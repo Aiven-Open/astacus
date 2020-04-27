@@ -1,0 +1,19 @@
+[MASTER]
+string-quote=double-avoid-escape
+triple-quote=double
+docstring-quote=double
+
+[MESSAGES CONTROL]
+disable=
+
+[FORMAT]
+max-line-length=125
+
+[REPORTS]
+output-format=text
+reports=no
+score=no
+
+[TYPECHECK]
+ignored-classes=PurePath,responses
+extension-pkg-whitelist=cassandra.cluster,cassandra.metadata,cassandra.query
