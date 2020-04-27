@@ -15,13 +15,17 @@ data. And I will have my restore, in this runtime or the next._
 - Product-specific code with simple, testable API
 
 - Complexities to deal with e.g. reuse of blobs with same value in the
-shared code To accomplish e.g. fast non-incremental M3 backups that are
-essentially incremental as only commit logs change frequently
+shared code
+    - It is needed to accomplish e.g. fast non-incremental M3 backups that are
+    essentially incremental as only commit logs change frequently
 
-- List of object storage “backup site” locations -> Facilitate migration from old to new during service cloud migration
+- List of object storage “backup site” locations -> Facilitate migration
+  from old to new during service cloud migration
+
+- Have most of the code covered by unit tests
 
 - Can be open sourced without feeling too bad about it
-- Have most of the code covered by unit tests
+    - Open source from the get go, no proprietary legacy dependencies
 
 # Installation
 
