@@ -6,7 +6,6 @@ See LICENSE for details
 """
 import os
 import setuptools
-import version
 
 
 def _run():
@@ -14,8 +13,14 @@ def _run():
     with open(readme_path, "r") as file_handle:
         readme_text = file_handle.read()
 
-    version_for_setup_py = version.update_project_version("astacus/version.py")
-    version_for_setup_py = ".dev".join(version_for_setup_py.split("-", 2)[:2])
+    try:
+        import version  # pylint: disable=import-outside-toplevel
+        version_for_setup_py = version.update_project_version(
+            "astacus/version.py")
+        version_for_setup_py = ".dev".join(
+            version_for_setup_py.split("-", 2)[:2])
+    except ImportError:
+        version_for_setup_py = "0.0.1"  # tox
 
     setuptools.setup(
         name="astacus",
@@ -23,7 +28,7 @@ def _run():
         zip_safe=False,
         packages=setuptools.find_packages(exclude=["test"]),
         install_requires=[
-            "aiohttp",
+            "fastapi==0.54.1",
         ],
         extras_require={},
         dependency_links=[],
