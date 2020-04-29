@@ -5,6 +5,10 @@ docstring-quote=double
 
 [MESSAGES CONTROL]
 disable=
+    invalid-name,  # fastapi conventions break this
+    missing-docstring,
+    wrong-import-order,  # we use isort anyway
+    too-few-public-methods  # some pydantic models have 0 and it is fine
 
 [FORMAT]
 max-line-length=125
@@ -15,5 +19,4 @@ reports=no
 score=no
 
 [TYPECHECK]
-ignored-classes=PurePath,responses
-extension-pkg-whitelist=cassandra.cluster,cassandra.metadata,cassandra.query
+ignored-classes=responses
