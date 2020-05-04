@@ -42,5 +42,5 @@ rm -rf %{buildroot}%{python3_sitelib}/tests/
 
 
 %changelog
-* Mon Jan 14 2019 Hannu Valtonen <hannu.valtonen@aiven.io> - 0.0.1
-- Initial RPM package (in karapace)
+* Tue Apr 28 2019 Markus Stenberg <mstenber@aiven.io> - 0.0.1
+- Initial RPM package (in astacus)
