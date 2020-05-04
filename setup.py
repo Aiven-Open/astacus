@@ -29,6 +29,7 @@ def _run():
         packages=setuptools.find_packages(exclude=["test"]),
         install_requires=[
             "fastapi==0.54.1",
+            "transitions==0.8.1",
         ],
         extras_require={},
         dependency_links=[],
