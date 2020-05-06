@@ -21,6 +21,16 @@ def lock(locker: str, ttl: int, state: NodeState = Depends(node_state)):
     return {"locked": True}
 
 
+@router.get("/relock")
+def relock(locker: str, ttl: int, state: NodeState = Depends(node_state)):
+    if not state.is_locked:
+        raise HTTPException(status_code=409, detail="Not locked")
+    if state.locker != locker:
+        raise HTTPException(status_code=403, detail="Locked by someone else")
+    state.locked_until = time.monotonic() + ttl
+    return {"locked": True}
+
+
 @router.get("/unlock")
 def unlock(locker: str, state: NodeState = Depends(node_state)):
     if not state.is_locked:
