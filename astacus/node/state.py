@@ -7,13 +7,12 @@ This state represents the state of the node.
 It is persisted to disk, and stored in the app.state.
 """
 
-from astacus.common.depends import get_or_create_state
-from fastapi import Depends
+from astacus.common import utils
+from fastapi import Depends, Request
 from pydantic import BaseModel  # pylint: disable=no-name-in-module # ( sometimes Cython -> pylint won't work )
-from starlette.requests import Request
 from threading import Lock
 
-import datetime
+import time
 
 APP_KEY = "node_state"
 APP_LOCK_KEY = "node_lock"
@@ -22,11 +21,20 @@ APP_LOCK_KEY = "node_lock"
 class NodeState(BaseModel):
     locked: bool = False
     locker: str = ''
-    locked_until: datetime.datetime = None
+    locked_until: int = 0
+
+    @property
+    def is_locked(self):
+        if self.locked:
+            if time.monotonic() > self.locked_until:
+                self.locked = False
+        return self.locked
 
 
-def unlocked_node_state(request: Request) -> NodeState:
-    return get_or_create_state(request=request, key=APP_KEY, factory=NodeState)
+def raw_node_state(request: Request) -> NodeState:
+    return utils.get_or_create_state(request=request,
+                                     key=APP_KEY,
+                                     factory=NodeState)
 
 
 def node_lock(request: Request) -> Lock:
@@ -38,14 +46,16 @@ def node_lock(request: Request) -> Lock:
     should be taken in not trying to lock multiple times as that will
     deadlock.
 
-    For longer requests combination of unlocked_node_state + node_lock
+    For longer requests combination of raw_node_state + node_lock
     + with (only in critical sections) in the different thread should
     be used.
     """
-    return get_or_create_state(request=request, key=APP_LOCK_KEY, factory=Lock)
+    return utils.get_or_create_state(request=request,
+                                     key=APP_LOCK_KEY,
+                                     factory=Lock)
 
 
-def node_state(state: NodeState = Depends(unlocked_node_state),
+def node_state(state: NodeState = Depends(raw_node_state),
                lock: Lock = Depends(node_lock)) -> NodeState:
     with lock:
         yield state
