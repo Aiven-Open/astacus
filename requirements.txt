@@ -1,10 +1,11 @@
 # makefile convenience
 pre-commit>=2.2.0
 
-# pre-commit tasks in Makefile need this
+# pre-commit tasks in Makefile need these
 pylint==2.4.4
 pytest==5.4.1
 pytest-mock==3.1.0
+mypy==0.770
 
 # fastapi testclient needs this yet does not depend on it, gnn
 requests
