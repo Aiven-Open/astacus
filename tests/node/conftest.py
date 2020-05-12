@@ -4,8 +4,11 @@ See LICENSE for details
 """
 
 from astacus.node.api import router as node_router
+from astacus.node.hashstorage import FileHashStorage
+from astacus.node.snapshot import Snapshotter
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pathlib import Path
 
 import pytest
 
@@ -20,3 +23,30 @@ def fixture_app():
 @pytest.fixture(name="client")
 def fixture_client(app):
     yield TestClient(app)
+
+
+class SnapshotterWithDefaults(Snapshotter):
+    def create_2foobar(self):
+        (self.src / "foo").write_text("foobar")
+        (self.src / "foo2").write_text("foobar")
+        assert self.snapshot() > 0
+        ss1 = self.get_snapshot_state()
+        assert self.snapshot() == 0
+        ss2 = self.get_snapshot_state()
+        assert ss1 == ss2
+
+
+@pytest.fixture(name="snapshotter")
+def fixture_snapshotter(tmpdir):
+    src = Path(tmpdir) / "src"
+    src.mkdir()
+    dst = Path(tmpdir) / "dst"
+    dst.mkdir()
+    yield SnapshotterWithDefaults(src=src, dst=dst, globs=["*"])
+
+
+@pytest.fixture(name="storage")
+def fixture_storage(tmpdir):
+    storage_path = Path(tmpdir) / "storage"
+    storage_path.mkdir()
+    yield FileHashStorage(storage_path)

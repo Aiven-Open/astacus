@@ -21,7 +21,7 @@ APP_LOCK_KEY = "node_lock"
 class NodeState(BaseModel):
     locked: bool = False
     locker: str = ''
-    locked_until: int = 0
+    locked_until: float = 0
 
     @property
     def is_locked(self):
@@ -56,6 +56,6 @@ def node_lock(request: Request) -> Lock:
 
 
 def node_state(state: NodeState = Depends(raw_node_state),
-               lock: Lock = Depends(node_lock)) -> NodeState:
+               lock: Lock = Depends(node_lock)):
     with lock:
         yield state
