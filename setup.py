@@ -29,13 +29,16 @@ def _run():
         packages=setuptools.find_packages(exclude=["test"]),
         install_requires=[
             "fastapi==0.54.1",
+            "httpx==0.12.1",
+            "uvicorn==0.11.5",
+            "sentry-sdk==0.14.4",
         ],
         extras_require={},
         dependency_links=[],
         package_data={},
         entry_points={
             "console_scripts": [
-                "astacus = astacus:main",
+                "astacus = astacus.main:main",
             ],
         },
         author="Aiven",

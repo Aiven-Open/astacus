@@ -9,4 +9,6 @@ pytest-mock==3.1.0
 # fastapi testclient needs this yet does not depend on it, gnn
 requests
 
+respx==0.10.1
+
 -e .
