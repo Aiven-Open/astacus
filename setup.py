@@ -29,6 +29,7 @@ def _run():
         packages=setuptools.find_packages(exclude=["test"]),
         install_requires=[
             "fastapi==0.54.1",
+            "httpx==0.12.1",
         ],
         extras_require={},
         dependency_links=[],
