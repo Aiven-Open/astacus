@@ -18,7 +18,10 @@ class CoordinatorOp(op.Op):
 
     async def request_from_nodes(self, url, *, caller, method="get"):
         urls = [f"{node.url}/{url}" for node in self.nodes]
-        aws = [utils.httpx_request(url, method=method, caller=caller) for url in urls]
+        aws = [
+            utils.httpx_request(url, method=method, caller=caller)
+            for url in urls
+        ]
         return await asyncio.gather(*aws, return_exceptions=True)
 
 

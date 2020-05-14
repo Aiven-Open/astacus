@@ -22,6 +22,10 @@ class NodeRequest(BaseModel):
     result_url: str = ""  # where results are sent
 
 
+class NodeResult(BaseModel):
+    progress: Progress
+
+
 class NodeOp(Op):
     req: Optional[NodeRequest] = None  # Provided by subclass
     result: Optional[BaseModel] = None  # Provided by subclass

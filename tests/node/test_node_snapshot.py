@@ -3,7 +3,10 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 
+from astacus.common import utils
+from astacus.node import snapshot
 from astacus.node.progress import Progress
+from pathlib import Path
 
 import pytest
 
@@ -61,7 +64,9 @@ def test_snapshot(snapshotter, storage):
     assert not blocks_empty
 
 
-def test_api_snapshot(client, utils_http_request_list):
+def test_api_snapshot_and_upload(client, mocker, tmpdir):
+    url = 'http://addr/result'
+    m = mocker.patch.object(utils, "http_request")
     response = client.post("/node/snapshot")
     assert response.status_code == 409, response.json()
 
@@ -70,11 +75,25 @@ def test_api_snapshot(client, utils_http_request_list):
     response = client.post("/node/snapshot")
     assert response.status_code == 200, response.json()
 
-    url = 'http://addr/result'
-    result = {
-        'url': url,
-        'method': 'post',
-    }
-    utils_http_request_list.append(result)
     response = client.post("/node/snapshot", json={"result_url": url})
     assert response.status_code == 200, response.json()
+
+    # Decode the (result endpoint) response using the model
+    response = m.call_args[1]["data"]
+    result = snapshot.SnapshotResult.parse_raw(response)
+    assert result.progress.finished_successfully
+    assert result.hashes
+    hexdigest = result.hashes[0]
+
+    # Ask it to be uploaded
+    response = client.post("/node/upload",
+                           json={
+                               "hashes": result.hashes,
+                               "result_url": url
+                           })
+    assert response.status_code == 200, response.json()
+    response = m.call_args[1]["data"]
+    result = snapshot.SnapshotResult.parse_raw(response)
+    assert result.progress.finished_successfully
+
+    assert (Path(tmpdir) / "backup-root" / f"{hexdigest}.dat").is_file()

@@ -9,10 +9,8 @@ Root-level astacus configuration, which includes
 """
 
 from astacus.common import magic
-from astacus.coordinator.config import CoordinatorConfig
-from astacus.coordinator.config import APP_KEY as COORDINATOR_CONFIG_KEY
-from astacus.node.config import APP_KEY as NODE_CONFIG_KEY
-from astacus.node.config import NodeConfig
+from astacus.coordinator.config import APP_KEY as COORDINATOR_CONFIG_KEY, CoordinatorConfig
+from astacus.node.config import APP_KEY as NODE_CONFIG_KEY, NodeConfig
 from fastapi import Request
 from pydantic import BaseModel  # pylint: disable=no-name-in-module # ( sometimes Cython -> pylint won't work )
 from typing import Optional

@@ -35,20 +35,21 @@ class HashStorage:
     def list_hexdigests(self):
         raise NotImplementedError
 
-    def upload_hexdigest_bytes(self, hexdigest, data):
-        self.upload_hexdigest_from_file(hexdigest, io.BytesIO(data))
+    def upload_hexdigest_bytes(self, hexdigest, data) -> bool:
+        return self.upload_hexdigest_from_file(hexdigest, io.BytesIO(data))
 
     def upload_hexdigest_from_file(self, hexdigest, f) -> bool:
         raise NotImplementedError
 
-    def upload_hexdigest_from_path(self, hexdigest, filename):
-        self.upload_hexdigest_from_file(hexdigest, open(filename, "rb"))
+    def upload_hexdigest_from_path(self, hexdigest, filename) -> bool:
+        return self.upload_hexdigest_from_file(hexdigest, open(filename, "rb"))
 
 
 class FileHashStorage(HashStorage):
     """ Implementation of the hash storage API, which just handles files - primarily useful for testing """
     def __init__(self, path, *, suffix=".dat"):
         self.path = Path(path)
+        self.path.mkdir(exist_ok=True)
         self.suffix = suffix
 
     def _hexdigest_to_path(self, hexdigest):

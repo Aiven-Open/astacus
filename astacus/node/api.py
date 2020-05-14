@@ -4,7 +4,7 @@ See LICENSE for details
 """
 
 from .node import Node
-from .snapshot import SnapshotOps, SnapshotRequest
+from .snapshot import SnapshotOps, SnapshotRequest, SnapshotUploadRequest
 from .state import node_state, NodeState
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -48,3 +48,10 @@ def snapshot(req: SnapshotRequest = SnapshotRequest(), n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
     return SnapshotOps(n=n).start_snapshot(req=req)
+
+
+@router.post("/upload")
+def upload(req: SnapshotUploadRequest, n: Node = Depends()):
+    if not n.state.is_locked:
+        raise HTTPException(status_code=409, detail="Not locked")
+    return SnapshotOps(n=n).start_upload(req=req)

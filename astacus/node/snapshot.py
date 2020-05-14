@@ -11,7 +11,7 @@ this module with proper parameters.
 """
 
 from .hashstorage import FileHashStorage
-from .node import Node, NodeOp, NodeRequest
+from .node import Node, NodeOp, NodeRequest, NodeResult
 from .progress import Progress
 from astacus.common import utils
 from pathlib import Path
@@ -243,15 +243,17 @@ class SnapshotRequest(NodeRequest):
     pass
 
 
-class SnapshotUploadRequest(SnapshotRequest):
+class SnapshotUploadRequest(NodeRequest):
     hashes: List[str]
-    dst: str = ""  # filesystem snapshot, not super interesting except for testing
 
 
-class SnapshotResult(BaseModel):
-    progress: Progress
+class SnapshotResult(NodeResult):
     state: Optional[SnapshotState]  # should be passed opaquely to restore
     hashes: Optional[List[str]]  # populated only if state is available
+
+
+class SnapshotUploadResult(NodeResult):
+    pass
 
 
 class SnapshotOps(NodeOp):
@@ -295,8 +297,8 @@ class SnapshotOps(NodeOp):
         return self.start_op(op_name="upload", op=self, fun=self.upload)
 
     def upload(self):
-        if self.req.dst:
-            storage = FileHashStorage(self.req.dst)
+        if self.config.backup_root:
+            storage = FileHashStorage(self.config.backup_root)
         else:
             raise NotImplementedError
         self.snapshotter.write_hashes_to_storage(

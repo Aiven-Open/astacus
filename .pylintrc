@@ -7,6 +7,7 @@ docstring-quote=double
 disable=
     invalid-name,  # fastapi conventions break this
     missing-docstring,
+    no-member,  # broken with pydantic + inheritance for some reason
     no-self-use,  # annoying when minimally fullfilling some API
     wrong-import-order,  # we use isort anyway
     too-few-public-methods,  # some pydantic models have 0 and it is fine

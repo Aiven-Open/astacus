@@ -44,8 +44,8 @@ def test_lock_fail(app, client):
         _CCNode(url="http://localhost:12345/asdf")
     ]
     with respx.mock:
-        respx.get("http://localhost:12345/asdf/lock?locker=z&ttl=60",
-                  content=None)
+        respx.post("http://localhost:12345/asdf/lock?locker=z&ttl=60",
+                   content=None)
         response = client.post("/lock?locker=z")
         assert response.status_code == 200, response.json()
 
@@ -62,8 +62,8 @@ def test_lock_ok(app, client):
     app.state.coordinator_config.nodes = nodes
     with respx.mock:
         for node in nodes:
-            respx.get(f"{node.url}/lock?locker=z&ttl=60",
-                      content={"locked": True})
+            respx.post(f"{node.url}/lock?locker=z&ttl=60",
+                       content={"locked": True})
         response = client.post("/lock?locker=z")
         assert response.status_code == 200, response.json()
 
@@ -82,9 +82,9 @@ def test_lock_onefail(app, client):
     app.state.coordinator_config.nodes = nodes
     with respx.mock:
         for i, node in enumerate(nodes):
-            respx.get(f"{node.url}/lock?locker=z&ttl=60",
-                      content={"locked": i == 0})
-            respx.get(f"{node.url}/unlock?locker=z", content=None)
+            respx.post(f"{node.url}/lock?locker=z&ttl=60",
+                       content={"locked": i == 0})
+            respx.post(f"{node.url}/unlock?locker=z", content=None)
         response = client.post("/lock?locker=z")
         assert response.status_code == 200, response.json()
 

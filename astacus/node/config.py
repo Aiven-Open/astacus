@@ -21,6 +21,9 @@ class NodeConfig(BaseModel):
     # Where do we hardlink things from the file hierarchy we care about
     root_link: str
 
+    # Where we backup root (uses FileHashStorage, mostly useful for testing)
+    backup_root: str = ""
+
 
 def node_config(request: Request) -> NodeConfig:
     return getattr(request.app.state, APP_KEY)
