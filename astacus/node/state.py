@@ -8,6 +8,7 @@ It is persisted to disk, and stored in the app.state.
 """
 
 from astacus.common import utils
+from astacus.common.op import Op
 from fastapi import Depends, Request
 from pydantic import BaseModel  # pylint: disable=no-name-in-module # ( sometimes Cython -> pylint won't work )
 from threading import Lock
@@ -22,6 +23,7 @@ class NodeState(BaseModel):
     locked: bool = False
     locker: str = ''
     locked_until: float = 0
+    op_info: Op.Info = Op.Info()
 
     @property
     def is_locked(self):
@@ -29,6 +31,26 @@ class NodeState(BaseModel):
             if time.monotonic() > self.locked_until:
                 self.locked = False
         return self.locked
+
+    @property
+    def still_locked_callback(self):
+        original_locker = self.locker
+
+        def _gen():
+            still_locked = self.is_locked
+            while still_locked:
+                if not self.is_locked or self.locker != original_locker:
+                    still_locked = False
+                yield still_locked
+            while True:
+                yield False
+
+        gen = _gen()
+
+        def _fun():
+            return next(gen)
+
+        return _fun
 
 
 def raw_node_state(request: Request) -> NodeState:

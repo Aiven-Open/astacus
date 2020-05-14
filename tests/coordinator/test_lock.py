@@ -6,13 +6,15 @@ Test that the coordinator lock endpoint works.
 
 """
 
-from astacus.coordinator.config import Node
+from astacus.coordinator.config import CoordinatorConfig
 
 import respx
 
+_CCNode = CoordinatorConfig.Node
+
 
 def test_status_nonexistent(client):
-    response = client.get("/status/123")
+    response = client.get("/lock/123")
     assert response.status_code == 404
     assert response.json() == {
         "detail": {
@@ -39,7 +41,7 @@ def test_lock_no_nodes(client):
 def test_lock_fail(app, client):
     # Add fake node that won't respond to API -> state won't be done
     app.state.coordinator_config.nodes = [
-        Node(url="http://localhost:12345/asdf")
+        _CCNode(url="http://localhost:12345/asdf")
     ]
     with respx.mock:
         respx.get("http://localhost:12345/asdf/lock?locker=z&ttl=60",
@@ -54,8 +56,8 @@ def test_lock_fail(app, client):
 
 def test_lock_ok(app, client):
     nodes = [
-        Node(url="http://localhost:12346/asdf"),
-        Node(url="http://localhost:12345/asdf"),
+        _CCNode(url="http://localhost:12346/asdf"),
+        _CCNode(url="http://localhost:12345/asdf"),
     ]
     app.state.coordinator_config.nodes = nodes
     with respx.mock:
@@ -69,13 +71,13 @@ def test_lock_ok(app, client):
         assert response.status_code == 200, response.json()
         assert response.json() == {"state": "done"}
 
-        assert app.state.coordinator_state.op == 1
+        assert app.state.coordinator_state.op_info.op_id == 1
 
 
 def test_lock_onefail(app, client):
     nodes = [
-        Node(url="http://localhost:12346/asdf"),
-        Node(url="http://localhost:12345/asdf"),
+        _CCNode(url="http://localhost:12346/asdf"),
+        _CCNode(url="http://localhost:12345/asdf"),
     ]
     app.state.coordinator_config.nodes = nodes
     with respx.mock:

@@ -9,6 +9,7 @@ It is persisted to disk, and stored in the app.state.
 """
 
 from astacus.common import utils
+from astacus.common.op import Op
 from asyncio import Lock
 from fastapi import Depends, Request
 from pydantic import BaseModel  # pylint: disable=no-name-in-module # ( sometimes Cython -> pylint won't work )
@@ -18,8 +19,7 @@ APP_LOCK_KEY = "coordinator_state_lock"
 
 
 class CoordinatorState(BaseModel):
-    op: int = 0
-    op_state: str = "???"
+    op_info: Op.Info = Op.Info()
 
 
 def raw_coordinator_state(request: Request) -> CoordinatorState:

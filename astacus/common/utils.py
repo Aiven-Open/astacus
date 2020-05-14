@@ -32,7 +32,8 @@ def http_request(url,
                  caller,
                  method="get",
                  timeout=10,
-                 ignore_status_code: bool = False):
+                 ignore_status_code: bool = False,
+                 **kw):
     """Wrapper for requests.request which handles timeouts as non-exceptions,
     and returns only valid results that we actually care about.
 
@@ -45,7 +46,7 @@ def http_request(url,
     # using passwords in urls here.
     logger.info("request %s %s by %s", method, url, caller)
     try:
-        r = requests.request(method, url, timeout=timeout)
+        r = requests.request(method, url, timeout=timeout, **kw)
         if r.ok:
             return r.json()
         if ignore_status_code:

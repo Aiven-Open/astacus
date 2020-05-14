@@ -9,10 +9,10 @@ about API design testing)
 
 """
 
-from .coordinator import Coordinator, Op
+from .coordinator import Coordinator, CoordinatorOp
 
 
-class LockOps(Op):
+class LockOps(CoordinatorOp):
     def __init__(self, *, c: Coordinator, locker: str, ttl: int = 60):
         super().__init__(c=c)
         self.locker = locker
@@ -23,7 +23,7 @@ class LockOps(Op):
                 f"lock?locker={self.locker}&ttl={self.ttl}",
                 caller="LockOps.lock"):
             if result != {"locked": True}:
-                self.set_op_state(self.State.fail)
+                self.set_status_fail()
                 await self.unlock()
                 return
 
@@ -31,4 +31,4 @@ class LockOps(Op):
         for result in await self.request_from_nodes(
                 f"unlock?locker={self.locker}", caller="LockOps.unlock"):
             if result != {"locked": False}:
-                self.set_op_state(self.State.fail)
+                self.set_status_fail()
