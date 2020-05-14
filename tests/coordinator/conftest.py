@@ -3,6 +3,7 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 from astacus.coordinator.api import router
+from astacus.coordinator.config import CoordinatorConfig
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -13,6 +14,7 @@ import pytest
 def fixture_app():
     app = FastAPI()
     app.include_router(router, tags=["coordinator"])
+    app.state.coordinator_config = CoordinatorConfig()
     yield app
 
 
