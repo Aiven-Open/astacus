@@ -3,10 +3,12 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 
+from .backup import BackupOp
 from .coordinator import Coordinator
 from .lockops import LockOps
+from astacus.common.op import Op
 from enum import Enum
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from urllib.parse import urljoin
 
 import logging
@@ -23,15 +25,24 @@ class ErrorCode(str, Enum):
 class OpName(str, Enum):
     lock = "lock"
     unlock = "unlock"
+    backup = "backup"
+
+
+@router.get("/{op_name}/{op_id}")
+def status(*, op_name: OpName, op_id: int, c: Coordinator = Depends()):
+    _, op_info = c.get_op_and_op_info(op_id=op_id, op_name=op_name)
+    return {"state": op_info.op_status}
+
+
+class LockStartResult(Op.StartResult):
+    unlock_url: str
 
 
 @router.post("/lock")
 async def lock(*, locker: str, ttl: int = 60, c: Coordinator = Depends()):
     op = LockOps(c=c, ttl=ttl, locker=locker)
     result = c.start_op(op_name="lock", op=op, fun=op.lock)
-    result["unlock-url"] = urljoin(str(c.request.url),
-                                   f"../unlock?locker={locker}")
-    return result
+    return LockStartResult(unlock_url=urljoin(str(c.request.url), f"../unlock?locker={locker}"), **result.dict())
 
 
 @router.post("/unlock")
@@ -40,16 +51,7 @@ def unlock(*, locker: str, c: Coordinator = Depends()):
     return c.start_op(op_name="unlock", op=op, fun=op.unlock)
 
 
-@router.get("/{op_name}/{op_id}")
-def status(*, op_name: OpName, op_id: int, c: Coordinator = Depends()):
-    op_info = c.state.op_info
-    if op_id != op_info.op_id or op_name != op_info.op_name:
-        logger.info("status for nonexistent %s.%s != %r", op_name, op_id,
-                    op_info)
-        raise HTTPException(
-            404, {
-                "code": ErrorCode.operation_id_mismatch,
-                "op": op_id,
-                "message": "Unknown operation id"
-            })
-    return {"state": op_info.op_status}
+@router.post("/backup")
+def backup(*, c: Coordinator = Depends()):
+    op = BackupOp(c=c)
+    return c.start_op(op_name="backup", op=op, fun=op.run)

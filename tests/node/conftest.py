@@ -3,10 +3,10 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 
+from astacus.common.progress import Progress
 from astacus.node.api import router as node_router
 from astacus.node.config import NodeConfig
 from astacus.node.hashstorage import FileHashStorage
-from astacus.node.progress import Progress
 from astacus.node.snapshot import Snapshotter
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -25,10 +25,9 @@ def fixture_app(tmpdir):
     (root / "foo").write_text("foobar")
     (root / "foo2").write_text("foobar")
     root_link = Path(tmpdir) / "root-link"
-    app.state.node_config = NodeConfig(root=str(root),
-                                       root_link=str(root_link),
-                                       root_globs=["*"],
-                                       backup_root=str(backup_root))
+    app.state.node_config = NodeConfig(
+        root=str(root), root_link=str(root_link), root_globs=["*"], backup_root=str(backup_root)
+    )
     yield app
 
 

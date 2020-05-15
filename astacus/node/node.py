@@ -5,10 +5,9 @@ See LICENSE for details
 """
 
 from .config import node_config, NodeConfig
-from .progress import Progress
 from .state import node_state, NodeState
-from astacus.common import utils
-from astacus.common.op import Op, OpStartMixin
+from astacus.common import ipc, op, utils
+from astacus.common.progress import Progress
 from fastapi import BackgroundTasks, Depends, Request
 from pydantic import BaseModel  # pylint: disable=no-name-in-module # ( sometimes Cython -> pylint won't work )
 from typing import Optional
@@ -18,16 +17,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class NodeRequest(BaseModel):
-    result_url: str = ""  # where results are sent
-
-
-class NodeResult(BaseModel):
-    progress: Progress
-
-
-class NodeOp(Op):
-    req: Optional[NodeRequest] = None  # Provided by subclass
+class NodeOp(op.Op):
+    req: Optional[ipc.NodeRequest] = None  # Provided by subclass
     result: Optional[BaseModel] = None  # Provided by subclass
     progress: Optional[Progress] = None  # Provided by subclass
 
@@ -55,15 +46,9 @@ class NodeOp(Op):
         if result_json == self._sent_result_json:
             return
         self._sent_result_json = result_json
-        utils.http_request(self.req.result_url,
-                           method="post",
-                           caller="SnapshotOps.snapshot",
-                           data=result_json)
+        utils.http_request(self.req.result_url, method="put", caller="SnapshotOps.snapshot", data=result_json)
 
-    def set_status(self,
-                   state: Op.Status,
-                   *,
-                   from_state: Optional[Op.Status] = None) -> bool:
+    def set_status(self, state: op.Op.Status, *, from_state: Optional[op.Op.Status] = None) -> bool:
         if not super().set_status(state, from_state=from_state):
             # State didn't change, do nothing
             return False
@@ -77,14 +62,16 @@ class NodeOp(Op):
         return True
 
 
-class Node(OpStartMixin):
+class Node(op.OpMixin):
     """ Convenience dependency which contains sub-dependencies most API endpoints need """
-    def __init__(self,
-                 *,
-                 request: Request,
-                 background_tasks: BackgroundTasks,
-                 config: NodeConfig = Depends(node_config),
-                 state: NodeState = Depends(node_state)):
+    def __init__(
+        self,
+        *,
+        request: Request,
+        background_tasks: BackgroundTasks,
+        config: NodeConfig = Depends(node_config),
+        state: NodeState = Depends(node_state)
+    ):
         self.request = request
         self.background_tasks = background_tasks
         self.config = config

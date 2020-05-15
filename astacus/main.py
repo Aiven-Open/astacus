@@ -46,13 +46,8 @@ app = init_app()
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Astacus - cluster backup tool - REST server")
-    parser.add_argument("-c",
-                        "--config",
-                        type=str,
-                        help="YAML configuration file to use",
-                        required=True)
+    parser = argparse.ArgumentParser(description="Astacus - cluster backup tool - REST server")
+    parser.add_argument("-c", "--config", type=str, help="YAML configuration file to use", required=True)
     # TBD: Add overrides for configuration file entries that may be
     # relevant to update in more human-friendly way
     args = parser.parse_args()
@@ -61,11 +56,7 @@ def main():
     app = init_app()
     gconfig = app.state.global_config
     uconfig = gconfig.uvicorn
-    uvicorn.run("astacus.main:app",
-                host=uconfig.host,
-                port=uconfig.port,
-                reload=uconfig.reload,
-                log_level=uconfig.log_level)
+    uvicorn.run("astacus.main:app", host=uconfig.host, port=uconfig.port, reload=uconfig.reload, log_level=uconfig.log_level)
 
 
 if __name__ == '__main__':

@@ -11,14 +11,12 @@ this module with proper parameters.
 """
 
 from .hashstorage import FileHashStorage
-from .node import Node, NodeOp, NodeRequest, NodeResult
-from .progress import Progress
-from astacus.common import utils
+from .node import Node, NodeOp
+from astacus.common import ipc, utils
+from astacus.common.ipc import SnapshotFile, SnapshotRequest, SnapshotState, SnapshotUploadRequest
+from astacus.common.progress import Progress
 from pathlib import Path
-from pydantic import BaseModel  # pylint: disable=no-name-in-module # ( sometimes Cython -> pylint won't work )
-from typing import List, Optional
 
-import functools
 import hashlib
 import logging
 import os
@@ -28,22 +26,6 @@ _hash = hashlib.blake2s
 logger = logging.getLogger(__name__)
 
 APP_KEY = "node_snapshotter"
-
-
-@functools.total_ordering
-class SnapshotFile(BaseModel):
-    relative_path: Path
-    file_size: int
-    mtime_ns: int
-    hexdigest: str
-
-    def __lt__(self, o):
-        # In our use case, paths uniquely identify files we care about
-        return self.relative_path < o.relative_path
-
-
-class SnapshotState(BaseModel):
-    files: List[SnapshotFile]
 
 
 def hash_hexdigest_readable(f, *, read_buffer=1_000_000):
@@ -96,29 +78,21 @@ class Snapshotter:
         return sorted(dirs), files
 
     def _add_snapshotfile(self, snapshotfile: SnapshotFile):
-        old_snapshotfile = self.relative_path2snapshotfile.get(
-            snapshotfile.relative_path, None)
+        old_snapshotfile = self.relative_path2snapshotfile.get(snapshotfile.relative_path, None)
         if old_snapshotfile:
             self._remove_snapshotfile(old_snapshotfile)
-        self.relative_path2snapshotfile[
-            snapshotfile.relative_path] = snapshotfile
-        self.hexdigest2snapshotfiles.setdefault(snapshotfile.hexdigest,
-                                                []).append(snapshotfile)
+        self.relative_path2snapshotfile[snapshotfile.relative_path] = snapshotfile
+        self.hexdigest2snapshotfiles.setdefault(snapshotfile.hexdigest, []).append(snapshotfile)
 
     def _remove_snapshotfile(self, snapshotfile: SnapshotFile):
-        assert self.relative_path2snapshotfile[
-            snapshotfile.relative_path] == snapshotfile
+        assert self.relative_path2snapshotfile[snapshotfile.relative_path] == snapshotfile
         del self.relative_path2snapshotfile[snapshotfile.relative_path]
-        self.hexdigest2snapshotfiles[snapshotfile.hexdigest].remove(
-            snapshotfile)
+        self.hexdigest2snapshotfiles[snapshotfile.hexdigest].remove(snapshotfile)
 
     def _snapshotfile_from_path(self, relative_path):
         src_path = self.src / relative_path
         st = src_path.stat()
-        return SnapshotFile(relative_path=relative_path,
-                            mtime_ns=st.st_mtime_ns,
-                            file_size=st.st_size,
-                            hexdigest="")
+        return SnapshotFile(relative_path=relative_path, mtime_ns=st.st_mtime_ns, file_size=st.st_size, hexdigest="")
 
     def _get_snapshot_hash_list(self, relfilenames):
         for relfilename in relfilenames:
@@ -127,8 +101,7 @@ class Snapshotter:
             if old_snapshotfile:
                 snapshotfile.hexdigest = old_snapshotfile.hexdigest
                 if old_snapshotfile == snapshotfile:
-                    logger.debug("%r in %s is same", old_snapshotfile,
-                                 relfilename)
+                    logger.debug("%r in %s is same", old_snapshotfile, relfilename)
                     continue
             yield snapshotfile
 
@@ -136,8 +109,7 @@ class Snapshotter:
         return [dig for dig, sf in self.hexdigest2snapshotfiles.items() if sf]
 
     def get_snapshot_state(self):
-        return SnapshotState(
-            files=sorted(self.relative_path2snapshotfile.values()))
+        return SnapshotState(files=sorted(self.relative_path2snapshotfile.values()))
 
     def snapshot(self, *, progress: Progress):
         progress.start(3)
@@ -184,20 +156,14 @@ class Snapshotter:
         for snapshotfile in snapshotfiles:
             # src may or may not be present; dst is present as it is in snapshot
             dst_path = self.dst / snapshotfile.relative_path
-            snapshotfile.hexdigest = hash_hexdigest_readable(
-                dst_path.open(mode="rb"))
+            snapshotfile.hexdigest = hash_hexdigest_readable(dst_path.open(mode="rb"))
             self._add_snapshotfile(snapshotfile)
             changes += 1
             progress.add_success()
         progress.done()
         return changes
 
-    def write_hashes_to_storage(self,
-                                *,
-                                hashes,
-                                storage,
-                                progress: Progress,
-                                still_running_callback=lambda: True):
+    def write_hashes_to_storage(self, *, hashes, storage, progress: Progress, still_running_callback=lambda: True):
         todo = set(hashes)
         progress.start(len(todo))
         for hexdigest in todo:
@@ -211,15 +177,12 @@ class Snapshotter:
                     continue
                 current_hexdigest = hash_hexdigest_readable(open(path, "rb"))
                 if current_hexdigest != snapshotfile.hexdigest:
-                    logger.info("Hash of %s changed before upload",
-                                snapshotfile.relative_path)
+                    logger.info("Hash of %s changed before upload", snapshotfile.relative_path)
                     continue
                 if storage.upload_hexdigest_from_path(hexdigest, path):
-                    current_hexdigest = hash_hexdigest_readable(
-                        open(path, "rb"))
+                    current_hexdigest = hash_hexdigest_readable(open(path, "rb"))
                     if current_hexdigest != snapshotfile.hexdigest:
-                        logger.info("Hash of %s changed after upload",
-                                    snapshotfile.relative_path)
+                        logger.info("Hash of %s changed after upload", snapshotfile.relative_path)
                         storage.delete_hexdigest(hexdigest)
                         continue
                     progress.upload_success(hexdigest)
@@ -239,58 +202,51 @@ class Snapshotter:
         progress.done()
 
 
-class SnapshotRequest(NodeRequest):
-    pass
-
-
-class SnapshotUploadRequest(NodeRequest):
-    hashes: List[str]
-
-
-class SnapshotResult(NodeResult):
-    state: Optional[SnapshotState]  # should be passed opaquely to restore
-    hashes: Optional[List[str]]  # populated only if state is available
-
-
-class SnapshotUploadResult(NodeResult):
-    pass
-
-
-class SnapshotOps(NodeOp):
+class _SnapshotterOp(NodeOp):
     def __init__(self, *, n: Node):
         super().__init__(n=n)
         self.snapshotter = self._get_or_create_snapshotter(n)
         progress = Progress()
-        self.result = SnapshotResult(progress=progress)
-        self.progress = self.result.progress
+        self.result = self.get_result_class()(progress=progress)  # pylint: disable=not-callable
+
+    def get_result_class(self):
+        raise NotImplementedError
 
     def _create_snapshotter(self) -> Snapshotter:
-        return Snapshotter(src=self.config.root,
-                           dst=self.config.root_link,
-                           globs=self.config.root_globs,
-                           file_path_filter=self.file_path_filter)
+        return Snapshotter(
+            src=self.config.root,
+            dst=self.config.root_link,
+            globs=self.config.root_globs,
+            file_path_filter=self.file_path_filter
+        )
 
     def _get_or_create_snapshotter(self, n: Node) -> Snapshotter:
-        return utils.get_or_create_state(request=n.request,
-                                         key=APP_KEY,
-                                         factory=self._create_snapshotter)
+        return utils.get_or_create_state(request=n.request, key=APP_KEY, factory=self._create_snapshotter)
 
     def file_path_filter(self, files):
         return files
 
-    def start_snapshot(self, *, req: SnapshotRequest):
+
+class SnapshotOp(_SnapshotterOp):
+    def get_result_class(self):
+        return ipc.SnapshotResult
+
+    def start(self, *, req: SnapshotRequest):
         self.req = req
         logger.debug("start_snapshot %r", req)
         return self.start_op(op_name="snapshot", op=self, fun=self.snapshot)
 
     def snapshot(self):
-        self.snapshotter.snapshot(progress=self.progress)
+        self.snapshotter.snapshot(progress=self.result.progress)
         self.result.state = self.snapshotter.get_snapshot_state()
-        self.result.hashes = [
-            ssfile.hexdigest for ssfile in self.result.state.files
-        ]
+        self.result.hashes = [ssfile.hexdigest for ssfile in self.result.state.files]
 
-    def start_upload(self, *, req: SnapshotUploadRequest):
+
+class UploadOp(_SnapshotterOp):
+    def get_result_class(self):
+        return ipc.SnapshotUploadResult
+
+    def start(self, *, req: SnapshotUploadRequest):
         self.req = req
         logger.debug("start_upload %r", req)
         # TBD: Could start some worker thread to upload the self.result periodically
@@ -304,5 +260,6 @@ class SnapshotOps(NodeOp):
         self.snapshotter.write_hashes_to_storage(
             hashes=self.req.hashes,
             storage=storage,
-            progress=self.progress,
-            still_running_callback=self.still_running_callback)
+            progress=self.result.progress,
+            still_running_callback=self.still_running_callback
+        )

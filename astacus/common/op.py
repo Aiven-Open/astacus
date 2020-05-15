@@ -12,7 +12,10 @@ Notable things:
 """
 
 from .exceptions import ExpiredOperationException
+from astacus.common import magic
+from dataclasses import dataclass, field
 from enum import Enum
+from fastapi import HTTPException
 from pydantic import BaseModel  # pylint: disable=no-name-in-module # ( sometimes Cython -> pylint won't work )
 from typing import Optional
 from urllib.parse import urlunsplit
@@ -35,14 +38,15 @@ class Op:
         op_name: str = ""
         op_status: Optional["Op.Status"]
 
+    class StartResult(BaseModel):
+        op_id: int
+        status_url: str
+
     def __init__(self, *, info: Info):
         self.info = info
         self.op_id = None  # set in start_op
 
-    def set_status(self,
-                   state: Status,
-                   *,
-                   from_state: Optional[Status] = None) -> bool:
+    def set_status(self, state: Status, *, from_state: Optional[Status] = None) -> bool:
         assert self.op_id, "start_op() should be called before set_status()"
         if self.info.op_id != self.op_id:
             raise ExpiredOperationException("operation id mismatch")
@@ -59,20 +63,26 @@ class Op:
 Op.Info.update_forward_refs()
 
 
-class OpStartMixin:
+@dataclass
+class OpState:
+    op_info: Op.Info = field(default_factory=Op.Info)
+    op: Optional[Op] = None
+
+
+class OpMixin:
     """
     Convenience mixin which provides for both asynchronous as well as
-    synchronous op starting functionality
+    synchronous op starting functionality, and active job querying
     """
     def start_op(self, *, op, op_name, fun):
         info = self.state.op_info
         info.op_id += 1
         info.op_name = op_name
+        self.state.op = op
         op.op_id = info.op_id
         op.set_status(Op.Status.starting)
         url = self.request.url
-        status_url = urlunsplit(
-            (url.scheme, url.netloc, f"{url.path}/{op.op_id}", "", ""))
+        status_url = urlunsplit((url.scheme, url.netloc, f"{url.path}/{op.op_id}", "", ""))
 
         async def _wrapper():
             try:
@@ -84,10 +94,22 @@ class OpStartMixin:
                 op.set_status(Op.Status.done, from_state=Op.Status.running)
             except Exception as ex:  # pylint: disable=broad-except
                 op.set_status_fail()
-                logger.warning("Unexpected exception during %s %s %r", op, fun,
-                               ex)
+                logger.warning("Unexpected exception during %s %s %r", op, fun, ex)
                 raise
 
         self.background_tasks.add_task(_wrapper)
 
-        return {"op": op.op_id, "status-url": status_url}
+        return Op.StartResult(op_id=op.op_id, status_url=status_url)
+
+    def get_op_and_op_info(self, *, op_id, op_name=None):
+        op_info = self.state.op_info
+        if op_id != op_info.op_id or (op_name and op_name != op_info.op_name):
+            logger.info("request for nonexistent %s.%s != %r", op_name, op_id, op_info)
+            raise HTTPException(
+                404, {
+                    "code": magic.ErrorCode.operation_id_mismatch,
+                    "op": op_id,
+                    "message": "Unknown operation id"
+                }
+            )
+        return self.state.op, op_info

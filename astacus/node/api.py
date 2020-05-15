@@ -4,8 +4,9 @@ See LICENSE for details
 """
 
 from .node import Node
-from .snapshot import SnapshotOps, SnapshotRequest, SnapshotUploadRequest
+from .snapshot import SnapshotOp, UploadOp
 from .state import node_state, NodeState
+from astacus.common.ipc import SnapshotRequest, SnapshotUploadRequest
 from fastapi import APIRouter, Depends, HTTPException
 
 import time
@@ -47,11 +48,23 @@ def unlock(locker: str, state: NodeState = Depends(node_state)):
 def snapshot(req: SnapshotRequest = SnapshotRequest(), n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
-    return SnapshotOps(n=n).start_snapshot(req=req)
+    return SnapshotOp(n=n).start(req=req)
+
+
+@router.get("/snapshot/{op_id}")
+def snapshot_result(*, op_id: int, n: Node = Depends()):
+    op, _ = n.get_op_and_op_info(op_id=op_id, op_name="snapshot")
+    return op.result
 
 
 @router.post("/upload")
 def upload(req: SnapshotUploadRequest, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
-    return SnapshotOps(n=n).start_upload(req=req)
+    return UploadOp(n=n).start(req=req)
+
+
+@router.get("/upload/{op_id}")
+def upload_result(*, op_id: int, n: Node = Depends()):
+    op, _ = n.get_op_and_op_info(op_id=op_id, op_name="upload")
+    return op.result

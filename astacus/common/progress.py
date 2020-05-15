@@ -70,3 +70,7 @@ class Progress(BaseModel):
     @property
     def finished_successfully(self):
         return self.final and not self.failed and self.handled == self.total
+
+    @property
+    def finished_failed(self):
+        return self.final and not self.finished_successfully

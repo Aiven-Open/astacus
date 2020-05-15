@@ -3,9 +3,8 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 
-from astacus.common import utils
-from astacus.node import snapshot
-from astacus.node.progress import Progress
+from astacus.common import ipc, utils
+from astacus.common.progress import Progress
 from pathlib import Path
 
 import pytest
@@ -43,9 +42,7 @@ def test_snapshot(snapshotter, storage):
     assert (dst / "foo").is_file()
     assert (dst / "foo").read_text() == "barfoo"
 
-    snapshotter.write_hashes_to_storage(hashes=blocks,
-                                        storage=storage,
-                                        progress=Progress())
+    snapshotter.write_hashes_to_storage(hashes=blocks, storage=storage, progress=Progress())
 
     # Remove file from src, run snapshot
     (src / "foo").unlink()
@@ -80,20 +77,16 @@ def test_api_snapshot_and_upload(client, mocker, tmpdir):
 
     # Decode the (result endpoint) response using the model
     response = m.call_args[1]["data"]
-    result = snapshot.SnapshotResult.parse_raw(response)
+    result = ipc.SnapshotResult.parse_raw(response)
     assert result.progress.finished_successfully
     assert result.hashes
     hexdigest = result.hashes[0]
 
     # Ask it to be uploaded
-    response = client.post("/node/upload",
-                           json={
-                               "hashes": result.hashes,
-                               "result_url": url
-                           })
+    response = client.post("/node/upload", json={"hashes": result.hashes, "result_url": url})
     assert response.status_code == 200, response.json()
     response = m.call_args[1]["data"]
-    result = snapshot.SnapshotResult.parse_raw(response)
+    result = ipc.SnapshotResult.parse_raw(response)
     assert result.progress.finished_successfully
 
     assert (Path(tmpdir) / "backup-root" / f"{hexdigest}.dat").is_file()

@@ -2,9 +2,11 @@
 string-quote=double-avoid-escape
 triple-quote=double
 docstring-quote=double
+jobs=4
 
 [MESSAGES CONTROL]
 disable=
+    bad-continuation,  # yapf style
     invalid-name,  # fastapi conventions break this
     missing-docstring,
     no-member,  # broken with pydantic + inheritance for some reason

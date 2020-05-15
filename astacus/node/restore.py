@@ -21,19 +21,11 @@ class Restorer:
     def __init__(self, *, dst):
         self.dst = dst
 
-    def restore_from_storage(self,
-                             *,
-                             storage,
-                             progress,
-                             snapshotstate: SnapshotState,
-                             still_running_callback=lambda: True):
+    def restore_from_storage(self, *, storage, progress, snapshotstate: SnapshotState, still_running_callback=lambda: True):
         hexdigest2snapshotfiles: Dict[str, List[SnapshotFile]] = {}
         for snapshotfile in snapshotstate.files:
-            hexdigest2snapshotfiles.setdefault(snapshotfile.hexdigest,
-                                               []).append(snapshotfile)
-        progress.start(
-            sum(snapshotfiles[0].file_size
-                for snapshotfiles in hexdigest2snapshotfiles.values()))
+            hexdigest2snapshotfiles.setdefault(snapshotfile.hexdigest, []).append(snapshotfile)
+        progress.start(sum(snapshotfiles[0].file_size for snapshotfiles in hexdigest2snapshotfiles.values()))
         # TBD: Error checking, what to do if we're told to restore to existing directory?
         for hexdigest, snapshotfiles in hexdigest2snapshotfiles.items():
             if not still_running_callback():
@@ -43,9 +35,7 @@ class Restorer:
             with download_path.open("wb") as f:
                 storage.download_hexdigest_to_file(hexdigest, f)
                 progress.download_success(snapshotfiles[0].file_size)
-                os.utime(download_path,
-                         ns=(snapshotfiles[0].mtime_ns,
-                             snapshotfiles[0].mtime_ns))
+                os.utime(download_path, ns=(snapshotfiles[0].mtime_ns, snapshotfiles[0].mtime_ns))
 
             # We don't report progress for these, as local copying
             # should be ~instant
@@ -53,7 +43,6 @@ class Restorer:
                 copy_path = self.dst / snapshotfile.relative_path
                 copy_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy(download_path, copy_path)
-                os.utime(copy_path,
-                         ns=(snapshotfile.mtime_ns, snapshotfile.mtime_ns))
+                os.utime(copy_path, ns=(snapshotfile.mtime_ns, snapshotfile.mtime_ns))
         # This operation is done. It may or may not have been a success.
         progress.done()

@@ -4,13 +4,14 @@ See LICENSE for details
 
 This state represents the state of the node.
 
-It is persisted to disk, and stored in the app.state.
+By design it cannot be persisted to disk, but e.g. op_info can be if necessary.
+
 """
 
 from astacus.common import utils
-from astacus.common.op import Op
+from astacus.common.op import OpState
+from dataclasses import dataclass
 from fastapi import Depends, Request
-from pydantic import BaseModel  # pylint: disable=no-name-in-module # ( sometimes Cython -> pylint won't work )
 from threading import Lock
 
 import time
@@ -19,11 +20,11 @@ APP_KEY = "node_state"
 APP_LOCK_KEY = "node_lock"
 
 
-class NodeState(BaseModel):
+@dataclass
+class NodeState(OpState):
     locked: bool = False
     locker: str = ''
     locked_until: float = 0
-    op_info: Op.Info = Op.Info()
 
     @property
     def is_locked(self):
@@ -54,9 +55,7 @@ class NodeState(BaseModel):
 
 
 def raw_node_state(request: Request) -> NodeState:
-    return utils.get_or_create_state(request=request,
-                                     key=APP_KEY,
-                                     factory=NodeState)
+    return utils.get_or_create_state(request=request, key=APP_KEY, factory=NodeState)
 
 
 def node_lock(request: Request) -> Lock:
@@ -72,12 +71,9 @@ def node_lock(request: Request) -> Lock:
     + with (only in critical sections) in the different thread should
     be used.
     """
-    return utils.get_or_create_state(request=request,
-                                     key=APP_LOCK_KEY,
-                                     factory=Lock)
+    return utils.get_or_create_state(request=request, key=APP_LOCK_KEY, factory=Lock)
 
 
-def node_state(state: NodeState = Depends(raw_node_state),
-               lock: Lock = Depends(node_lock)):
+def node_state(state: NodeState = Depends(raw_node_state), lock: Lock = Depends(node_lock)):
     with lock:
         yield state

@@ -7,6 +7,7 @@ from astacus.coordinator.config import CoordinatorConfig
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import asyncio
 import pytest
 
 
@@ -27,3 +28,12 @@ def fixture_client(app):
     assert response.status_code == 422, response.json()
 
     yield client
+
+
+async def _nop_sleep(_):
+    pass
+
+
+@pytest.fixture(name="sleepless")
+def fixture_sleepless(mocker):
+    mocker.patch.object(asyncio, 'sleep', new=_nop_sleep)

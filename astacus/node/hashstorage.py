@@ -60,9 +60,7 @@ class FileHashStorage(HashStorage):
         self._hexdigest_to_path(hexdigest).unlink(missing_ok=True)
 
     def list_hexdigests(self):
-        results = [
-            p.stem for p in self.path.iterdir() if p.suffix == self.suffix
-        ]
+        results = [p.stem for p in self.path.iterdir() if p.suffix == self.suffix]
         logger.debug("list_hexdigests => %d", len(results))
         return results
 
