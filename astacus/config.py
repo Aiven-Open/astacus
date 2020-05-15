@@ -15,7 +15,7 @@ from fastapi import Request
 from pydantic import BaseModel  # pylint: disable=no-name-in-module # ( sometimes Cython -> pylint won't work )
 from typing import Optional
 
-import json
+import yaml
 
 APP_KEY = "global_config"
 
@@ -43,7 +43,7 @@ def global_config(request: Request) -> GlobalConfig:
 
 def set_global_config_from_path(app, path):
     fh = open(path)
-    config = GlobalConfig.parse_obj(json.load(fh))
+    config = GlobalConfig.parse_obj(yaml.safe_load(fh))
     setattr(app.state, APP_KEY, config)
     setattr(app.state, COORDINATOR_CONFIG_KEY, config.coordinator)
     setattr(app.state, NODE_CONFIG_KEY, config.node)

@@ -51,7 +51,7 @@ def main():
     parser.add_argument("-c",
                         "--config",
                         type=str,
-                        help="JSON configuration file to use",
+                        help="YAML configuration file to use",
                         required=True)
     # TBD: Add overrides for configuration file entries that may be
     # relevant to update in more human-friendly way

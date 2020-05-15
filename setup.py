@@ -28,6 +28,7 @@ def _run():
         zip_safe=False,
         packages=setuptools.find_packages(exclude=["test"]),
         install_requires=[
+            "PyYAML==5.3.1",
             "fastapi==0.54.1",
             "httpx==0.12.1",
             "uvicorn==0.11.5",
