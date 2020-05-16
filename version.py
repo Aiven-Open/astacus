@@ -16,15 +16,13 @@ def save_version(*, new_ver, old_ver, version_file):
     version_file = os.path.join(os.path.dirname(__file__), version_file)
     if not old_ver or new_ver != old_ver:
         with open(version_file, "w") as file_handle:
-            file_handle.write('"""{}"""\n__version__ = "{}"\n'.format(
-                __doc__, new_ver))
+            file_handle.write('"""{}"""\n__version__ = "{}"\n'.format(__doc__, new_ver))
     return True
 
 
 def update_project_version(version_file):
     "Update the version_file, and return the version number stored in the file"
-    version_file = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                                version_file)
+    version_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), version_file)
     try:
         module = imp.load_source("verfile", version_file)
         file_ver = module.__version__
@@ -33,37 +31,26 @@ def update_project_version(version_file):
 
     os.chdir(os.path.dirname(__file__) or ".")
     try:
-        git_out = subprocess.check_output(["git", "describe", "--always"],
-                                          stderr=getattr(
-                                              subprocess, "DEVNULL", None))
+        git_out = subprocess.check_output(["git", "describe", "--always"], stderr=getattr(subprocess, "DEVNULL", None))
     except (OSError, subprocess.CalledProcessError):
         pass
     else:
         git_ver = git_out.splitlines()[0].strip().decode("utf-8")
         if "." not in git_ver:
             git_ver = "0.0.1-0-unknown-{}".format(git_ver)
-        if save_version(new_ver=git_ver,
-                        old_ver=file_ver,
-                        version_file=version_file):
+        if save_version(new_ver=git_ver, old_ver=file_ver, version_file=version_file):
             return git_ver
 
     makefile = os.path.join(os.path.dirname(__file__), "Makefile")
     if os.path.exists(makefile):
         with open(makefile, "r") as file_handle:
             lines = file_handle.readlines()
-        short_ver = [
-            line.split("=", 1)[1].strip() for line in lines
-            if line.startswith("short_ver")
-        ][0]
-        if save_version(new_ver=short_ver,
-                        old_ver=file_ver,
-                        version_file=version_file):
+        short_ver = [line.split("=", 1)[1].strip() for line in lines if line.startswith("short_ver")][0]
+        if save_version(new_ver=short_ver, old_ver=file_ver, version_file=version_file):
             return short_ver
 
     if not file_ver:
-        raise Exception(
-            "version not available from git or from file {!r}".format(
-                version_file))
+        raise Exception("version not available from git or from file {!r}".format(version_file))
 
     return file_ver
 

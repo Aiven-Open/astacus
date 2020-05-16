@@ -48,3 +48,14 @@ repos:
         exclude: ^vendor/
         args:
           - --rcfile=.pylintrc
+
+  # https://pre-commit.com/#repository-local-hooks
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: mypy
+        language: system
+        types: [python]
+        files: \.py$
+        exclude: ^setup.py|^tests/|^vendor/

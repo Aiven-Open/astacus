@@ -15,10 +15,8 @@ def _run():
 
     try:
         import version  # pylint: disable=import-outside-toplevel
-        version_for_setup_py = version.update_project_version(
-            "astacus/version.py")
-        version_for_setup_py = ".dev".join(
-            version_for_setup_py.split("-", 2)[:2])
+        version_for_setup_py = version.update_project_version("astacus/version.py")
+        version_for_setup_py = ".dev".join(version_for_setup_py.split("-", 2)[:2])
     except ImportError:
         version_for_setup_py = "0.0.1"  # tox
 
@@ -28,14 +26,18 @@ def _run():
         zip_safe=False,
         packages=setuptools.find_packages(exclude=["test"]),
         install_requires=[
+            "PyYAML==5.3.1",
             "fastapi==0.54.1",
+            "httpx==0.12.1",
+            "uvicorn==0.11.5",
+            "sentry-sdk==0.14.4",
         ],
         extras_require={},
         dependency_links=[],
         package_data={},
         entry_points={
             "console_scripts": [
-                "astacus = astacus:main",
+                "astacus = astacus.main:main",
             ],
         },
         author="Aiven",
