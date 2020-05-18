@@ -22,12 +22,12 @@ class Restorer:
         self.dst = dst
 
     def restore_from_storage(self, *, storage, progress, snapshotstate: SnapshotState, still_running_callback=lambda: True):
-        hexdigest2snapshotfiles: Dict[str, List[SnapshotFile]] = {}
+        hexdigest_to_snapshotfiles: Dict[str, List[SnapshotFile]] = {}
         for snapshotfile in snapshotstate.files:
-            hexdigest2snapshotfiles.setdefault(snapshotfile.hexdigest, []).append(snapshotfile)
-        progress.start(sum(snapshotfiles[0].file_size for snapshotfiles in hexdigest2snapshotfiles.values()))
+            hexdigest_to_snapshotfiles.setdefault(snapshotfile.hexdigest, []).append(snapshotfile)
+        progress.start(sum(snapshotfiles[0].file_size for snapshotfiles in hexdigest_to_snapshotfiles.values()))
         # TBD: Error checking, what to do if we're told to restore to existing directory?
-        for hexdigest, snapshotfiles in hexdigest2snapshotfiles.items():
+        for hexdigest, snapshotfiles in hexdigest_to_snapshotfiles.items():
             if not still_running_callback():
                 break
             download_path = self.dst / snapshotfiles[0].relative_path
