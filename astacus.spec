@@ -6,10 +6,21 @@ Summary:        Cluster database backup tool
 License:        ASL 2.0
 Source0:        astacus-rpm-src.tar
 BuildArch:      noarch
+# pghoard
+Requires:       python3-botocore
+Requires:       python3-cryptography >= 0.8
+Requires:       python3-dateutil
+Requires:       python3-psycopg2
+Requires:       python3-requests
+Requires:       python3-snappy
+BuildRequires:  snappy-devel
+
+# astacus
 BuildRequires:  python3-devel
 BuildRequires:  python3-flake8
 BuildRequires:  python3-isort
 BuildRequires:  python3-pylint
+BuildRequires:  python3-pytest
 BuildRequires:  python3-tox
 BuildRequires:  python3-yapf
 BuildRequires:  pre-commit

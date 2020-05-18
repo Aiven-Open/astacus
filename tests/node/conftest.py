@@ -3,10 +3,10 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 
+from astacus.common.hashstorage import FileHashStorage
 from astacus.common.progress import Progress
 from astacus.node.api import router as node_router
 from astacus.node.config import NodeConfig
-from astacus.node.hashstorage import FileHashStorage
 from astacus.node.snapshot import Snapshotter
 from fastapi import FastAPI
 from fastapi.testclient import TestClient

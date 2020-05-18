@@ -13,8 +13,21 @@ clean:
 	rm -rf rpm/
 
 .PHONY: build-dep-fedora
-build-dep-fedora: /usr/bin/rpmbuild
+build-dep-fedora:
+	sudo dnf -y install --best --allowerasing \
+		golang \
+		postgresql-server \
+		python3-botocore python3-cryptography python3-paramiko python3-dateutil python3-devel \
+		python3-flake8 python3-psycopg2 python3-pylint python3-pytest \
+		python3-pytest-cov python3-requests python3-snappy \
+		python3-azure-storage \
+		rpm-build
+	sudo dnf -y install 'dnf-command(builddep)'
 	sudo dnf -y builddep astacus.spec
+
+.PHONY: build-dep-ubuntu
+build-dep-ubuntu:
+	sudo apt-get install -y git libsnappy-dev python3-pip python3-psycopg2
 
 .PHONY: pylint
 pylint: $(GENERATED)
@@ -53,3 +66,22 @@ pre-commit: $(GENERATED)
 
 .PHONY: lint
 lint: pre-commit
+
+# Utility targets to ensure that build-dep-X are up to date. These are
+# NOT optimized for normal development.
+PODMAN_RUN = podman run --rm --security-opt label=disable -v `pwd`:/src
+# ^ without label=disable, modern selinux won't be happy
+
+.PHONY: podman-test
+podman-test: podman-test-fedora podman-test-ubuntu
+
+
+.PHONY: podman-test-fedora
+podman-test-fedora:
+	podman build -t astacus-fedora -f Dockerfile.fedora
+	$(PODMAN_RUN) astacus-fedora
+
+.PHONY: podman-test-ubuntu
+podman-test-ubuntu:
+	podman build -t astacus-ubuntu -f Dockerfile.ubuntu
+	$(PODMAN_RUN) astacus-ubuntu

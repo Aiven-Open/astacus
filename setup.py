@@ -31,6 +31,7 @@ def _run():
             "httpx==0.12.1",
             "uvicorn==0.11.5",
             "sentry-sdk==0.14.4",
+            "pghoard==2.1.0",
         ],
         extras_require={},
         dependency_links=[],

@@ -10,9 +10,9 @@ this module with proper parameters.
 
 """
 
-from .hashstorage import FileHashStorage
 from .node import Node, NodeOp
 from astacus.common import ipc, utils
+from astacus.common.hashstorage import FileHashStorage
 from astacus.common.ipc import SnapshotFile, SnapshotRequest, SnapshotState, SnapshotUploadRequest
 from astacus.common.progress import Progress
 from pathlib import Path
@@ -55,8 +55,8 @@ class Snapshotter:
         self.src = Path(src)
         self.dst = Path(dst)
         self.globs = globs
-        self.relative_path2snapshotfile = {}
-        self.hexdigest2snapshotfiles = {}
+        self.relative_path_to_snapshotfile = {}
+        self.hexdigest_to_snapshotfiles = {}
         self.file_path_filter = file_path_filter
 
     def _list_files(self, basepath: Path):
@@ -78,16 +78,16 @@ class Snapshotter:
         return sorted(dirs), files
 
     def _add_snapshotfile(self, snapshotfile: SnapshotFile):
-        old_snapshotfile = self.relative_path2snapshotfile.get(snapshotfile.relative_path, None)
+        old_snapshotfile = self.relative_path_to_snapshotfile.get(snapshotfile.relative_path, None)
         if old_snapshotfile:
             self._remove_snapshotfile(old_snapshotfile)
-        self.relative_path2snapshotfile[snapshotfile.relative_path] = snapshotfile
-        self.hexdigest2snapshotfiles.setdefault(snapshotfile.hexdigest, []).append(snapshotfile)
+        self.relative_path_to_snapshotfile[snapshotfile.relative_path] = snapshotfile
+        self.hexdigest_to_snapshotfiles.setdefault(snapshotfile.hexdigest, []).append(snapshotfile)
 
     def _remove_snapshotfile(self, snapshotfile: SnapshotFile):
-        assert self.relative_path2snapshotfile[snapshotfile.relative_path] == snapshotfile
-        del self.relative_path2snapshotfile[snapshotfile.relative_path]
-        self.hexdigest2snapshotfiles[snapshotfile.hexdigest].remove(snapshotfile)
+        assert self.relative_path_to_snapshotfile[snapshotfile.relative_path] == snapshotfile
+        del self.relative_path_to_snapshotfile[snapshotfile.relative_path]
+        self.hexdigest_to_snapshotfiles[snapshotfile.hexdigest].remove(snapshotfile)
 
     def _snapshotfile_from_path(self, relative_path):
         src_path = self.src / relative_path
@@ -96,7 +96,7 @@ class Snapshotter:
 
     def _get_snapshot_hash_list(self, relfilenames):
         for relfilename in relfilenames:
-            old_snapshotfile = self.relative_path2snapshotfile.get(relfilename)
+            old_snapshotfile = self.relative_path_to_snapshotfile.get(relfilename)
             snapshotfile = self._snapshotfile_from_path(relfilename)
             if old_snapshotfile:
                 snapshotfile.hexdigest = old_snapshotfile.hexdigest
@@ -106,10 +106,10 @@ class Snapshotter:
             yield snapshotfile
 
     def get_snapshot_hashes(self):
-        return [dig for dig, sf in self.hexdigest2snapshotfiles.items() if sf]
+        return [dig for dig, sf in self.hexdigest_to_snapshotfiles.items() if sf]
 
     def get_snapshot_state(self):
-        return SnapshotState(files=sorted(self.relative_path2snapshotfile.values()))
+        return SnapshotState(files=sorted(self.relative_path_to_snapshotfile.values()))
 
     def snapshot(self, *, progress: Progress):
         progress.start(3)
@@ -129,7 +129,7 @@ class Snapshotter:
         # Remove extra files
         for relfilename in set(dst_files).difference(src_files):
             dst_path = self.dst / relfilename
-            snapshotfile = self.relative_path2snapshotfile.get(relfilename)
+            snapshotfile = self.relative_path_to_snapshotfile.get(relfilename)
             if snapshotfile:
                 self._remove_snapshotfile(snapshotfile)
             dst_path.unlink()
@@ -169,7 +169,7 @@ class Snapshotter:
         for hexdigest in todo:
             if not still_running_callback():
                 break
-            files = self.hexdigest2snapshotfiles.get(hexdigest, [])
+            files = self.hexdigest_to_snapshotfiles.get(hexdigest, [])
             for snapshotfile in files:
                 path = self.dst / snapshotfile.relative_path
                 if not path.is_file():
