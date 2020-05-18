@@ -29,7 +29,8 @@ class HashStorage:
 
     def download_hexdigest_to_path(self, hexdigest, filename):
         tempfilename = f"{filename}.tmp"
-        self.download_hexdigest_to_file(hexdigest, open(tempfilename, "wb"))
+        with open(tempfilename, "wb") as f:
+            self.download_hexdigest_to_file(hexdigest, f)
         os.rename(tempfilename, filename)
 
     def list_hexdigests(self):
@@ -42,7 +43,8 @@ class HashStorage:
         raise NotImplementedError
 
     def upload_hexdigest_from_path(self, hexdigest, filename) -> bool:
-        return self.upload_hexdigest_from_file(hexdigest, open(filename, "rb"))
+        with open(filename, "rb") as f:
+            return self.upload_hexdigest_from_file(hexdigest, f)
 
 
 class FileHashStorage(HashStorage):

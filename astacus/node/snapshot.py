@@ -10,9 +10,9 @@ this module with proper parameters.
 
 """
 
-from .hashstorage import FileHashStorage
 from .node import Node, NodeOp
 from astacus.common import ipc, utils
+from astacus.common.hashstorage import FileHashStorage
 from astacus.common.ipc import SnapshotFile, SnapshotRequest, SnapshotState, SnapshotUploadRequest
 from astacus.common.progress import Progress
 from pathlib import Path
