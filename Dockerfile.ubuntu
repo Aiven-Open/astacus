@@ -1,0 +1,13 @@
+# -*- dockerfile -*-
+
+FROM ubuntu:20.04
+MAINTAINER "Markus Stenberg <mstenber@aiven.io>"
+
+RUN apt-get update
+RUN apt-get install -y sudo make
+ADD Makefile /build/
+RUN cd /build && make build-dep-ubuntu
+ADD README.md setup.py requirements*.txt /build/
+RUN cd /build && python3 -m pip install -r requirements.txt
+# Expect real 'src' to be mounted for CMD to do something useful
+CMD cd /src && make test

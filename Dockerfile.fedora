@@ -1,0 +1,12 @@
+# -*- dockerfile -*-
+
+FROM fedora:31
+MAINTAINER "Markus Stenberg <mstenber@aiven.io>"
+
+RUN dnf install -y sudo make
+ADD Makefile astacus.spec /build/
+RUN cd /build && make build-dep-fedora
+ADD README.md setup.py requirements*.txt /build/
+RUN cd /build && python3 -m pip install -r requirements.txt
+# Expect real 'src' to be mounted for CMD to do something useful
+CMD cd /src && make test
