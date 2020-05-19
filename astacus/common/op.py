@@ -12,11 +12,11 @@ Notable things:
 """
 
 from .exceptions import ExpiredOperationException
+from .utils import AstacusModel
 from astacus.common import magic
 from dataclasses import dataclass, field
 from enum import Enum
 from fastapi import HTTPException
-from pydantic import BaseModel  # pylint: disable=no-name-in-module # ( sometimes Cython -> pylint won't work )
 from typing import Optional
 from urllib.parse import urlunsplit
 
@@ -33,12 +33,12 @@ class Op:
         fail = "fail"
         done = "done"
 
-    class Info(BaseModel):
+    class Info(AstacusModel):
         op_id: int = 0
         op_name: str = ""
         op_status: Optional["Op.Status"]
 
-    class StartResult(BaseModel):
+    class StartResult(AstacusModel):
         op_id: int
         status_url: str
 

@@ -3,14 +3,15 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 
+from astacus.common.rohmuhashstorage import RohmuConfig
+from astacus.common.utils import AstacusModel
 from fastapi import Request
-from pydantic import BaseModel  # pylint: disable=no-name-in-module # ( sometimes Cython -> pylint won't work )
-from typing import List
+from typing import List, Optional
 
 APP_KEY = "node_config"
 
 
-class NodeConfig(BaseModel):
+class NodeConfig(AstacusModel):
     # Where is the root of the file hierarchy we care about
     # ( There can be others too, but probably all things we care about have at least 1 directory )
     root: str
@@ -21,8 +22,7 @@ class NodeConfig(BaseModel):
     # Where do we hardlink things from the file hierarchy we care about
     root_link: str
 
-    # Where we backup root (uses FileHashStorage, mostly useful for testing)
-    backup_root: str = ""
+    object_storage: Optional[RohmuConfig] = None
 
 
 def node_config(request: Request) -> NodeConfig:

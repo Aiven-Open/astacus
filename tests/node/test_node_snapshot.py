@@ -5,7 +5,6 @@ See LICENSE for details
 
 from astacus.common import ipc, utils
 from astacus.common.progress import Progress
-from pathlib import Path
 
 import pytest
 
@@ -61,7 +60,7 @@ def test_snapshot(snapshotter, storage):
     assert not blocks_empty
 
 
-def test_api_snapshot_and_upload(client, mocker, tmpdir):
+def test_api_snapshot_and_upload(client, mocker):
     url = 'http://addr/result'
     m = mocker.patch.object(utils, "http_request")
     response = client.post("/node/snapshot")
@@ -80,7 +79,6 @@ def test_api_snapshot_and_upload(client, mocker, tmpdir):
     result = ipc.SnapshotResult.parse_raw(response)
     assert result.progress.finished_successfully
     assert result.hashes
-    hexdigest = result.hashes[0]
 
     # Ask it to be uploaded
     response = client.post("/node/upload", json={"hashes": result.hashes, "result_url": url})
@@ -88,5 +86,3 @@ def test_api_snapshot_and_upload(client, mocker, tmpdir):
     response = m.call_args[1]["data"]
     result = ipc.SnapshotResult.parse_raw(response)
     assert result.progress.finished_successfully
-
-    assert (Path(tmpdir) / "backup-root" / f"{hexdigest}.dat").is_file()

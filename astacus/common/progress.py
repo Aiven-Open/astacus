@@ -5,14 +5,14 @@ See LICENSE for details
 
 """
 
-from pydantic import BaseModel  # pylint: disable=no-name-in-module # ( sometimes Cython -> pylint won't work )
+from .utils import AstacusModel
 
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-class Progress(BaseModel):
+class Progress(AstacusModel):
     """ JSON-encodable progress meter of sorts """
     handled: int = 0
     failed: int = 0

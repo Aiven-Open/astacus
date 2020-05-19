@@ -12,9 +12,9 @@ this module with proper parameters.
 
 from .node import Node, NodeOp
 from astacus.common import ipc, utils
-from astacus.common.hashstorage import FileHashStorage
 from astacus.common.ipc import SnapshotFile, SnapshotRequest, SnapshotState, SnapshotUploadRequest
 from astacus.common.progress import Progress
+from astacus.common.rohmuhashstorage import RohmuHashStorage
 from pathlib import Path
 
 import hashlib
@@ -253,10 +253,7 @@ class UploadOp(_SnapshotterOp):
         return self.start_op(op_name="upload", op=self, fun=self.upload)
 
     def upload(self):
-        if self.config.backup_root:
-            storage = FileHashStorage(self.config.backup_root)
-        else:
-            raise NotImplementedError
+        storage = RohmuHashStorage(self.config.object_storage)
         self.snapshotter.write_hashes_to_storage(
             hashes=self.req.hashes,
             storage=storage,

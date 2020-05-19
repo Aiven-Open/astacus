@@ -4,8 +4,8 @@ See LICENSE for details
 """
 
 from .progress import Progress
+from .utils import AstacusModel
 from pathlib import Path
-from pydantic import BaseModel  # pylint: disable=no-name-in-module # ( sometimes Cython -> pylint won't work )
 from typing import List, Optional
 
 import functools
@@ -13,11 +13,11 @@ import functools
 # node generic base
 
 
-class NodeRequest(BaseModel):
+class NodeRequest(AstacusModel):
     result_url: str = ""  # where results are sent
 
 
-class NodeResult(BaseModel):
+class NodeResult(AstacusModel):
     progress: Progress
 
 
@@ -25,7 +25,7 @@ class NodeResult(BaseModel):
 
 
 @functools.total_ordering
-class SnapshotFile(BaseModel):
+class SnapshotFile(AstacusModel):
     relative_path: Path
     file_size: int
     mtime_ns: int
@@ -36,7 +36,7 @@ class SnapshotFile(BaseModel):
         return self.relative_path < o.relative_path
 
 
-class SnapshotState(BaseModel):
+class SnapshotState(AstacusModel):
     files: List[SnapshotFile]
 
 
