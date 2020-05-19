@@ -25,6 +25,7 @@ score=no
 
 [TYPECHECK]
 ignored-classes=responses
+extension-pkg-whitelist=pydantic
 
 [SIMILARITIES]
 # Ignore import statements when computing similarities

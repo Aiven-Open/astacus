@@ -8,10 +8,11 @@ Rohmu-specific actual object storage implementation
 """
 
 from .hashstorage import HashStorage
+from .utils import AstacusModel
 from enum import Enum
 from pghoard import rohmu  # type: ignore
 from pghoard.rohmu import rohmufile  # type: ignore
-from pydantic import BaseModel, Field  # pylint: disable=no-name-in-module # ( sometimes Cython -> pylint won't work )
+from pydantic import Field
 from typing import Dict, Optional, Union
 from typing_extensions import Literal
 
@@ -32,7 +33,7 @@ class RohmuStorageType(str, Enum):
     # swift = "swift"
 
 
-class RohmuModel(BaseModel):
+class RohmuModel(AstacusModel):
     class Config:
         # As we're keen to both export and decode json, just using enum
         # values is much saner than the alternatives
@@ -99,7 +100,7 @@ class RohmuConfig(RohmuModel):
     temporary_directory: str
 
     # Targets we support for backing up
-    backup_target_storage: str
+    default_storage: str
     storages: Dict[str, RohmuStorageConfig]
 
     # Encryption (optional)
@@ -122,13 +123,18 @@ Note that this isn't super optimized insofar reading is concerned.  We
 could store metadata somewhere, but keeping it in the actual storage
 layer makes the design somewhat more clean.
     """
-    def __init__(self, *, config: RohmuConfig, storage=None):
+    def __init__(self, config: RohmuConfig, *, storage=None):
+        assert config
         self.config = config
-        if storage is None:
-            storage = config.backup_target_storage
-        self.storage_config = config.storages[storage]
-        self.storage = rohmu.get_transfer(self.storage_config.dict())
         self.data_key = "hashblock"
+        self.choose_storage(storage)
+        os.makedirs(config.temporary_directory, exist_ok=True)
+
+    def choose_storage(self, storage=None):
+        if storage is None:
+            storage = self.config.default_storage
+        self.storage_config = self.config.storages[storage]
+        self.storage = rohmu.get_transfer(self.storage_config.dict())
 
     def delete_hexdigest(self, hexdigest):
         key = os.path.join(self.data_key, hexdigest)

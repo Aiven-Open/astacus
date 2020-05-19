@@ -3,15 +3,16 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 
+from astacus.common.rohmuhashstorage import RohmuConfig
+from astacus.common.utils import AstacusModel
 from fastapi import Request
-from pydantic import BaseModel  # pylint: disable=no-name-in-module # ( sometimes Cython -> pylint won't work )
-from typing import List
+from typing import List, Optional
 
 APP_KEY = "coordinator_config"
 
 
-class CoordinatorConfig(BaseModel):
-    class Node(BaseModel):
+class CoordinatorConfig(AstacusModel):
+    class Node(AstacusModel):
         url: str
 
     # Which nodes are we supposed to manage
@@ -34,6 +35,8 @@ class CoordinatorConfig(BaseModel):
     # almost always sense and subsequent backup attempts are fast as
     # snapshots are incremential unless nodes have restarted.
     backup_attempts: int = 5
+
+    object_storage: Optional[RohmuConfig] = None
 
 
 def coordinator_config(request: Request) -> CoordinatorConfig:

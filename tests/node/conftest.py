@@ -21,13 +21,29 @@ def fixture_app(tmpdir):
     app.include_router(node_router, prefix="/node", tags=["node"])
     root = Path(tmpdir) / "root"
     backup_root = Path(tmpdir) / "backup-root"
+    tmp_path = Path(tmpdir) / "backup-tmp"
     root.mkdir()
     (root / "foo").write_text("foobar")
     (root / "foo2").write_text("foobar")
     root_link = Path(tmpdir) / "root-link"
-    app.state.node_config = NodeConfig(
-        root=str(root), root_link=str(root_link), root_globs=["*"], backup_root=str(backup_root)
-    )
+    app.state.node_config = NodeConfig.parse_obj({
+        "root": str(root),
+        "root_link": str(root_link),
+        "root_globs": ["*"],
+        "object_storage": {
+            "temporary_directory": str(tmp_path),
+            "default_storage": "x",
+            "compression": {
+                "algorithm": "zstd"
+            },
+            "storages": {
+                "x": {
+                    "storage_type": "local",
+                    "directory": str(backup_root),
+                }
+            }
+        }
+    })
     yield app
 
 

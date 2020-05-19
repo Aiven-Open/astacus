@@ -8,8 +8,8 @@ from .config import node_config, NodeConfig
 from .state import node_state, NodeState
 from astacus.common import ipc, op, utils
 from astacus.common.progress import Progress
+from astacus.common.utils import AstacusModel
 from fastapi import BackgroundTasks, Depends, Request
-from pydantic import BaseModel  # pylint: disable=no-name-in-module # ( sometimes Cython -> pylint won't work )
 from typing import Optional
 
 import logging
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 class NodeOp(op.Op):
     req: Optional[ipc.NodeRequest] = None  # Provided by subclass
-    result: Optional[BaseModel] = None  # Provided by subclass
+    result: Optional[AstacusModel] = None  # Provided by subclass
     progress: Optional[Progress] = None  # Provided by subclass
 
     def __init__(self, *, n: "Node"):

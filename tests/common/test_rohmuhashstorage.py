@@ -22,7 +22,7 @@ def test_rohmuhashstorage(tmpdir):
     tmp_path.mkdir()
     config = RohmuConfig.parse_obj({
         "temporary_directory": str(tmp_path),
-        "backup_target_storage": "x",
+        "default_storage": "x",
         "compression": {
             "algorithm": "zstd"
         },
