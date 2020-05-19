@@ -99,7 +99,7 @@ class RohmuConfig(RohmuModel):
     temporary_directory: str
 
     # Targets we support for backing up
-    backup_target_storage: str
+    default_storage: str
     storages: Dict[str, RohmuStorageConfig]
 
     # Encryption (optional)
@@ -125,7 +125,7 @@ layer makes the design somewhat more clean.
     def __init__(self, *, config: RohmuConfig, storage=None):
         self.config = config
         if storage is None:
-            storage = config.backup_target_storage
+            storage = config.default_storage
         self.storage_config = config.storages[storage]
         self.storage = rohmu.get_transfer(self.storage_config.dict())
         self.data_key = "hashblock"
