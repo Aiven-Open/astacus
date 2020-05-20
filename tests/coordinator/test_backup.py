@@ -6,6 +6,9 @@ Test that the coordinator backup endpoint works.
 
 """
 
+from astacus.common import ipc
+from astacus.common.ipc import SnapshotHash
+from astacus.coordinator.backup import BackupOp, NodeIndexData
 from astacus.coordinator.config import CoordinatorConfig
 from astacus.coordinator.coordinator import CoordinatorOpWithClusterLock
 
@@ -66,3 +69,75 @@ def test_backup(fail_at, app, client, mocker, sleepless):  # pylint: disable=unu
             assert response.json() == {"state": "done"}
 
         assert app.state.coordinator_state.op_info.op_id == 1
+
+
+class DummyBackupOp(BackupOp):
+    def __init__(self):
+        # pylint: disable=super-init-not-called
+        # NOP __init__, we mock whatever we care about
+        self.nodes = [0, 1, 2]
+
+    def assert_upload_of_snapshot_is(self, snapshot, upload):
+        got_upload = self._snapshot_results_to_upload_node_index_datas(snapshot)
+        assert got_upload == upload
+
+
+_progress_done = ipc.Progress(final=True)
+
+
+@pytest.mark.parametrize(
+    "snapshot,upload", [
+        ([
+            ipc.SnapshotResult(progress=_progress_done),
+            ipc.SnapshotResult(progress=_progress_done),
+            ipc.SnapshotResult(progress=_progress_done),
+        ], [
+            NodeIndexData(),
+            NodeIndexData(),
+            NodeIndexData(),
+        ]),
+        ([
+            ipc.SnapshotResult(
+                hashes=[
+                    SnapshotHash(hexdigest="1-1", size=1),
+                    SnapshotHash(hexdigest="12-2", size=2),
+                    SnapshotHash(hexdigest="123-3", size=3),
+                ],
+                progress=_progress_done
+            ),
+            ipc.SnapshotResult(
+                hashes=[
+                    SnapshotHash(hexdigest="2-1", size=1),
+                    SnapshotHash(hexdigest="12-2", size=2),
+                    SnapshotHash(hexdigest="23-2", size=2),
+                    SnapshotHash(hexdigest="123-3", size=3),
+                ],
+                progress=_progress_done
+            ),
+            ipc.SnapshotResult(
+                hashes=[
+                    SnapshotHash(hexdigest="3-1", size=1),
+                    SnapshotHash(hexdigest="23-2", size=2),
+                    SnapshotHash(hexdigest="123-3", size=3),
+                ],
+                progress=_progress_done
+            ),
+        ], [
+            NodeIndexData(
+                sshashes=[SnapshotHash(hexdigest='1-1', size=1),
+                          SnapshotHash(hexdigest='12-2', size=2)], total_size=3
+            ),
+            NodeIndexData(
+                sshashes=[SnapshotHash(hexdigest='2-1', size=1),
+                          SnapshotHash(hexdigest='23-2', size=2)], total_size=3
+            ),
+            NodeIndexData(
+                sshashes=[SnapshotHash(hexdigest='3-1', size=1),
+                          SnapshotHash(hexdigest='123-3', size=3)], total_size=4
+            ),
+        ]),
+    ]
+)
+def test_upload_optimization(snapshot, upload):
+    op = DummyBackupOp()
+    op.assert_upload_of_snapshot_is(snapshot, upload)
