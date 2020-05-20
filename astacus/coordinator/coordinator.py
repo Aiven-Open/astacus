@@ -162,9 +162,12 @@ class CoordinatorOpWithClusterLock(CoordinatorOp):
                 logger.info("Lock of node %r expired, canceling operation", node)
                 main_task.cancel()
                 return
-            if t < next_lock:
-                await asyncio.sleep(next_lock - t)
+            while t < next_lock:
+                left = next_lock - t + 0.01
+                logger.debug("_node_relock_loop sleeping %r", left)
+                await asyncio.sleep(left)
                 t = time.monotonic()
+
             # Attempt to reacquire lock
             r = await self.request_lock_call_from_nodes(
                 call=magic.LockCall.relock, locker=self.locker, ttl=self.ttl, nodes=[node]
