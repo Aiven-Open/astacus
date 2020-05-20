@@ -25,9 +25,9 @@ def test_snapshot(snapshotter, storage):
     assert (dst / "foo").read_text() == "foobar"
     assert (dst / "foo2").read_text() == "foobar"
 
-    blocks = snapshotter.get_snapshot_hashes()
-    assert len(blocks) == 1
-    assert len(blocks[0]) == 64  # in hex, so 32 bytes of hash = 256 bit hash
+    hashes = snapshotter.get_snapshot_hashes()
+    assert len(hashes) == 1
+    assert hashes == [ipc.SnapshotHash(hexdigest="03a4921c6b0aa0e5bed57228a3b6fd61bec160d46fa610ce6742dd51ab311f43", size=6)]
 
     while True:
         (src / "foo").write_text("barfoo")  # same length
@@ -41,7 +41,7 @@ def test_snapshot(snapshotter, storage):
     assert (dst / "foo").is_file()
     assert (dst / "foo").read_text() == "barfoo"
 
-    snapshotter.write_hashes_to_storage(hashes=blocks, storage=storage, progress=Progress())
+    snapshotter.write_hashes_to_storage(hashes=hashes, storage=storage, progress=Progress())
 
     # Remove file from src, run snapshot
     (src / "foo").unlink()
@@ -55,9 +55,9 @@ def test_snapshot(snapshotter, storage):
     assert snapshotter.snapshot(progress=Progress()) == 0
     assert not (dst / "foo2").is_file()
 
-    # Now shouldn't have any data blocks
-    blocks_empty = snapshotter.get_snapshot_hashes()
-    assert not blocks_empty
+    # Now shouldn't have any data hashes
+    hashes_empty = snapshotter.get_snapshot_hashes()
+    assert not hashes_empty
 
 
 def test_api_snapshot_and_upload(client, mocker):
@@ -81,7 +81,7 @@ def test_api_snapshot_and_upload(client, mocker):
     assert result.hashes
 
     # Ask it to be uploaded
-    response = client.post("/node/upload", json={"hashes": result.hashes, "result_url": url})
+    response = client.post("/node/upload", json={"hashes": [x.dict() for x in result.hashes], "result_url": url})
     assert response.status_code == 200, response.json()
     response = m.call_args[1]["data"]
     result = ipc.SnapshotResult.parse_raw(response)

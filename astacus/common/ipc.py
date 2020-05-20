@@ -44,13 +44,31 @@ class SnapshotRequest(NodeRequest):
     pass
 
 
+class SnapshotHash(AstacusModel):
+    """
+    This class represents something that is to be stored in the object storage.
+
+    size is provided mainly to allow for even loading of nodes in case
+    same hexdigest is available from multiple nodes.
+
+    For symmetry, same structure is passed back in SnapshotUploadRequest,
+    although only hexdigest should really matter.
+    """
+    hexdigest: str
+    size: int
+
+    def __hash__(self):
+        # hexdigests should be unique, regardless of size
+        return hash(self.hexdigest)
+
+
 class SnapshotUploadRequest(NodeRequest):
-    hashes: List[str]
+    hashes: List[SnapshotHash]
 
 
 class SnapshotResult(NodeResult):
     state: Optional[SnapshotState]  # should be passed opaquely to restore
-    hashes: Optional[List[str]]  # populated only if state is available
+    hashes: Optional[List[SnapshotHash]]  # populated only if state is available
 
 
 class SnapshotUploadResult(NodeResult):

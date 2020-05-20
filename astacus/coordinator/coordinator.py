@@ -7,8 +7,10 @@ from .config import coordinator_config, CoordinatorConfig
 from .state import coordinator_state, CoordinatorState
 from astacus.common import magic, op, utils
 from astacus.common.magic import LockCall
+from astacus.common.rohmuhashstorage import RohmuHashStorage
 from enum import Enum
 from fastapi import BackgroundTasks, Depends, Request
+from starlette.concurrency import run_in_threadpool
 
 import asyncio
 import json
@@ -25,12 +27,38 @@ class LockResult(Enum):
     exception = "exception"
 
 
+class AsyncHashStorageWrapper:
+    """Subset of the HashStorage API proxied async -> sync via starlette threadpool
+
+    Note that the access is not intentionally locked; therefore even
+    synchronous API can be used in parallel (at least if it is safe to
+    do so) using this.
+
+    """
+    def __init__(self, storage):
+        self.storage = storage
+
+    async def delete_hexdigest(self, hexdigest):
+        return await run_in_threadpool(self.storage.delete_hexdigest, hexdigest)
+
+    async def list_hexdigests(self):
+        return await run_in_threadpool(self.storage.list_hexdigests)
+
+
 class CoordinatorOp(op.Op):
     def __init__(self, *, c: "Coordinator"):
         super().__init__(info=c.state.op_info)
         self.nodes = c.config.nodes
         self.request_url = c.request.url
         self.config = c.config
+
+    @property
+    def async_storage(self):
+        return AsyncHashStorageWrapper(storage=self.storage)
+
+    @property
+    def storage(self):
+        return RohmuHashStorage(self.config.object_storage)
 
     async def request_from_nodes(self, url, *, caller, nodes=None, **kw):
         if nodes is None:
@@ -84,17 +112,18 @@ class CoordinatorOp(op.Op):
     async def request_unlock_from_nodes(self, *, locker: str) -> bool:
         return await self.request_lock_call_from_nodes(call=LockCall.unlock, locker=locker) == LockResult.ok
 
-    async def wait_successful_results(self, start_results, *, result_class):
+    async def wait_successful_results(self, start_results, *, result_class, all_nodes=True):
         urls = []
-        for result in start_results:
+        for i, result in enumerate(start_results, 1):
             if not result or isinstance(result, Exception):
-                continue
+                logger.info("wait_successful_results: Incorrect start result for #%d/%d: %r", i, len(start_results), result)
+                return []
             parsed_result = op.Op.StartResult.parse_obj(result)
             urls.append(parsed_result.status_url)
-        if len(urls) != len(self.nodes):
+        if all_nodes and len(urls) != len(self.nodes):
             return []
         delay = self.config.poll_delay_start
-        results = [None] * len(self.nodes)
+        results = [None] * len(urls)
         # Note that we don't have timeout mechanism here as such,
         # however, if re-locking times out, we will bail out. TBD if
         # we need timeout mechanism here anyway.
@@ -162,9 +191,12 @@ class CoordinatorOpWithClusterLock(CoordinatorOp):
                 logger.info("Lock of node %r expired, canceling operation", node)
                 main_task.cancel()
                 return
-            if t < next_lock:
-                await asyncio.sleep(next_lock - t)
+            while t < next_lock:
+                left = next_lock - t + 0.01
+                logger.debug("_node_relock_loop sleeping %r", left)
+                await asyncio.sleep(left)
                 t = time.monotonic()
+
             # Attempt to reacquire lock
             r = await self.request_lock_call_from_nodes(
                 call=magic.LockCall.relock, locker=self.locker, ttl=self.ttl, nodes=[node]

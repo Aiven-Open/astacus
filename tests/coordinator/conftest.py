@@ -10,6 +10,8 @@ from fastapi.testclient import TestClient
 import asyncio
 import pytest
 
+_original_asyncio_sleep = asyncio.sleep
+
 
 @pytest.fixture(name="app")
 def fixture_app():
@@ -30,10 +32,10 @@ def fixture_client(app):
     yield client
 
 
-async def _nop_sleep(_):
-    pass
+async def _sleep_little(value):
+    await _original_asyncio_sleep(min(value, 0.01))
 
 
 @pytest.fixture(name="sleepless")
 def fixture_sleepless(mocker):
-    mocker.patch.object(asyncio, 'sleep', new=_nop_sleep)
+    mocker.patch.object(asyncio, 'sleep', new=_sleep_little)
