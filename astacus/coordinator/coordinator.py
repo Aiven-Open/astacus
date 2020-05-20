@@ -7,8 +7,10 @@ from .config import coordinator_config, CoordinatorConfig
 from .state import coordinator_state, CoordinatorState
 from astacus.common import magic, op, utils
 from astacus.common.magic import LockCall
+from astacus.common.rohmuhashstorage import RohmuHashStorage
 from enum import Enum
 from fastapi import BackgroundTasks, Depends, Request
+from starlette.concurrency import run_in_threadpool
 
 import asyncio
 import json
@@ -25,12 +27,38 @@ class LockResult(Enum):
     exception = "exception"
 
 
+class AsyncHashStorageWrapper:
+    """Subset of the HashStorage API proxied async -> sync via starlette threadpool
+
+    Note that the access is not intentionally locked; therefore even
+    synchronous API can be used in parallel (at least if it is safe to
+    do so) using this.
+
+    """
+    def __init__(self, storage):
+        self.storage = storage
+
+    async def delete_hexdigest(self, hexdigest):
+        return await run_in_threadpool(self.storage.delete_hexdigest, hexdigest)
+
+    async def list_hexdigests(self):
+        return await run_in_threadpool(self.storage.list_hexdigests)
+
+
 class CoordinatorOp(op.Op):
     def __init__(self, *, c: "Coordinator"):
         super().__init__(info=c.state.op_info)
         self.nodes = c.config.nodes
         self.request_url = c.request.url
         self.config = c.config
+
+    @property
+    def async_storage(self):
+        return AsyncHashStorageWrapper(storage=self.storage)
+
+    @property
+    def storage(self):
+        return RohmuHashStorage(self.config.object_storage)
 
     async def request_from_nodes(self, url, *, caller, nodes=None, **kw):
         if nodes is None:

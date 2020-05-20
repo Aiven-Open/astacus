@@ -23,6 +23,7 @@ FAILS = [1, 2, 3, 4, 5, None]
 @pytest.mark.parametrize("fail_at", FAILS)
 def test_backup(fail_at, app, client, mocker, sleepless):  # pylint: disable=unused-argument
     mocker.patch.object(CoordinatorOpWithClusterLock, 'get_locker', return_value='x')
+    mocker.patch.object(BackupOp, 'storage')
     nodes = [
         _CCNode(url="http://localhost:12345/asdf"),
         _CCNode(url="http://localhost:12346/asdf"),
@@ -77,8 +78,8 @@ class DummyBackupOp(BackupOp):
         # NOP __init__, we mock whatever we care about
         self.nodes = [0, 1, 2]
 
-    def assert_upload_of_snapshot_is(self, snapshot, upload):
-        got_upload = self._snapshot_results_to_upload_node_index_datas(snapshot)
+    def assert_upload_of_snapshot_is(self, hexdigests, snapshot, upload):
+        got_upload = self._snapshot_results_to_upload_node_index_datas(snapshot_results=snapshot, hexdigests=hexdigests)
         assert got_upload == upload
 
 
@@ -86,8 +87,8 @@ _progress_done = ipc.Progress(final=True)
 
 
 @pytest.mark.parametrize(
-    "snapshot,upload", [
-        ([
+    "hexdigests,snapshots,uploads", [
+        ([], [
             ipc.SnapshotResult(progress=_progress_done),
             ipc.SnapshotResult(progress=_progress_done),
             ipc.SnapshotResult(progress=_progress_done),
@@ -96,7 +97,7 @@ _progress_done = ipc.Progress(final=True)
             NodeIndexData(),
             NodeIndexData(),
         ]),
-        ([
+        (["2-1"], [
             ipc.SnapshotResult(
                 hashes=[
                     SnapshotHash(hexdigest="1-1", size=1),
@@ -124,20 +125,19 @@ _progress_done = ipc.Progress(final=True)
             ),
         ], [
             NodeIndexData(
-                sshashes=[SnapshotHash(hexdigest='1-1', size=1),
-                          SnapshotHash(hexdigest='12-2', size=2)], total_size=3
+                sshashes=[
+                    SnapshotHash(hexdigest='1-1', size=1),
+                    SnapshotHash(hexdigest='123-3', size=3),
+                ], total_size=4
             ),
-            NodeIndexData(
-                sshashes=[SnapshotHash(hexdigest='2-1', size=1),
-                          SnapshotHash(hexdigest='23-2', size=2)], total_size=3
-            ),
+            NodeIndexData(sshashes=[SnapshotHash(hexdigest='12-2', size=2)], total_size=2),
             NodeIndexData(
                 sshashes=[SnapshotHash(hexdigest='3-1', size=1),
-                          SnapshotHash(hexdigest='123-3', size=3)], total_size=4
+                          SnapshotHash(hexdigest='23-2', size=2)], total_size=3
             ),
         ]),
     ]
 )
-def test_upload_optimization(snapshot, upload):
+def test_upload_optimization(hexdigests, snapshots, uploads):
     op = DummyBackupOp()
-    op.assert_upload_of_snapshot_is(snapshot, upload)
+    op.assert_upload_of_snapshot_is(hexdigests, snapshots, uploads)

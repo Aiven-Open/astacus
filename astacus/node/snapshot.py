@@ -14,7 +14,6 @@ from .node import Node, NodeOp
 from astacus.common import ipc, utils
 from astacus.common.ipc import SnapshotFile, SnapshotState
 from astacus.common.progress import Progress
-from astacus.common.rohmuhashstorage import RohmuHashStorage
 from pathlib import Path
 
 import hashlib
@@ -259,10 +258,9 @@ class UploadOp(_SnapshotterOp):
         return self.start_op(op_name="upload", op=self, fun=self.upload)
 
     def upload(self):
-        storage = RohmuHashStorage(self.config.object_storage)
         self.snapshotter.write_hashes_to_storage(
             hashes=self.req.hashes,
-            storage=storage,
+            storage=self.storage,
             progress=self.result.progress,
             still_running_callback=self.still_running_callback
         )

@@ -39,7 +39,8 @@ class BackupOp(CoordinatorOpWithClusterLock):
             return []
         return await self.wait_successful_results(start_results, result_class=ipc.SnapshotResult)
 
-    def _snapshot_results_to_upload_node_index_datas(self, snapshot_results) -> List[NodeIndexData]:
+    def _snapshot_results_to_upload_node_index_datas(self, *, snapshot_results, hexdigests) -> List[NodeIndexData]:
+        hexdigests = set(hexdigests)
         assert len(snapshot_results) == len(self.nodes)
         sshash_to_node_indexes: Dict[ipc.SnapshotHash, List[int]] = {}
         for i, snapshot_result in enumerate(snapshot_results):
@@ -58,7 +59,8 @@ class BackupOp(CoordinatorOpWithClusterLock):
 
         todo = sorted(sshash_to_node_indexes.items(), key=_sshash_to_node_indexes_key)
         for sshash, node_indexes in todo:
-            # TBD: filter hashes based on what is in the object storage
+            if sshash.hexdigest in hexdigests:
+                continue
             _, node_index = min((node_index_datas[node_index].total_size, node_index) for node_index in node_indexes)
             node_index_datas[node_index].append_sshash(sshash)
         return node_index_datas
@@ -84,7 +86,10 @@ class BackupOp(CoordinatorOpWithClusterLock):
             if not snapshot_results:
                 logger.info("Unable to snapshot successfully")
                 continue
-            node_index_datas = self._snapshot_results_to_upload_node_index_datas(snapshot_results)
+            hexdigests = await self.async_storage.list_hexdigests()
+            node_index_datas = self._snapshot_results_to_upload_node_index_datas(
+                snapshot_results=snapshot_results, hexdigests=hexdigests
+            )
             upload_results = await self._upload(node_index_datas)
             if not upload_results:
                 logger.info("Unable to upload successfully")
