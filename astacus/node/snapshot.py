@@ -12,7 +12,7 @@ this module with proper parameters.
 
 from .node import Node, NodeOp
 from astacus.common import ipc, utils
-from astacus.common.ipc import SnapshotFile, SnapshotRequest, SnapshotState, SnapshotUploadRequest
+from astacus.common.ipc import SnapshotFile, SnapshotState
 from astacus.common.progress import Progress
 from astacus.common.rohmuhashstorage import RohmuHashStorage
 from pathlib import Path
@@ -106,7 +106,11 @@ class Snapshotter:
             yield snapshotfile
 
     def get_snapshot_hashes(self):
-        return [dig for dig, sf in self.hexdigest_to_snapshotfiles.items() if sf]
+        return [
+            ipc.SnapshotHash(hexdigest=dig, size=sf[0].file_size)
+            for dig, sf in self.hexdigest_to_snapshotfiles.items()
+            if sf
+        ]
 
     def get_snapshot_state(self):
         return SnapshotState(files=sorted(self.relative_path_to_snapshotfile.values()))
@@ -164,7 +168,7 @@ class Snapshotter:
         return changes
 
     def write_hashes_to_storage(self, *, hashes, storage, progress: Progress, still_running_callback=lambda: True):
-        todo = set(hashes)
+        todo = set(hash.hexdigest for hash in hashes)
         progress.start(len(todo))
         for hexdigest in todo:
             if not still_running_callback():
@@ -231,7 +235,7 @@ class SnapshotOp(_SnapshotterOp):
     def get_result_class(self):
         return ipc.SnapshotResult
 
-    def start(self, *, req: SnapshotRequest):
+    def start(self, *, req: ipc.SnapshotRequest):
         self.req = req
         logger.debug("start_snapshot %r", req)
         return self.start_op(op_name="snapshot", op=self, fun=self.snapshot)
@@ -239,14 +243,16 @@ class SnapshotOp(_SnapshotterOp):
     def snapshot(self):
         self.snapshotter.snapshot(progress=self.result.progress)
         self.result.state = self.snapshotter.get_snapshot_state()
-        self.result.hashes = [ssfile.hexdigest for ssfile in self.result.state.files]
+        self.result.hashes = [
+            ipc.SnapshotHash(hexdigest=ssfile.hexdigest, size=ssfile.file_size) for ssfile in self.result.state.files
+        ]
 
 
 class UploadOp(_SnapshotterOp):
     def get_result_class(self):
         return ipc.SnapshotUploadResult
 
-    def start(self, *, req: SnapshotUploadRequest):
+    def start(self, *, req: ipc.SnapshotUploadRequest):
         self.req = req
         logger.debug("start_upload %r", req)
         # TBD: Could start some worker thread to upload the self.result periodically

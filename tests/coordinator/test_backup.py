@@ -35,7 +35,18 @@ def test_backup(fail_at, app, client, mocker, sleepless):  # pylint: disable=unu
                 respx.post(f"{node.url}/snapshot", content={"op_id": 42, "status_url": f"{node.url}/snapshot/result"})
             # Failure point 3: snapshot result call fails
             if fail_at != 3:
-                respx.get(f"{node.url}/snapshot/result", content={"progress": {"final": True}, "hashes": ["HASH"]})
+                respx.get(
+                    f"{node.url}/snapshot/result",
+                    content={
+                        "progress": {
+                            "final": True
+                        },
+                        "hashes": [{
+                            "hexdigest": "HASH",
+                            "size": 42
+                        }]
+                    }
+                )
             # Failure point 4: upload call fails
             if fail_at != 4:
                 respx.post(f"{node.url}/upload", content={"op_id": 43, "status_url": f"{node.url}/upload/result"})

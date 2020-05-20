@@ -12,8 +12,8 @@ from pathlib import Path
 def test_restore(snapshotter, storage, tmpdir):
     snapshotter.create_2foobar()
     ss1 = snapshotter.get_snapshot_state()
-    blocks = snapshotter.get_snapshot_hashes()
-    snapshotter.write_hashes_to_storage(hashes=blocks, storage=storage, progress=Progress())
+    hashes = snapshotter.get_snapshot_hashes()
+    snapshotter.write_hashes_to_storage(hashes=hashes, storage=storage, progress=Progress())
 
     # Restore the old backup from storage
     dst2 = Path(tmpdir / "dst2")
