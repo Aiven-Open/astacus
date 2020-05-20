@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 class NodeIndexData(ipc.AstacusModel):
+    node_index: int
     sshashes: List[ipc.SnapshotHash] = []
     total_size: int = 0
 
@@ -34,6 +35,7 @@ class NodeIndexData(ipc.AstacusModel):
 
 class BackupOp(CoordinatorOpWithClusterLock):
     async def _snapshot(self):
+        logger.debug("BackupOp._snapshot")
         start_results = await self.request_from_nodes("snapshot", method="post", caller="BackupOp.snapshot")
         if not start_results:
             return []
@@ -47,7 +49,7 @@ class BackupOp(CoordinatorOpWithClusterLock):
             for sshash in snapshot_result.hashes or []:
                 sshash_to_node_indexes.setdefault(sshash, []).append(i)
 
-        node_index_datas = [NodeIndexData() for _ in self.nodes]
+        node_index_datas = [NodeIndexData(node_index=i) for i in range(len(self.nodes))]
 
         # This is not really optimal algorithm, but probably good enough.
 
@@ -63,14 +65,13 @@ class BackupOp(CoordinatorOpWithClusterLock):
                 continue
             _, node_index = min((node_index_datas[node_index].total_size, node_index) for node_index in node_indexes)
             node_index_datas[node_index].append_sshash(sshash)
-        return node_index_datas
+        return [data for data in node_index_datas if data.sshashes]
 
     async def _upload(self, node_index_datas: List[NodeIndexData]):
+        logger.debug("BackupOp._upload")
         start_results = []
-        for node, data in zip(self.nodes, node_index_datas):
-            # TBD: wait_successful_results is stupid, and it cannot be
-            # used only with subset of nodes. So we send empty upload
-            # request to nodes with nothing to upload.
+        for data in node_index_datas:
+            node = self.nodes[data.node_index]
             req = ipc.SnapshotUploadRequest(hashes=data.sshashes)
             start_result = await self.request_from_nodes(
                 "upload", caller="BackupOp.upload", method="post", data=req.json(), nodes=[node]
@@ -78,10 +79,12 @@ class BackupOp(CoordinatorOpWithClusterLock):
             if len(start_result) != 1:
                 return []
             start_results.extend(start_result)
-        return await self.wait_successful_results(start_results, result_class=ipc.SnapshotUploadResult)
+        return await self.wait_successful_results(start_results, result_class=ipc.SnapshotUploadResult, all_nodes=False)
 
     async def run_with_lock(self):
-        for _ in range(self.config.backup_attempts):
+        attempts = self.config.backup_attempts
+        for attempt in range(1, attempts + 1):
+            logger.debug("BackupOp - attempt #%d/%d", attempt, attempts)
             snapshot_results = await self._snapshot()
             if not snapshot_results:
                 logger.info("Unable to snapshot successfully")
@@ -90,9 +93,10 @@ class BackupOp(CoordinatorOpWithClusterLock):
             node_index_datas = self._snapshot_results_to_upload_node_index_datas(
                 snapshot_results=snapshot_results, hexdigests=hexdigests
             )
-            upload_results = await self._upload(node_index_datas)
-            if not upload_results:
-                logger.info("Unable to upload successfully")
-                continue
+            if node_index_datas:
+                upload_results = await self._upload(node_index_datas)
+                if not upload_results:
+                    logger.info("Unable to upload successfully")
+                    continue
             return
         self.set_status_fail()

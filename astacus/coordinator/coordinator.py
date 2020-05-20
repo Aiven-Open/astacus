@@ -112,17 +112,18 @@ class CoordinatorOp(op.Op):
     async def request_unlock_from_nodes(self, *, locker: str) -> bool:
         return await self.request_lock_call_from_nodes(call=LockCall.unlock, locker=locker) == LockResult.ok
 
-    async def wait_successful_results(self, start_results, *, result_class):
+    async def wait_successful_results(self, start_results, *, result_class, all_nodes=True):
         urls = []
-        for result in start_results:
+        for i, result in enumerate(start_results, 1):
             if not result or isinstance(result, Exception):
-                continue
+                logger.info("wait_successful_results: Incorrect start result for #%d/%d: %r", i, len(start_results), result)
+                return []
             parsed_result = op.Op.StartResult.parse_obj(result)
             urls.append(parsed_result.status_url)
-        if len(urls) != len(self.nodes):
+        if all_nodes and len(urls) != len(self.nodes):
             return []
         delay = self.config.poll_delay_start
-        results = [None] * len(self.nodes)
+        results = [None] * len(urls)
         # Note that we don't have timeout mechanism here as such,
         # however, if re-locking times out, we will bail out. TBD if
         # we need timeout mechanism here anyway.

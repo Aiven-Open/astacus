@@ -76,7 +76,7 @@ class DummyBackupOp(BackupOp):
     def __init__(self):
         # pylint: disable=super-init-not-called
         # NOP __init__, we mock whatever we care about
-        self.nodes = [0, 1, 2]
+        self.nodes = [0, 1, 2, 3]
 
     def assert_upload_of_snapshot_is(self, hexdigests, snapshot, upload):
         got_upload = self._snapshot_results_to_upload_node_index_datas(snapshot_results=snapshot, hexdigests=hexdigests)
@@ -87,55 +87,62 @@ _progress_done = ipc.Progress(final=True)
 
 
 @pytest.mark.parametrize(
-    "hexdigests,snapshots,uploads", [
+    "hexdigests,snapshots,uploads",
+    [
         ([], [
             ipc.SnapshotResult(progress=_progress_done),
             ipc.SnapshotResult(progress=_progress_done),
             ipc.SnapshotResult(progress=_progress_done),
-        ], [
-            NodeIndexData(),
-            NodeIndexData(),
-            NodeIndexData(),
-        ]),
-        (["2-1"], [
-            ipc.SnapshotResult(
-                hashes=[
-                    SnapshotHash(hexdigest="1-1", size=1),
-                    SnapshotHash(hexdigest="12-2", size=2),
-                    SnapshotHash(hexdigest="123-3", size=3),
-                ],
-                progress=_progress_done
-            ),
-            ipc.SnapshotResult(
-                hashes=[
-                    SnapshotHash(hexdigest="2-1", size=1),
-                    SnapshotHash(hexdigest="12-2", size=2),
-                    SnapshotHash(hexdigest="23-2", size=2),
-                    SnapshotHash(hexdigest="123-3", size=3),
-                ],
-                progress=_progress_done
-            ),
-            ipc.SnapshotResult(
-                hashes=[
-                    SnapshotHash(hexdigest="3-1", size=1),
-                    SnapshotHash(hexdigest="23-2", size=2),
-                    SnapshotHash(hexdigest="123-3", size=3),
-                ],
-                progress=_progress_done
-            ),
-        ], [
-            NodeIndexData(
-                sshashes=[
-                    SnapshotHash(hexdigest='1-1', size=1),
-                    SnapshotHash(hexdigest='123-3', size=3),
-                ], total_size=4
-            ),
-            NodeIndexData(sshashes=[SnapshotHash(hexdigest='12-2', size=2)], total_size=2),
-            NodeIndexData(
-                sshashes=[SnapshotHash(hexdigest='3-1', size=1),
-                          SnapshotHash(hexdigest='23-2', size=2)], total_size=3
-            ),
-        ]),
+            ipc.SnapshotResult(progress=_progress_done),
+        ], []),
+        (
+            ["2-1"],
+            [
+                ipc.SnapshotResult(progress=_progress_done),  # node 0 is empty
+                ipc.SnapshotResult(
+                    hashes=[
+                        SnapshotHash(hexdigest="1-1", size=1),
+                        SnapshotHash(hexdigest="12-2", size=2),
+                        SnapshotHash(hexdigest="123-3", size=3),
+                    ],
+                    progress=_progress_done
+                ),
+                ipc.SnapshotResult(
+                    hashes=[
+                        SnapshotHash(hexdigest="2-1", size=1),
+                        SnapshotHash(hexdigest="12-2", size=2),
+                        SnapshotHash(hexdigest="23-2", size=2),
+                        SnapshotHash(hexdigest="123-3", size=3),
+                    ],
+                    progress=_progress_done
+                ),
+                ipc.SnapshotResult(
+                    hashes=[
+                        SnapshotHash(hexdigest="3-1", size=1),
+                        SnapshotHash(hexdigest="23-2", size=2),
+                        SnapshotHash(hexdigest="123-3", size=3),
+                    ],
+                    progress=_progress_done
+                ),
+            ],
+            [
+                NodeIndexData(
+                    node_index=1,
+                    sshashes=[
+                        SnapshotHash(hexdigest='1-1', size=1),
+                        SnapshotHash(hexdigest='123-3', size=3),
+                    ],
+                    total_size=4
+                ),
+                NodeIndexData(node_index=2, sshashes=[SnapshotHash(hexdigest='12-2', size=2)], total_size=2),
+                NodeIndexData(
+                    node_index=3,
+                    sshashes=[SnapshotHash(hexdigest='3-1', size=1),
+                              SnapshotHash(hexdigest='23-2', size=2)],
+                    total_size=3
+                ),
+            ]
+        ),
     ]
 )
 def test_upload_optimization(hexdigests, snapshots, uploads):
