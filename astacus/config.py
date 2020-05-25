@@ -9,7 +9,7 @@ Root-level astacus configuration, which includes
 """
 
 from astacus.common import magic
-from astacus.common.rohmuhashstorage import RohmuConfig
+from astacus.common.rohmustorage import RohmuConfig
 from astacus.common.utils import AstacusModel
 from astacus.coordinator.config import APP_KEY as COORDINATOR_CONFIG_KEY, CoordinatorConfig
 from astacus.node.config import APP_KEY as NODE_CONFIG_KEY, NodeConfig

@@ -8,7 +8,7 @@ from .config import node_config, NodeConfig
 from .state import node_state, NodeState
 from astacus.common import ipc, op, utils
 from astacus.common.progress import Progress
-from astacus.common.rohmuhashstorage import RohmuHashStorage
+from astacus.common.rohmustorage import RohmuStorage
 from astacus.common.utils import AstacusModel
 from fastapi import BackgroundTasks, Depends, Request
 from typing import Optional
@@ -32,7 +32,7 @@ class NodeOp(op.Op):
 
     @property
     def storage(self):
-        return RohmuHashStorage(self.config.object_storage)
+        return RohmuStorage(self.config.object_storage)
 
     def still_running_callback(self):
         if self.info.op_id != self.op_id:

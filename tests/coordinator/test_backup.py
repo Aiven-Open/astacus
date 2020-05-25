@@ -8,9 +8,12 @@ Test that the coordinator backup endpoint works.
 
 from astacus.common import ipc
 from astacus.common.ipc import SnapshotHash
+from astacus.common.storage import FileStorage
 from astacus.coordinator.backup import BackupOp, NodeIndexData
 from astacus.coordinator.config import CoordinatorConfig
 from astacus.coordinator.coordinator import CoordinatorOpWithClusterLock
+from datetime import datetime
+from pathlib import Path
 
 import pytest
 import respx
@@ -21,9 +24,10 @@ FAILS = [1, 2, 3, 4, 5, None]
 
 
 @pytest.mark.parametrize("fail_at", FAILS)
-def test_backup(fail_at, app, client, mocker, sleepless):  # pylint: disable=unused-argument
+def test_backup(fail_at, app, client, mocker, sleepless, tmpdir):  # pylint: disable=unused-argument,too-many-arguments
     mocker.patch.object(CoordinatorOpWithClusterLock, 'get_locker', return_value='x')
-    mocker.patch.object(BackupOp, 'storage')
+    storage = FileStorage(Path(tmpdir) / "filestorage")
+    mocker.patch.object(BackupOp, 'storage', new=storage)
     nodes = [
         _CCNode(url="http://localhost:12345/asdf"),
         _CCNode(url="http://localhost:12346/asdf"),
@@ -66,8 +70,10 @@ def test_backup(fail_at, app, client, mocker, sleepless):  # pylint: disable=unu
         assert response.status_code == 200, response.json()
         if fail_at:
             assert response.json() == {"state": "fail"}
+            assert not storage.list_jsons()
         else:
             assert response.json() == {"state": "done"}
+            assert len(storage.list_jsons()) == 1
 
         assert app.state.coordinator_state.op_info.op_id == 1
 
@@ -86,45 +92,44 @@ class DummyBackupOp(BackupOp):
 _progress_done = ipc.Progress(final=True)
 
 
+def _ssresults(*kwarg_list):
+    return [
+        ipc.SnapshotResult(progress=_progress_done, hostname="host-{i}", start=datetime.now(), **kw)
+        for i, kw in enumerate(kwarg_list, 1)
+    ]
+
+
 @pytest.mark.parametrize(
     "hexdigests,snapshots,uploads",
     [
-        ([], [
-            ipc.SnapshotResult(progress=_progress_done),
-            ipc.SnapshotResult(progress=_progress_done),
-            ipc.SnapshotResult(progress=_progress_done),
-            ipc.SnapshotResult(progress=_progress_done),
-        ], []),
+        ([], _ssresults({}, {}, {}, {}), []),
         (
             ["2-1"],
-            [
-                ipc.SnapshotResult(progress=_progress_done),  # node 0 is empty
-                ipc.SnapshotResult(
-                    hashes=[
+            _ssresults(
+                {},  # node 0 is empty
+                {
+                    "hashes": [
                         SnapshotHash(hexdigest="1-1", size=1),
                         SnapshotHash(hexdigest="12-2", size=2),
                         SnapshotHash(hexdigest="123-3", size=3),
-                    ],
-                    progress=_progress_done
-                ),
-                ipc.SnapshotResult(
-                    hashes=[
+                    ]
+                },
+                {
+                    "hashes": [
                         SnapshotHash(hexdigest="2-1", size=1),
                         SnapshotHash(hexdigest="12-2", size=2),
                         SnapshotHash(hexdigest="23-2", size=2),
                         SnapshotHash(hexdigest="123-3", size=3),
-                    ],
-                    progress=_progress_done
-                ),
-                ipc.SnapshotResult(
-                    hashes=[
+                    ]
+                },
+                {
+                    "hashes": [
                         SnapshotHash(hexdigest="3-1", size=1),
                         SnapshotHash(hexdigest="23-2", size=2),
                         SnapshotHash(hexdigest="123-3", size=3),
-                    ],
-                    progress=_progress_done
-                ),
-            ],
+                    ]
+                }
+            ),
             [
                 NodeIndexData(
                     node_index=1,
