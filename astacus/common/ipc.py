@@ -5,10 +5,13 @@ See LICENSE for details
 
 from .progress import Progress
 from .utils import AstacusModel
+from datetime import datetime
 from pathlib import Path
+from pydantic import Field
 from typing import List, Optional
 
 import functools
+import socket
 
 # node generic base
 
@@ -18,6 +21,7 @@ class NodeRequest(AstacusModel):
 
 
 class NodeResult(AstacusModel):
+    hostname: str = Field(default_factory=socket.gethostname)
     progress: Progress
 
 
@@ -67,9 +71,19 @@ class SnapshotUploadRequest(NodeRequest):
 
 
 class SnapshotResult(NodeResult):
+    start: datetime = Field(default_factory=datetime.now)
+    end: Optional[datetime]
     state: Optional[SnapshotState]  # should be passed opaquely to restore
     hashes: Optional[List[SnapshotHash]]  # populated only if state is available
 
 
 class SnapshotUploadResult(NodeResult):
     pass
+
+
+# controller.backup
+
+
+class BackupManifest(AstacusModel):
+    attempt: int
+    snapshot_results: List[SnapshotResult]

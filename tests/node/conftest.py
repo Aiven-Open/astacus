@@ -3,8 +3,8 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 
-from astacus.common.hashstorage import FileHashStorage
 from astacus.common.progress import Progress
+from astacus.common.storage import FileStorage
 from astacus.node.api import router as node_router
 from astacus.node.config import NodeConfig
 from astacus.node.snapshot import Snapshotter
@@ -78,4 +78,4 @@ def fixture_snapshotter(tmpdir):
 def fixture_storage(tmpdir):
     storage_path = Path(tmpdir) / "storage"
     storage_path.mkdir()
-    yield FileHashStorage(storage_path)
+    yield FileStorage(storage_path)

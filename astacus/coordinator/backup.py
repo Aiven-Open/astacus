@@ -16,6 +16,7 @@ plugin mechanism can be added here.
 
 from .coordinator import CoordinatorOpWithClusterLock
 from astacus.common import ipc
+from datetime import datetime
 from typing import Dict, List
 
 import logging
@@ -81,10 +82,21 @@ class BackupOp(CoordinatorOpWithClusterLock):
             start_results.extend(start_result)
         return await self.wait_successful_results(start_results, result_class=ipc.SnapshotUploadResult, all_nodes=False)
 
+    async def _store_backup_manifest(self, *, attempt, start, snapshot_results):
+        logger.debug("_store_backup_manifest")
+
+        # This set of snapshot results is good; Create backup
+        # manifest, store it, and declare victory.
+        iso = start.isoformat()
+        filename = f"backup-{iso}"
+        manifest = ipc.BackupManifest(attempt=attempt, snapshot_results=snapshot_results)
+        await self.async_storage.upload_json(filename, manifest.json())
+
     async def run_with_lock(self):
         attempts = self.config.backup_attempts
         for attempt in range(1, attempts + 1):
             logger.debug("BackupOp - attempt #%d/%d", attempt, attempts)
+            start = datetime.now()
             snapshot_results = await self._snapshot()
             if not snapshot_results:
                 logger.info("Unable to snapshot successfully")
@@ -98,5 +110,6 @@ class BackupOp(CoordinatorOpWithClusterLock):
                 if not upload_results:
                     logger.info("Unable to upload successfully")
                     continue
+            await self._store_backup_manifest(start=start, attempt=attempt, snapshot_results=snapshot_results)
             return
         self.set_status_fail()

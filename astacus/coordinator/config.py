@@ -3,7 +3,7 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 
-from astacus.common.rohmuhashstorage import RohmuConfig
+from astacus.common.rohmustorage import RohmuConfig
 from astacus.common.utils import AstacusModel
 from fastapi import Request
 from typing import List, Optional

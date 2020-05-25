@@ -7,7 +7,7 @@ Rohmu-specific actual object storage implementation
 
 """
 
-from .hashstorage import HashStorage
+from .storage import Storage
 from .utils import AstacusModel
 from enum import Enum
 from pghoard import rohmu  # type: ignore
@@ -16,6 +16,8 @@ from pydantic import Field
 from typing import Dict, Optional, Union
 from typing_extensions import Literal
 
+import io
+import json
 import logging
 import os
 import tempfile
@@ -116,7 +118,7 @@ class RohmuMetadata(RohmuModel):
     compression_algorithm: Optional[RohmuCompressionType] = Field(None, alias="compression-algorithm")
 
 
-class RohmuHashStorage(HashStorage):
+class RohmuStorage(Storage):
     """Implementation of the hash storage API, on top of pghoard.rohmu.
 
 Note that this isn't super optimized insofar reading is concerned.  We
@@ -126,33 +128,13 @@ layer makes the design somewhat more clean.
     def __init__(self, config: RohmuConfig, *, storage=None):
         assert config
         self.config = config
-        self.data_key = "hashblock"
+        self.hexdigest_key = "data"
+        self.json_key = "json"
         self.choose_storage(storage)
         os.makedirs(config.temporary_directory, exist_ok=True)
 
-    def choose_storage(self, storage=None):
-        if storage is None:
-            storage = self.config.default_storage
-        self.storage_config = self.config.storages[storage]
-        self.storage = rohmu.get_transfer(self.storage_config.dict())
-
-    def delete_hexdigest(self, hexdigest):
-        key = os.path.join(self.data_key, hexdigest)
-        self.storage.delete_key(key)
-
-    def list_hexdigests(self):
-        return [os.path.basename(o["name"]) for o in self.storage.list_iter(self.data_key, with_metadata=False)]
-
-    def _private_key_lookup(self, key_id: str) -> str:
-        return self.config.encryption_keys[key_id].private
-
-    def _public_key_lookup(self, key_id: str) -> str:
-        return self.config.encryption_keys[key_id].public
-
-    def download_hexdigest_to_file(self, hexdigest, f) -> bool:
-        key = os.path.join(self.data_key, hexdigest)
+    def _download_key_to_file(self, key, f) -> bool:
         raw_metadata: dict = self.storage.get_metadata_for_key(key)
-        logger.debug("download_hexdigest_to_file - raw_metadata: %r", raw_metadata)
         with tempfile.TemporaryFile(dir=self.config.temporary_directory) as temp_file:
             self.storage.get_contents_to_fileobj(key, temp_file)
             temp_file.seek(0)
@@ -165,8 +147,16 @@ layer makes the design somewhat more clean.
             )
         return True
 
-    def upload_hexdigest_from_file(self, hexdigest, f) -> bool:
-        key = os.path.join(self.data_key, hexdigest)
+    def _list_key(self, key):
+        return [os.path.basename(o["name"]) for o in self.storage.list_iter(key, with_metadata=False)]
+
+    def _private_key_lookup(self, key_id: str) -> str:
+        return self.config.encryption_keys[key_id].private
+
+    def _public_key_lookup(self, key_id: str) -> str:
+        return self.config.encryption_keys[key_id].public
+
+    def _upload_key_from_file(self, key, f) -> bool:
         encryption_key_id = self.config.encryption_key_id
         compression = self.config.compression
         metadata = RohmuMetadata()
@@ -177,7 +167,6 @@ layer makes the design somewhat more clean.
         if compression.algorithm:
             metadata.compression_algorithm = compression.algorithm
         rohmu_metadata = metadata.dict(exclude_unset=True, by_alias=True)
-        logger.debug("upload_hexdigest_from_file - %r", rohmu_metadata)
         with tempfile.TemporaryFile(dir=self.config.temporary_directory) as temp_file:
             rohmufile.write_file(
                 input_obj=f,
@@ -192,3 +181,48 @@ layer makes the design somewhat more clean.
             temp_file.seek(0)
             self.storage.store_file_object(key, temp_file, metadata=rohmu_metadata)
         return True
+
+    def choose_storage(self, storage=None):
+        if storage is None:
+            storage = self.config.default_storage
+        self.storage_config = self.config.storages[storage]
+        self.storage = rohmu.get_transfer(self.storage_config.dict())
+
+    # HexDigestStorage implementation
+
+    def delete_hexdigest(self, hexdigest):
+        key = os.path.join(self.hexdigest_key, hexdigest)
+        self.storage.delete_key(key)
+
+    def list_hexdigests(self):
+        return self._list_key(self.hexdigest_key)
+
+    def download_hexdigest_to_file(self, hexdigest, f) -> bool:
+        key = os.path.join(self.hexdigest_key, hexdigest)
+        return self._download_key_to_file(key, f)
+
+    def upload_hexdigest_from_file(self, hexdigest, f) -> bool:
+        key = os.path.join(self.hexdigest_key, hexdigest)
+        return self._upload_key_from_file(key, f)
+
+    # JsonStorage implementation
+    def delete_json(self, name: str):
+        key = os.path.join(self.json_key, name)
+        self.storage.delete_key(key)
+
+    def download_json(self, name: str):
+        key = os.path.join(self.json_key, name)
+        f = io.BytesIO()
+        self._download_key_to_file(key, f)
+        f.seek(0)
+        return json.load(f)
+
+    def list_jsons(self):
+        return self._list_key(self.json_key)
+
+    def upload_json_str(self, name: str, data: str):
+        key = os.path.join(self.json_key, name)
+        f = io.BytesIO()
+        f.write(data.encode())
+        f.seek(0)
+        return self._upload_key_from_file(key, f)

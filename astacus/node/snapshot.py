@@ -14,6 +14,7 @@ from .node import Node, NodeOp
 from astacus.common import ipc, utils
 from astacus.common.ipc import SnapshotFile, SnapshotState
 from astacus.common.progress import Progress
+from datetime import datetime
 from pathlib import Path
 
 import hashlib
@@ -245,6 +246,7 @@ class SnapshotOp(_SnapshotterOp):
         self.result.hashes = [
             ipc.SnapshotHash(hexdigest=ssfile.hexdigest, size=ssfile.file_size) for ssfile in self.result.state.files
         ]
+        self.result.end = datetime.now()
 
 
 class UploadOp(_SnapshotterOp):

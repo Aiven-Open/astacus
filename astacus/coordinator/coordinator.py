@@ -7,7 +7,7 @@ from .config import coordinator_config, CoordinatorConfig
 from .state import coordinator_state, CoordinatorState
 from astacus.common import magic, op, utils
 from astacus.common.magic import LockCall
-from astacus.common.rohmuhashstorage import RohmuHashStorage
+from astacus.common.rohmustorage import RohmuStorage
 from enum import Enum
 from fastapi import BackgroundTasks, Depends, Request
 from starlette.concurrency import run_in_threadpool
@@ -27,8 +27,8 @@ class LockResult(Enum):
     exception = "exception"
 
 
-class AsyncHashStorageWrapper:
-    """Subset of the HashStorage API proxied async -> sync via starlette threadpool
+class AsyncStorageWrapper:
+    """Subset of the Storage API proxied async -> sync via starlette threadpool
 
     Note that the access is not intentionally locked; therefore even
     synchronous API can be used in parallel (at least if it is safe to
@@ -38,11 +38,23 @@ class AsyncHashStorageWrapper:
     def __init__(self, storage):
         self.storage = storage
 
-    async def delete_hexdigest(self, hexdigest):
+    async def delete_hexdigest(self, hexdigest: str):
         return await run_in_threadpool(self.storage.delete_hexdigest, hexdigest)
+
+    async def delete_json(self, name: str):
+        return await run_in_threadpool(self.storage.delete_json, name)
+
+    async def download_json(self, name: str):
+        return await run_in_threadpool(self.storage.download_json, name)
 
     async def list_hexdigests(self):
         return await run_in_threadpool(self.storage.list_hexdigests)
+
+    async def list_jsons(self):
+        return await run_in_threadpool(self.storage.list_jsons)
+
+    async def upload_json(self, name: str, data):
+        return await run_in_threadpool(self.storage.upload_json, name, data)
 
 
 class CoordinatorOp(op.Op):
@@ -54,11 +66,11 @@ class CoordinatorOp(op.Op):
 
     @property
     def async_storage(self):
-        return AsyncHashStorageWrapper(storage=self.storage)
+        return AsyncStorageWrapper(storage=self.storage)
 
     @property
     def storage(self):
-        return RohmuHashStorage(self.config.object_storage)
+        return RohmuStorage(self.config.object_storage)
 
     async def request_from_nodes(self, url, *, caller, nodes=None, **kw):
         if nodes is None:
