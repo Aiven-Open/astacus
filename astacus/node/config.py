@@ -12,6 +12,9 @@ APP_KEY = "node_config"
 
 
 class NodeConfig(AstacusModel):
+    # Which availability zone is this node in (optional)
+    az: str = ""
+
     # Where is the root of the file hierarchy we care about
     # ( There can be others too, but probably all things we care about have at least 1 directory )
     root: str

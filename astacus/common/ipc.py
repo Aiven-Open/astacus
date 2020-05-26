@@ -22,7 +22,8 @@ class NodeRequest(AstacusModel):
 
 class NodeResult(AstacusModel):
     hostname: str = Field(default_factory=socket.gethostname)
-    progress: Progress
+    az: str = ""
+    progress: Progress = Field(default_factory=Progress)
 
 
 # node.snapshot
@@ -38,6 +39,9 @@ class SnapshotFile(AstacusModel):
     def __lt__(self, o):
         # In our use case, paths uniquely identify files we care about
         return self.relative_path < o.relative_path
+
+    def equals_excluding_mtime(self, o):
+        return self.copy(update={"mtime_ns": 0}) == o.copy(update={"mtime_ns": 0})
 
 
 class SnapshotState(AstacusModel):
@@ -77,13 +81,15 @@ class SnapshotResult(NodeResult):
     hashes: Optional[List[SnapshotHash]]  # populated only if state is available
 
 
-class SnapshotUploadResult(NodeResult):
-    pass
+class SnapshotDownloadRequest(NodeRequest):
+    state: SnapshotState
 
 
 # controller.backup
 
 
 class BackupManifest(AstacusModel):
+    start: datetime
+    end: datetime = Field(default_factory=datetime.now)
     attempt: int
     snapshot_results: List[SnapshotResult]
