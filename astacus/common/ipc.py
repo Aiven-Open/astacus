@@ -22,7 +22,7 @@ class NodeRequest(AstacusModel):
 
 class NodeResult(AstacusModel):
     hostname: str = Field(default_factory=socket.gethostname)
-    progress: Progress
+    progress: Progress = Field(default_factory=Progress)
 
 
 # node.snapshot

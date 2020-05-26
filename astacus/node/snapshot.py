@@ -210,11 +210,10 @@ class _SnapshotterOp(NodeOp):
     def __init__(self, *, n: Node):
         super().__init__(n=n)
         self.snapshotter = self._get_or_create_snapshotter(n)
-        progress = Progress()
-        self.result = self.get_result_class()(progress=progress)  # pylint: disable=not-callable
+        self.result = self.create_result()
 
-    def get_result_class(self):
-        raise NotImplementedError
+    def create_result(self):
+        return ipc.NodeResult()
 
     def _create_snapshotter(self) -> Snapshotter:
         return Snapshotter(
@@ -232,8 +231,8 @@ class _SnapshotterOp(NodeOp):
 
 
 class SnapshotOp(_SnapshotterOp):
-    def get_result_class(self):
-        return ipc.SnapshotResult
+    def create_result(self):
+        return ipc.SnapshotResult()
 
     def start(self, *, req: ipc.SnapshotRequest):
         self.req = req
@@ -250,9 +249,6 @@ class SnapshotOp(_SnapshotterOp):
 
 
 class UploadOp(_SnapshotterOp):
-    def get_result_class(self):
-        return ipc.SnapshotUploadResult
-
     def start(self, *, req: ipc.SnapshotUploadRequest):
         self.req = req
         logger.debug("start_upload %r", req)

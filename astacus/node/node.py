@@ -47,7 +47,7 @@ class NodeOp(op.Op):
         if not self.still_running_callback():
             logger.debug("send_result omitted - not running")
             return
-        result_json = self.result.json(exclude_unset=True)
+        result_json = self.result.json(exclude_defaults=True)
         if result_json == self._sent_result_json:
             return
         self._sent_result_json = result_json

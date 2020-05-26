@@ -166,7 +166,7 @@ layer makes the design somewhat more clean.
             rsa_public_key = self._public_key_lookup(encryption_key_id)
         if compression.algorithm:
             metadata.compression_algorithm = compression.algorithm
-        rohmu_metadata = metadata.dict(exclude_unset=True, by_alias=True)
+        rohmu_metadata = metadata.dict(exclude_defaults=True, by_alias=True)
         with tempfile.TemporaryFile(dir=self.config.temporary_directory) as temp_file:
             rohmufile.write_file(
                 input_obj=f,
