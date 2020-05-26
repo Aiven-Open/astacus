@@ -3,15 +3,24 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 
+from .download import DownloadOp
 from .node import Node
 from .snapshot import SnapshotOp, UploadOp
 from .state import node_state, NodeState
-from astacus.common.ipc import SnapshotRequest, SnapshotUploadRequest
+from astacus.common import ipc
+from enum import Enum
 from fastapi import APIRouter, Depends, HTTPException
 
 import time
 
 router = APIRouter()
+
+
+class OpName(str, Enum):
+    """ (Long-running) operations defined in this API (for node) """
+    download = "download"
+    snapshot = "snapshot"
+    upload = "upload"
 
 
 @router.post("/lock")
@@ -45,7 +54,7 @@ def unlock(locker: str, state: NodeState = Depends(node_state)):
 
 
 @router.post("/snapshot")
-def snapshot(req: SnapshotRequest = SnapshotRequest(), n: Node = Depends()):
+def snapshot(req: ipc.SnapshotRequest = ipc.SnapshotRequest(), n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
     return SnapshotOp(n=n).start(req=req)
@@ -53,12 +62,12 @@ def snapshot(req: SnapshotRequest = SnapshotRequest(), n: Node = Depends()):
 
 @router.get("/snapshot/{op_id}")
 def snapshot_result(*, op_id: int, n: Node = Depends()):
-    op, _ = n.get_op_and_op_info(op_id=op_id, op_name="snapshot")
+    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.snapshot)
     return op.result
 
 
 @router.post("/upload")
-def upload(req: SnapshotUploadRequest, n: Node = Depends()):
+def upload(req: ipc.SnapshotUploadRequest, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
     return UploadOp(n=n).start(req=req)
@@ -66,5 +75,18 @@ def upload(req: SnapshotUploadRequest, n: Node = Depends()):
 
 @router.get("/upload/{op_id}")
 def upload_result(*, op_id: int, n: Node = Depends()):
-    op, _ = n.get_op_and_op_info(op_id=op_id, op_name="upload")
+    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.upload)
+    return op.result
+
+
+@router.post("/download")
+def download(req: ipc.SnapshotDownloadRequest, n: Node = Depends()):
+    if not n.state.is_locked:
+        raise HTTPException(status_code=409, detail="Not locked")
+    return DownloadOp(n=n).start(req=req)
+
+
+@router.get("/download/{op_id}")
+def download_result(*, op_id: int, n: Node = Depends()):
+    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.download)
     return op.result

@@ -7,7 +7,7 @@ from astacus.common.progress import Progress
 from astacus.common.storage import FileStorage
 from astacus.node.api import router as node_router
 from astacus.node.config import NodeConfig
-from astacus.node.snapshot import Snapshotter
+from astacus.node.snapshotter import Snapshotter
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pathlib import Path

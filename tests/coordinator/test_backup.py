@@ -8,12 +8,9 @@ Test that the coordinator backup endpoint works.
 
 from astacus.common import ipc
 from astacus.common.ipc import SnapshotHash
-from astacus.common.storage import FileStorage
 from astacus.coordinator.backup import BackupOp, NodeIndexData
 from astacus.coordinator.config import CoordinatorConfig
-from astacus.coordinator.coordinator import CoordinatorOpWithClusterLock
 from datetime import datetime
-from pathlib import Path
 
 import pytest
 import respx
@@ -24,10 +21,7 @@ FAILS = [1, 2, 3, 4, 5, None]
 
 
 @pytest.mark.parametrize("fail_at", FAILS)
-def test_backup(fail_at, app, client, mocker, sleepless, tmpdir):  # pylint: disable=unused-argument,too-many-arguments
-    mocker.patch.object(CoordinatorOpWithClusterLock, 'get_locker', return_value='x')
-    storage = FileStorage(Path(tmpdir) / "filestorage")
-    mocker.patch.object(BackupOp, 'storage', new=storage)
+def test_backup(fail_at, app, client, storage):
     nodes = [
         _CCNode(url="http://localhost:12345/asdf"),
         _CCNode(url="http://localhost:12346/asdf"),
@@ -84,8 +78,10 @@ class DummyBackupOp(BackupOp):
         # NOP __init__, we mock whatever we care about
         self.nodes = [0, 1, 2, 3]
 
-    def assert_upload_of_snapshot_is(self, hexdigests, snapshot, upload):
-        got_upload = self._snapshot_results_to_upload_node_index_datas(snapshot_results=snapshot, hexdigests=hexdigests)
+    def assert_upload_of_snapshot_is(self, hexdigests, snapshot_results, upload):
+        self.stored_hexdigests = set(hexdigests)
+        self.snapshot_results = snapshot_results
+        got_upload = self._snapshot_results_to_upload_node_index_datas()
         assert got_upload == upload
 
 
@@ -100,7 +96,7 @@ def _ssresults(*kwarg_list):
 
 
 @pytest.mark.parametrize(
-    "hexdigests,snapshots,uploads",
+    "hexdigests,snapshot_results,uploads",
     [
         ([], _ssresults({}, {}, {}, {}), []),
         (
@@ -150,6 +146,6 @@ def _ssresults(*kwarg_list):
         ),
     ]
 )
-def test_upload_optimization(hexdigests, snapshots, uploads):
+def test_upload_optimization(hexdigests, snapshot_results, uploads):
     op = DummyBackupOp()
-    op.assert_upload_of_snapshot_is(hexdigests, snapshots, uploads)
+    op.assert_upload_of_snapshot_is(hexdigests, snapshot_results, uploads)

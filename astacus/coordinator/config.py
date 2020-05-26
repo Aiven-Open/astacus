@@ -13,7 +13,14 @@ APP_KEY = "coordinator_config"
 
 class CoordinatorConfig(AstacusModel):
     class Node(AstacusModel):
+        # What is the Astacus url of the node
         url: str
+
+        # Availability zone the node is in; in theory this could be
+        # made also just part of node config, but it feels more
+        # elegant not to have probe nodes for configuration and
+        # instead have required parts here in the configuration file.
+        az: str = ""
 
     # Which nodes are we supposed to manage
     nodes: List[Node] = []
@@ -35,6 +42,13 @@ class CoordinatorConfig(AstacusModel):
     # almost always sense and subsequent backup attempts are fast as
     # snapshots are incremential unless nodes have restarted.
     backup_attempts: int = 5
+
+    # Restore is attempted this many times before giving up.
+    #
+    # Note that values should be >1, as at least one retry makes
+    # almost always sense and subsequent restore attempts are fast as
+    # already downloaded files are not downloaded again.
+    restore_attempts: int = 5
 
     object_storage: Optional[RohmuConfig] = None
 

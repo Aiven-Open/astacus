@@ -5,30 +5,38 @@ See LICENSE for details
 """
 
 from .config import node_config, NodeConfig
+from .snapshotter import Snapshotter
 from .state import node_state, NodeState
 from astacus.common import ipc, op, utils
 from astacus.common.progress import Progress
 from astacus.common.rohmustorage import RohmuStorage
-from astacus.common.utils import AstacusModel
 from fastapi import BackgroundTasks, Depends, Request
 from typing import Optional
 
 import logging
 
 logger = logging.getLogger(__name__)
+APP_KEY = "node_snapshotter"
 
 
 class NodeOp(op.Op):
     req: Optional[ipc.NodeRequest] = None  # Provided by subclass
-    result: Optional[AstacusModel] = None  # Provided by subclass
     progress: Optional[Progress] = None  # Provided by subclass
 
     def __init__(self, *, n: "Node"):
         super().__init__(info=n.state.op_info)
         self.start_op = n.start_op
         self.config = n.config
+        self.snapshotter = n.snapshotter
         self._still_locked_callback = n.state.still_locked_callback
         self._sent_result_json = None
+        self.result = self.create_result()
+        self.result.az = self.config.az
+        # TBD: Could start some worker thread to send the self.result periodically
+        # (or to some local start method )
+
+    def create_result(self):
+        return ipc.NodeResult()
 
     @property
     def storage(self):
@@ -81,3 +89,16 @@ class Node(op.OpMixin):
         self.background_tasks = background_tasks
         self.config = config
         self.state = state
+        self.snapshotter = utils.get_or_create_state(request=request, key=APP_KEY, factory=self._create_snapshotter)
+
+    def _create_snapshotter(self):
+        # TBD: Make this be based on configuration somehow?
+        def _file_path_filter(files):
+            return files
+
+        return Snapshotter(
+            src=self.config.root,
+            dst=self.config.root_link,
+            globs=self.config.root_globs,
+            file_path_filter=_file_path_filter
+        )

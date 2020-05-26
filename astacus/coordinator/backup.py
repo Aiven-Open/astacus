@@ -17,7 +17,7 @@ plugin mechanism can be added here.
 from .coordinator import CoordinatorOpWithClusterLock
 from astacus.common import ipc
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Set
 
 import logging
 
@@ -35,6 +35,11 @@ class NodeIndexData(ipc.AstacusModel):
 
 
 class BackupOp(CoordinatorOpWithClusterLock):
+    snapshot_results: List[ipc.SnapshotResult] = []
+    stored_hexdigests: Set[str] = set()
+    backup_attempt = 0
+    backup_start = None
+
     async def _snapshot(self):
         logger.debug("BackupOp._snapshot")
         start_results = await self.request_from_nodes("snapshot", method="post", caller="BackupOp.snapshot")
@@ -42,11 +47,10 @@ class BackupOp(CoordinatorOpWithClusterLock):
             return []
         return await self.wait_successful_results(start_results, result_class=ipc.SnapshotResult)
 
-    def _snapshot_results_to_upload_node_index_datas(self, *, snapshot_results, hexdigests) -> List[NodeIndexData]:
-        hexdigests = set(hexdigests)
-        assert len(snapshot_results) == len(self.nodes)
+    def _snapshot_results_to_upload_node_index_datas(self) -> List[NodeIndexData]:
+        assert len(self.snapshot_results) == len(self.nodes)
         sshash_to_node_indexes: Dict[ipc.SnapshotHash, List[int]] = {}
-        for i, snapshot_result in enumerate(snapshot_results):
+        for i, snapshot_result in enumerate(self.snapshot_results):
             for sshash in snapshot_result.hashes or []:
                 sshash_to_node_indexes.setdefault(sshash, []).append(i)
 
@@ -62,7 +66,7 @@ class BackupOp(CoordinatorOpWithClusterLock):
 
         todo = sorted(sshash_to_node_indexes.items(), key=_sshash_to_node_indexes_key)
         for sshash, node_indexes in todo:
-            if sshash.hexdigest in hexdigests:
+            if sshash.hexdigest in self.stored_hexdigests:
                 continue
             _, node_index = min((node_index_datas[node_index].total_size, node_index) for node_index in node_indexes)
             node_index_datas[node_index].append_sshash(sshash)
@@ -80,36 +84,35 @@ class BackupOp(CoordinatorOpWithClusterLock):
             if len(start_result) != 1:
                 return []
             start_results.extend(start_result)
-        return await self.wait_successful_results(start_results, result_class=ipc.SnapshotUploadResult, all_nodes=False)
+        return await self.wait_successful_results(start_results, result_class=ipc.NodeResult, all_nodes=False)
 
-    async def _store_backup_manifest(self, *, attempt, start, snapshot_results):
-        logger.debug("_store_backup_manifest")
-
-        # This set of snapshot results is good; Create backup
-        # manifest, store it, and declare victory.
-        iso = start.isoformat()
-        filename = f"backup-{iso}"
-        manifest = ipc.BackupManifest(attempt=attempt, snapshot_results=snapshot_results)
-        await self.async_storage.upload_json(filename, manifest.json())
+    def _create_backup_manifest(self):
+        return ipc.BackupManifest(
+            attempt=self.backup_attempt, start=self.backup_start, snapshot_results=self.snapshot_results
+        )
 
     async def run_with_lock(self):
         attempts = self.config.backup_attempts
         for attempt in range(1, attempts + 1):
             logger.debug("BackupOp - attempt #%d/%d", attempt, attempts)
-            start = datetime.now()
-            snapshot_results = await self._snapshot()
-            if not snapshot_results:
+            self.backup_attempt = attempt
+            self.backup_start = datetime.now()
+            self.snapshot_results = await self._snapshot()
+            if not self.snapshot_results:
                 logger.info("Unable to snapshot successfully")
                 continue
-            hexdigests = await self.async_storage.list_hexdigests()
-            node_index_datas = self._snapshot_results_to_upload_node_index_datas(
-                snapshot_results=snapshot_results, hexdigests=hexdigests
-            )
+            self.stored_hexdigests = set(await self.async_storage.list_hexdigests())
+            node_index_datas = self._snapshot_results_to_upload_node_index_datas()
             if node_index_datas:
                 upload_results = await self._upload(node_index_datas)
                 if not upload_results:
                     logger.info("Unable to upload successfully")
                     continue
-            await self._store_backup_manifest(start=start, attempt=attempt, snapshot_results=snapshot_results)
+
+            manifest = self._create_backup_manifest()
+            iso = self.backup_start.isoformat()
+            filename = f"backup-{iso}"
+            logger.debug("Storing backup manifest %s", filename)
+            await self.async_storage.upload_json(filename, manifest.json())
             return
         self.set_status_fail()

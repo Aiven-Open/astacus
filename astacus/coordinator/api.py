@@ -6,6 +6,7 @@ See LICENSE for details
 from .backup import BackupOp
 from .coordinator import Coordinator
 from .lockops import LockOps
+from .restore import RestoreOp
 from astacus.common.op import Op
 from enum import Enum
 from fastapi import APIRouter, Depends
@@ -18,14 +19,12 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-class ErrorCode(str, Enum):
-    operation_id_mismatch = "operation_id_mismatch"
-
-
 class OpName(str, Enum):
-    lock = "lock"
-    unlock = "unlock"
+    """ (Long-running) operations defined in this API (for coordinator) """
     backup = "backup"
+    lock = "lock"
+    restore = "restore"
+    unlock = "unlock"
 
 
 @router.get("/{op_name}/{op_id}")
@@ -41,17 +40,23 @@ class LockStartResult(Op.StartResult):
 @router.post("/lock")
 async def lock(*, locker: str, ttl: int = 60, c: Coordinator = Depends()):
     op = LockOps(c=c, ttl=ttl, locker=locker)
-    result = c.start_op(op_name="lock", op=op, fun=op.lock)
+    result = c.start_op(op_name=OpName.lock, op=op, fun=op.lock)
     return LockStartResult(unlock_url=urljoin(str(c.request.url), f"../unlock?locker={locker}"), **result.dict())
 
 
 @router.post("/unlock")
 def unlock(*, locker: str, c: Coordinator = Depends()):
     op = LockOps(c=c, locker=locker)
-    return c.start_op(op_name="unlock", op=op, fun=op.unlock)
+    return c.start_op(op_name=OpName.unlock, op=op, fun=op.unlock)
 
 
 @router.post("/backup")
 def backup(*, c: Coordinator = Depends()):
     op = BackupOp(c=c)
-    return c.start_op(op_name="backup", op=op, fun=op.run)
+    return c.start_op(op_name=OpName.backup, op=op, fun=op.run)
+
+
+@router.post("/restore")
+def restore(*, name: str = '', c: Coordinator = Depends()):
+    op = RestoreOp(c=c, name=name)
+    return c.start_op(op_name=OpName.restore, op=op, fun=op.run)
