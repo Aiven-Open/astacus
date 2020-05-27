@@ -113,6 +113,6 @@ class BackupOp(CoordinatorOpWithClusterLock):
             iso = self.backup_start.isoformat()
             filename = f"backup-{iso}"
             logger.debug("Storing backup manifest %s", filename)
-            await self.async_storage.upload_json(filename, manifest.json())
+            await self.async_storage.upload_json(filename, manifest)
             return
         self.set_status_fail()

@@ -12,9 +12,11 @@ Shared utilities (between coordinator and node)
 from pydantic import BaseModel
 from starlette.requests import Request
 
+import asyncio
 import httpx
 import logging
 import requests
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -95,3 +97,70 @@ async def httpx_request(url, *, caller, method="get", timeout=10, json: bool = T
         except AssertionError as ex:
             logger.error("AssertionError - probably respx - from %s to %s: %r", url, caller, ex)
         return None
+
+
+def exponential_backoff(*, initial, retries=None, multiplier=2, maximum=None, duration=None):
+    """Exponential backoff iterator which works with both 'for' and 'async for'
+
+    First attempt is never delayed. The delays are only for retries.
+    'initial' is the first retry's delay. After that, each retry is
+    multiplier times larger.
+
+    The iteration stops if:
+    - retries is exceeded (retries=0 = try only once, although not very useful)
+    - duration would be exceeded (if duration is provided)
+    """
+    retries_text = ""
+    if retries:
+        retries_text = f"/{retries}"
+
+    class _Iter:
+        retry = -1
+        initial = None
+
+        @property
+        def _delay(self):
+            if retries is not None and self.retry > retries:
+                return None
+            now = time.monotonic()
+            if not self.retry:
+                self.initial = now
+                return 0
+            delay = initial * multiplier ** (self.retry - 1)
+            if maximum is not None:
+                delay = min(delay, maximum)
+            if duration is not None:
+                time_left_after_sleep = now - self.start - duration
+                if time_left_after_sleep < 0:
+                    return None
+            logger.debug("exponential_backoff waiting %.2f seconds (retry %d%s)", delay, self.retry, retries_text)
+
+            return delay
+
+        async def __anext__(self):
+            self.retry += 1
+            delay = self._delay
+            if delay is None:
+                raise StopAsyncIteration
+            if delay:
+                await asyncio.sleep(delay)
+            return self.retry
+
+        def __next__(self):
+            self.retry += 1
+            delay = self._delay
+            if delay is None:
+                raise StopIteration
+            if delay:
+                time.sleep(delay)
+            return self.retry
+
+    class _Iterable:
+        def __aiter__(self):
+            return _Iter()
+
+        def __iter__(self):
+            return _Iter()
+
+    assert duration is not None or retries is not None
+    return _Iterable()
