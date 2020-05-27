@@ -35,5 +35,9 @@ TBD
 
 TBD
 
+# TODO
+
+There is separate [TODO](TODO.md) file which tracks what is still to be done.
+
 [cassandra]: https://cassandra.apache.org
 [m3]: https://github.com/m3db/m3/

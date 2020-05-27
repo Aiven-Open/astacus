@@ -85,3 +85,7 @@ podman-test-fedora:
 podman-test-ubuntu:
 	podman build -t astacus-ubuntu -f Dockerfile.ubuntu
 	$(PODMAN_RUN) astacus-ubuntu
+
+.PHONY: pip-outdated
+pip-outdated:
+	pip-outdated setup.cfg requirements.testing.txt

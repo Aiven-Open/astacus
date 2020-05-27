@@ -1,11 +1,12 @@
 repos:
-  - repo: https://gitlab.com/pycqa/flake8
-    rev: 3.7.9
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v2.5.0
     hooks:
-      - id: flake8
-        files: \.py$
-        args:
-          - --config=.flake8
+      - id: trailing-whitespace
+        exclude: ^vendor/|^tests/.*/fixtures/.*
+      - id: end-of-file-fixer
+        exclude: ^vendor/|^tests/.*/fixtures/.*
+      - id: debug-statements
 
   - repo: https://github.com/pre-commit/mirrors-yapf
     rev: v0.30.0
@@ -27,14 +28,13 @@ repos:
         args:
           - --recursive
 
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v2.5.0
+  - repo: https://gitlab.com/pycqa/flake8
+    rev: 3.8.2
     hooks:
-      - id: trailing-whitespace
-        exclude: ^vendor/|^tests/.*/fixtures/.*
-      - id: end-of-file-fixer
-        exclude: ^vendor/|^tests/.*/fixtures/.*
-      - id: debug-statements
+      - id: flake8
+        files: \.py$
+        args:
+          - --config=.flake8
 
   # https://pre-commit.com/#repository-local-hooks
   - repo: local

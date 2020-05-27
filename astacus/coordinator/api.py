@@ -28,13 +28,19 @@ class OpName(str, Enum):
 
 
 @router.get("/{op_name}/{op_id}")
-def status(*, op_name: OpName, op_id: int, c: Coordinator = Depends()):
+def op_status(*, op_name: OpName, op_id: int, c: Coordinator = Depends()):
     _, op_info = c.get_op_and_op_info(op_id=op_id, op_name=op_name)
     return {"state": op_info.op_status}
 
 
 class LockStartResult(Op.StartResult):
     unlock_url: str
+
+
+@router.get("/")
+def root():
+    # Root is no-op, just useful for testing that Astacus is actually running
+    return {}
 
 
 @router.post("/lock")

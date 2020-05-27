@@ -42,8 +42,9 @@ class RestoreOp(CoordinatorOpWithClusterLock):
             else:
                 # Restore fake, empty backup to ensure node is clean
                 result = ipc.SnapshotResult(state=ipc.SnapshotState(files=[]))
+            data = ipc.SnapshotDownloadRequest(state=result.state).json()
             start_result = await self.request_from_nodes(
-                "download", caller="RestoreOp._restore", method="post", data=result.json(), nodes=[node]
+                "download", caller="RestoreOp._restore", method="post", data=data, nodes=[node]
             )
             if len(start_result) != 1:
                 return []
