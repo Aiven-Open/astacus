@@ -140,10 +140,14 @@ class CoordinatorOp(op.Op):
         # however, if re-locking times out, we will bail out. TBD if
         # we need timeout mechanism here anyway.
         failures = {}
-        while any(True for result in results if result is None or not result.progress.final):
-            await asyncio.sleep(delay)
-            delay = min(self.config.poll_delay_max, delay * self.config.poll_delay_multiplier)
+        async for _ in utils.exponential_backoff(
+            initial=delay,
+            multiplier=self.config.poll_delay_multiplier,
+            maximum=self.config.poll_delay_max,
+            duration=self.config.poll_duration
+        ):
             for i, (url, result) in enumerate(zip(urls, results)):
+                # TBD: This could be done in parallel too
                 if result is not None and result.progress.final:
                     continue
                 r = await utils.httpx_request(url, caller="BackupOp.wait_successful_results")
@@ -157,6 +161,11 @@ class CoordinatorOp(op.Op):
                 results[i] = result
                 if result.progress.finished_failed:
                     return []
+            if not any(True for result in results if result is None or not result.progress.final):
+                break
+        else:
+            logger.debug("wait_successful_results timed out")
+            return []
         return results
 
 

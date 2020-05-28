@@ -9,12 +9,11 @@ is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
 
 - backup list endpoint + its tests
 
-- command-line tool to play with Astacus (the daemon)
-    - just provide separate subcommands to main 'astacus' command
-
 - improve operation reporting; probably astacus.common.progress.Progress
   information should be also forwarded to coordinator results, and
-  subsequently to e.g. CLI
+  subsequently to e.g. CLI. Currently coordinator REST API / CLI reports
+  just binary outcome (success/not) which while technically sufficient in
+  short term, isn't optimal
 
 - plugin concept in general - how do extra parts in backup/restore work?
      - m3 plugin
@@ -31,7 +30,10 @@ is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
 ## Short-term; before public availability
 
 - multiple storages actually in use (/tested to work); rohmustorage has
-  base of the code but all other code should also use similar logic
+  base of the code but all other code should also use similar logic. this
+  is so that if e.g. service is migrated from storage x to y, new backups
+  will use storage location y, but old backups at storage x are also
+  available (and transparently to the user)
 
 - document
     - (better) README

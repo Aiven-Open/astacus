@@ -63,6 +63,6 @@ def backup(*, c: Coordinator = Depends()):
 
 
 @router.post("/restore")
-def restore(*, name: str = '', c: Coordinator = Depends()):
+def restore(*, name: str = "", c: Coordinator = Depends()):
     op = RestoreOp(c=c, name=name)
     return c.start_op(op_name=OpName.restore, op=op, fun=op.run)

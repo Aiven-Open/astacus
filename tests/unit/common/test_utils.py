@@ -33,7 +33,8 @@ async def test_exponential_backoff(mocker):
         _waits.append(d)
 
     mocker.patch.object(asyncio, "sleep", new=_asleep)
-    assert list(utils.exponential_backoff(initial=1, retries=5)) == list(range(6))
+    retries = list(utils.exponential_backoff(initial=1, retries=5))
+    assert retries == list(range(6))
 
     def _assert_rounded_waits_equals(x):
         assert len(_waits) == len(x)
@@ -47,6 +48,8 @@ async def test_exponential_backoff(mocker):
     _assert_rounded_waits_equals([1, 2, 4, 8])
 
     # Ensure the async version works too
-    async for _ in utils.exponential_backoff(initial=1, retries=5):
-        pass
+    retries = []
+    async for retry in utils.exponential_backoff(initial=1, retries=5):
+        retries.append(retry)
+    assert retries == list(range(6))
     _assert_rounded_waits_equals([1, 2, 4, 8, 16])

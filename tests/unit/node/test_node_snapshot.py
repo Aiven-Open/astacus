@@ -61,7 +61,7 @@ def test_snapshot(snapshotter, storage):
 
 
 def test_api_snapshot_and_upload(client, mocker):
-    url = 'http://addr/result'
+    url = "http://addr/result"
     m = mocker.patch.object(utils, "http_request")
     response = client.post("/node/snapshot")
     assert response.status_code == 409, response.json()
