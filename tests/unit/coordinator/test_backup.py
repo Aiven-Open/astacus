@@ -130,16 +130,16 @@ def _ssresults(*kwarg_list):
                 NodeIndexData(
                     node_index=1,
                     sshashes=[
-                        SnapshotHash(hexdigest='1-1', size=1),
-                        SnapshotHash(hexdigest='123-3', size=3),
+                        SnapshotHash(hexdigest="1-1", size=1),
+                        SnapshotHash(hexdigest="123-3", size=3),
                     ],
                     total_size=4
                 ),
-                NodeIndexData(node_index=2, sshashes=[SnapshotHash(hexdigest='12-2', size=2)], total_size=2),
+                NodeIndexData(node_index=2, sshashes=[SnapshotHash(hexdigest="12-2", size=2)], total_size=2),
                 NodeIndexData(
                     node_index=3,
-                    sshashes=[SnapshotHash(hexdigest='3-1', size=1),
-                              SnapshotHash(hexdigest='23-2', size=2)],
+                    sshashes=[SnapshotHash(hexdigest="3-1", size=1),
+                              SnapshotHash(hexdigest="23-2", size=2)],
                     total_size=3
                 ),
             ]

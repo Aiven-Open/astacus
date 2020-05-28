@@ -38,7 +38,7 @@ async def _sleep_little(value):
 
 @pytest.fixture(name="sleepless")
 def fixture_sleepless(mocker):
-    mocker.patch.object(asyncio, 'sleep', new=_sleep_little)
+    mocker.patch.object(asyncio, "sleep", new=_sleep_little)
 
 
 @pytest.fixture(name="app")
@@ -46,5 +46,5 @@ def fixture_app(mocker, sleepless, storage, tmpdir):  # pylint: disable=unused-a
     app = FastAPI()
     app.include_router(router, tags=["coordinator"])
     app.state.coordinator_config = CoordinatorConfig(object_storage=create_rohmu_config(tmpdir))
-    mocker.patch.object(CoordinatorOpWithClusterLock, 'get_locker', return_value='x')
+    mocker.patch.object(CoordinatorOpWithClusterLock, "get_locker", return_value="x")
     yield app

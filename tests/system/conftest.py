@@ -29,28 +29,40 @@ class TestNode(AstacusModel):
 
 
 ASTACUS_NODES = [
-    TestNode(name="a1", url="http://localhost:5515", port=5515),
-    TestNode(name="a2", url="http://localhost:5516", port=5516),
-    TestNode(name="a3", url="http://localhost:5517", port=5517),
+    # Intentionally not at default port
+    TestNode(name="a1", url="http://localhost:55150", port=55150),
+    TestNode(name="a2", url="http://localhost:55151", port=55151),
+    TestNode(name="a3", url="http://localhost:55152", port=55152),
 ]
 
 
 @asynccontextmanager
 async def background_process(program, *args):
+    # pylint: disable=bare-except
     proc = await asyncio.create_subprocess_exec(program, *args)
     try:
         yield
     finally:
         try:
-            proc.terminate()
-        except asyncio.ProcessLookupError:
-            pass
-        while True:
+            await asyncio.wait_for(proc.wait(), 0.1)
+        except asyncio.TimeoutError:
             try:
-                await asyncio.wait_for(proc.wait(), 3)
-                break
-            except asyncio.TimeoutError:
-                proc.kill()
+                proc.terminate()
+            except:
+                # thrown exception is not well defined, unfortunately, varies
+                # by event loop
+                pass
+            while True:
+                try:
+                    await asyncio.wait_for(proc.wait(), 3)
+                    break
+                except asyncio.TimeoutError:
+                    try:
+                        proc.kill()
+                    except:
+                        # thrown exception is not well defined, unfortunately, varies
+                        # by event loop
+                        break
 
 
 def create_astacus_config_dict(*, tmpdir, root_path, link_path, node):
@@ -104,7 +116,7 @@ async def _wait_url_up(url):
 async def _astacus(*, tmpdir, index):
     node = ASTACUS_NODES[index]
     a_conf_path = create_astacus_config(tmpdir=tmpdir, node=node)
-    async with background_process("astacus", "-c", str(a_conf_path)):
+    async with background_process("astacus", "server", "-c", str(a_conf_path)):
         await _wait_url_up(node.url)
         yield node
 

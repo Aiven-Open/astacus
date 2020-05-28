@@ -20,11 +20,11 @@ def fixture_utils_http_request_list(mocker):
         assert result_list, f"Unable to serve request {args!r} {kwargs!r}"
         r = result_list.pop(0)
         if isinstance(r, dict):
-            if 'args' in r:
+            if "args" in r:
                 assert list(r["args"]) == list(args)
-            if 'kwargs' in r:
+            if "kwargs" in r:
                 assert r["kwargs"] == kwargs
-            if 'result' in r:
+            if "result" in r:
                 return r["result"]
             return None
         if r is None:

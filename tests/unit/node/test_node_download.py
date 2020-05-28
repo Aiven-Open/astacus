@@ -38,7 +38,7 @@ def test_download(snapshotter, storage, tmpdir):
 
 
 def test_api_download(client, mocker):
-    url = 'http://addr/result'
+    url = "http://addr/result"
     m = mocker.patch.object(utils, "http_request")
     response = client.post("/node/download")
     assert response.status_code == 422, response.json()

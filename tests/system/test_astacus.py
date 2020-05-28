@@ -6,30 +6,16 @@ Basic backup-restore cycle and its variations
 
 """
 
-from astacus.common.utils import exponential_backoff
-
 import logging
 import pytest
-import requests
 import shutil
+import subprocess
 
 logger = logging.getLogger(__name__)
 
 
 def _astacus_run(astacus, op):
-    r = requests.post(f"{astacus.url}/{op}")
-    assert r and r.ok
-    url = r.json()["status_url"]
-    for _ in exponential_backoff(initial=0.1, duration=10):
-        logger.debug("Checking {op} status at %r", url)
-        r = requests.get(url)
-        assert r and r.ok
-        state = r.json()["state"]
-        assert state != "fail"
-        if state == "done":
-            break
-    else:
-        raise TimeoutError("_astacus_run timed out")
+    subprocess.run(["astacus", "--url", astacus.url, "-w", "10", op], check=True)
 
 
 def _astacus_ls(astacus):

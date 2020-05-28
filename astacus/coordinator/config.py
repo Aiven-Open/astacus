@@ -32,6 +32,8 @@ class CoordinatorConfig(AstacusModel):
     poll_delay_start: int = 1
     poll_delay_multiplier: int = 2
     poll_delay_max: int = 60
+    # How long do we wait for op to finish before giving up on it?
+    poll_duration: int = 86400
 
     # How many times can poll fail in row before we call it a day
     poll_maximum_failures: int = 5

@@ -130,7 +130,7 @@ def exponential_backoff(*, initial, retries=None, multiplier=2, maximum=None, du
             if maximum is not None:
                 delay = min(delay, maximum)
             if duration is not None:
-                time_left_after_sleep = now - self.start - duration
+                time_left_after_sleep = (self.initial + duration) - now - delay
                 if time_left_after_sleep < 0:
                     return None
             logger.debug("exponential_backoff waiting %.2f seconds (retry %d%s)", delay, self.retry, retries_text)

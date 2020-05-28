@@ -23,7 +23,7 @@ APP_LOCK_KEY = "node_lock"
 @dataclass
 class NodeState(OpState):
     locked: bool = False
-    locker: str = ''
+    locker: str = ""
     locked_until: float = 0
 
     @property
