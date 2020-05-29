@@ -8,8 +8,10 @@ TBD: Test with something else than local files?
 
 """
 
+from astacus.common import exceptions
 from astacus.common.rohmustorage import RohmuStorage
 from astacus.common.storage import FileStorage
+from contextlib import nullcontext as does_not_raise
 from pathlib import Path
 from tests.utils import create_rohmu_config
 
@@ -22,9 +24,9 @@ TEST_JSON = "jsonblob"
 TEST_JSON_DATA = {"foo": 7, "array": [1, 2, 3], "true": True}
 
 
-def create_storage(*, tmpdir, engine):
+def create_storage(*, tmpdir, engine, **kw):
     if engine == "rohmu":
-        config = create_rohmu_config(tmpdir)
+        config = create_rohmu_config(tmpdir, **kw)
         return RohmuStorage(config=config)
     if engine == "file":
         path = Path(tmpdir / "test-storage-file")
@@ -49,8 +51,26 @@ def _test_jsonstorage(storage):
     assert storage.list_jsons() == []
 
 
-@pytest.mark.parametrize("engine", ["file", "rohmu"])
-def test_storage(tmpdir, engine):
-    storage = create_storage(tmpdir=tmpdir, engine=engine)
-    _test_hexdigeststorage(storage)
-    _test_jsonstorage(storage)
+@pytest.mark.parametrize(
+    "engine,kw,ex", [
+        ("file", {}, None),
+        ("rohmu", {}, None),
+        ("rohmu", {
+            "compression": False
+        }, None),
+        ("rohmu", {
+            "encryption": False
+        }, None),
+        ("rohmu", {
+            "compression": False,
+            "encryption": False
+        }, pytest.raises(exceptions.CompressionOrEncryptionRequired)),
+    ]
+)
+def test_storage(tmpdir, engine, kw, ex):
+    if ex is None:
+        ex = does_not_raise()
+    with ex:
+        storage = create_storage(tmpdir=tmpdir, engine=engine, **kw)
+        _test_hexdigeststorage(storage)
+        _test_jsonstorage(storage)

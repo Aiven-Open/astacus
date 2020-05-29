@@ -7,6 +7,7 @@ Rohmu-specific actual object storage implementation
 
 """
 
+from .exceptions import CompressionOrEncryptionRequired
 from .storage import Storage
 from .utils import AstacusModel
 from enum import Enum
@@ -132,6 +133,8 @@ layer makes the design somewhat more clean.
         self.json_key = "json"
         self.choose_storage(storage)
         os.makedirs(config.temporary_directory, exist_ok=True)
+        if not self.config.compression.algorithm and not self.config.encryption_key_id:
+            raise CompressionOrEncryptionRequired()
 
     def _download_key_to_file(self, key, f) -> bool:
         raw_metadata: dict = self.storage.get_metadata_for_key(key)
