@@ -69,11 +69,14 @@ def create_astacus_config_dict(*, tmpdir, root_path, link_path, node):
     nodes = [{"url": f"{node.url}/node"} for node in ASTACUS_NODES]
     return {
         "coordinator": {
-            "nodes": nodes
+            "nodes": nodes,
+            "plugin": "files",
+            "plugin_config": {
+                "root_globs": ["*"],
+            },
         },
         "node": {
             "root": str(root_path),
-            "root_globs": ["*"],
             "root_link": str(link_path),
         },
         "object_storage": create_rohmu_config(tmpdir).dict(),

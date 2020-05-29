@@ -28,3 +28,10 @@ class InsufficientAZsException(PermanentException):
 # check is in place until that gets fixed
 class CompressionOrEncryptionRequired(PermanentException):
     pass
+
+
+class TransientException(AstacusException):
+    pass
+
+
+# TBD: Wrap the e.g. rohmu retryable exceptions around TransientException

@@ -5,7 +5,7 @@ See LICENSE for details
 
 from .config import coordinator_config, CoordinatorConfig
 from .state import coordinator_state, CoordinatorState
-from astacus.common import magic, op, statsd, utils
+from astacus.common import exceptions, magic, op, statsd, utils
 from astacus.common.magic import LockCall
 from astacus.common.rohmustorage import RohmuStorage
 from datetime import datetime
@@ -131,13 +131,24 @@ class CoordinatorOp(op.Op):
 
     async def run_attempts(self, attempts):
         name = self.__class__.__name__
-        for attempt in range(1, attempts + 1):
-            logger.debug("%s - attempt #%d/%d", name, attempt, attempts)
-            self.attempt = attempt
-            self.attempt_start = datetime.now()
-            async with self.stats.async_timing_manager("astacus_attempt_duration", {"op": name, "attempt": str(attempt)}):
-                if await self.try_run():
-                    return
+        try:
+            for attempt in range(1, attempts + 1):
+                logger.debug("%s - attempt #%d/%d", name, attempt, attempts)
+                self.attempt = attempt
+                self.attempt_start = datetime.now()
+                async with self.stats.async_timing_manager(
+                    "astacus_attempt_duration", {
+                        "op": name,
+                        "attempt": str(attempt)
+                    }
+                ):
+                    try:
+                        if await self.try_run():
+                            return
+                    except exceptions.TransientException as ex:
+                        logger.info("%s - trasient failure: %r", name, ex)
+        except exceptions.PermanentException as ex:
+            logger.info("%s - permanent failure: %r", name, ex)
         self.set_status_fail()
 
     def set_status_fail(self):

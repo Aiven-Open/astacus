@@ -8,8 +8,9 @@ Test that the coordinator backup endpoint works.
 
 from astacus.common import ipc
 from astacus.common.ipc import SnapshotHash
-from astacus.coordinator.backup import BackupOp, NodeIndexData
 from astacus.coordinator.config import CoordinatorConfig
+from astacus.coordinator.plugins import get_plugin_backup_class
+from astacus.coordinator.plugins.base import NodeIndexData
 from datetime import datetime
 
 import pytest
@@ -72,15 +73,18 @@ def test_backup(fail_at, app, client, storage):
         assert app.state.coordinator_state.op_info.op_id == 1
 
 
-class DummyBackupOp(BackupOp):
-    def __init__(self):
+_BackupOp = get_plugin_backup_class("files")
+
+
+class DummyBackupOp(_BackupOp):
+    def __init__(self, hexdigests, snapshot_results):
         # pylint: disable=super-init-not-called
         # NOP __init__, we mock whatever we care about
         self.nodes = [0, 1, 2, 3]
+        self.hexdigests = set(hexdigests)
+        self.result_snapshot = snapshot_results
 
-    def assert_upload_of_snapshot_is(self, hexdigests, snapshot_results, upload):
-        self.stored_hexdigests = set(hexdigests)
-        self.snapshot_results = snapshot_results
+    def assert_upload_of_snapshot_is(self, upload):
         got_upload = self._snapshot_results_to_upload_node_index_datas()
         assert got_upload == upload
 
@@ -147,5 +151,5 @@ def _ssresults(*kwarg_list):
     ]
 )
 def test_upload_optimization(hexdigests, snapshot_results, uploads):
-    op = DummyBackupOp()
-    op.assert_upload_of_snapshot_is(hexdigests, snapshot_results, uploads)
+    op = DummyBackupOp(hexdigests, snapshot_results)
+    op.assert_upload_of_snapshot_is(uploads)

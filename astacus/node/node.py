@@ -16,7 +16,7 @@ from typing import Optional
 import logging
 
 logger = logging.getLogger(__name__)
-APP_KEY = "node_snapshotter"
+SNAPSHOTTER_KEY = "node_snapshotter"
 
 
 class NodeOp(op.Op):
@@ -27,11 +27,12 @@ class NodeOp(op.Op):
         super().__init__(info=n.state.op_info)
         self.start_op = n.start_op
         self.config = n.config
-        self.snapshotter = n.snapshotter
         self._still_locked_callback = n.state.still_locked_callback
         self._sent_result_json = None
         self.result = self.create_result()
         self.result.az = self.config.az
+        self.get_or_create_snapshotter = n.get_or_create_snapshotter
+        self.get_snapshotter = n.get_snapshotter
         # TBD: Could start some worker thread to send the self.result periodically
         # (or to some local start method )
 
@@ -89,17 +90,19 @@ class Node(op.OpMixin):
         self.background_tasks = background_tasks
         self.config = config
         self.state = state
-        self.snapshotter = utils.get_or_create_state(request=request, key=APP_KEY, factory=self._create_snapshotter)
         self.stats = statsd.StatsClient(config=config.statsd)
 
-    def _create_snapshotter(self):
-        # TBD: Make this be based on configuration somehow?
-        def _file_path_filter(files):
-            return files
+    def get_or_create_snapshotter(self, root_globs):
+        def _create_snapshotter():
+            # TBD: Make this be based on configuration somehow?
+            def _file_path_filter(files):
+                return files
 
-        return Snapshotter(
-            src=self.config.root,
-            dst=self.config.root_link,
-            globs=self.config.root_globs,
-            file_path_filter=_file_path_filter
-        )
+            return Snapshotter(
+                src=self.config.root, dst=self.config.root_link, globs=root_globs, file_path_filter=_file_path_filter
+            )
+
+        return utils.get_or_create_state(request=self.request, key=SNAPSHOTTER_KEY, factory=_create_snapshotter)
+
+    def get_snapshotter(self):
+        return getattr(self.request.app.state, SNAPSHOTTER_KEY)

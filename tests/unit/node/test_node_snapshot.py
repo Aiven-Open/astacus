@@ -64,14 +64,19 @@ def test_api_snapshot_and_upload(client, mocker):
     url = "http://addr/result"
     m = mocker.patch.object(utils, "http_request")
     response = client.post("/node/snapshot")
+    assert response.status_code == 422, response.json()
+
+    req_json = {"root_globs": ["*"]}
+    response = client.post("/node/snapshot", json=req_json)
     assert response.status_code == 409, response.json()
 
     response = client.post("/node/lock?locker=x&ttl=10")
     assert response.status_code == 200, response.json()
-    response = client.post("/node/snapshot")
+    response = client.post("/node/snapshot", json=req_json)
     assert response.status_code == 200, response.json()
 
-    response = client.post("/node/snapshot", json={"result_url": url})
+    req_json["result_url"] = url
+    response = client.post("/node/snapshot", json=req_json)
     assert response.status_code == 200, response.json()
 
     # Decode the (result endpoint) response using the model

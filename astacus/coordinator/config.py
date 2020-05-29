@@ -3,6 +3,7 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 
+from astacus.common import ipc
 from astacus.common.rohmustorage import RohmuConfig
 from astacus.common.statsd import StatsdConfig
 from astacus.common.utils import AstacusModel
@@ -22,6 +23,9 @@ class CoordinatorConfig(AstacusModel):
         # elegant not to have probe nodes for configuration and
         # instead have required parts here in the configuration file.
         az: str = ""
+
+    plugin: ipc.Plugin
+    plugin_config: dict = {}
 
     # Which nodes are we supposed to manage
     nodes: List[Node] = []
@@ -43,7 +47,7 @@ class CoordinatorConfig(AstacusModel):
     #
     # Note that values should be >1, as at least one retry makes
     # almost always sense and subsequent backup attempts are fast as
-    # snapshots are incremential unless nodes have restarted.
+    # snapshots are incremential unless nodes have restarted.1
     backup_attempts: int = 5
 
     # Restore is attempted this many times before giving up.

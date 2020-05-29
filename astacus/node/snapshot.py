@@ -11,8 +11,10 @@ this module with proper parameters.
 """
 
 from .node import NodeOp
+from .snapshotter import Snapshotter
 from astacus.common import ipc
 from datetime import datetime
+from typing import Optional
 
 import hashlib
 import logging
@@ -23,12 +25,15 @@ logger = logging.getLogger(__name__)
 
 
 class SnapshotOp(NodeOp):
+    snapshotter: Optional[Snapshotter] = None
+
     def create_result(self):
         return ipc.SnapshotResult()
 
     def start(self, *, req: ipc.SnapshotRequest):
         self.req = req
         logger.debug("start_snapshot %r", req)
+        self.snapshotter = self.get_or_create_snapshotter(req.root_globs)
         return self.start_op(op_name="snapshot", op=self, fun=self.snapshot)
 
     def snapshot(self):
@@ -47,7 +52,7 @@ class UploadOp(NodeOp):
         return self.start_op(op_name="upload", op=self, fun=self.upload)
 
     def upload(self):
-        self.snapshotter.write_hashes_to_storage(
+        self.get_snapshotter().write_hashes_to_storage(
             hashes=self.req.hashes,
             storage=self.storage,
             progress=self.result.progress,

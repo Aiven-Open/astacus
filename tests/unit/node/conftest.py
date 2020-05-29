@@ -29,7 +29,6 @@ def fixture_app(tmpdir):
     app.state.node_config = NodeConfig.parse_obj({
         "root": str(root),
         "root_link": str(root_link),
-        "root_globs": ["*"],
         "object_storage": {
             "temporary_directory": str(tmp_path),
             "default_storage": "x",

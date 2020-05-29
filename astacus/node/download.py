@@ -11,8 +11,9 @@ API of this module with proper parameters.
 """
 
 from .node import NodeOp
+from .snapshotter import Snapshotter
 from astacus.common import ipc
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import logging
 import os
@@ -82,12 +83,16 @@ class Downloader:
 
 
 class DownloadOp(NodeOp):
+    snapshotter: Optional[Snapshotter] = None
+
     def start(self, *, req: ipc.SnapshotDownloadRequest):
         self.req = req
+        self.snapshotter = self.get_or_create_snapshotter(req.state.root_globs)
         logger.debug("start_download %r", req)
         return self.start_op(op_name="download", op=self, fun=self.download)
 
     def download(self):
+        assert self.snapshotter
         downloader = Downloader(dst=self.config.root, snapshotter=self.snapshotter, storage=self.storage)
         downloader.download_from_storage(
             snapshotstate=self.req.state, progress=self.result.progress, still_running_callback=self.still_running_callback

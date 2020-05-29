@@ -43,6 +43,7 @@ class Snapshotter:
     e.g. file_path_filter should be overridden.
     """
     def __init__(self, *, src, dst, globs, file_path_filter=None):
+        assert globs  # model has empty; either plugin or configuration must supply them
         self.src = Path(src)
         self.dst = Path(dst)
         self.globs = globs
@@ -102,7 +103,7 @@ class Snapshotter:
         ]
 
     def get_snapshot_state(self):
-        return SnapshotState(files=sorted(self.relative_path_to_snapshotfile.values()))
+        return SnapshotState(root_globs=self.globs, files=sorted(self.relative_path_to_snapshotfile.values()))
 
     def snapshot(self, *, progress: Optional[Progress] = None):
         if progress is None:

@@ -54,7 +54,7 @@ def unlock(locker: str, state: NodeState = Depends(node_state)):
 
 
 @router.post("/snapshot")
-def snapshot(req: ipc.SnapshotRequest = ipc.SnapshotRequest(), n: Node = Depends()):
+def snapshot(req: ipc.SnapshotRequest, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
     return SnapshotOp(n=n).start(req=req)
