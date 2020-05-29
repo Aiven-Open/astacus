@@ -8,6 +8,15 @@ repos:
         exclude: ^vendor/|^tests/.*/fixtures/.*
       - id: debug-statements
 
+  - repo: https://github.com/timothycrosley/isort
+    rev: 4.3.21
+    hooks:
+      - id: isort
+        files: \.py$
+        exclude: ^vendor/
+        args:
+          - --recursive
+
   - repo: https://github.com/pre-commit/mirrors-yapf
     rev: v0.30.0
     hooks:
@@ -18,15 +27,6 @@ repos:
           - --parallel
           - --recursive
           - --in-place
-
-  - repo: https://github.com/timothycrosley/isort
-    rev: 4.3.21
-    hooks:
-      - id: isort
-        files: \.py$
-        exclude: ^vendor/
-        args:
-          - --recursive
 
   - repo: https://gitlab.com/pycqa/flake8
     rev: 3.8.2

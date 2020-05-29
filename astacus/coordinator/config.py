@@ -4,6 +4,7 @@ See LICENSE for details
 """
 
 from astacus.common.rohmustorage import RohmuConfig
+from astacus.common.statsd import StatsdConfig
 from astacus.common.utils import AstacusModel
 from fastapi import Request
 from typing import List, Optional
@@ -52,7 +53,9 @@ class CoordinatorConfig(AstacusModel):
     # already downloaded files are not downloaded again.
     restore_attempts: int = 5
 
+    # These can be either globally or locally set
     object_storage: Optional[RohmuConfig] = None
+    statsd: Optional[StatsdConfig] = None
 
 
 def coordinator_config(request: Request) -> CoordinatorConfig:

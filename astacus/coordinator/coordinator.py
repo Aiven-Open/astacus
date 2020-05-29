@@ -5,12 +5,14 @@ See LICENSE for details
 
 from .config import coordinator_config, CoordinatorConfig
 from .state import coordinator_state, CoordinatorState
-from astacus.common import magic, op, utils
+from astacus.common import magic, op, statsd, utils
 from astacus.common.magic import LockCall
 from astacus.common.rohmustorage import RohmuStorage
+from datetime import datetime
 from enum import Enum
 from fastapi import BackgroundTasks, Depends, Request
 from starlette.concurrency import run_in_threadpool
+from typing import Optional
 
 import asyncio
 import json
@@ -58,6 +60,9 @@ class AsyncStorageWrapper:
 
 
 class CoordinatorOp(op.Op):
+    attempt = -1  # try_run iteration number
+    attempt_start: Optional[datetime] = None  # try_run iteration start time
+
     def __init__(self, *, c: "Coordinator"):
         super().__init__(info=c.state.op_info)
         self.nodes = c.config.nodes
@@ -124,6 +129,22 @@ class CoordinatorOp(op.Op):
     async def request_unlock_from_nodes(self, *, locker: str) -> bool:
         return await self.request_lock_call_from_nodes(call=LockCall.unlock, locker=locker) == LockResult.ok
 
+    async def run_attempts(self, attempts):
+        name = self.__class__.__name__
+        for attempt in range(1, attempts + 1):
+            logger.debug("%s - attempt #%d/%d", name, attempt, attempts)
+            self.attempt = attempt
+            self.attempt_start = datetime.now()
+            async with self.stats.async_timing_manager("astacus_attempt_duration", {"op": name, "attempt": str(attempt)}):
+                if await self.try_run():
+                    return
+        self.set_status_fail()
+
+    def set_status_fail(self):
+        super().set_status_fail()
+        name = self.__class__.__name__
+        self.stats.increase("astacus_fail", {"op": name})
+
     async def wait_successful_results(self, start_results, *, result_class, all_nodes=True):
         urls = []
         for i, result in enumerate(start_results, 1):
@@ -178,6 +199,9 @@ class CoordinatorOpWithClusterLock(CoordinatorOp):
 
     def get_locker(self):
         return f"{socket.gethostname()}-{id(self)}"
+
+    async def run_with_lock(self):
+        raise NotImplementedError
 
     async def run(self):
         relock_tasks = []
@@ -250,3 +274,4 @@ class Coordinator(op.OpMixin):
         self.background_tasks = background_tasks
         self.config = config
         self.state = state
+        self.stats = statsd.StatsClient(config=config.statsd)

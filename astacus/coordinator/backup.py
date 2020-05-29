@@ -16,7 +16,6 @@ plugin mechanism can be added here.
 
 from .coordinator import CoordinatorOpWithClusterLock
 from astacus.common import ipc
-from datetime import datetime
 from typing import Dict, List, Set
 
 import logging
@@ -37,8 +36,6 @@ class NodeIndexData(ipc.AstacusModel):
 class BackupOp(CoordinatorOpWithClusterLock):
     snapshot_results: List[ipc.SnapshotResult] = []
     stored_hexdigests: Set[str] = set()
-    backup_attempt = 0
-    backup_start = None
 
     async def _snapshot(self):
         logger.debug("BackupOp._snapshot")
@@ -87,32 +84,27 @@ class BackupOp(CoordinatorOpWithClusterLock):
         return await self.wait_successful_results(start_results, result_class=ipc.NodeResult, all_nodes=False)
 
     def _create_backup_manifest(self):
-        return ipc.BackupManifest(
-            attempt=self.backup_attempt, start=self.backup_start, snapshot_results=self.snapshot_results
-        )
+        return ipc.BackupManifest(attempt=self.attempt, start=self.attempt_start, snapshot_results=self.snapshot_results)
+
+    async def try_run(self) -> bool:
+        self.snapshot_results = await self._snapshot()
+        if not self.snapshot_results:
+            logger.info("Unable to snapshot successfully")
+            return False
+        self.stored_hexdigests = set(await self.async_storage.list_hexdigests())
+        node_index_datas = self._snapshot_results_to_upload_node_index_datas()
+        if node_index_datas:
+            upload_results = await self._upload(node_index_datas)
+            if not upload_results:
+                logger.info("Unable to upload successfully")
+                return False
+        manifest = self._create_backup_manifest()
+        assert self.attempt_start
+        iso = self.attempt_start.isoformat()
+        filename = f"backup-{iso}"
+        logger.debug("Storing backup manifest %s", filename)
+        await self.async_storage.upload_json(filename, manifest)
+        return True
 
     async def run_with_lock(self):
-        attempts = self.config.backup_attempts
-        for attempt in range(1, attempts + 1):
-            logger.debug("BackupOp - attempt #%d/%d", attempt, attempts)
-            self.backup_attempt = attempt
-            self.backup_start = datetime.now()
-            self.snapshot_results = await self._snapshot()
-            if not self.snapshot_results:
-                logger.info("Unable to snapshot successfully")
-                continue
-            self.stored_hexdigests = set(await self.async_storage.list_hexdigests())
-            node_index_datas = self._snapshot_results_to_upload_node_index_datas()
-            if node_index_datas:
-                upload_results = await self._upload(node_index_datas)
-                if not upload_results:
-                    logger.info("Unable to upload successfully")
-                    continue
-
-            manifest = self._create_backup_manifest()
-            iso = self.backup_start.isoformat()
-            filename = f"backup-{iso}"
-            logger.debug("Storing backup manifest %s", filename)
-            await self.async_storage.upload_json(filename, manifest)
-            return
-        self.set_status_fail()
+        await self.run_attempts(self.config.backup_attempts)

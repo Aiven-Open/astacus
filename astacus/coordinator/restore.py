@@ -88,16 +88,11 @@ class RestoreOp(CoordinatorOpWithClusterLock):
 
         return self._get_node_to_backup_index_from_azs(azs_in_backup=azs_in_backup, azs_in_nodes=azs_in_nodes)
 
+    async def try_run(self) -> bool:
+        return bool(await self._restore())
+
     async def run_with_lock(self):
         backup_name = await self.get_backup_name()
         backup_dict = await self.async_storage.download_json(backup_name)
         self.backup_manifest = ipc.BackupManifest.parse_obj(backup_dict)
-        attempts = self.config.restore_attempts
-        for attempt in range(1, attempts + 1):
-            self.restore_attempt = attempt
-            logger.debug("RestoreOp - attempt #%d/%d", attempt, attempts)
-
-            if not await self._restore():
-                continue
-            return
-        self.set_status_fail()
+        await self.run_attempts(self.config.restore_attempts)

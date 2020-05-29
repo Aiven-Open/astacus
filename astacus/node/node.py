@@ -7,7 +7,7 @@ See LICENSE for details
 from .config import node_config, NodeConfig
 from .snapshotter import Snapshotter
 from .state import node_state, NodeState
-from astacus.common import ipc, op, utils
+from astacus.common import ipc, op, statsd, utils
 from astacus.common.progress import Progress
 from astacus.common.rohmustorage import RohmuStorage
 from fastapi import BackgroundTasks, Depends, Request
@@ -90,6 +90,7 @@ class Node(op.OpMixin):
         self.config = config
         self.state = state
         self.snapshotter = utils.get_or_create_state(request=request, key=APP_KEY, factory=self._create_snapshotter)
+        self.stats = statsd.StatsClient(config=config.statsd)
 
     def _create_snapshotter(self):
         # TBD: Make this be based on configuration somehow?
