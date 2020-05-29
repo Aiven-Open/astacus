@@ -16,19 +16,19 @@ is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
   just binary outcome (success/not) which while technically sufficient in
   short term, isn't optimal
 
-- metrics support (preferably just provide Prometheus endpoint with really
-  bare-bones metrics and move from there)
+- more metrics endpoints - think on what is really needed
+    - perhaps backup/snapshot/restore sizes and file counts? copy from *hoard?
 
 - plugin
-     - concept in general - how do extra parts in backup/restore work?
+    - concept in general - how do extra parts in backup/restore work?
 
-     - m3 plugin
-          - one node will ensure that etcd state has stayed consistent across
+    - m3 plugin
+        - one node will ensure that etcd state has stayed consistent across
           snapshot+upload period, and it will be stored also within backup
-          - at restoration time, one node will be used to restore etcd
+        - at restoration time, one node will be used to restore etcd
           contents, with rewritten node names
 
-     - (partial?) cassandra plugin; mostly to validate plugin arch is broad enough
+    - (partial?) cassandra plugin; mostly to validate plugin arch is broad enough
 
 
 - selective caching layer for astacus.common.storage.Storage; basically, we

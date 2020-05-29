@@ -4,6 +4,7 @@ See LICENSE for details
 """
 
 from astacus.common.rohmustorage import RohmuConfig
+from astacus.common.statsd import StatsdConfig
 from astacus.common.utils import AstacusModel
 from fastapi import Request
 from typing import List, Optional
@@ -25,7 +26,9 @@ class NodeConfig(AstacusModel):
     # Where do we hardlink things from the file hierarchy we care about
     root_link: str
 
+    # These can be either globally or locally set
     object_storage: Optional[RohmuConfig] = None
+    statsd: Optional[StatsdConfig] = None
 
 
 def node_config(request: Request) -> NodeConfig:

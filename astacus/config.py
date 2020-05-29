@@ -10,6 +10,7 @@ Root-level astacus configuration, which includes
 
 from astacus.common import magic
 from astacus.common.rohmustorage import RohmuConfig
+from astacus.common.statsd import StatsdConfig
 from astacus.common.utils import AstacusModel
 from astacus.coordinator.config import APP_KEY as COORDINATOR_CONFIG_KEY, CoordinatorConfig
 from astacus.node.config import APP_KEY as NODE_CONFIG_KEY, NodeConfig
@@ -37,7 +38,9 @@ class GlobalConfig(AstacusModel):
     sentry_dsn: str = ""
     uvicorn: UvicornConfig = UvicornConfig()
 
+    # These can be either globally or locally set
     object_storage: Optional[RohmuConfig] = None
+    statsd: Optional[StatsdConfig] = None
 
 
 def global_config(request: Request) -> GlobalConfig:
@@ -52,10 +55,10 @@ def set_global_config_from_path(app, path):
     setattr(app.state, APP_KEY, config)
     setattr(app.state, COORDINATOR_CONFIG_KEY, cconfig)
     setattr(app.state, NODE_CONFIG_KEY, nconfig)
-    # Actual object storage configuration can be either specified for
-    # subcomponents directly, or just on the app level to apply to both
-    if cconfig.object_storage is None:
-        cconfig.object_storage = config.object_storage
-    if nconfig.object_storage is None:
-        nconfig.object_storage = config.object_storage
+    # Propagate keys that can be configured locally/globally
+    for propagated_key in ["object_storage", "statsd"]:
+        for subconfig in [cconfig, nconfig]:
+            if getattr(subconfig, propagated_key) is not None:
+                continue
+            setattr(subconfig, propagated_key, getattr(config, propagated_key))
     return config

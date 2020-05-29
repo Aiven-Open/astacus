@@ -13,7 +13,7 @@ Notable things:
 
 from .exceptions import ExpiredOperationException
 from .utils import AstacusModel
-from astacus.common import magic
+from astacus.common import magic, statsd
 from dataclasses import dataclass, field
 from enum import Enum
 from fastapi import HTTPException
@@ -42,9 +42,11 @@ class Op:
         op_id: int
         status_url: str
 
+    op_id = -1  # set in start_op
+    stats: Optional[statsd.StatsClient] = None  # set in start_op
+
     def __init__(self, *, info: Info):
         self.info = info
-        self.op_id = None  # set in start_op
 
     def set_status(self, state: Status, *, from_state: Optional[Status] = None) -> bool:
         assert self.op_id, "start_op() should be called before set_status()"
@@ -81,6 +83,7 @@ class OpMixin:
         self.state.op = op
         op.op_id = info.op_id
         op.set_status(Op.Status.starting)
+        op.stats = self.stats
         url = self.request.url
         status_url = urlunsplit((url.scheme, url.netloc, f"{url.path}/{op.op_id}", "", ""))
 
