@@ -20,8 +20,6 @@ is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
     - perhaps backup/snapshot/restore sizes and file counts? copy from *hoard?
 
 - plugin
-    - concept in general - how do extra parts in backup/restore work?
-
     - m3 plugin
         - one node will ensure that etcd state has stayed consistent across
           snapshot+upload period, and it will be stored also within backup

@@ -45,7 +45,7 @@ def test_api_download(client, mocker):
 
     # Actual restoration is painful. So we trust above test_download to work,
     # and pass empty list of files to be downloaded
-    req_json = {"result_url": url, "state": {"files": []}}
+    req_json = {"result_url": url, "state": {"root_globs": ["*"], "files": []}}
 
     response = client.post("/node/download", json=req_json)
     assert response.status_code == 409, response.json()

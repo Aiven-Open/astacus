@@ -6,12 +6,20 @@ See LICENSE for details
 from .progress import Progress
 from .utils import AstacusModel
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from pydantic import Field
 from typing import List, Optional
 
 import functools
 import socket
+
+
+# These are the database plugins we support; list is intentionally
+# enum here, as dynamically adding them isn't priority (for now)
+class Plugin(str, Enum):
+    files = "files"
+
 
 # node generic base
 
@@ -45,11 +53,13 @@ class SnapshotFile(AstacusModel):
 
 
 class SnapshotState(AstacusModel):
+    root_globs: List[str]
     files: List[SnapshotFile]
 
 
 class SnapshotRequest(NodeRequest):
-    pass
+    # list of globs, e.g. ["**/*.dat"] we want to back up from root
+    root_globs: List[str]
 
 
 class SnapshotHash(AstacusModel):
@@ -89,7 +99,20 @@ class SnapshotDownloadRequest(NodeRequest):
 
 
 class BackupManifest(AstacusModel):
+    # When was (this) backup attempt started
     start: datetime
+
+    # .. and when did it finish
     end: datetime = Field(default_factory=datetime.now)
+
+    # How many attempts did it take (starts from 1)
     attempt: int
+
+    # Filesystem snapshot contents of the backup
     snapshot_results: List[SnapshotResult]
+
+    # Which plugin was used to back the data up
+    plugin: Plugin
+
+    # Plugin-specific data about the backup
+    plugin_data: dict = {}

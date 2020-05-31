@@ -8,7 +8,7 @@ Test that the coordinator restore endpoint works.
 
 from astacus.common import exceptions, ipc
 from astacus.coordinator.config import CoordinatorConfig
-from astacus.coordinator.restore import RestoreOp
+from astacus.coordinator.plugins import get_plugin_restore_class
 from contextlib import nullcontext as does_not_raise
 from datetime import datetime
 from pathlib import Path
@@ -33,10 +33,12 @@ def test_restore(fail_at, app, client, storage):
             snapshot_results=[
                 ipc.SnapshotResult(
                     state=ipc.SnapshotState(
+                        root_globs=["*"],
                         files=[ipc.SnapshotFile(relative_path=Path("foo"), file_size=6, mtime_ns=0, hexdigest="DEADBEEF")]
                     )
                 )
-            ]
+            ],
+            plugin="files",
         )
     )
 
@@ -75,12 +77,15 @@ def test_restore(fail_at, app, client, storage):
         assert app.state.coordinator_state.op_info.op_id == 1
 
 
-class DummyRestoreOp(RestoreOp):
+_RestoreOp = get_plugin_restore_class("files")
+
+
+class DummyRestoreOp(_RestoreOp):
     def __init__(self, nodes, manifest):
         # pylint: disable=super-init-not-called
         # NOP __init__, we mock whatever we care about
         self.nodes = nodes
-        self.backup_manifest = manifest
+        self.result_backup_manifest = manifest
 
     def assert_node_to_backup_index_is(self, expected):
         assert self._get_node_to_backup_index() == expected
@@ -104,7 +109,10 @@ class DummyRestoreOp(RestoreOp):
 def test_node_to_backup_index(node_azlist, backup_azlist, expected_index, exception):
     nodes = [_CCNode(url="unused", az=az) for az in node_azlist]
     manifest = ipc.BackupManifest(
-        start=datetime.now(), attempt=1, snapshot_results=[ipc.SnapshotResult(az=az) for az in backup_azlist]
+        start=datetime.now(),
+        attempt=1,
+        snapshot_results=[ipc.SnapshotResult(az=az) for az in backup_azlist],
+        plugin="files"
     )
 
     op = DummyRestoreOp(nodes, manifest)

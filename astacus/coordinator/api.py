@@ -3,10 +3,9 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 
-from .backup import BackupOp
 from .coordinator import Coordinator
 from .lockops import LockOps
-from .restore import RestoreOp
+from .plugins import get_plugin_backup_class, get_plugin_restore_class
 from astacus.common.op import Op
 from enum import Enum
 from fastapi import APIRouter, Depends
@@ -58,11 +57,13 @@ def unlock(*, locker: str, c: Coordinator = Depends()):
 
 @router.post("/backup")
 def backup(*, c: Coordinator = Depends()):
-    op = BackupOp(c=c)
+    op_class = get_plugin_backup_class(c.config.plugin)
+    op = op_class(c=c)
     return c.start_op(op_name=OpName.backup, op=op, fun=op.run)
 
 
 @router.post("/restore")
 def restore(*, name: str = "", c: Coordinator = Depends()):
-    op = RestoreOp(c=c, name=name)
+    op_class = get_plugin_restore_class(c.config.plugin)
+    op = op_class(c=c, name=name)
     return c.start_op(op_name=OpName.restore, op=op, fun=op.run)
