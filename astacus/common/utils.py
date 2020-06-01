@@ -164,3 +164,19 @@ def exponential_backoff(*, initial, retries=None, multiplier=2, maximum=None, du
 
     assert duration is not None or retries is not None
     return _Iterable()
+
+
+class SizeLimitedFile:
+    def __init__(self, *, path, file_size):
+        self.f = open(path, "rb")
+        self.file_size = file_size
+        self.ofs = 0
+
+    def read(self, n=None):
+        can_read = self.file_size - self.ofs
+        if n is None:
+            n = can_read
+        n = min(can_read, n)
+        data = self.f.read(n)
+        self.ofs += len(data)
+        return data

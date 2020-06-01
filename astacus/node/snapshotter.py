@@ -151,8 +151,7 @@ class Snapshotter:
         # TBD: This could be done via e.g. multiprocessing too some day.
         for snapshotfile in snapshotfiles:
             # src may or may not be present; dst is present as it is in snapshot
-            dst_path = self.dst / snapshotfile.relative_path
-            snapshotfile.hexdigest = hash_hexdigest_readable(dst_path.open(mode="rb"))
+            snapshotfile.hexdigest = hash_hexdigest_readable(snapshotfile.open_for_reading(self.dst))
             self._add_snapshotfile(snapshotfile)
             changes += 1
             progress.add_success()
@@ -171,23 +170,23 @@ class Snapshotter:
                 if not path.is_file():
                     logger.warning("%s disappeared post-snapshot", path)
                     continue
-                current_hexdigest = hash_hexdigest_readable(open(path, "rb"))
+                current_hexdigest = hash_hexdigest_readable(snapshotfile.open_for_reading(self.dst))
                 if current_hexdigest != snapshotfile.hexdigest:
                     logger.info("Hash of %s changed before upload", snapshotfile.relative_path)
                     continue
-                if storage.upload_hexdigest_from_path(hexdigest, path):
-                    current_hexdigest = hash_hexdigest_readable(open(path, "rb"))
-                    if current_hexdigest != snapshotfile.hexdigest:
-                        logger.info("Hash of %s changed after upload", snapshotfile.relative_path)
-                        storage.delete_hexdigest(hexdigest)
-                        continue
-                    progress.upload_success(hexdigest)
-                else:
+                if not storage.upload_hexdigest_from_file(hexdigest, snapshotfile.open_for_reading(self.dst)):
+                    # We found and processed one file with the particular
+                    # hexdigest; even if sending it failed, we won't try
+                    # subsequent files and instead break out of iterating
+                    # through candidate files with same hexdigest.
                     progress.upload_failure(hexdigest)
-                # We found and processed one file with the particular
-                # hexdigest; even if sending it failed, we won't try
-                # subsequent files and instead break out of iterating
-                # through candidate files with same hexdigest.
+                    break
+                current_hexdigest = hash_hexdigest_readable(snapshotfile.open_for_reading(self.dst))
+                if current_hexdigest != snapshotfile.hexdigest:
+                    logger.info("Hash of %s changed after upload", snapshotfile.relative_path)
+                    storage.delete_hexdigest(hexdigest)
+                    continue
+                progress.upload_success(hexdigest)
                 break
             else:
                 # We didn't find single file with the matching hexdigest.

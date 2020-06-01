@@ -160,9 +160,12 @@ class RestoreOpBase(OpBase):
 
     result_backup_name: str = ""
 
-    async def step_backup_manifest(self):
+    async def _download_backup_dict(self):
         assert self.result_backup_name
-        backup_dict = await self.async_storage.download_json(self.result_backup_name)
+        return await self.async_storage.download_json(self.result_backup_name)
+
+    async def step_backup_manifest(self):
+        backup_dict = await self._download_backup_dict()
         return ipc.BackupManifest.parse_obj(backup_dict)
 
     result_backup_manifest: Optional[ipc.BackupManifest] = None
@@ -231,3 +234,10 @@ class RestoreOpBase(OpBase):
             raise exceptions.InsufficientAZsException(f"{azs_missing} az(s) missing - unable to restore backup")
 
         return self._get_node_to_backup_index_from_azs(azs_in_backup=azs_in_backup, azs_in_nodes=azs_in_nodes)
+
+    @property
+    def plugin_manifest(self):
+        assert self.plugin
+        assert self.result_backup_manifest
+        plugin_manifest_class = plugins.get_plugin_manifest_class(self.plugin)
+        return plugin_manifest_class.parse_obj(self.result_backup_manifest.plugin_data)
