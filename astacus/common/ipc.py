@@ -4,7 +4,7 @@ See LICENSE for details
 """
 
 from .progress import Progress
-from .utils import AstacusModel
+from .utils import AstacusModel, SizeLimitedFile
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -50,6 +50,9 @@ class SnapshotFile(AstacusModel):
 
     def equals_excluding_mtime(self, o):
         return self.copy(update={"mtime_ns": 0}) == o.copy(update={"mtime_ns": 0})
+
+    def open_for_reading(self, root_path):
+        return SizeLimitedFile(path=root_path / self.relative_path, file_size=self.file_size)
 
 
 class SnapshotState(AstacusModel):
