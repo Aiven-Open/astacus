@@ -21,10 +21,7 @@ is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
 
 - plugin
     - m3 plugin
-        - one node will ensure that etcd state has stayed consistent across
-          snapshot+upload period, and it will be stored also within backup
-        - at restoration time, one node will be used to restore etcd
-          contents, with rewritten node names
+        - implement rewrites of some keys (/omitting of some keys?)
 
     - (partial?) cassandra plugin; mostly to validate plugin arch is broad enough
 

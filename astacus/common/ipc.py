@@ -19,6 +19,7 @@ import socket
 # enum here, as dynamically adding them isn't priority (for now)
 class Plugin(str, Enum):
     files = "files"
+    m3 = "m3"
 
 
 # node generic base
