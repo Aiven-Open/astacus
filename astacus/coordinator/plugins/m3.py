@@ -13,11 +13,11 @@ state is consistent.
 from .etcd import ETCDBackupOpBase, ETCDConfiguration, ETCDDump, ETCDRestoreOpBase
 from astacus.common import ipc
 from astacus.common.utils import AstacusModel
-from typing import Optional
+from typing import List, Optional
 
 
 class M3Configuration(ETCDConfiguration):
-    pass
+    environment: str
 
 
 class M3Manifest(AstacusModel):
@@ -28,7 +28,8 @@ class M3BackupOp(ETCDBackupOpBase):
     # upload backup manifest only after we've retrieved again etcd
     # contents and found it consistent
     steps = [
-        "retrieve_etcd",  # local
+        "init",  # local -->
+        "retrieve_etcd",
         "snapshot",  # base -->
         "list_hexdigests",
         "upload_blocks",
@@ -41,8 +42,16 @@ class M3BackupOp(ETCDBackupOpBase):
 
     result_retrieve_etcd: Optional[ETCDDump] = None
 
-    etcd_prefixes = [b"_kv/", b"_sd.placement/"]
     snapshot_root_globs = ["**/*.db"]
+
+    etcd_prefix_formats = ["_kv/{env}/m3db.node.namespaces", "_sd.placement/{env}/m3db"]
+
+    etcd_prefixes: List[bytes] = []
+
+    async def step_init(self):
+        env = self.plugin_config.environment
+        self.etcd_prefixes = [p.format(env=env).encode() for p in self.etcd_prefix_formats]
+        return True
 
     async def step_retrieve_etcd(self):
         return await self.get_etcd_dump(self.etcd_prefixes)
