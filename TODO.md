@@ -52,6 +52,8 @@ is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
 
 ## Eventually
 
+- m3aggregator plugin (m3db is priority)
+
 - package (or have someone do it?) this for distros
 
 - separate rohmu from pghoard (right now, pghoard dependency is bit .. ugly ..)

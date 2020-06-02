@@ -10,7 +10,7 @@ Test that the plugin m3 specific flow (backup + restore) works
 
 from astacus.common.etcd import b64encode_to_str
 from astacus.coordinator.config import CoordinatorConfig
-from astacus.coordinator.plugins import base, m3
+from astacus.coordinator.plugins import base, m3db
 
 import pytest
 import respx
@@ -18,7 +18,7 @@ import respx
 ENV = "dummyenv"
 
 COORDINATOR_CONFIG = {
-    "plugin": "m3",
+    "plugin": "m3db",
     "plugin_config": {
         "etcd_url": "http://dummy/etcd",
         "environment": ENV,
@@ -26,7 +26,7 @@ COORDINATOR_CONFIG = {
 }
 
 
-class DummyM3BackupOp(m3.M3BackupOp):
+class DummyM3DBBackupOp(m3db.M3DBBackupOp):
     def __init__(self):
         # pylint: disable=super-init-not-called
         self.config = CoordinatorConfig.parse_obj(COORDINATOR_CONFIG)
@@ -46,7 +46,7 @@ PREFIXES = [{
         KEY2_B64: VALUE2_B64,
     },
     "prefix_b64": b64encode_to_str(prefix.format(env=ENV).encode())
-} for prefix in DummyM3BackupOp.etcd_prefix_formats]
+} for prefix in DummyM3DBBackupOp.etcd_prefix_formats]
 
 PLUGIN_DATA = {"etcd": {"prefixes": PREFIXES}}
 
@@ -54,7 +54,7 @@ PLUGIN_DATA = {"etcd": {"prefixes": PREFIXES}}
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fail_at", BACKUP_FAILS)
 async def test_m3_backup(fail_at):
-    op = DummyM3BackupOp()
+    op = DummyM3DBBackupOp()
     assert op.steps == ['init', 'retrieve_etcd', 'retrieve_etcd_again', 'create_m3_manifest']
     with respx.mock:
         if fail_at != 1:
@@ -77,7 +77,7 @@ async def test_m3_backup(fail_at):
     assert op.plugin_data == PLUGIN_DATA
 
 
-class DummyM3RestoreOp(m3.M3RestoreOp):
+class DummyM3DRestoreOp(m3db.M3DRestoreOp):
     steps = ["backup_manifest", "restore_etcd"]
 
     def __init__(self):
@@ -86,7 +86,7 @@ class DummyM3RestoreOp(m3.M3RestoreOp):
 
     async def _download_backup_dict(self):
         return {
-            "plugin": "m3",
+            "plugin": "m3db",
             "plugin_data": PLUGIN_DATA,
             "attempt": 1,
             "snapshot_results": [],
@@ -100,7 +100,7 @@ RESTORE_FAILS = [1, 2, None]
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fail_at", RESTORE_FAILS)
 async def test_m3_restore(fail_at):
-    op = DummyM3RestoreOp()
+    op = DummyM3DRestoreOp()
     with respx.mock:
         if fail_at != 1:
             respx.post("http://dummy/etcd/kv/deleterange", content={"ok": True})

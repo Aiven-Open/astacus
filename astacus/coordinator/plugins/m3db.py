@@ -16,15 +16,15 @@ from astacus.common.utils import AstacusModel
 from typing import List, Optional
 
 
-class M3Configuration(ETCDConfiguration):
+class M3DBConfiguration(ETCDConfiguration):
     environment: str
 
 
-class M3Manifest(AstacusModel):
+class M3DBManifest(AstacusModel):
     etcd: ETCDDump
 
 
-class M3BackupOp(ETCDBackupOpBase):
+class M3DBBackupOp(ETCDBackupOpBase):
     # upload backup manifest only after we've retrieved again etcd
     # contents and found it consistent
     steps = [
@@ -38,7 +38,7 @@ class M3BackupOp(ETCDBackupOpBase):
         "upload_manifest",  # base
     ]
 
-    plugin = ipc.Plugin.m3
+    plugin = ipc.Plugin.m3db
 
     result_retrieve_etcd: Optional[ETCDDump] = None
 
@@ -61,23 +61,23 @@ class M3BackupOp(ETCDBackupOpBase):
         return etcd_now == self.result_retrieve_etcd
 
     async def step_create_m3_manifest(self):
-        m3manifest = M3Manifest(etcd=self.result_retrieve_etcd)
+        m3manifest = M3DBManifest(etcd=self.result_retrieve_etcd)
         self.plugin_data = m3manifest.dict()
         return m3manifest
 
 
-class M3RestoreOp(ETCDRestoreOpBase):
-    plugin = ipc.Plugin.m3
+class M3DRestoreOp(ETCDRestoreOpBase):
+    plugin = ipc.Plugin.m3db
     steps = [
         "backup_name",  # base -->
         "backup_manifest",
         "restore_etcd",  # local
         "restore",  # base
     ]
-    plugin = ipc.Plugin.m3
+    plugin = ipc.Plugin.m3db
 
     async def step_restore_etcd(self):
         return await self.restore_etcd_dump(self.plugin_manifest.etcd)
 
 
-plugin_info = {"backup": M3BackupOp, "manifest": M3Manifest, "restore": M3RestoreOp, "config": M3Configuration}
+plugin_info = {"backup": M3DBBackupOp, "manifest": M3DBManifest, "restore": M3DRestoreOp, "config": M3DBConfiguration}
