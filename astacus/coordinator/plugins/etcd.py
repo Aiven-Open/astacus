@@ -12,9 +12,10 @@ from .base import BackupOpBase, RestoreOpBase
 from astacus.common.etcd import ETCDClient
 from astacus.common.utils import AstacusModel
 from base64 import b64decode, b64encode
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import asyncio
+import base64
 
 
 class ETCDConfiguration(AstacusModel):
@@ -22,9 +23,28 @@ class ETCDConfiguration(AstacusModel):
     etcd_url: str
 
 
+class ETCDKey(AstacusModel):
+    key_b64: str
+    value_b64: str
+
+    @property
+    def key_bytes(self):
+        return base64.b64decode(self.key_b64)
+
+    def set_key_bytes(self, value):
+        self.key_b64 = base64.b64encode(value).decode()
+
+    @property
+    def value_bytes(self):
+        return base64.b64decode(self.value_b64)
+
+    def set_value_bytes(self, value):
+        self.value_b64 = base64.b64encode(value).decode()
+
+
 class ETCDPrefixDump(AstacusModel):
     prefix_b64: str
-    etcd_key_values_b64: Dict[str, str]
+    keys: List[ETCDKey]
 
 
 class ETCDDump(AstacusModel):
@@ -43,7 +63,8 @@ class ETCDBackupOpBase(BackupOpBase):
         kvs = await client.prefix_get(prefix)
         if not kvs:
             return None
-        return ETCDPrefixDump(prefix_b64=b64encode(prefix), etcd_key_values_b64=kvs)
+        keys = [ETCDKey(key_b64=k, value_b64=v) for k, v in kvs.items()]
+        return ETCDPrefixDump(prefix_b64=b64encode(prefix), keys=keys)
 
     async def get_etcd_dump(self, prefixes) -> Optional[ETCDDump]:
         prefixes = [self._get_etcd_prefix_dump(prefix) for prefix in prefixes]
@@ -64,8 +85,8 @@ class ETCDRestoreOpBase(RestoreOpBase):
         if not await self._etcd_client.prefix_delete(b64decode(prefix.prefix_b64)):
             return False
         # Then put the entries we had for the prefix
-        for k, v in prefix.etcd_key_values_b64.items():
-            if not await self._etcd_client.kv_put_b64(key=k, value=v):
+        for key in prefix.keys:
+            if not await self._etcd_client.kv_put_b64(key=key.key_b64, value=key.value_b64):
                 return False
         return True
 

@@ -177,7 +177,6 @@ class RestoreOpBase(OpBase):
         # configures us may lie about the real availability zone of
         # the nodes anyway).
 
-        assert self.result_backup_manifest
         node_to_backup_index = self._get_node_to_backup_index()
         start_results = []
 
@@ -221,6 +220,7 @@ class RestoreOpBase(OpBase):
         return node_to_backup_index
 
     def _get_node_to_backup_index(self):
+        assert self.result_backup_manifest
         covered_nodes = len(self.result_backup_manifest.snapshot_results)
         configured_nodes = len(self.nodes)
         if configured_nodes < covered_nodes:
