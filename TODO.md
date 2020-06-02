@@ -3,6 +3,7 @@
 Note: This is more granular and detailed version what should be done; there
 is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
 
+
 ## Very short term; need to be done for it to be usable for internal use
 
 - backup cleanup endpoint + its tests
@@ -20,9 +21,6 @@ is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
     - perhaps backup/snapshot/restore sizes and file counts? copy from *hoard?
 
 - plugin
-    - m3 plugin
-        - implement rewrites of some keys (/omitting of some keys?)
-
     - (partial?) cassandra plugin; mostly to validate plugin arch is broad enough
 
 
@@ -34,6 +32,7 @@ is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
 - sync package dependencies ( setup.cfg, requirements*.txt mainly ) with
   what is used internally ; so that astacus.spec winds up with same
   versions, given Aiven-internal packages)
+
 
 ## Short-term; before public availability
 
@@ -50,8 +49,16 @@ is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
 
 - measure, improve test code coverage
 
+
 ## Eventually
+
+- m3aggregator plugin (m3db is priority)
 
 - package (or have someone do it?) this for distros
 
 - separate rohmu from pghoard (right now, pghoard dependency is bit .. ugly ..)
+
+
+## Maybe not - known design choice for now
+
+- in m3db placement plan, we do not rewrite port number
