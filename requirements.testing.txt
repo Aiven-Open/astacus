@@ -7,11 +7,13 @@ pylint==2.5.2
 pytest-asyncio==0.12.0
 pytest-mock==3.1.0
 pytest-timeout==1.3.4
-pytest==5.4.2
-
-pip-outdated
+pytest==5.4.3
 
 # fastapi testclient needs this yet does not depend on it, gnn
 requests
 
-respx==0.10.1
+respx==0.11.1
+
+# convenience things that don't actually matter which version they are
+pip-outdated
+pytest-watch
