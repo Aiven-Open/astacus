@@ -36,8 +36,10 @@ nkMAHqg9PS372Cs=
 
 
 def create_rohmu_config(tmpdir, *, compression=True, encryption=True):
-    rohmu_path = Path(tmpdir) / "rohmu"
-    rohmu_path.mkdir(exist_ok=True)
+    x_path = Path(tmpdir) / "rohmu-x"
+    x_path.mkdir(exist_ok=True)
+    y_path = Path(tmpdir) / "rohmu-y"
+    y_path.mkdir(exist_ok=True)
     tmp_path = Path(tmpdir) / "rohmu-tmp"
     tmp_path.mkdir(exist_ok=True)
     config = {
@@ -46,7 +48,11 @@ def create_rohmu_config(tmpdir, *, compression=True, encryption=True):
         "storages": {
             "x": {
                 "storage_type": "local",
-                "directory": str(rohmu_path),
+                "directory": str(x_path),
+            },
+            "y": {
+                "storage_type": "local",
+                "directory": str(y_path),
             }
         }
     }

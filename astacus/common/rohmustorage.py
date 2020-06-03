@@ -8,7 +8,7 @@ Rohmu-specific actual object storage implementation
 """
 
 from .exceptions import CompressionOrEncryptionRequired, NotFoundException
-from .storage import Storage
+from .storage import MultiStorage, Storage
 from .utils import AstacusModel
 from enum import Enum
 from pghoard import rohmu  # type: ignore
@@ -138,7 +138,7 @@ class RohmuStorage(Storage):
         self.config = config
         self.hexdigest_key = "data"
         self.json_key = "json"
-        self.choose_storage(storage)
+        self._choose_storage(storage)
         os.makedirs(config.temporary_directory, exist_ok=True)
         if not self.config.compression.algorithm and not self.config.encryption_key_id:
             raise CompressionOrEncryptionRequired()
@@ -196,7 +196,7 @@ class RohmuStorage(Storage):
 
     storage_name: str = ""
 
-    def choose_storage(self, storage=None):
+    def _choose_storage(self, storage=None):
         if storage is None or storage == "":
             storage = self.config.default_storage
         self.storage_name = storage
@@ -243,3 +243,17 @@ class RohmuStorage(Storage):
         f.write(data.encode())
         f.seek(0)
         return self._upload_key_from_file(key, f)
+
+
+class MultiRohmuStorage(MultiStorage):
+    def __init__(self, *, config: RohmuConfig):
+        self.config = config
+
+    def get_storage(self, name):
+        return RohmuStorage(config=self.config, storage=name)
+
+    def get_default_storage_name(self):
+        return self.config.default_storage
+
+    def list_storages(self):
+        return sorted(self.config.storages.keys())

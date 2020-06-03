@@ -75,6 +75,7 @@ class BackupOpBase(OpBase):
     result_snapshot: List[ipc.SnapshotResult] = []
 
     async def step_list_hexdigests(self) -> bool:
+        assert self.hexdigest_storage
         self.hexdigests = set(await self.hexdigest_storage.list_hexdigests())
         return True
 
@@ -110,7 +111,7 @@ class BackupOpBase(OpBase):
         start_results = []
         for data in node_index_datas:
             node = self.nodes[data.node_index]
-            req = ipc.SnapshotUploadRequest(hashes=data.sshashes, storage=self.storage.storage_name)
+            req = ipc.SnapshotUploadRequest(hashes=data.sshashes, storage=self.default_storage_name)
             start_result = await self.request_from_nodes(
                 "upload", caller="BackupOp.upload", method="post", data=req.json(), nodes=[node]
             )
@@ -149,16 +150,20 @@ class RestoreOpBase(OpBase):
     config_attempts_var_name = "restore_attempts"
     steps = ["backup_name", "backup_manifest", "restore"]
 
-    def __init__(self, *, c: Coordinator, name: str):
+    def __init__(self, *, c: Coordinator, req: ipc.RestoreRequest):
         super().__init__(c=c)
-        self.name = name
+        self.req = req
+        if req.storage:
+            self.set_storage_name(req.storage)
 
     async def step_backup_name(self) -> str:
-        if not self.name:
+        assert self.json_storage
+        name = self.req.name
+        if not name:
             return sorted(await self.json_storage.list_jsons())[-1]
-        if self.name.startswith(magic.JSON_BACKUP_PREFIX):
-            return self.name
-        return f"{magic.JSON_BACKUP_PREFIX}{self.name}"
+        if name.startswith(magic.JSON_BACKUP_PREFIX):
+            return name
+        return f"{magic.JSON_BACKUP_PREFIX}{name}"
 
     result_backup_name: str = ""
 
@@ -190,7 +195,7 @@ class RestoreOpBase(OpBase):
                 root_globs = self.result_backup_manifest.snapshot_results[0].state.root_globs
                 # Restore fake, empty backup to ensure node is clean
                 result = ipc.SnapshotResult(state=ipc.SnapshotState(root_globs=root_globs, files=[]))
-            data = ipc.SnapshotDownloadRequest(state=result.state, storage=self.storage.storage_name).json()
+            data = ipc.SnapshotDownloadRequest(state=result.state, storage=self.default_storage_name).json()
             start_result = await self.request_from_nodes(
                 "download", caller="RestoreOp._restore", method="post", data=data, nodes=[node]
             )

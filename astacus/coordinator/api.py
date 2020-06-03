@@ -4,8 +4,10 @@ See LICENSE for details
 """
 
 from .coordinator import Coordinator
+from .list import list_backups
 from .lockops import LockOps
 from .plugins import get_plugin_backup_class, get_plugin_restore_class
+from astacus.common import ipc
 from astacus.common.op import Op
 from enum import Enum
 from fastapi import APIRouter, Depends
@@ -63,7 +65,12 @@ def backup(*, c: Coordinator = Depends()):
 
 
 @router.post("/restore")
-def restore(*, name: str = "", c: Coordinator = Depends()):
+def restore(*, req: ipc.RestoreRequest = ipc.RestoreRequest(), c: Coordinator = Depends()):
     op_class = get_plugin_restore_class(c.config.plugin)
-    op = op_class(c=c, name=name)
+    op = op_class(c=c, req=req)
     return c.start_op(op_name=OpName.restore, op=op, fun=op.run)
+
+
+@router.get("/list")
+def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordinator = Depends()):
+    return list_backups(req=req, json_mstorage=c.json_mstorage)

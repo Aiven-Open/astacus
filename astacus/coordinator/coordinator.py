@@ -5,15 +5,14 @@ See LICENSE for details
 
 from .config import coordinator_config, CoordinatorConfig
 from .state import coordinator_state, CoordinatorState
-from astacus.common import exceptions, magic, op, statsd, utils
-from astacus.common.cachingjsonstorage import CachingJsonStorage
+from astacus.common import asyncstorage, exceptions, magic, op, statsd, utils
+from astacus.common.cachingjsonstorage import MultiCachingJsonStorage
 from astacus.common.magic import LockCall
-from astacus.common.rohmustorage import RohmuStorage
-from astacus.common.storage import FileStorage, HexDigestStorage, JsonStorage
+from astacus.common.rohmustorage import MultiRohmuStorage
+from astacus.common.storage import HexDigestStorage, JsonStorage, MultiFileStorage, MultiStorage
 from datetime import datetime
 from enum import Enum
 from fastapi import BackgroundTasks, Depends, Request
-from starlette.concurrency import run_in_threadpool
 from typing import Optional
 
 import asyncio
@@ -31,48 +30,6 @@ class LockResult(Enum):
     exception = "exception"
 
 
-class AsyncHexDigestStorageWrapper:
-    """Subset of the HexDigestStorage API proxied async -> sync via starlette threadpool
-
-    Note that the access is not intentionally locked; therefore even
-    synchronous API can be used in parallel (at least if it is safe to
-    do so) using this.
-
-    """
-    def __init__(self, storage: HexDigestStorage):
-        self.storage = storage
-
-    async def delete_hexdigest(self, hexdigest: str):
-        return await run_in_threadpool(self.storage.delete_hexdigest, hexdigest)
-
-    async def list_hexdigests(self):
-        return await run_in_threadpool(self.storage.list_hexdigests)
-
-
-class AsyncJsonStorageWrapper:
-    """Subset of the JsonStorage API proxied async -> sync via starlette threadpool
-
-    Note that the access is not intentionally locked; therefore even
-    synchronous API can be used in parallel (at least if it is safe to
-    do so) using this.
-
-    """
-    def __init__(self, storage: JsonStorage):
-        self.storage = storage
-
-    async def delete_json(self, name: str):
-        return await run_in_threadpool(self.storage.delete_json, name)
-
-    async def download_json(self, name: str):
-        return await run_in_threadpool(self.storage.download_json, name)
-
-    async def list_jsons(self):
-        return await run_in_threadpool(self.storage.list_jsons)
-
-    async def upload_json(self, name: str, data):
-        return await run_in_threadpool(self.storage.upload_json, name, data)
-
-
 class CoordinatorOp(op.Op):
     attempt = -1  # try_run iteration number
     attempt_start: Optional[datetime] = None  # try_run iteration start time
@@ -82,17 +39,20 @@ class CoordinatorOp(op.Op):
         self.nodes = c.config.nodes
         self.request_url = c.request.url
         self.config = c.config
-        rohmu = self.storage
-        self.hexdigest_storage = AsyncHexDigestStorageWrapper(rohmu)
-        json_storage = rohmu
-        if self.config.object_storage_cache:
-            file_storage = FileStorage(self.config.object_storage_cache)
-            json_storage = CachingJsonStorage(backend_storage=rohmu, cache_storage=file_storage)
-        self.json_storage = AsyncJsonStorageWrapper(json_storage)
+        self.hexdigest_mstorage = c.hexdigest_mstorage
+        self.json_mstorage = c.json_mstorage
+        self.set_storage_name(self.default_storage_name)
+
+    hexdigest_storage: Optional[HexDigestStorage] = None
+    json_storage: Optional[JsonStorage] = None
+
+    def set_storage_name(self, storage_name):
+        self.hexdigest_storage = asyncstorage.AsyncHexDigestStorage(self.hexdigest_mstorage.get_storage(storage_name))
+        self.json_storage = asyncstorage.AsyncJsonStorage(self.json_mstorage.get_storage(storage_name))
 
     @property
-    def storage(self):
-        return RohmuStorage(self.config.object_storage)
+    def default_storage_name(self):
+        return self.json_mstorage.get_default_storage_name()
 
     async def request_from_nodes(self, url, *, caller, nodes=None, **kw):
         if nodes is None:
@@ -303,3 +263,12 @@ class Coordinator(op.OpMixin):
         self.config = config
         self.state = state
         self.stats = statsd.StatsClient(config=config.statsd)
+
+        assert self.config.object_storage
+        mstorage = MultiRohmuStorage(config=self.config.object_storage)
+        self.hexdigest_mstorage = mstorage
+        json_mstorage: MultiStorage = mstorage
+        if self.config.object_storage_cache:
+            file_mstorage = MultiFileStorage(self.config.object_storage_cache)
+            json_mstorage = MultiCachingJsonStorage(backend_mstorage=mstorage, cache_mstorage=file_mstorage)
+        self.json_mstorage = json_mstorage

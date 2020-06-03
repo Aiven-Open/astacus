@@ -6,13 +6,13 @@ is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
 
 ## Very short term; need to be done for it to be usable for internal use
 
-- backup cleanup endpoint + its tests
+- backup cleanup endpoint + CLI + its tests
     - maintain only up to N backups
 
-- backup delete endpoint + its tests
+- backup delete endpoint + CLI + its tests
     - specific backups' manual deletion
 
-- backup list endpoint + its tests
+- backup list CLI + its tests
     - one option for creating nice looking output for it would be https://pypi.org/project/tabulate/
 
 - improve operation reporting; probably astacus.common.progress.Progress
@@ -34,12 +34,6 @@ is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
 
 ## Short-term; before public availability
 
-- multiple storages actually in use (/tested to work); rohmustorage has
-  base of the code but all other code should also use similar logic. this
-  is so that if e.g. service is migrated from storage x to y, new backups
-  will use storage location y, but old backups at storage x are also
-  available (and transparently to the user)
-
 - document
     - (better) README
     - the design
@@ -60,3 +54,8 @@ is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
 ## Maybe not - known design choice for now
 
 - in m3db placement plan, we do not rewrite port number
+
+- it would be possible to split (large) BackupManifest to
+  e.g. BackupSummary which would be used by list backups endpoint; in
+  practise, the results should be cached locally so cost of downloading
+  (even largish) files once is not prohibitive

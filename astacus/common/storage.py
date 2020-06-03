@@ -148,3 +148,34 @@ class FileStorage(Storage):
         path = self._json_to_path(name)
         with path.open(mode="w") as f:
             f.write(data)
+
+
+class MultiStorage:
+    def get_default_storage(self):
+        return self.get_storage(self.get_default_storage_name())
+
+    def get_default_storage_name(self):
+        raise NotImplementedError
+
+    def get_storage(self, name):
+        raise NotImplementedError
+
+    def list_storages(self):
+        raise NotImplementedError
+
+
+class MultiFileStorage(MultiStorage):
+    def __init__(self, path, **kw):
+        self.path = Path(path)
+        self.kw = kw
+        self._storages = set()
+
+    def get_storage(self, name):
+        self._storages.add(name)
+        return FileStorage(self.path / name, **self.kw)
+
+    def get_default_storage_name(self):
+        return sorted(self._storages)[-1]
+
+    def list_storages(self):
+        return sorted(self._storages)

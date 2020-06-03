@@ -23,7 +23,7 @@ exists, its contents stay the same.
 """
 
 from .exceptions import NotFoundException
-from .storage import JsonStorage
+from .storage import JsonStorage, MultiStorage
 
 
 class CachingJsonStorage(JsonStorage):
@@ -78,3 +78,20 @@ class CachingJsonStorage(JsonStorage):
         self.cache_storage.upload_json_str(name, data)
         self.backend_storage.upload_json_str(name, data)
         self._backend_json_set_add(name)
+
+
+class MultiCachingJsonStorage(MultiStorage):
+    def __init__(self, *, backend_mstorage, cache_mstorage):
+        self.cache_mstorage = cache_mstorage
+        self.backend_mstorage = backend_mstorage
+
+    def get_storage(self, name):
+        return CachingJsonStorage(
+            backend_storage=self.backend_mstorage.get_storage(name), cache_storage=self.cache_mstorage.get_storage(name)
+        )
+
+    def get_default_storage_name(self):
+        return self.backend_mstorage.get_default_storage_name()
+
+    def list_storages(self):
+        return self.backend_mstorage.list_storages()
