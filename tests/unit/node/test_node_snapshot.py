@@ -88,7 +88,13 @@ def test_api_snapshot_and_upload(client, mocker):
     # Ask it to be uploaded
     response = client.post("/node/upload")
     assert response.status_code == 422, response.json()
-    response = client.post("/node/upload", json={"hashes": [x.dict() for x in result.hashes], "result_url": url})
+    response = client.post(
+        "/node/upload", json={
+            "storage": "x",
+            "hashes": [x.dict() for x in result.hashes],
+            "result_url": url
+        }
+    )
     assert response.status_code == 200, response.json()
     response = m.call_args[1]["data"]
     result = ipc.SnapshotResult.parse_raw(response)

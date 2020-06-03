@@ -61,6 +61,10 @@ class CoordinatorConfig(AstacusModel):
     object_storage: Optional[RohmuConfig] = None
     statsd: Optional[StatsdConfig] = None
 
+    # Optional object storage cache directory used for caching json
+    # manifest fetching
+    object_storage_cache: str = ""
+
 
 def coordinator_config(request: Request) -> CoordinatorConfig:
     return getattr(request.app.state, APP_KEY)

@@ -17,3 +17,7 @@ class LockCall(str, Enum):
 
 class ErrorCode(str, Enum):
     operation_id_mismatch = "operation_id_mismatch"
+
+
+# In storage, json files with this prefix are backup manifests
+JSON_BACKUP_PREFIX = "backup-"

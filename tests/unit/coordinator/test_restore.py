@@ -21,26 +21,28 @@ FAILS = [1, 2, None]
 _CCNode = CoordinatorConfig.Node
 BACKUP_NAME = "dummybackup"
 
+BACKUP_MANIFEST = ipc.BackupManifest(
+    start="2020-01-01 21:43:00",
+    end="2020-02-02 12:34:56",
+    attempt=1,
+    snapshot_results=[
+        ipc.SnapshotResult(
+            state=ipc.SnapshotState(
+                root_globs=["*"],
+                files=[ipc.SnapshotFile(relative_path=Path("foo"), file_size=6, mtime_ns=0, hexdigest="DEADBEEF")]
+            ),
+            files=1,
+            total_size=6,
+        )
+    ],
+    plugin="files",
+)
+
 
 @pytest.mark.parametrize("fail_at", FAILS)
 def test_restore(fail_at, app, client, storage):
     # Create fake backup (not pretty but sufficient?)
-    storage.upload_json(
-        BACKUP_NAME,
-        ipc.BackupManifest(
-            start=datetime.now(),
-            attempt=1,
-            snapshot_results=[
-                ipc.SnapshotResult(
-                    state=ipc.SnapshotState(
-                        root_globs=["*"],
-                        files=[ipc.SnapshotFile(relative_path=Path("foo"), file_size=6, mtime_ns=0, hexdigest="DEADBEEF")]
-                    )
-                )
-            ],
-            plugin="files",
-        )
-    )
+    storage.upload_json(BACKUP_NAME, BACKUP_MANIFEST)
 
     nodes = [
         _CCNode(url="http://localhost:12345/asdf"),

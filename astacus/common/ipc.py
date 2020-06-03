@@ -85,23 +85,44 @@ class SnapshotHash(AstacusModel):
 
 
 class SnapshotUploadRequest(NodeRequest):
+    # list of hashes to be uploaded
     hashes: List[SnapshotHash]
+
+    # which (sub)object storage entry should be used
+    storage: str
 
 
 class SnapshotResult(NodeResult):
+    # when was the operation started ( / done )
     start: datetime = Field(default_factory=datetime.now)
     end: Optional[datetime]
-    state: Optional[SnapshotState]  # should be passed opaquely to restore
-    hashes: Optional[List[SnapshotHash]]  # populated only if state is available
+
+    # should be passed opaquely to restore
+    state: Optional[SnapshotState]
+
+    # Summary data for manifest use
+    files: int = 0
+    total_size: int = 0
+
+    # populated only if state is available
+    hashes: Optional[List[SnapshotHash]]
 
 
 class SnapshotDownloadRequest(NodeRequest):
+    # state to be downloaded
     state: SnapshotState
 
+    # which (sub)object storage entry should be used
+    storage: str
 
-# controller.backup
+
+# coordinator.api
+class RestoreRequest(AstacusModel):
+    storage: str = ""
+    name: str = ""
 
 
+# coordinator.plugins backup/restore
 class BackupManifest(AstacusModel):
     # When was (this) backup attempt started
     start: datetime
@@ -120,3 +141,30 @@ class BackupManifest(AstacusModel):
 
     # Plugin-specific data about the backup
     plugin_data: dict = {}
+
+
+# coordinator.list
+
+
+class ListRequest(AstacusModel):
+    storage: str = ""
+
+
+class ListSingleBackup(AstacusModel):
+    # Subset of BackupManifest; see it for information
+    name: str
+    start: datetime
+    end: datetime
+    plugin: Plugin
+    attempt: int
+    files: int
+    total_size: int
+
+
+class ListForStorage(AstacusModel):
+    storage_name: str
+    backups: List[ListSingleBackup]
+
+
+class ListResponse(AstacusModel):
+    storages: List[ListForStorage]

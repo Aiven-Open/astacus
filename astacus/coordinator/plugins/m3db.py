@@ -36,11 +36,23 @@ are needed anyway.
 from .etcd import ETCDBackupOpBase, ETCDConfiguration, ETCDDump, ETCDRestoreOpBase
 from astacus.common import exceptions, ipc
 from astacus.common.utils import AstacusModel
+from pydantic import validator
 from typing import List, Optional
 
 
 class M3IncorrectPlacementNodesLengthException(exceptions.PermanentException):
     pass
+
+
+MAXIMUM_PROTOBUF_STR_LENGTH = 127
+
+
+def non_empty_and_sane_length(value):
+    if len(value) == 0:
+        raise ValueError("Empty value is not supported")
+    if len(value) > MAXIMUM_PROTOBUF_STR_LENGTH:
+        raise ValueError("Large protobuf fields are not supported")
+    return value
 
 
 class M3PlacementNode(AstacusModel):
@@ -50,8 +62,14 @@ class M3PlacementNode(AstacusModel):
     # configured).
 
     node_id: str
+    _validate_node_id = validator("node_id", allow_reuse=True)(non_empty_and_sane_length)
+
     endpoint: str
+    _validate_endpoint = validator("endpoint", allow_reuse=True)(non_empty_and_sane_length)
+
     hostname: str
+    _validate_hostname = validator("hostname", allow_reuse=True)(non_empty_and_sane_length)
+
     # isolation_group: str # redundant - it is available from generic node snapshot result as az
     # zone/weight: assumed to stay same
 
@@ -125,7 +143,7 @@ def protobuf_lv(b, *, prefix=b""):
     if isinstance(b, str):
         b = b.encode()
     assert isinstance(b, bytes)
-    assert len(b) < 128  # we don't support real varints
+    assert len(b) < MAXIMUM_PROTOBUF_STR_LENGTH  # we don't support real varints
     return prefix + bytes([len(b)]) + b
 
 

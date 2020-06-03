@@ -2,7 +2,7 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
-from astacus.common.rohmustorage import RohmuStorage
+from astacus.common.rohmustorage import MultiRohmuStorage, RohmuStorage
 from astacus.coordinator.api import router
 from astacus.coordinator.config import CoordinatorConfig
 from astacus.coordinator.coordinator import CoordinatorOpWithClusterLock
@@ -19,6 +19,11 @@ _original_asyncio_sleep = asyncio.sleep
 @pytest.fixture(name="storage")
 def fixture_storage(tmpdir):
     return RohmuStorage(config=create_rohmu_config(tmpdir))
+
+
+@pytest.fixture(name="mstorage")
+def fixture_mstorage(tmpdir):
+    return MultiRohmuStorage(config=create_rohmu_config(tmpdir))
 
 
 @pytest.fixture(name="client")

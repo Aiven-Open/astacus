@@ -7,12 +7,13 @@ Rohmu-specific actual object storage implementation
 
 """
 
-from .exceptions import CompressionOrEncryptionRequired
-from .storage import Storage
+from .exceptions import CompressionOrEncryptionRequired, NotFoundException
+from .storage import MultiStorage, Storage
 from .utils import AstacusModel
 from enum import Enum
 from pghoard import rohmu  # type: ignore
 from pghoard.rohmu import rohmufile  # type: ignore
+from pghoard.rohmu import errors
 from pydantic import Field
 from typing import Dict, Optional, Union
 from typing_extensions import Literal
@@ -119,23 +120,30 @@ class RohmuMetadata(RohmuModel):
     compression_algorithm: Optional[RohmuCompressionType] = Field(None, alias="compression-algorithm")
 
 
-class RohmuStorage(Storage):
-    """Implementation of the hash storage API, on top of pghoard.rohmu.
+def rohmu_error_wrapper(fun):
+    """ Wrap rohmu exceptions in astacus ones; to be seen what is complete set """
+    def _f(*a, **kw):
+        try:
+            return fun(*a, **kw)
+        except errors.FileNotFoundFromStorageError as ex:
+            raise NotFoundException from ex
 
-Note that this isn't super optimized insofar reading is concerned.  We
-could store metadata somewhere, but keeping it in the actual storage
-layer makes the design somewhat more clean.
-    """
+    return _f
+
+
+class RohmuStorage(Storage):
+    """Implementation of the storage API, on top of pghoard.rohmu."""
     def __init__(self, config: RohmuConfig, *, storage=None):
         assert config
         self.config = config
         self.hexdigest_key = "data"
         self.json_key = "json"
-        self.choose_storage(storage)
+        self._choose_storage(storage)
         os.makedirs(config.temporary_directory, exist_ok=True)
         if not self.config.compression.algorithm and not self.config.encryption_key_id:
             raise CompressionOrEncryptionRequired()
 
+    @rohmu_error_wrapper
     def _download_key_to_file(self, key, f) -> bool:
         raw_metadata: dict = self.storage.get_metadata_for_key(key)
         with tempfile.TemporaryFile(dir=self.config.temporary_directory) as temp_file:
@@ -159,6 +167,7 @@ layer makes the design somewhat more clean.
     def _public_key_lookup(self, key_id: str) -> str:
         return self.config.encryption_keys[key_id].public
 
+    @rohmu_error_wrapper
     def _upload_key_from_file(self, key, f) -> bool:
         encryption_key_id = self.config.encryption_key_id
         compression = self.config.compression
@@ -185,14 +194,18 @@ layer makes the design somewhat more clean.
             self.storage.store_file_object(key, temp_file, metadata=rohmu_metadata)
         return True
 
-    def choose_storage(self, storage=None):
-        if storage is None:
+    storage_name: str = ""
+
+    def _choose_storage(self, storage=None):
+        if storage is None or storage == "":
             storage = self.config.default_storage
+        self.storage_name = storage
         self.storage_config = self.config.storages[storage]
         self.storage = rohmu.get_transfer(self.storage_config.dict())
 
     # HexDigestStorage implementation
 
+    @rohmu_error_wrapper
     def delete_hexdigest(self, hexdigest):
         key = os.path.join(self.hexdigest_key, hexdigest)
         self.storage.delete_key(key)
@@ -209,6 +222,7 @@ layer makes the design somewhat more clean.
         return self._upload_key_from_file(key, f)
 
     # JsonStorage implementation
+    @rohmu_error_wrapper
     def delete_json(self, name: str):
         key = os.path.join(self.json_key, name)
         self.storage.delete_key(key)
@@ -229,3 +243,17 @@ layer makes the design somewhat more clean.
         f.write(data.encode())
         f.seek(0)
         return self._upload_key_from_file(key, f)
+
+
+class MultiRohmuStorage(MultiStorage):
+    def __init__(self, *, config: RohmuConfig):
+        self.config = config
+
+    def get_storage(self, name):
+        return RohmuStorage(config=self.config, storage=name)
+
+    def get_default_storage_name(self):
+        return self.config.default_storage
+
+    def list_storages(self):
+        return sorted(self.config.storages.keys())
