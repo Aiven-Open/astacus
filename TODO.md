@@ -7,6 +7,10 @@ is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
 ## Very short term; need to be done for it to be usable for internal use
 
 - backup cleanup endpoint + its tests
+    - maintain only up to N backups
+
+- backup delete endpoint + its tests
+    - specific backups' manual deletion
 
 - backup list endpoint + its tests
     - one option for creating nice looking output for it would be https://pypi.org/project/tabulate/
@@ -22,12 +26,6 @@ is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
 
 - plugin
     - (partial?) cassandra plugin; mostly to validate plugin arch is broad enough
-
-
-- selective caching layer for astacus.common.storage.Storage; basically, we
-  want to avoid *unneccessary* object storage access, and as all objects we
-  deal with are immutable, it should be pretty straightforward to implement
-  and use
 
 - sync package dependencies ( setup.cfg, requirements*.txt mainly ) with
   what is used internally ; so that astacus.spec winds up with same

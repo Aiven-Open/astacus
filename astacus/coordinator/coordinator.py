@@ -6,8 +6,10 @@ See LICENSE for details
 from .config import coordinator_config, CoordinatorConfig
 from .state import coordinator_state, CoordinatorState
 from astacus.common import exceptions, magic, op, statsd, utils
+from astacus.common.cachingjsonstorage import CachingJsonStorage
 from astacus.common.magic import LockCall
 from astacus.common.rohmustorage import RohmuStorage
+from astacus.common.storage import FileStorage, HexDigestStorage, JsonStorage
 from datetime import datetime
 from enum import Enum
 from fastapi import BackgroundTasks, Depends, Request
@@ -29,28 +31,40 @@ class LockResult(Enum):
     exception = "exception"
 
 
-class AsyncStorageWrapper:
-    """Subset of the Storage API proxied async -> sync via starlette threadpool
+class AsyncHexDigestStorageWrapper:
+    """Subset of the HexDigestStorage API proxied async -> sync via starlette threadpool
 
     Note that the access is not intentionally locked; therefore even
     synchronous API can be used in parallel (at least if it is safe to
     do so) using this.
 
     """
-    def __init__(self, storage):
+    def __init__(self, storage: HexDigestStorage):
         self.storage = storage
 
     async def delete_hexdigest(self, hexdigest: str):
         return await run_in_threadpool(self.storage.delete_hexdigest, hexdigest)
+
+    async def list_hexdigests(self):
+        return await run_in_threadpool(self.storage.list_hexdigests)
+
+
+class AsyncJsonStorageWrapper:
+    """Subset of the JsonStorage API proxied async -> sync via starlette threadpool
+
+    Note that the access is not intentionally locked; therefore even
+    synchronous API can be used in parallel (at least if it is safe to
+    do so) using this.
+
+    """
+    def __init__(self, storage: JsonStorage):
+        self.storage = storage
 
     async def delete_json(self, name: str):
         return await run_in_threadpool(self.storage.delete_json, name)
 
     async def download_json(self, name: str):
         return await run_in_threadpool(self.storage.download_json, name)
-
-    async def list_hexdigests(self):
-        return await run_in_threadpool(self.storage.list_hexdigests)
 
     async def list_jsons(self):
         return await run_in_threadpool(self.storage.list_jsons)
@@ -68,10 +82,13 @@ class CoordinatorOp(op.Op):
         self.nodes = c.config.nodes
         self.request_url = c.request.url
         self.config = c.config
-
-    @property
-    def async_storage(self):
-        return AsyncStorageWrapper(storage=self.storage)
+        rohmu = self.storage
+        self.hexdigest_storage = AsyncHexDigestStorageWrapper(rohmu)
+        json_storage = rohmu
+        if self.config.object_storage_cache:
+            file_storage = FileStorage(self.config.object_storage_cache)
+            json_storage = CachingJsonStorage(backend_storage=rohmu, cache_storage=file_storage)
+        self.json_storage = AsyncJsonStorageWrapper(json_storage)
 
     @property
     def storage(self):

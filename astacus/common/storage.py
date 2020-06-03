@@ -5,6 +5,7 @@ See LICENSE for details
 
 """
 
+from .exceptions import NotFoundException
 from .utils import AstacusModel
 from pathlib import Path
 
@@ -77,6 +78,17 @@ class Storage(HexDigestStorage, JsonStorage):
     pass
 
 
+def file_error_wrapper(fun):
+    """ Wrap rohmu exceptions in astacus ones; to be seen what is complete set """
+    def _f(*a, **kw):
+        try:
+            return fun(*a, **kw)
+        except FileNotFoundError as ex:
+            raise NotFoundException from ex
+
+    return _f
+
+
 class FileStorage(Storage):
     """ Implementation of the storage API, which just handles files - primarily useful for testing """
     def __init__(self, path, *, hexdigest_suffix=".dat", json_suffix=".json"):
@@ -91,6 +103,7 @@ class FileStorage(Storage):
     def _json_to_path(self, name):
         return self.path / f"{name}{self.json_suffix}"
 
+    @file_error_wrapper
     def delete_hexdigest(self, hexdigest):
         logger.debug("delete_hexdigest %r", hexdigest)
         self._hexdigest_to_path(hexdigest).unlink()
@@ -103,6 +116,7 @@ class FileStorage(Storage):
     def list_hexdigests(self):
         return self._list(self.hexdigest_suffix)
 
+    @file_error_wrapper
     def download_hexdigest_to_file(self, hexdigest, f) -> bool:
         logger.debug("download_hexdigest_to_file %r", hexdigest)
         path = self._hexdigest_to_path(hexdigest)
@@ -115,10 +129,12 @@ class FileStorage(Storage):
         path.write_bytes(f.read())
         return True
 
+    @file_error_wrapper
     def delete_json(self, name: str):
         logger.debug("delete_json %r", name)
         self._json_to_path(name).unlink()
 
+    @file_error_wrapper
     def download_json(self, name: str):
         logger.debug("download_json %r", name)
         path = self._json_to_path(name)

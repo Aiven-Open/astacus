@@ -41,7 +41,7 @@ class NodeOp(op.Op):
 
     @property
     def storage(self):
-        return RohmuStorage(self.config.object_storage)
+        return RohmuStorage(self.config.object_storage, storage=self.req.storage)
 
     def still_running_callback(self):
         if self.info.op_id != self.op_id:

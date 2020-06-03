@@ -6,7 +6,7 @@ Common base classes for the plugins
 
 """
 
-from astacus.common import exceptions, ipc
+from astacus.common import exceptions, ipc, magic
 from astacus.coordinator import plugins
 from astacus.coordinator.coordinator import Coordinator, CoordinatorOpWithClusterLock
 from collections import Counter
@@ -75,7 +75,7 @@ class BackupOpBase(OpBase):
     result_snapshot: List[ipc.SnapshotResult] = []
 
     async def step_list_hexdigests(self) -> bool:
-        self.hexdigests = set(await self.async_storage.list_hexdigests())
+        self.hexdigests = set(await self.hexdigest_storage.list_hexdigests())
         return True
 
     hexdigests: Set[str] = set()
@@ -110,7 +110,7 @@ class BackupOpBase(OpBase):
         start_results = []
         for data in node_index_datas:
             node = self.nodes[data.node_index]
-            req = ipc.SnapshotUploadRequest(hashes=data.sshashes)
+            req = ipc.SnapshotUploadRequest(hashes=data.sshashes, storage=self.storage.storage_name)
             start_result = await self.request_from_nodes(
                 "upload", caller="BackupOp.upload", method="post", data=req.json(), nodes=[node]
             )
@@ -139,9 +139,9 @@ class BackupOpBase(OpBase):
         )
         assert self.attempt_start
         iso = self.attempt_start.isoformat()
-        filename = f"backup-{iso}"
+        filename = f"{magic.JSON_BACKUP_PREFIX}{iso}"
         logger.debug("Storing backup manifest %s", filename)
-        await self.async_storage.upload_json(filename, manifest)
+        await self.json_storage.upload_json(filename, manifest)
         return True
 
 
@@ -155,14 +155,16 @@ class RestoreOpBase(OpBase):
 
     async def step_backup_name(self) -> str:
         if not self.name:
-            return sorted(await self.async_storage.list_jsons())[-1]
-        return self.name
+            return sorted(await self.json_storage.list_jsons())[-1]
+        if self.name.startswith(magic.JSON_BACKUP_PREFIX):
+            return self.name
+        return f"{magic.JSON_BACKUP_PREFIX}{self.name}"
 
     result_backup_name: str = ""
 
     async def _download_backup_dict(self):
         assert self.result_backup_name
-        return await self.async_storage.download_json(self.result_backup_name)
+        return await self.json_storage.download_json(self.result_backup_name)
 
     async def step_backup_manifest(self):
         backup_dict = await self._download_backup_dict()
@@ -188,7 +190,7 @@ class RestoreOpBase(OpBase):
                 root_globs = self.result_backup_manifest.snapshot_results[0].state.root_globs
                 # Restore fake, empty backup to ensure node is clean
                 result = ipc.SnapshotResult(state=ipc.SnapshotState(root_globs=root_globs, files=[]))
-            data = ipc.SnapshotDownloadRequest(state=result.state).json()
+            data = ipc.SnapshotDownloadRequest(state=result.state, storage=self.storage.storage_name).json()
             start_result = await self.request_from_nodes(
                 "download", caller="RestoreOp._restore", method="post", data=data, nodes=[node]
             )

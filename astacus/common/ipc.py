@@ -85,18 +85,31 @@ class SnapshotHash(AstacusModel):
 
 
 class SnapshotUploadRequest(NodeRequest):
+    # list of hashes to be uploaded
     hashes: List[SnapshotHash]
+
+    # which (sub)object storage entry should be used
+    storage: str
 
 
 class SnapshotResult(NodeResult):
+    # when was the operation started ( / done )
     start: datetime = Field(default_factory=datetime.now)
     end: Optional[datetime]
-    state: Optional[SnapshotState]  # should be passed opaquely to restore
-    hashes: Optional[List[SnapshotHash]]  # populated only if state is available
+
+    # should be passed opaquely to restore
+    state: Optional[SnapshotState]
+
+    # populated only if state is available
+    hashes: Optional[List[SnapshotHash]]
 
 
 class SnapshotDownloadRequest(NodeRequest):
+    # state to be downloaded
     state: SnapshotState
+
+    # which (sub)object storage entry should be used
+    storage: str
 
 
 # controller.backup

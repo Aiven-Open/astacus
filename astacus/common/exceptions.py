@@ -24,8 +24,14 @@ class InsufficientAZsException(PermanentException):
     pass
 
 
+class NotFoundException(PermanentException):
+    pass
+
+
 # rohmu without compression/encryption does not work; this temporary
 # check is in place until that gets fixed
+
+
 class CompressionOrEncryptionRequired(PermanentException):
     pass
 
