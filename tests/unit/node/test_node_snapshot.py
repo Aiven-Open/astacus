@@ -84,6 +84,8 @@ def test_api_snapshot_and_upload(client, mocker):
     result = ipc.SnapshotResult.parse_raw(response)
     assert result.progress.finished_successfully
     assert result.hashes
+    assert result.files
+    assert result.total_size
 
     # Ask it to be uploaded
     response = client.post("/node/upload")
