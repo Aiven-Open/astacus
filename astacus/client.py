@@ -10,16 +10,19 @@ from astacus.common import ipc, magic, utils
 from astacus.common.utils import exponential_backoff, http_request
 from tabulate import tabulate
 
+import json as _json
 import logging
 import time
 
 logger = logging.getLogger(__name__)
 
 
-def _run_op(op, args) -> bool:
+def _run_op(op, args, *, json=None, data=None) -> bool:
     print(f"Starting {op}..")
     start = time.monotonic()
-    r = http_request(f"{args.url}/{op}", method="post", caller="client._run_op")
+    if json is not None:
+        data = _json.dumps(json)
+    r = http_request(f"{args.url}/{op}", method="post", caller="client._run_op", data=data)
     if r is None:
         return False
     if not args.wait_completion:
@@ -52,7 +55,12 @@ def _run_backup(args) -> bool:
 
 
 def _run_restore(args) -> bool:
-    return _run_op("restore", args)
+    json = {}
+    if args.storage:
+        json["storage"] = args.storage
+    if args.backup:
+        json["name"] = args.backup
+    return _run_op("restore", args, json=json)
 
 
 def _run_list(args) -> bool:
@@ -106,6 +114,20 @@ def _run_list(args) -> bool:
     return True
 
 
+def _run_cleanup(args) -> bool:
+    json = {}  # type: ignore
+    # Copy retention fields from argparser arguments to the json request, if set
+    for k in ipc.Retention().dict().keys():
+        v = getattr(args, k, None)
+        if v:
+            json.setdefault("retention", {})[k] = v
+    return _run_op("cleanup", args, json=json)
+
+
+def _run_delete(args) -> bool:
+    return _run_op("cleanup", args, json={"explicit_delete": args.backups})
+
+
 def create_client_parsers(parser, subparsers):
     default_url = f"http://localhost:{magic.ASTACUS_DEFAULT_PORT}"
     parser.add_argument("-u", "--url", type=str, help="Astacus REST endpoint URL", default=default_url)
@@ -120,8 +142,23 @@ def create_client_parsers(parser, subparsers):
     p_backup.set_defaults(func=_run_backup)
 
     p_restore = subparsers.add_parser("restore", help="Request backup restoration")
+    p_restore.add_argument("--storage", help="Storage to use (default: configured)")
+    p_restore.add_argument("--backup", help="Name of backup to restore (default: most recent)")
     p_restore.set_defaults(func=_run_restore)
 
     p_list = subparsers.add_parser("list", help="List backups")
     p_list.add_argument("--storage", help="Particular storage to list (default: all)")
     p_list.set_defaults(func=_run_list)
+
+    p_cleanup = subparsers.add_parser("cleanup", help="Delete backups that should no longer be kept")
+    p_cleanup.add_argument("--minimum-backups", type=int, help="Minimum number of backups to be kept")
+    p_cleanup.add_argument("--maximum-backups", type=int, help="Maximum number of backups to be kept")
+    p_cleanup.add_argument(
+        "--keep-days", type=int, help="Number of days to keep backups (does not override minimum/maximum-backups)"
+    )
+
+    p_cleanup.set_defaults(func=_run_cleanup)
+
+    p_delete = subparsers.add_parser("delete", help="Delete specific old existing backup(s)")
+    p_delete.add_argument("--backups", nargs="+", help="Backup names to be deleted")
+    p_delete.set_defaults(func=_run_delete)

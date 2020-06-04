@@ -5,7 +5,7 @@ See LICENSE for details
 
 from .config import coordinator_config, CoordinatorConfig
 from .state import coordinator_state, CoordinatorState
-from astacus.common import asyncstorage, exceptions, magic, op, statsd, utils
+from astacus.common import asyncstorage, exceptions, ipc, magic, op, statsd, utils
 from astacus.common.cachingjsonstorage import MultiCachingJsonStorage
 from astacus.common.magic import LockCall
 from astacus.common.rohmustorage import MultiRohmuStorage
@@ -112,7 +112,7 @@ class CoordinatorOp(op.Op):
             for attempt in range(1, attempts + 1):
                 logger.debug("%s - attempt #%d/%d", name, attempt, attempts)
                 self.attempt = attempt
-                self.attempt_start = datetime.now()
+                self.attempt_start = datetime.utcnow()
                 async with self.stats.async_timing_manager(
                     "astacus_attempt_duration", {
                         "op": name,
@@ -143,7 +143,7 @@ class CoordinatorOp(op.Op):
             urls.append(parsed_result.status_url)
         if all_nodes and len(urls) != len(self.nodes):
             return []
-        delay = self.config.poll_delay_start
+        delay = self.config.poll.delay_start
         results = [None] * len(urls)
         # Note that we don't have timeout mechanism here as such,
         # however, if re-locking times out, we will bail out. TBD if
@@ -151,9 +151,9 @@ class CoordinatorOp(op.Op):
         failures = {}
         async for _ in utils.exponential_backoff(
             initial=delay,
-            multiplier=self.config.poll_delay_multiplier,
-            maximum=self.config.poll_delay_max,
-            duration=self.config.poll_duration
+            multiplier=self.config.poll.delay_multiplier,
+            maximum=self.config.poll.delay_max,
+            duration=self.config.poll.duration
         ):
             for i, (url, result) in enumerate(zip(urls, results)):
                 # TBD: This could be done in parallel too
@@ -162,7 +162,7 @@ class CoordinatorOp(op.Op):
                 r = await utils.httpx_request(url, caller="BackupOp.wait_successful_results")
                 if r is None:
                     failures[i] = failures.get(i, 0) + 1
-                    if failures[i] >= self.config.poll_maximum_failures:
+                    if failures[i] >= self.config.poll.maximum_failures:
                         return []
                     continue
                 # We got something -> decode the result
@@ -176,6 +176,14 @@ class CoordinatorOp(op.Op):
             logger.debug("wait_successful_results timed out")
             return []
         return results
+
+    async def download_backup_manifest(self, backup_name: str) -> ipc.BackupManifest:
+        assert self.json_storage
+        d = await self.json_storage.download_json(backup_name)
+        manifest = ipc.BackupManifest.parse_obj(d)
+        assert not manifest.filename or manifest.filename == backup_name
+        manifest.filename = backup_name
+        return manifest
 
 
 class CoordinatorOpWithClusterLock(CoordinatorOp):

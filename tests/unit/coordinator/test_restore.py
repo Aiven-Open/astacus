@@ -7,7 +7,7 @@ Test that the coordinator restore endpoint works.
 """
 
 from astacus.common import exceptions, ipc
-from astacus.coordinator.config import CoordinatorConfig
+from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins import get_plugin_restore_class
 from contextlib import nullcontext as does_not_raise
 from datetime import datetime
@@ -18,7 +18,6 @@ import respx
 
 FAILS = [1, 2, None]
 
-_CCNode = CoordinatorConfig.Node
 BACKUP_NAME = "dummybackup"
 
 BACKUP_MANIFEST = ipc.BackupManifest(
@@ -31,6 +30,7 @@ BACKUP_MANIFEST = ipc.BackupManifest(
                 root_globs=["*"],
                 files=[ipc.SnapshotFile(relative_path=Path("foo"), file_size=6, mtime_ns=0, hexdigest="DEADBEEF")]
             ),
+            hashes=[ipc.SnapshotHash(hexdigest="DEADBEEF", size=6)],
             files=1,
             total_size=6,
         )
@@ -43,17 +43,13 @@ BACKUP_MANIFEST = ipc.BackupManifest(
 def test_restore(fail_at, app, client, storage):
     # Create fake backup (not pretty but sufficient?)
     storage.upload_json(BACKUP_NAME, BACKUP_MANIFEST)
-
-    nodes = [
-        _CCNode(url="http://localhost:12345/asdf"),
-        _CCNode(url="http://localhost:12346/asdf"),
-    ]
-    app.state.coordinator_config.nodes = nodes
+    nodes = app.state.coordinator_config.nodes
     with respx.mock:
         for node in nodes:
             respx.post(f"{node.url}/unlock?locker=x&ttl=0", content={"locked": False})
             # Failure point 1: Lock fails
             respx.post(f"{node.url}/lock?locker=x&ttl=60", content={"locked": fail_at != 1})
+
             # Failure point 2: download call fails
             if fail_at != 2:
                 respx.post(f"{node.url}/download", content={"op_id": 42, "status_url": f"{node.url}/download/result"})
@@ -109,9 +105,9 @@ class DummyRestoreOp(_RestoreOp):
     ]
 )
 def test_node_to_backup_index(node_azlist, backup_azlist, expected_index, exception):
-    nodes = [_CCNode(url="unused", az=az) for az in node_azlist]
+    nodes = [CoordinatorNode(url="unused", az=az) for az in node_azlist]
     manifest = ipc.BackupManifest(
-        start=datetime.now(),
+        start=datetime.utcnow(),
         attempt=1,
         snapshot_results=[ipc.SnapshotResult(az=az) for az in backup_azlist],
         plugin="files"

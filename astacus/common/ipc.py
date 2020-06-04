@@ -22,6 +22,18 @@ class Plugin(str, Enum):
     m3db = "m3db"
 
 
+class Retention(AstacusModel):
+    # If set, number of backups to retain always (even beyond days)
+    minimum_backups: Optional[int] = None
+
+    # If set, maximum number of backups to retain
+    maximum_backups: Optional[int] = None
+
+    # Backups older than this are deleted, unless it would reduce
+    # number of backups to less than minimum_backups
+    keep_days: Optional[int] = None
+
+
 # node generic base
 
 
@@ -94,7 +106,7 @@ class SnapshotUploadRequest(NodeRequest):
 
 class SnapshotResult(NodeResult):
     # when was the operation started ( / done )
-    start: datetime = Field(default_factory=datetime.now)
+    start: datetime = Field(default_factory=datetime.utcnow)
     end: Optional[datetime]
 
     # should be passed opaquely to restore
@@ -128,7 +140,7 @@ class BackupManifest(AstacusModel):
     start: datetime
 
     # .. and when did it finish
-    end: datetime = Field(default_factory=datetime.now)
+    end: datetime = Field(default_factory=datetime.utcnow)
 
     # How many attempts did it take (starts from 1)
     attempt: int
@@ -141,6 +153,9 @@ class BackupManifest(AstacusModel):
 
     # Plugin-specific data about the backup
     plugin_data: dict = {}
+
+    # Semi-redundant but simplifies handling; automatically set on download
+    filename: str = ""
 
 
 # coordinator.list
@@ -168,3 +183,12 @@ class ListForStorage(AstacusModel):
 
 class ListResponse(AstacusModel):
     storages: List[ListForStorage]
+
+
+# coordinator.cleanup
+
+
+class CleanupRequest(AstacusModel):
+    storage: str = ""
+    retention: Optional[Retention] = None
+    explicit_delete: List[str] = []
