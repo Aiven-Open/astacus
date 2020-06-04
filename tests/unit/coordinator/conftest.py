@@ -51,7 +51,10 @@ def fixture_app(mocker, sleepless, storage, tmpdir):  # pylint: disable=unused-a
     app = FastAPI()
     app.include_router(router, tags=["coordinator"])
     app.state.coordinator_config = CoordinatorConfig(
-        object_storage=create_rohmu_config(tmpdir), plugin="files", plugin_config={"root_globs": ["*"]}
+        object_storage=create_rohmu_config(tmpdir),
+        plugin="files",
+        plugin_config={"root_globs": ["*"]},
+        object_storage_cache=f"{tmpdir}/cache/is/somewhere",
     )
     mocker.patch.object(CoordinatorOpWithClusterLock, "get_locker", return_value="x")
     yield app

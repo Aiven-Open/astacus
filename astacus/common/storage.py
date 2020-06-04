@@ -93,7 +93,7 @@ class FileStorage(Storage):
     """ Implementation of the storage API, which just handles files - primarily useful for testing """
     def __init__(self, path, *, hexdigest_suffix=".dat", json_suffix=".json"):
         self.path = Path(path)
-        self.path.mkdir(exist_ok=True)
+        self.path.mkdir(parents=True, exist_ok=True)
         self.hexdigest_suffix = hexdigest_suffix
         self.json_suffix = json_suffix
 
