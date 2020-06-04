@@ -44,6 +44,9 @@ async def test_astacus(astacus1, astacus2, astacus3):
     astacus1.root_path.mkdir()
     file3_path.write_text("content3")
 
+    # Ensure 'list' command does not crash (output validation is bit too painful)
+    _astacus_run(astacus1, "list")
+
     # Run restore
     _astacus_run(astacus2, "restore")
 
