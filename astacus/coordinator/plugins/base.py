@@ -131,6 +131,9 @@ class BackupOpBase(OpBase):
 
     async def step_upload_manifest(self):
         """ Final backup manifest upload. It has to be parametrized with the plugin, and plugin_data """
+        assert self.attempt_start
+        iso = self.attempt_start.isoformat()
+        filename = f"{magic.JSON_BACKUP_PREFIX}{iso}"
         manifest = ipc.BackupManifest(
             attempt=self.attempt,
             start=self.attempt_start,
@@ -138,9 +141,6 @@ class BackupOpBase(OpBase):
             plugin=self.plugin,
             plugin_data=self.plugin_data
         )
-        assert self.attempt_start
-        iso = self.attempt_start.isoformat()
-        filename = f"{magic.JSON_BACKUP_PREFIX}{iso}"
         logger.debug("Storing backup manifest %s", filename)
         await self.json_storage.upload_json(filename, manifest)
         return True
@@ -167,13 +167,9 @@ class RestoreOpBase(OpBase):
 
     result_backup_name: str = ""
 
-    async def _download_backup_dict(self):
-        assert self.result_backup_name
-        return await self.json_storage.download_json(self.result_backup_name)
-
     async def step_backup_manifest(self):
-        backup_dict = await self._download_backup_dict()
-        return ipc.BackupManifest.parse_obj(backup_dict)
+        assert self.result_backup_name
+        return await self.download_backup_manifest(self.result_backup_name)
 
     result_backup_manifest: Optional[ipc.BackupManifest] = None
 

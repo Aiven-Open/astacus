@@ -6,27 +6,6 @@ is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
 
 ## Very short term; need to be done for it to be usable for internal use
 
-- backup cleanup endpoint + CLI + its tests
-    - maintain only up to N backups
-
-- backup delete endpoint + CLI + its tests
-    - specific backups' manual deletion
-
-- backup list CLI + its tests
-    - one option for creating nice looking output for it would be https://pypi.org/project/tabulate/
-
-- improve operation reporting; probably astacus.common.progress.Progress
-  information should be also forwarded to coordinator results, and
-  subsequently to REST/CLI. Currently coordinator REST API / CLI reports
-  just binary outcome (success/not) which while technically sufficient in
-  short term, isn't optimal
-
-- more metrics endpoints - think on what is really needed
-    - perhaps backup/snapshot/restore sizes and file counts? copy from *hoard?
-
-- plugin
-    - (partial?) cassandra plugin; mostly to validate plugin arch is broad enough
-
 - sync package dependencies ( setup.cfg, requirements*.txt mainly ) with
   what is used internally ; so that astacus.spec winds up with same
   versions, given Aiven-internal packages)
@@ -39,7 +18,19 @@ is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
     - the design
     - user-visible UI etc
 
+- improve operation reporting; probably astacus.common.progress.Progress
+  information should be also forwarded to coordinator results, and
+  subsequently to REST/CLI. Currently coordinator REST API / CLI reports
+  just binary outcome (success/not) which while technically sufficient in
+  short term, isn't optimal
+
 - measure, improve test code coverage
+
+- more metrics endpoints - think on what is really needed
+    - perhaps backup/snapshot/restore sizes and file counts? copy from *hoard?
+
+- plugin
+    - (partial?) cassandra plugin; mostly to validate plugin arch is broad enough
 
 
 ## Eventually

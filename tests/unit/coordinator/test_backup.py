@@ -8,7 +8,6 @@ Test that the coordinator backup endpoint works.
 
 from astacus.common import ipc
 from astacus.common.ipc import SnapshotHash
-from astacus.coordinator.config import CoordinatorConfig
 from astacus.coordinator.plugins import get_plugin_backup_class
 from astacus.coordinator.plugins.base import NodeIndexData
 from datetime import datetime
@@ -16,26 +15,22 @@ from datetime import datetime
 import pytest
 import respx
 
-_CCNode = CoordinatorConfig.Node
-
 FAILS = [1, 2, 3, 4, 5, None]
 
 
 @pytest.mark.parametrize("fail_at", FAILS)
 def test_backup(fail_at, app, client, storage):
-    nodes = [
-        _CCNode(url="http://localhost:12345/asdf"),
-        _CCNode(url="http://localhost:12346/asdf"),
-    ]
-    app.state.coordinator_config.nodes = nodes
+    nodes = app.state.coordinator_config.nodes
     with respx.mock:
         for node in nodes:
             respx.post(f"{node.url}/unlock?locker=x&ttl=0", content={"locked": False})
             # Failure point 1: Lock fails
             respx.post(f"{node.url}/lock?locker=x&ttl=60", content={"locked": fail_at != 1})
+
             # Failure point 2: snapshot call fails
             if fail_at != 2:
                 respx.post(f"{node.url}/snapshot", content={"op_id": 42, "status_url": f"{node.url}/snapshot/result"})
+
             # Failure point 3: snapshot result call fails
             if fail_at != 3:
                 respx.get(
@@ -50,6 +45,7 @@ def test_backup(fail_at, app, client, storage):
                         }]
                     }
                 )
+
             # Failure point 4: upload call fails
             if fail_at != 4:
                 respx.post(f"{node.url}/upload", content={"op_id": 43, "status_url": f"{node.url}/upload/result"})
@@ -94,7 +90,7 @@ _progress_done = ipc.Progress(final=True)
 
 def _ssresults(*kwarg_list):
     return [
-        ipc.SnapshotResult(progress=_progress_done, hostname="host-{i}", start=datetime.now(), **kw)
+        ipc.SnapshotResult(progress=_progress_done, hostname="host-{i}", start=datetime.utcnow(), **kw)
         for i, kw in enumerate(kwarg_list, 1)
     ]
 

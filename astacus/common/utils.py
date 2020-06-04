@@ -180,3 +180,9 @@ class SizeLimitedFile:
         data = self.f.read(n)
         self.ofs += len(data)
         return data
+
+
+def timedelta_as_short_str(delta):
+    h, s = divmod(delta.seconds, 3600)
+    m, s = divmod(s, 60)
+    return " ".join(f"{v}{u}" for v, u in [(delta.days, "d"), (h, "h"), (m, "m"), (s, "s")] if v)

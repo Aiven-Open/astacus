@@ -7,6 +7,7 @@ Test astacus.common.utils
 """
 
 from astacus.common import utils
+from datetime import timedelta
 
 import asyncio
 import logging
@@ -53,3 +54,14 @@ async def test_exponential_backoff(mocker):
         retries.append(retry)
     assert retries == list(range(6))
     _assert_rounded_waits_equals([1, 2, 4, 8, 16])
+
+
+@pytest.mark.parametrize(
+    "v,s", [
+        (timedelta(days=1, seconds=1), "1d 1s"),
+        (timedelta(hours=3, minutes=2, seconds=1), "3h 2m 1s"),
+        (timedelta(seconds=0), ""),
+    ]
+)
+def test_timedelta_as_short_str(v, s):
+    assert utils.timedelta_as_short_str(v) == s

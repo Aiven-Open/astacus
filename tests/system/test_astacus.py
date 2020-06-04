@@ -14,8 +14,8 @@ import subprocess
 logger = logging.getLogger(__name__)
 
 
-def _astacus_run(astacus, op):
-    subprocess.run(["astacus", "--url", astacus.url, "-w", "10", op], check=True)
+def _astacus_run(astacus, *args):
+    subprocess.run(["astacus", "--url", astacus.url, "-w", "10"] + list(args), check=True)
 
 
 def _astacus_ls(astacus):
@@ -43,6 +43,12 @@ async def test_astacus(astacus1, astacus2, astacus3):
     shutil.rmtree(astacus1.root_path)
     astacus1.root_path.mkdir()
     file3_path.write_text("content3")
+
+    # Ensure 'list' command does not crash (output validation is bit too painful)
+    _astacus_run(astacus1, "list")
+
+    _astacus_run(astacus1, "cleanup", "--minimum-backups", "7", "--maximum-backups", "42", "--keep-days", "15")
+    _astacus_run(astacus1, "delete", "--backups", "nonexistent-is-ok")
 
     # Run restore
     _astacus_run(astacus2, "restore")

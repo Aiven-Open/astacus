@@ -8,14 +8,14 @@ Test that the plugin m3 specific flow (backup + restore) works
 """
 # pylint: disable=too-many-ancestors
 
+from ..conftest import COORDINATOR_NODES
+from astacus.common import ipc
 from astacus.common.etcd import b64encode_to_str
-from astacus.coordinator.config import CoordinatorConfig
+from astacus.coordinator.config import CoordinatorConfig, CoordinatorNode
 from astacus.coordinator.plugins import base, m3db
 
 import pytest
 import respx
-
-_CCNode = CoordinatorConfig.Node
 
 ENV = "dummyenv"
 
@@ -43,10 +43,7 @@ COORDINATOR_CONFIG = {
 
 
 class DummyM3DBBackupOp(m3db.M3DBBackupOp):
-    nodes = [
-        _CCNode(url="http://localhost:12345/asdf"),
-        _CCNode(url="http://localhost:12346/asdf"),
-    ]
+    nodes = COORDINATOR_NODES
 
     def __init__(self):
         # pylint: disable=super-init-not-called
@@ -105,24 +102,24 @@ async def test_m3_backup(fail_at):
 
 
 class DummyM3DRestoreOp(m3db.M3DRestoreOp):
-    nodes = [
-        _CCNode(url="http://localhost:12345/asdf"),
-        _CCNode(url="http://localhost:12346/asdf"),
-    ]
+    nodes = COORDINATOR_NODES
     steps = ["init", "backup_manifest", "rewrite_etcd", "restore_etcd"]
 
     def __init__(self):
         # pylint: disable=super-init-not-called
         self.config = CoordinatorConfig.parse_obj(COORDINATOR_CONFIG)
 
-    async def _download_backup_dict(self):
-        return {
+    result_backup_name = "x"
+
+    async def download_backup_manifest(self, backup_name):
+        assert backup_name == self.result_backup_name
+        return ipc.BackupManifest.parse_obj({
             "plugin": "m3db",
             "plugin_data": PLUGIN_DATA,
             "attempt": 1,
             "snapshot_results": [],
             "start": "2020-01-01 12:00",
-        }
+        })
 
 
 RESTORE_FAILS = [1, 2, None]
@@ -169,8 +166,8 @@ def test_rewrite_single_m3_placement(bytes_in, bytes_out):
         endpoint="endpoint22",
         hostname="hostname22",
     )
-    src_node = _CCNode(az="az1", url="unused")
-    dst_node = _CCNode(az="az22", url="unused")
+    src_node = CoordinatorNode(az="az1", url="unused")
+    dst_node = CoordinatorNode(az="az22", url="unused")
     got = m3db.rewrite_single_m3_placement(
         bytes_in, src_pnode=src_pnode, dst_pnode=dst_pnode, src_node=src_node, dst_node=dst_node
     )

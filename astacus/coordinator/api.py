@@ -3,6 +3,7 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 
+from .cleanup import CleanupOp
 from .coordinator import Coordinator
 from .list import list_backups
 from .lockops import LockOps
@@ -26,6 +27,7 @@ class OpName(str, Enum):
     lock = "lock"
     restore = "restore"
     unlock = "unlock"
+    cleanup = "cleanup"
 
 
 @router.get("/{op_name}/{op_id}")
@@ -74,3 +76,9 @@ def restore(*, req: ipc.RestoreRequest = ipc.RestoreRequest(), c: Coordinator = 
 @router.get("/list")
 def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordinator = Depends()):
     return list_backups(req=req, json_mstorage=c.json_mstorage)
+
+
+@router.post("/cleanup")
+def cleanup(*, req: ipc.CleanupRequest = ipc.CleanupRequest(), c: Coordinator = Depends()):
+    op = CleanupOp(c=c, req=req)
+    return c.start_op(op_name=OpName.cleanup, op=op, fun=op.run)

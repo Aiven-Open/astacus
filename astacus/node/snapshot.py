@@ -42,7 +42,9 @@ class SnapshotOp(NodeOp):
         self.result.hashes = [
             ipc.SnapshotHash(hexdigest=ssfile.hexdigest, size=ssfile.file_size) for ssfile in self.result.state.files
         ]
-        self.result.end = datetime.now()
+        self.result.files = len(self.result.state.files)
+        self.result.total_size = sum(ssfile.file_size for ssfile in self.result.state.files)
+        self.result.end = datetime.utcnow()
 
 
 class UploadOp(NodeOp):

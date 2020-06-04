@@ -6,11 +6,7 @@ Test that the coordinator lock endpoint works.
 
 """
 
-from astacus.coordinator.config import CoordinatorConfig
-
 import respx
-
-_CCNode = CoordinatorConfig.Node
 
 
 def test_status_nonexistent(client):
@@ -19,7 +15,10 @@ def test_status_nonexistent(client):
     assert response.json() == {"detail": {"code": "operation_id_mismatch", "message": "Unknown operation id", "op": 123}}
 
 
-def test_lock_no_nodes(client):
+def test_lock_no_nodes(app, client):
+    nodes = app.state.coordinator_config.nodes
+    nodes.clear()
+
     # Without nodes, normal lock calls should be about instant
     response = client.post("/lock?locker=x")
     assert response.status_code == 200, response.json()
@@ -32,25 +31,8 @@ def test_lock_no_nodes(client):
     assert response.json() == {"state": "done"}
 
 
-def test_lock_fail(app, client):
-    # Add fake node that won't respond to API -> state won't be done
-    app.state.coordinator_config.nodes = [_CCNode(url="http://localhost:12345/asdf")]
-    with respx.mock:
-        respx.post("http://localhost:12345/asdf/lock?locker=z&ttl=60", content=None)
-        response = client.post("/lock?locker=z")
-        assert response.status_code == 200, response.json()
-
-    response = client.get(response.json()["status_url"])
-    assert response.status_code == 200, response.json()
-    assert response.json() == {"state": "fail"}
-
-
 def test_lock_ok(app, client):
-    nodes = [
-        _CCNode(url="http://localhost:12346/asdf"),
-        _CCNode(url="http://localhost:12345/asdf"),
-    ]
-    app.state.coordinator_config.nodes = nodes
+    nodes = app.state.coordinator_config.nodes
     with respx.mock:
         for node in nodes:
             respx.post(f"{node.url}/lock?locker=z&ttl=60", content={"locked": True})
@@ -65,11 +47,7 @@ def test_lock_ok(app, client):
 
 
 def test_lock_onefail(app, client):
-    nodes = [
-        _CCNode(url="http://localhost:12346/asdf"),
-        _CCNode(url="http://localhost:12345/asdf"),
-    ]
-    app.state.coordinator_config.nodes = nodes
+    nodes = app.state.coordinator_config.nodes
     with respx.mock:
         for i, node in enumerate(nodes):
             respx.post(f"{node.url}/lock?locker=z&ttl=60", content={"locked": i == 0})
