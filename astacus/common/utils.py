@@ -181,6 +181,22 @@ class SizeLimitedFile:
         self.ofs += len(data)
         return data
 
+    def seek(self, ofs, whence=0):
+        if whence == 0:
+            pass
+        elif whence == 1:
+            ofs += self.ofs
+        elif whence == 2:
+            ofs += self.file_size
+        else:
+            raise NotImplementedError
+        ofs = max(0, ofs)
+        ofs = min(self.file_size, ofs)
+        self.ofs = ofs
+
+    def tell(self):
+        return self.ofs
+
 
 def timedelta_as_short_str(delta):
     h, s = divmod(delta.seconds, 3600)

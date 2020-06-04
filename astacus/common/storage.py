@@ -17,6 +17,11 @@ import os
 logger = logging.getLogger(__name__)
 
 
+class StorageUploadResult(AstacusModel):
+    size: int
+    stored_size: int
+
+
 class HexDigestStorage:
     def delete_hexdigest(self, hexdigest):
         raise NotImplementedError
@@ -39,13 +44,13 @@ class HexDigestStorage:
     def list_hexdigests(self):
         raise NotImplementedError
 
-    def upload_hexdigest_bytes(self, hexdigest, data) -> bool:
+    def upload_hexdigest_bytes(self, hexdigest, data) -> StorageUploadResult:
         return self.upload_hexdigest_from_file(hexdigest, io.BytesIO(data))
 
-    def upload_hexdigest_from_file(self, hexdigest, f) -> bool:
+    def upload_hexdigest_from_file(self, hexdigest, f) -> StorageUploadResult:
         raise NotImplementedError
 
-    def upload_hexdigest_from_path(self, hexdigest, filename) -> bool:
+    def upload_hexdigest_from_path(self, hexdigest, filename) -> StorageUploadResult:
         with open(filename, "rb") as f:
             return self.upload_hexdigest_from_file(hexdigest, f)
 
@@ -123,11 +128,12 @@ class FileStorage(Storage):
         f.write(path.read_bytes())
         return True
 
-    def upload_hexdigest_from_file(self, hexdigest, f) -> bool:
+    def upload_hexdigest_from_file(self, hexdigest, f) -> StorageUploadResult:
         logger.debug("upload_hexdigest_from_file %r", hexdigest)
         path = self._hexdigest_to_path(hexdigest)
-        path.write_bytes(f.read())
-        return True
+        data = f.read()
+        path.write_bytes(data)
+        return StorageUploadResult(size=len(data), stored_size=len(data))
 
     @file_error_wrapper
     def delete_json(self, name: str):

@@ -16,6 +16,8 @@ def _iter_backups(storage):
         manifest = ipc.BackupManifest.parse_obj(storage.download_json(name))
         files = sum(x.files for x in manifest.snapshot_results)
         total_size = sum(x.total_size for x in manifest.snapshot_results)
+        upload_size = sum(x.total_size for x in manifest.upload_results)
+        upload_stored_size = sum(x.total_stored_size for x in manifest.upload_results)
         yield ipc.ListSingleBackup(
             name=pname,
             start=manifest.start,
@@ -23,7 +25,9 @@ def _iter_backups(storage):
             plugin=manifest.plugin,
             attempt=manifest.attempt,
             files=files,
-            total_size=total_size
+            total_size=total_size,
+            upload_size=upload_size,
+            upload_stored_size=upload_stored_size,
         )
 
 

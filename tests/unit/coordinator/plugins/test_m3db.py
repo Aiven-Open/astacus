@@ -119,6 +119,7 @@ class DummyM3DRestoreOp(m3db.M3DRestoreOp):
             "attempt": 1,
             "snapshot_results": [],
             "start": "2020-01-01 12:00",
+            "upload_results": [],
         })
 
 

@@ -8,7 +8,7 @@ Rohmu-specific actual object storage implementation
 """
 
 from .exceptions import CompressionOrEncryptionRequired, NotFoundException
-from .storage import MultiStorage, Storage
+from .storage import MultiStorage, Storage, StorageUploadResult
 from .utils import AstacusModel
 from enum import Enum
 from pghoard import rohmu  # type: ignore
@@ -168,7 +168,7 @@ class RohmuStorage(Storage):
         return self.config.encryption_keys[key_id].public
 
     @rohmu_error_wrapper
-    def _upload_key_from_file(self, key, f) -> bool:
+    def _upload_key_from_file(self, key, f) -> StorageUploadResult:
         encryption_key_id = self.config.encryption_key_id
         compression = self.config.compression
         metadata = RohmuMetadata()
@@ -179,6 +179,9 @@ class RohmuStorage(Storage):
         if compression.algorithm:
             metadata.compression_algorithm = compression.algorithm
         rohmu_metadata = metadata.dict(exclude_defaults=True, by_alias=True)
+        f.seek(0, 2)
+        plain_size = f.tell()
+        f.seek(0)
         with tempfile.TemporaryFile(dir=self.config.temporary_directory) as temp_file:
             rohmufile.write_file(
                 input_obj=f,
@@ -190,9 +193,10 @@ class RohmuStorage(Storage):
             )
             # compression_threads=compression.threads, # I wish
             # currently not supported by write_file API
+            compressed_size = temp_file.tell()
             temp_file.seek(0)
             self.storage.store_file_object(key, temp_file, metadata=rohmu_metadata)
-        return True
+        return StorageUploadResult(size=plain_size, stored_size=compressed_size)
 
     storage_name: str = ""
 
@@ -217,7 +221,7 @@ class RohmuStorage(Storage):
         key = os.path.join(self.hexdigest_key, hexdigest)
         return self._download_key_to_file(key, f)
 
-    def upload_hexdigest_from_file(self, hexdigest, f) -> bool:
+    def upload_hexdigest_from_file(self, hexdigest, f) -> StorageUploadResult:
         key = os.path.join(self.hexdigest_key, hexdigest)
         return self._upload_key_from_file(key, f)
 
@@ -242,7 +246,8 @@ class RohmuStorage(Storage):
         f = io.BytesIO()
         f.write(data.encode())
         f.seek(0)
-        return self._upload_key_from_file(key, f)
+        self._upload_key_from_file(key, f)
+        return True
 
 
 class MultiRohmuStorage(MultiStorage):
