@@ -5,6 +5,7 @@ See LICENSE for details
 
 """
 
+from astacus.common import exceptions
 from astacus.common.ipc import SnapshotFile, SnapshotHash, SnapshotState
 from astacus.common.progress import Progress
 from pathlib import Path
@@ -161,6 +162,7 @@ class Snapshotter:
     def write_hashes_to_storage(self, *, hashes, storage, progress: Progress, still_running_callback=lambda: True):
         todo = set(hash.hexdigest for hash in hashes)
         progress.start(len(todo))
+        total_size, total_stored_size = 0, 0
         for hexdigest in todo:
             if not still_running_callback():
                 break
@@ -174,7 +176,9 @@ class Snapshotter:
                 if current_hexdigest != snapshotfile.hexdigest:
                     logger.info("Hash of %s changed before upload", snapshotfile.relative_path)
                     continue
-                if not storage.upload_hexdigest_from_file(hexdigest, snapshotfile.open_for_reading(self.dst)):
+                try:
+                    upload_result = storage.upload_hexdigest_from_file(hexdigest, snapshotfile.open_for_reading(self.dst))
+                except exceptions.TransientException:
                     # We found and processed one file with the particular
                     # hexdigest; even if sending it failed, we won't try
                     # subsequent files and instead break out of iterating
@@ -186,6 +190,8 @@ class Snapshotter:
                     logger.info("Hash of %s changed after upload", snapshotfile.relative_path)
                     storage.delete_hexdigest(hexdigest)
                     continue
+                total_size += upload_result.size
+                total_stored_size += upload_result.stored_size
                 progress.upload_success(hexdigest)
                 break
             else:
@@ -195,3 +201,4 @@ class Snapshotter:
 
         # This operation is done. It may or may not have been a success.
         progress.done()
+        return total_size, total_stored_size

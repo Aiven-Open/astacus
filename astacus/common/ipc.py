@@ -104,6 +104,11 @@ class SnapshotUploadRequest(NodeRequest):
     storage: str
 
 
+class SnapshotUploadResult(NodeResult):
+    total_size: int = 0
+    total_stored_size: int = 0
+
+
 class SnapshotResult(NodeResult):
     # when was the operation started ( / done )
     start: datetime = Field(default_factory=datetime.utcnow)
@@ -148,6 +153,9 @@ class BackupManifest(AstacusModel):
     # Filesystem snapshot contents of the backup
     snapshot_results: List[SnapshotResult]
 
+    # What did the upload return (mostly for statistics)
+    upload_results: List[SnapshotUploadResult]
+
     # Which plugin was used to back the data up
     plugin: Plugin
 
@@ -174,6 +182,8 @@ class ListSingleBackup(AstacusModel):
     attempt: int
     files: int
     total_size: int
+    upload_size: int
+    upload_stored_size: int
 
 
 class ListForStorage(AstacusModel):

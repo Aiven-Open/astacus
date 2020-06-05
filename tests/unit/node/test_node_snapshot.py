@@ -99,5 +99,5 @@ def test_api_snapshot_and_upload(client, mocker):
     )
     assert response.status_code == 200, response.json()
     response = m.call_args[1]["data"]
-    result = ipc.SnapshotResult.parse_raw(response)
+    result = ipc.SnapshotUploadResult.parse_raw(response)
     assert result.progress.finished_successfully

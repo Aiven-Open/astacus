@@ -35,6 +35,9 @@ BACKUP_MANIFEST = ipc.BackupManifest(
             total_size=6,
         )
     ],
+    upload_results=[
+        ipc.SnapshotUploadResult(total_size=6, total_stored_size=10),
+    ],
     plugin="files",
 )
 
@@ -110,6 +113,7 @@ def test_node_to_backup_index(node_azlist, backup_azlist, expected_index, except
         start=datetime.utcnow(),
         attempt=1,
         snapshot_results=[ipc.SnapshotResult(az=az) for az in backup_azlist],
+        upload_results=[],
         plugin="files"
     )
 

@@ -89,3 +89,17 @@ podman-test-ubuntu:
 .PHONY: pip-outdated
 pip-outdated:
 	pip-outdated setup.cfg requirements.testing.txt
+
+
+# For development purposes, run server with the default astacus conf
+# and 'something' to be backed up
+BACKUPROOT=/tmp/astacus/src
+run-server:
+	rm -rf /tmp/astacus
+	mkdir -p $(BACKUPROOT)
+	dd if=/dev/zero of=$(BACKUPROOT)/zeros bs=1000 count=1000
+	dd if=/dev/urandom of=$(BACKUPROOT)/random bs=1000 count=1000
+	echo foo > $(BACKUPROOT)/foo
+	echo foo > $(BACKUPROOT)/foo2
+	echo bar > $(BACKUPROOT)/bar
+	astacus server -c astacus.conf

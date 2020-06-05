@@ -21,7 +21,9 @@ def test_api_list(client, populated_mstorage):
                 'name': '1',
                 'plugin': 'files',
                 'start': '2020-01-01T21:43:00',
-                'total_size': 6
+                'total_size': 6,
+                'upload_size': 6,
+                'upload_stored_size': 10,
             }, {
                 'attempt': 1,
                 'end': '2020-02-02T12:34:56',
@@ -29,7 +31,9 @@ def test_api_list(client, populated_mstorage):
                 'name': '2',
                 'plugin': 'files',
                 'start': '2020-01-01T21:43:00',
-                'total_size': 6
+                'total_size': 6,
+                'upload_size': 6,
+                'upload_stored_size': 10,
             }],
             'storage_name': 'x'
         }, {
@@ -40,7 +44,9 @@ def test_api_list(client, populated_mstorage):
                 'name': '3',
                 'plugin': 'files',
                 'start': '2020-01-01T21:43:00',
-                'total_size': 6
+                'total_size': 6,
+                'upload_size': 6,
+                'upload_stored_size': 10,
             }],
             'storage_name': 'y'
         }],

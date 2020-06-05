@@ -48,13 +48,16 @@ class SnapshotOp(NodeOp):
 
 
 class UploadOp(NodeOp):
+    def create_result(self):
+        return ipc.SnapshotUploadResult()
+
     def start(self, *, req: ipc.SnapshotUploadRequest):
         self.req = req
         logger.debug("start_upload %r", req)
         return self.start_op(op_name="upload", op=self, fun=self.upload)
 
     def upload(self):
-        self.get_snapshotter().write_hashes_to_storage(
+        self.result.total_size, self.result.total_stored_size = self.get_snapshotter().write_hashes_to_storage(
             hashes=self.req.hashes,
             storage=self.storage,
             progress=self.result.progress,

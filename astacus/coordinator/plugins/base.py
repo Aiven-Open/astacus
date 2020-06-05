@@ -10,7 +10,7 @@ from astacus.common import exceptions, ipc, magic
 from astacus.coordinator import plugins
 from astacus.coordinator.coordinator import Coordinator, CoordinatorOpWithClusterLock
 from collections import Counter
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Union
 
 import logging
 
@@ -118,7 +118,9 @@ class BackupOpBase(OpBase):
             if len(start_result) != 1:
                 return []
             start_results.extend(start_result)
-        return await self.wait_successful_results(start_results, result_class=ipc.NodeResult, all_nodes=False)
+        return await self.wait_successful_results(start_results, result_class=ipc.SnapshotUploadResult, all_nodes=False)
+
+    result_upload_blocks: Union[bool, List[ipc.SnapshotUploadResult]]
 
     async def step_upload_blocks(self):
         node_index_datas = self._snapshot_results_to_upload_node_index_datas()
@@ -132,12 +134,13 @@ class BackupOpBase(OpBase):
     async def step_upload_manifest(self):
         """ Final backup manifest upload. It has to be parametrized with the plugin, and plugin_data """
         assert self.attempt_start
-        iso = self.attempt_start.isoformat()
+        iso = self.attempt_start.isoformat(timespec="seconds")
         filename = f"{magic.JSON_BACKUP_PREFIX}{iso}"
         manifest = ipc.BackupManifest(
             attempt=self.attempt,
             start=self.attempt_start,
             snapshot_results=self.result_snapshot,
+            upload_results=[] if self.result_upload_blocks is True else self.result_upload_blocks,
             plugin=self.plugin,
             plugin_data=self.plugin_data
         )

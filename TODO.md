@@ -4,13 +4,6 @@ Note: This is more granular and detailed version what should be done; there
 is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
 
 
-## Very short term; need to be done for it to be usable for internal use
-
-- sync package dependencies ( setup.cfg, requirements*.txt mainly ) with
-  what is used internally ; so that astacus.spec winds up with same
-  versions, given Aiven-internal packages)
-
-
 ## Short-term; before public availability
 
 - document
