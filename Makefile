@@ -3,7 +3,7 @@ LONG_VER = $(shell git describe --long 2>/dev/null || echo $(SHORT_VER)-0-unknow
 PYTHON_SOURCE_DIRS = astacus/
 PYTHON_TEST_DIRS = tests/
 ALL_PYTHON_DIRS = $(PYTHON_SOURCE_DIRS) $(PYTHON_TEST_DIRS)
-GENERATED =
+GENERATED = astacus/version.py
 PYTHON = python3
 DNF_INSTALL = sudo dnf install -y
 
@@ -14,14 +14,7 @@ clean:
 
 .PHONY: build-dep-fedora
 build-dep-fedora:
-	sudo dnf -y install --best --allowerasing \
-		golang \
-		postgresql-server \
-		python3-botocore python3-cryptography python3-paramiko python3-dateutil python3-devel \
-		python3-flake8 python3-psycopg2 python3-pylint python3-pytest \
-		python3-pytest-cov python3-requests python3-snappy \
-		python3-azure-storage \
-		rpm-build
+	sudo dnf -y install --best --allowerasing rpm-build
 	sudo dnf -y install 'dnf-command(builddep)'
 	sudo dnf -y builddep astacus.spec
 
@@ -103,3 +96,18 @@ run-server:
 	echo foo > $(BACKUPROOT)/foo2
 	echo bar > $(BACKUPROOT)/bar
 	astacus server -c astacus.conf
+
+.PHONY: rpm
+rpm: $(GENERATED) /usr/bin/rpmbuild /usr/lib/rpm/check-buildroot
+	git archive --output=astacus-rpm-src.tar --prefix=astacus/ HEAD
+	# add generated files to the tar, they're not in git repository
+	tar -r -f astacus-rpm-src.tar --transform=s,astacus/,astacus/astacus/, $(GENERATED)
+	rpmbuild -bb astacus.spec \
+		--define '_topdir $(PWD)/rpm' \
+		--define '_sourcedir $(CURDIR)' \
+		--define 'major_version $(SHORT_VER)' \
+		--define 'minor_version $(subst -,.,$(subst $(SHORT_VER)-,,$(LONG_VER)))'
+	$(RM) astacus-rpm-src.tar
+
+astacus/version.py: version.py
+	$(PYTHON) $^ $@

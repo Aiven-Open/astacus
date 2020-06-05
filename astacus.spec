@@ -6,27 +6,21 @@ Summary:        Cluster database backup tool
 License:        ASL 2.0
 Source0:        astacus-rpm-src.tar
 BuildArch:      noarch
-# pghoard
-Requires:       python3-botocore
-Requires:       python3-cryptography >= 0.8
-Requires:       python3-dateutil
-Requires:       python3-psycopg2
-Requires:       python3-requests
-Requires:       python3-snappy
-BuildRequires:  snappy-devel
 
-# astacus
 BuildRequires:  python3-devel
-BuildRequires:  python3-flake8
-BuildRequires:  python3-isort
-BuildRequires:  python3-pylint
-BuildRequires:  python3-pytest
-BuildRequires:  python3-tox
-BuildRequires:  python3-yapf
-BuildRequires:  pre-commit
-Requires:       systemd
+
+Requires:       pghoard
+Requires:       python3-fastapi
+Requires:       python3-httpx
+Requires:       python3-pyyaml
+Requires:       python3-sentry-sdk
+Requires:       python3-tabulate
+Requires:       python3-typing-extensions
+Requires:       python3-uvicorn
 
 %undefine _missing_build_ids_terminate_build
+
+%{?python_disable_dependency_generator}
 
 %description
 Cluster database backup tool
@@ -37,21 +31,26 @@ Cluster database backup tool
 
 
 %install
+
+# We don't want setup.cfg derived hard versions as packager of
+# python3-* may actually do something interesting and (for example)
+# rename tabulate package python3-tabulate (cough).
+grep -B 9999 "SKIP-IN-RPM" setup.cfg > setup.cfg.rpm
+mv setup.cfg.rpm setup.cfg
+
 python3 setup.py install --prefix=%{_prefix} --root=%{buildroot}
 sed -e "s@#!/bin/python@#!%{_bindir}/python@" -i %{buildroot}%{_bindir}/*
 rm -rf %{buildroot}%{python3_sitelib}/tests/
-%{__install} -Dm0644 astacus.unit %{buildroot}%{_unitdir}/astacus.service
 %{__mkdir_p} %{buildroot}%{_localstatedir}/lib/astacus
 
 
 %files
 %defattr(-,root,root,-)
-%doc LICENSE README.md astacus.config.json
+%doc LICENSE README.md astacus.conf
 %{_bindir}/astacus*
-%{_unitdir}/astacus.service
 %{python3_sitelib}/*
 
 
 %changelog
-* Tue Apr 28 2019 Markus Stenberg <mstenber@aiven.io> - 0.0.1
+* Tue Apr 28 2020 Markus Stenberg <mstenber@aiven.io> - 0.0.1
 - Initial RPM package (in astacus)
