@@ -179,8 +179,7 @@ class RohmuStorage(Storage):
         if compression.algorithm:
             metadata.compression_algorithm = compression.algorithm
         rohmu_metadata = metadata.dict(exclude_defaults=True, by_alias=True)
-        f.seek(0, 2)
-        plain_size = f.tell()
+        plain_size = f.seek(0, 2)
         f.seek(0)
         with tempfile.TemporaryFile(dir=self.config.temporary_directory) as temp_file:
             rohmufile.write_file(
