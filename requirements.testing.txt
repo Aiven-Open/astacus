@@ -12,7 +12,7 @@ pytest==5.4.3
 # fastapi testclient needs this yet does not depend on it, gnn
 requests
 
-respx==0.11.1
+respx==0.10.1
 
 # convenience things that don't actually matter which version they are
 pip-outdated
