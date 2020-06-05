@@ -173,7 +173,7 @@ class SizeLimitedFile:
         self.ofs = 0
 
     def read(self, n=None):
-        can_read = self.file_size - self.ofs
+        can_read = max(0, self.file_size - self.ofs)
         if n is None:
             n = can_read
         n = min(can_read, n)
@@ -182,17 +182,16 @@ class SizeLimitedFile:
         return data
 
     def seek(self, ofs, whence=0):
-        if whence == 0:
+        if whence == 0:  # from start of file
             pass
-        elif whence == 1:
-            ofs += self.ofs
-        elif whence == 2:
+        elif whence == 2:  # from end of file
             ofs += self.file_size
         else:
             raise NotImplementedError
-        ofs = max(0, ofs)
-        ofs = min(self.file_size, ofs)
+        if ofs < 0:
+            raise ValueError(f"negative seek position: {ofs}")
         self.ofs = ofs
+        return ofs
 
     def tell(self):
         return self.ofs

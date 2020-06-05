@@ -19,7 +19,7 @@ shared code
     - It is needed to accomplish e.g. fast non-incremental M3 backups that are
     essentially incremental as only commit logs change frequently
 
-- List of object storage “backup site” locations -> Facilitate migration
+- Support list of object storage backup site locations -> Facilitate migration
   from old to new during service cloud migration
 
 - Have most of the code covered by unit tests
@@ -29,11 +29,50 @@ shared code
 
 # Installation
 
-TBD
+Use setup.py, or install from pip (TBD)
+
+# Configuration
+
+Create astacus.conf, which specifies which database to back up, and where.
 
 # Usage
 
-TBD
+## Start the nodes
+
+Start astacus server on all nodes to be backed up:
+
+`astacus server -c <configuration path>`
+
+## Perform backups
+
+Periodically (e.g. from cron) call on (ideally only one node, but it
+doesn't really matter):
+
+- `astacus backup` or
+- HTTP POST to http://server-address:5515/backup
+
+
+## Restore backups
+
+Backup can be restored with either
+
+- `astacus restore` or
+- HTTP POST to http://server-address:5515/restore
+
+## List backups
+
+To see list of backups:
+
+- `astacus list` or
+- HTTP GET http://server-address:5515/list)
+
+## Clean up old backups
+
+To clean up backups based on the configured retention policy,
+
+- use `astacus cleanup` (from cronjob or CLI), or
+- HTTP POST to http://server-address:5515/cleanup
+
 
 # TODO
 

@@ -133,3 +133,6 @@ astacus/version.py
 
 # Emacs temp files from flycheck
 .#*
+
+# generated rpm packages
+rpm/
