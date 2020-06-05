@@ -63,37 +63,38 @@ def _run_restore(args) -> bool:
     return _run_op("restore", args, json=json)
 
 
-def _run_list(args) -> bool:
-    storage_name = ""
-    if args.storage:
-        storage_name = f"?storage={args.storage}"
-    r = http_request(f"{args.url}/list{storage_name}", caller="client._run_list")
-    if r is None:
-        return False
-    result = ipc.ListResponse.parse_obj(r)
+def print_list_result(result):
     for i, storage in enumerate(result.storages):
-        gheaders = {"storage": "Storage"}
+        gheaders = {
+            "storage": "Storage",
+            "pchanged": "% changed",
+            "csaving": "Compression %",
+        }
         gtable = [{"storage": storage.storage_name}]
         plugin_same = len(set(b.plugin for b in storage.backups)) <= 1
         headers = {
             "name": "Name",
             # "start": "Start", n/a, name =~ same
-            "attempt": "Attempt",
+            "attempt": "Att",
             "duration": "Duration",
             "files": "Files",
             "total_size": "Size",
         }
-        table = [
-            {
+        table = []
+        tsize, usize, ssize = 0, 0, 0
+        for b in storage.backups:
+            table.append({
                 "plugin": b.plugin,
                 "name": b.name,
                 "attempt": b.attempt,
                 # "start": b.start,
                 "duration": utils.timedelta_as_short_str(b.end - b.start),
                 "files": b.files,
-                "total_size": b.total_size
-            } for b in storage.backups
-        ]
+                "total_size": utils.size_as_short_str(b.total_size),
+            })
+            tsize += b.total_size
+            usize += b.upload_size
+            ssize += b.upload_stored_size
         if not plugin_same:
             headers["plugin"] = "Plugin"
         else:
@@ -103,6 +104,10 @@ def _run_list(args) -> bool:
             if storage.backups:
                 gheaders["plugin"] = "Plugin"
                 gtable[0]["plugin"] = storage.backups[0].plugin
+        if tsize:
+            gtable[0]["pchanged"] = "%.2f%%" % (100.0 * usize / tsize)
+        if usize:
+            gtable[0]["csaving"] = "%.2f%%" % (100.0 - 100.0 * ssize / usize)
 
         # headers type hint is for some reason wrong - it accepts Dict[str,str]
         if i:
@@ -111,6 +116,15 @@ def _run_list(args) -> bool:
         print()
         print(tabulate(table, headers=headers, tablefmt="github"))  # type: ignore
 
+
+def _run_list(args) -> bool:
+    storage_name = ""
+    if args.storage:
+        storage_name = f"?storage={args.storage}"
+    r = http_request(f"{args.url}/list{storage_name}", caller="client._run_list")
+    if r is None:
+        return False
+    print_list_result(ipc.ListResponse.parse_obj(r))
     return True
 
 

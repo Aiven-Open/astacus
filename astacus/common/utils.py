@@ -202,3 +202,10 @@ def timedelta_as_short_str(delta):
     h, s = divmod(delta.seconds, 3600)
     m, s = divmod(s, 60)
     return " ".join(f"{v}{u}" for v, u in [(delta.days, "d"), (h, "h"), (m, "m"), (s, "s")] if v)
+
+
+def size_as_short_str(s):
+    for u, m in [("T", 1e12), ("G", 1e9), ("M", 1e6), ("K", 1e3)]:
+        if s >= m:
+            return "%.1f %sB" % (s / m, u)
+    return f"{s} B"
