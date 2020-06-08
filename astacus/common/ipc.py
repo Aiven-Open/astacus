@@ -180,6 +180,7 @@ class ListSingleBackup(AstacusModel):
     end: datetime
     plugin: Plugin
     attempt: int
+    nodes: int
     files: int
     total_size: int
     upload_size: int

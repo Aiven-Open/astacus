@@ -12,6 +12,7 @@ from datetime import timedelta
 import asyncio
 import logging
 import pytest
+import tempfile
 import time
 
 logger = logging.getLogger(__name__)
@@ -79,3 +80,19 @@ def test_timedelta_as_short_str(v, s):
 )
 def test_size_as_short_str(v, s):
     assert utils.size_as_short_str(v) == s
+
+
+def test_sizelimitedfile():
+    with tempfile.NamedTemporaryFile() as f:
+        f.write(b"foobarbaz")
+        f.flush()
+        lf = utils.SizeLimitedFile(path=f.name, file_size=6)
+        assert lf.read() == b"foobar"
+        assert lf.tell() == 6
+        assert lf.seek(0, 0) == 0
+        assert lf.tell() == 0
+        assert lf.read() == b"foobar"
+        assert lf.seek(0, 2) == 6
+        assert not lf.read()
+        assert lf.seek(3, 0) == 3
+        assert lf.read() == b"bar"

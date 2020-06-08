@@ -17,6 +17,7 @@ def test_api_list(client, populated_mstorage):
             'backups': [{
                 'attempt': 1,
                 'end': '2020-02-02T12:34:56',
+                'nodes': 1,
                 'files': 1,
                 'name': '1',
                 'plugin': 'files',
@@ -27,6 +28,7 @@ def test_api_list(client, populated_mstorage):
             }, {
                 'attempt': 1,
                 'end': '2020-02-02T12:34:56',
+                'nodes': 1,
                 'files': 1,
                 'name': '2',
                 'plugin': 'files',
@@ -40,6 +42,7 @@ def test_api_list(client, populated_mstorage):
             'backups': [{
                 'attempt': 1,
                 'end': '2020-02-02T12:34:56',
+                'nodes': 1,
                 'files': 1,
                 'name': '3',
                 'plugin': 'files',

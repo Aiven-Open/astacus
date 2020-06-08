@@ -28,6 +28,11 @@ is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
 
 ## Eventually
 
+- figure out why S3 didn't work - I got
+  `botocore.exceptions.ClientError: An error occurred (AccessDenied) when
+  calling the ListObjectsV2 operation: Access Denied`
+  with allegedly properly configured token+bucket
+
 - m3aggregator plugin (m3db is priority)
 
 - package (or have someone do it?) this for distros
@@ -43,3 +48,8 @@ is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
   e.g. BackupSummary which would be used by list backups endpoint; in
   practise, the results should be cached locally so cost of downloading
   (even largish) files once is not prohibitive
+
+- permissions / file modes and directories/links in general are ignored. if
+  this is actually used for general cluster backup, actually storing those
+  would be nice too and not too much effort. however, it is not really
+  focus of the project for now so left not done.

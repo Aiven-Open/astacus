@@ -95,7 +95,7 @@ run-server:
 	echo foo > $(BACKUPROOT)/foo
 	echo foo > $(BACKUPROOT)/foo2
 	echo bar > $(BACKUPROOT)/bar
-	astacus server -c astacus.conf
+	astacus server -c examples/astacus.files-local.conf
 
 .PHONY: rpm
 rpm: $(GENERATED) /usr/bin/rpmbuild /usr/lib/rpm/check-buildroot

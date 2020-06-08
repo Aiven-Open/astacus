@@ -67,26 +67,49 @@ def print_list_result(result):
     for i, storage in enumerate(result.storages):
         gheaders = {
             "storage": "Storage",
-            "pchanged": "% changed",
-            "csaving": "Compression %",
+            "plugin": "Plugin",
+            "pchanged": "% change",
+            "csaving": "Comp %",
+            "attempt": "Att",
+            "nodes": "Nodes"
         }
-        gtable = [{"storage": storage.storage_name}]
-        plugin_same = len(set(b.plugin for b in storage.backups)) <= 1
         headers = {
+            "plugin": "Plugin",
             "name": "Name",
             # "start": "Start", n/a, name =~ same
             "attempt": "Att",
             "duration": "Duration",
+            "nodes": "Nodes",
             "files": "Files",
             "total_size": "Size",
         }
+        # These are fields which are in both gheaders and headers,
+        # and they should be retained and populated
+        # - in neither if no values set
+        # - in global headers if all values are same
+        # - in table rows if 2+ distinct values are present
+        same_or_global = ["plugin", "attempt", "nodes"]
+        gtable = [{"storage": storage.storage_name}]
         table = []
         tsize, usize, ssize = 0, 0, 0
+        local_fields = []
+        for field_name in same_or_global:
+            assert field_name in gheaders
+            assert field_name in headers
+            values = list(set(getattr(b, field_name) for b in storage.backups))
+            if len(values) < 1:
+                del gheaders[field_name]
+                del headers[field_name]
+            elif len(values) == 1:
+                del headers[field_name]
+                gtable[0][field_name] = values[0]
+            else:
+                local_fields.append(field_name)
+                del gheaders[field_name]
+
         for b in storage.backups:
             table.append({
-                "plugin": b.plugin,
                 "name": b.name,
-                "attempt": b.attempt,
                 # "start": b.start,
                 "duration": utils.timedelta_as_short_str(b.end - b.start),
                 "files": b.files,
@@ -95,15 +118,9 @@ def print_list_result(result):
             tsize += b.total_size
             usize += b.upload_size
             ssize += b.upload_stored_size
-        if not plugin_same:
-            headers["plugin"] = "Plugin"
-        else:
-            # delete the plugin fields from table
-            for e in table:
-                del e["plugin"]
-            if storage.backups:
-                gheaders["plugin"] = "Plugin"
-                gtable[0]["plugin"] = storage.backups[0].plugin
+            for field_name in local_fields:
+                table[field_name] = getattr(b, field_name)
+
         if tsize:
             gtable[0]["pchanged"] = "%.2f%%" % (100.0 * usize / tsize)
         if usize:
