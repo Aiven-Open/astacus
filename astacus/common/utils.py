@@ -15,6 +15,7 @@ from starlette.requests import Request
 import asyncio
 import httpx
 import logging
+import os
 import requests
 import time
 
@@ -168,33 +169,22 @@ def exponential_backoff(*, initial, retries=None, multiplier=2, maximum=None, du
 
 class SizeLimitedFile:
     def __init__(self, *, path, file_size):
-        self.f = open(path, "rb")
-        self.file_size = file_size
-        self.ofs = 0
+        self._f = open(path, "rb")
+        self._file_size = file_size
+        self.tell = self._f.tell
 
     def read(self, n=None):
-        can_read = max(0, self.file_size - self.ofs)
+        can_read = max(0, self._file_size - self._f.tell())
         if n is None:
             n = can_read
         n = min(can_read, n)
-        data = self.f.read(n)
-        self.ofs += len(data)
-        return data
+        return self._f.read(n)
 
     def seek(self, ofs, whence=0):
-        if whence == 0:  # from start of file
-            pass
-        elif whence == 2:  # from end of file
-            ofs += self.file_size
-        else:
-            raise NotImplementedError
-        if ofs < 0:
-            raise ValueError(f"negative seek position: {ofs}")
-        self.ofs = ofs
-        return ofs
-
-    def tell(self):
-        return self.ofs
+        if whence == os.SEEK_END:
+            ofs += self._file_size
+            whence = os.SEEK_SET
+        return self._f.seek(ofs, whence)
 
 
 def timedelta_as_short_str(delta):
