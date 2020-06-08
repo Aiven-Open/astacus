@@ -24,6 +24,7 @@ def _iter_backups(storage):
             end=manifest.end,
             plugin=manifest.plugin,
             attempt=manifest.attempt,
+            nodes=len(manifest.snapshot_results),
             files=files,
             total_size=total_size,
             upload_size=upload_size,
