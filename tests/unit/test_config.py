@@ -9,9 +9,7 @@ import pathlib
 import pytest
 
 
-def test_config_sample_load():
-    sample_path = pathlib.Path(config.__file__).parent.parent / "astacus.conf"
-    if not sample_path.is_file():
-        pytest.skip("no configuration file")
+@pytest.mark.parametrize("path", list((pathlib.Path(config.__file__).parent.parent / "examples").glob("*.conf")))
+def test_config_sample_load(path):
     app = FastAPI()
-    config.set_global_config_from_path(app, sample_path)
+    config.set_global_config_from_path(app, path)
