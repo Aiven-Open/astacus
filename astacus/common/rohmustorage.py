@@ -71,11 +71,12 @@ class RohmuAzureStorageConfig(RohmuModel):
 
 class RohmuGoogleStorageConfig(RohmuModel):
     storage_type: Literal[RohmuStorageType.google]
+    # rohmu.object_storage.google:GoogleTransfer.__init__ arguments
     project_id: str
     bucket_name: str
-    account_key: str
+    credentials: Dict[str, str]
     prefix: Optional[str] = None
-    azure_cloud: Optional[str] = None
+    # credential_file # omitted, n/a
 
 
 RohmuStorageConfig = Union[RohmuLocalStorageConfig, RohmuS3StorageConfig, RohmuAzureStorageConfig, RohmuGoogleStorageConfig]

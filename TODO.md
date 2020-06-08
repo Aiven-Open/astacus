@@ -28,6 +28,11 @@ is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
 
 ## Eventually
 
+- figure out why S3 didn't work - I got
+  `botocore.exceptions.ClientError: An error occurred (AccessDenied) when
+  calling the ListObjectsV2 operation: Access Denied`
+  with allegedly properly configured token+bucket
+
 - m3aggregator plugin (m3db is priority)
 
 - package (or have someone do it?) this for distros
