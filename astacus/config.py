@@ -14,6 +14,7 @@ from astacus.common.statsd import StatsdConfig
 from astacus.common.utils import AstacusModel
 from astacus.coordinator.config import APP_KEY as COORDINATOR_CONFIG_KEY, CoordinatorConfig
 from astacus.node.config import APP_KEY as NODE_CONFIG_KEY, NodeConfig
+from enum import Enum
 from fastapi import Request
 from typing import Optional
 
@@ -23,7 +24,13 @@ APP_KEY = "global_config"
 
 
 class UvicornConfig(AstacusModel):
+    class HTTPMode(str, Enum):
+        auto = "auto"  # default, but sometimes leads to httptools
+        h11 = "h11"
+        httptools = "httptools"  # crashy on Fedora 31 at least
+
     host: str = magic.ASTACUS_DEFAULT_HOST
+    http: HTTPMode = HTTPMode.h11
     port: int = magic.ASTACUS_DEFAULT_PORT
     log_level: Optional[str] = None
     reload: bool = False

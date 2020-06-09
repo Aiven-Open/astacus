@@ -49,7 +49,12 @@ def _run_server(args):
     gconfig = app.state.global_config
     uconfig = gconfig.uvicorn
     uvicorn.run(
-        "astacus.server:app", host=uconfig.host, port=uconfig.port, reload=uconfig.reload, log_level=uconfig.log_level
+        "astacus.server:app",
+        host=uconfig.host,
+        port=uconfig.port,
+        reload=uconfig.reload,
+        log_level=uconfig.log_level,
+        http=uconfig.http
     )
 
 
