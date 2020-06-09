@@ -46,7 +46,7 @@ rm -rf %{buildroot}%{python3_sitelib}/tests/
 
 %files
 %defattr(-,root,root,-)
-%doc LICENSE README.md astacus.conf
+%doc LICENSE README.md examples/*.yaml examples/*.json
 %{_bindir}/astacus*
 %{python3_sitelib}/*
 
