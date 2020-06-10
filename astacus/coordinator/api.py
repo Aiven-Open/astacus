@@ -8,6 +8,7 @@ from .coordinator import Coordinator
 from .list import list_backups
 from .lockops import LockOps
 from .plugins import get_plugin_backup_class, get_plugin_restore_class
+from .state import CachedListResponse
 from astacus.common import ipc
 from astacus.common.op import Op
 from enum import Enum
@@ -15,6 +16,7 @@ from fastapi import APIRouter, Depends
 from urllib.parse import urljoin
 
 import logging
+import time
 
 router = APIRouter()
 
@@ -75,7 +77,14 @@ def restore(*, req: ipc.RestoreRequest = ipc.RestoreRequest(), c: Coordinator = 
 
 @router.get("/list")
 def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordinator = Depends()):
-    return list_backups(req=req, json_mstorage=c.json_mstorage)
+    cached_list_response = c.state.cached_list_response
+    if cached_list_response is not None:
+        age = time.monotonic() - cached_list_response.timestamp
+        if age < c.config.list_ttl and cached_list_response.list_request == req:
+            return cached_list_response.list_response
+    list_response = list_backups(req=req, json_mstorage=c.json_mstorage)
+    c.state.cached_list_response = CachedListResponse(list_request=req, list_response=list_response)
+    return list_response
 
 
 @router.post("/cleanup")

@@ -39,6 +39,7 @@ class CoordinatorOp(op.Op):
         self.nodes = c.config.nodes
         self.request_url = c.request.url
         self.config = c.config
+        self.state = c.state
         self.hexdigest_mstorage = c.hexdigest_mstorage
         self.json_mstorage = c.json_mstorage
         self.set_storage_name(self.default_storage_name)

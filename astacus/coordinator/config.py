@@ -73,6 +73,10 @@ class CoordinatorConfig(AstacusModel):
     object_storage: Optional[RohmuConfig] = None
     statsd: Optional[StatsdConfig] = None
 
+    # How long do we cache list results unless there is (successful)
+    # backup? Probably even one hour (default) is sensible enough
+    list_ttl: int = 3600
+
 
 def coordinator_config(request: Request) -> CoordinatorConfig:
     return getattr(request.app.state, APP_KEY)

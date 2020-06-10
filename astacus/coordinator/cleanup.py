@@ -47,6 +47,7 @@ class CleanupOp(CoordinatorOpWithClusterLock):
         for backup in backups:
             logger.info("deleting backup %r", backup)
             await self.json_storage.delete_json(backup)
+            self.state.cached_list_response = None
         await self.delete_dangling_hexdigests()
 
     async def delete_dangling_hexdigests(self):
