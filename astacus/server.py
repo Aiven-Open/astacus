@@ -21,6 +21,7 @@ from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
 
 import os
 import sentry_sdk
+import subprocess
 import uvicorn  # type:ignore
 
 
@@ -42,12 +43,19 @@ def init_app():
 app = init_app()
 
 
+def _systemd_notify_ready():
+    if not os.environ.get("NOTIFY_SOCKET"):
+        return
+    subprocess.run(["systemd-notify", "--ready"], check=True)
+
+
 def _run_server(args):
     os.environ["ASTACUS_CONFIG"] = args.config
     global app  # pylint: disable=global-statement
     app = init_app()
     gconfig = app.state.global_config
     uconfig = gconfig.uvicorn
+    _systemd_notify_ready()
     uvicorn.run(
         "astacus.server:app",
         host=uconfig.host,
