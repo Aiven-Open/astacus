@@ -80,8 +80,13 @@ class Downloader:
             progress.download_success((snapshotfiles[0].file_size + 1) * len(snapshotfiles))
             return still_running_callback()
 
+        sorted_all_snapshotfiles = sorted(all_snapshotfiles, key=lambda files: -files[0].file_size)
+
         if not utils.parallel_map_to(
-            fun=self._download_snapshotfiles_from_storage, iterable=all_snapshotfiles, result_callback=_cb, n=self.parallel
+            fun=self._download_snapshotfiles_from_storage,
+            iterable=sorted_all_snapshotfiles,
+            result_callback=_cb,
+            n=self.parallel
         ):
             progress.add_fail()
             progress.done()

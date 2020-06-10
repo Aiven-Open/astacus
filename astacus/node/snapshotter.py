@@ -217,8 +217,9 @@ class Snapshotter:
             progress_callback(map_in)  # hexdigest
             return still_running_callback()
 
+        sorted_todo = sorted(todo, key=lambda hexdigest: -self.hexdigest_to_snapshotfiles[hexdigest][0].file_size)
         if not utils.parallel_map_to(
-            fun=_download_hexdigest_in_thread, iterable=todo, result_callback=_result_cb, n=parallel
+            fun=_download_hexdigest_in_thread, iterable=sorted_todo, result_callback=_result_cb, n=parallel
         ):
             progress.add_fail()
 
