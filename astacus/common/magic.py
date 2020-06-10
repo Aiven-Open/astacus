@@ -9,6 +9,9 @@ ASTACUS_DEFAULT_HOST = "127.0.0.1"  # localhost-only, for testing
 ASTACUS_DEFAULT_PORT = 5515  # random port not assigned by IANA
 ASTACUS_TMPDIR = ".astacus"
 
+# Hexdigest is 32 bytes, so something orders of magnitude more at least
+EMBEDDED_FILE_SIZE = 100
+
 
 class LockCall(str, Enum):
     lock = "lock"

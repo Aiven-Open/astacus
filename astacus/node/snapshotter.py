@@ -5,12 +5,13 @@ See LICENSE for details
 
 """
 
-from astacus.common import exceptions, magic
+from astacus.common import exceptions, magic, utils
 from astacus.common.ipc import SnapshotFile, SnapshotHash, SnapshotState
 from astacus.common.progress import Progress
 from pathlib import Path
 from typing import Optional
 
+import base64
 import hashlib
 import logging
 import os
@@ -75,17 +76,19 @@ class Snapshotter:
         if old_snapshotfile:
             self._remove_snapshotfile(old_snapshotfile)
         self.relative_path_to_snapshotfile[snapshotfile.relative_path] = snapshotfile
-        self.hexdigest_to_snapshotfiles.setdefault(snapshotfile.hexdigest, []).append(snapshotfile)
+        if snapshotfile.hexdigest:
+            self.hexdigest_to_snapshotfiles.setdefault(snapshotfile.hexdigest, []).append(snapshotfile)
 
     def _remove_snapshotfile(self, snapshotfile: SnapshotFile):
         assert self.relative_path_to_snapshotfile[snapshotfile.relative_path] == snapshotfile
         del self.relative_path_to_snapshotfile[snapshotfile.relative_path]
-        self.hexdigest_to_snapshotfiles[snapshotfile.hexdigest].remove(snapshotfile)
+        if snapshotfile.hexdigest:
+            self.hexdigest_to_snapshotfiles[snapshotfile.hexdigest].remove(snapshotfile)
 
     def _snapshotfile_from_path(self, relative_path):
         src_path = self.src / relative_path
         st = src_path.stat()
-        return SnapshotFile(relative_path=relative_path, mtime_ns=st.st_mtime_ns, file_size=st.st_size, hexdigest="")
+        return SnapshotFile(relative_path=relative_path, mtime_ns=st.st_mtime_ns, file_size=st.st_size)
 
     def _get_snapshot_hash_list(self, relative_paths):
         for relative_path in relative_paths:
@@ -97,6 +100,7 @@ class Snapshotter:
 
             if old_snapshotfile:
                 snapshotfile.hexdigest = old_snapshotfile.hexdigest
+                snapshotfile.content_b64 = old_snapshotfile.content_b64
                 if old_snapshotfile == snapshotfile:
                     logger.debug("%r in %s is same", old_snapshotfile, relative_path)
                     continue
@@ -159,20 +163,23 @@ class Snapshotter:
         # TBD: This could be done via e.g. multiprocessing too some day.
         for snapshotfile in snapshotfiles:
             # src may or may not be present; dst is present as it is in snapshot
-            snapshotfile.hexdigest = hash_hexdigest_readable(snapshotfile.open_for_reading(self.dst))
+            if snapshotfile.file_size <= magic.EMBEDDED_FILE_SIZE:
+                snapshotfile.content_b64 = base64.b64encode(snapshotfile.open_for_reading(self.dst).read()).decode()
+            else:
+                snapshotfile.hexdigest = hash_hexdigest_readable(snapshotfile.open_for_reading(self.dst))
             self._add_snapshotfile(snapshotfile)
             changes += 1
             progress.add_success()
         progress.done()
         return changes
 
-    def write_hashes_to_storage(self, *, hashes, storage, progress: Progress, still_running_callback=lambda: True):
+    def write_hashes_to_storage(self, *, hashes, storage, parallel, progress: Progress, still_running_callback=lambda: True):
         todo = set(hash.hexdigest for hash in hashes)
         progress.start(len(todo))
-        total_size, total_stored_size = 0, 0
-        for hexdigest in todo:
-            if not still_running_callback():
-                break
+        sizes = {"total": 0, "stored": 0}
+
+        def _download_hexdigest_in_thread(hexdigest):
+            assert hexdigest
             files = self.hexdigest_to_snapshotfiles.get(hexdigest, [])
             for snapshotfile in files:
                 path = self.dst / snapshotfile.relative_path
@@ -190,22 +197,31 @@ class Snapshotter:
                     # hexdigest; even if sending it failed, we won't try
                     # subsequent files and instead break out of iterating
                     # through candidate files with same hexdigest.
-                    progress.upload_failure(hexdigest)
-                    break
+                    return progress.upload_failure, 0, 0
                 current_hexdigest = hash_hexdigest_readable(snapshotfile.open_for_reading(self.dst))
                 if current_hexdigest != snapshotfile.hexdigest:
                     logger.info("Hash of %s changed after upload", snapshotfile.relative_path)
                     storage.delete_hexdigest(hexdigest)
                     continue
-                total_size += upload_result.size
-                total_stored_size += upload_result.stored_size
-                progress.upload_success(hexdigest)
-                break
-            else:
-                # We didn't find single file with the matching hexdigest.
-                # Report it as missing but keep uploading other files.
-                progress.upload_missing(hexdigest)
+                return progress.upload_success, upload_result.size, upload_result.stored_size
+
+            # We didn't find single file with the matching hexdigest.
+            # Report it as missing but keep uploading other files.
+            return progress.upload_missing, 0, 0
+
+        def _result_cb(*, map_in, map_out):
+            # progress callback in 'main' thread
+            progress_callback, total, stored = map_out
+            sizes["total"] += total
+            sizes["stored"] += stored
+            progress_callback(map_in)  # hexdigest
+            return still_running_callback()
+
+        if not utils.parallel_map_to(
+            fun=_download_hexdigest_in_thread, iterable=todo, result_callback=_result_cb, n=parallel
+        ):
+            progress.add_fail()
 
         # This operation is done. It may or may not have been a success.
         progress.done()
-        return total_size, total_stored_size
+        return sizes["total"], sizes["stored"]

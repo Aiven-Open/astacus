@@ -9,6 +9,7 @@ Shared utilities (between coordinator and node)
 
 """
 
+from multiprocessing.dummy import Pool  # fastapi + fork = bad idea
 from pydantic import BaseModel
 from starlette.requests import Request
 
@@ -211,3 +212,12 @@ def size_as_short_str(s):
         if s >= m:
             return "%.1f %sB" % (s / m, u)
     return f"{s} B"
+
+
+def parallel_map_to(*, fun, iterable, result_callback, n=None) -> bool:
+    iterable_as_list = list(iterable)
+    with Pool(n) as p:
+        for map_in, map_out in zip(iterable_as_list, p.imap(fun, iterable_as_list)):
+            if not result_callback(map_in=map_in, map_out=map_out):
+                return False
+    return True

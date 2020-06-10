@@ -55,7 +55,8 @@ class SnapshotFile(AstacusModel):
     relative_path: Path
     file_size: int
     mtime_ns: int
-    hexdigest: str
+    hexdigest: str = ''
+    content_b64: Optional[str]
 
     def __lt__(self, o):
         # In our use case, paths uniquely identify files we care about

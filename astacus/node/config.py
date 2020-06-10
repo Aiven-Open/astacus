@@ -30,6 +30,10 @@ class NodeConfig(AstacusModel):
     object_storage: Optional[RohmuConfig] = None
     statsd: Optional[StatsdConfig] = None
 
+    # Optional parallelization of down[/upload]
+    parallel_downloads: int = 1
+    parallel_uploads: int = 1
+
 
 def node_config(request: Request) -> NodeConfig:
     return getattr(request.app.state, APP_KEY)

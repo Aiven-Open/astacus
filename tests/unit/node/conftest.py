@@ -3,6 +3,7 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 
+from astacus.common import magic
 from astacus.common.progress import Progress
 from astacus.common.storage import FileStorage
 from astacus.node.api import router as node_router
@@ -26,6 +27,8 @@ def fixture_app(tmpdir):
     root.mkdir()
     (root / "foo").write_text("foobar")
     (root / "foo2").write_text("foobar")
+    (root / "foobig").write_text("foobar" * magic.EMBEDDED_FILE_SIZE)
+    (root / "foobig2").write_text("foobar" * magic.EMBEDDED_FILE_SIZE)
     app.state.node_config = NodeConfig.parse_obj({
         "root": str(root),
         "object_storage": {
@@ -51,9 +54,11 @@ def fixture_client(app):
 
 
 class SnapshotterWithDefaults(Snapshotter):
-    def create_2foobar(self):
+    def create_4foobar(self):
         (self.src / "foo").write_text("foobar")
         (self.src / "foo2").write_text("foobar")
+        (self.src / "foobig").write_text("foobar" * magic.EMBEDDED_FILE_SIZE)
+        (self.src / "foobig2").write_text("foobar" * magic.EMBEDDED_FILE_SIZE)
         progress = Progress()
         assert self.snapshot(progress=progress) > 0
         assert progress.finished_successfully
