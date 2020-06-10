@@ -87,14 +87,18 @@ class Snapshotter:
         st = src_path.stat()
         return SnapshotFile(relative_path=relative_path, mtime_ns=st.st_mtime_ns, file_size=st.st_size, hexdigest="")
 
-    def _get_snapshot_hash_list(self, relfilenames):
-        for relfilename in relfilenames:
-            old_snapshotfile = self.relative_path_to_snapshotfile.get(relfilename)
-            snapshotfile = self._snapshotfile_from_path(relfilename)
+    def _get_snapshot_hash_list(self, relative_paths):
+        for relative_path in relative_paths:
+            old_snapshotfile = self.relative_path_to_snapshotfile.get(relative_path)
+            try:
+                snapshotfile = self._snapshotfile_from_path(relative_path)
+            except FileNotFoundError:
+                logger.debug("%s disappeared before stat, ignoring", self.src / relative_path)
+
             if old_snapshotfile:
                 snapshotfile.hexdigest = old_snapshotfile.hexdigest
                 if old_snapshotfile == snapshotfile:
-                    logger.debug("%r in %s is same", old_snapshotfile, relfilename)
+                    logger.debug("%r in %s is same", old_snapshotfile, relative_path)
                     continue
             yield snapshotfile
 
@@ -116,17 +120,17 @@ class Snapshotter:
 
         # Create missing directories
         changes = 0
-        for reldirname in set(src_dirs).difference(dst_dirs):
-            dst_path = self.dst / reldirname
+        for relative_dir in set(src_dirs).difference(dst_dirs):
+            dst_path = self.dst / relative_dir
             dst_path.mkdir(parents=True, exist_ok=True)
             changes += 1
 
         progress.add_success()
 
         # Remove extra files
-        for relfilename in set(dst_files).difference(src_files):
-            dst_path = self.dst / relfilename
-            snapshotfile = self.relative_path_to_snapshotfile.get(relfilename)
+        for relative_path in set(dst_files).difference(src_files):
+            dst_path = self.dst / relative_path
+            snapshotfile = self.relative_path_to_snapshotfile.get(relative_path)
             if snapshotfile:
                 self._remove_snapshotfile(snapshotfile)
             dst_path.unlink()
@@ -134,11 +138,14 @@ class Snapshotter:
         progress.add_success()
 
         # Add missing files
-        for relfilename in set(src_files).difference(dst_files):
-            src_path = self.src / relfilename
-            dst_path = self.dst / relfilename
-            os.link(src=src_path, dst=dst_path, follow_symlinks=False)
-            changes += 1
+        for relative_path in set(src_files).difference(dst_files):
+            src_path = self.src / relative_path
+            dst_path = self.dst / relative_path
+            try:
+                os.link(src=src_path, dst=dst_path, follow_symlinks=False)
+                changes += 1
+            except FileNotFoundError:
+                logger.debug("%s disappeared before linking, ignoring", src_path)
         progress.add_success()
 
         # We COULD also remove extra directories, but it is not
