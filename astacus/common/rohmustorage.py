@@ -14,7 +14,7 @@ from enum import Enum
 from pghoard import rohmu  # type: ignore
 from pghoard.rohmu import rohmufile  # type: ignore
 from pghoard.rohmu import errors
-from pydantic import Field
+from pydantic import DirectoryPath, Field
 from typing import Dict, Optional, Union
 from typing_extensions import Literal
 
@@ -46,7 +46,7 @@ class RohmuModel(AstacusModel):
 
 class RohmuLocalStorageConfig(RohmuModel):
     storage_type: Literal[RohmuStorageType.local]
-    directory: str
+    directory: DirectoryPath
     prefix: Optional[str] = None
 
 

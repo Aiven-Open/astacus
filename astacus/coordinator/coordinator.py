@@ -39,6 +39,7 @@ class CoordinatorOp(op.Op):
         self.nodes = c.config.nodes
         self.request_url = c.request.url
         self.config = c.config
+        self.state = c.state
         self.hexdigest_mstorage = c.hexdigest_mstorage
         self.json_mstorage = c.json_mstorage
         self.set_storage_name(self.default_storage_name)
@@ -112,7 +113,7 @@ class CoordinatorOp(op.Op):
             for attempt in range(1, attempts + 1):
                 logger.debug("%s - attempt #%d/%d", name, attempt, attempts)
                 self.attempt = attempt
-                self.attempt_start = datetime.utcnow()
+                self.attempt_start = utils.now()
                 async with self.stats.async_timing_manager(
                     "astacus_attempt_duration", {
                         "op": name,

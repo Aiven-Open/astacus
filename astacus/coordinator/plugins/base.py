@@ -146,6 +146,7 @@ class BackupOpBase(OpBase):
         )
         logger.debug("Storing backup manifest %s", filename)
         await self.json_storage.upload_json(filename, manifest)
+        self.state.cached_list_response = None  # Invalidate cache
         return True
 
 

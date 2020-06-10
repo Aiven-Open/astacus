@@ -18,7 +18,7 @@ def test_snapshot(snapshotter, storage):
     assert not (dst / "foo").is_file()
 
     # Create files in src, run snapshot
-    snapshotter.create_2foobar()
+    snapshotter.create_4foobar()
     ss2 = snapshotter.get_snapshot_state()
 
     assert (dst / "foo").is_file()
@@ -27,7 +27,9 @@ def test_snapshot(snapshotter, storage):
 
     hashes = snapshotter.get_snapshot_hashes()
     assert len(hashes) == 1
-    assert hashes == [ipc.SnapshotHash(hexdigest="03a4921c6b0aa0e5bed57228a3b6fd61bec160d46fa610ce6742dd51ab311f43", size=6)]
+    assert hashes == [
+        ipc.SnapshotHash(hexdigest='326827fe6fd23503bf16eed91861766df522748794814a1bf46d479d9feae1a0', size=600)
+    ]
 
     while True:
         (src / "foo").write_text("barfoo")  # same length
@@ -41,19 +43,14 @@ def test_snapshot(snapshotter, storage):
     assert (dst / "foo").is_file()
     assert (dst / "foo").read_text() == "barfoo"
 
-    snapshotter.write_hashes_to_storage(hashes=hashes, storage=storage, progress=Progress())
+    snapshotter.write_hashes_to_storage(hashes=hashes, storage=storage, parallel=1, progress=Progress())
 
     # Remove file from src, run snapshot
-    (src / "foo").unlink()
-    assert snapshotter.snapshot(progress=Progress()) > 0
-    assert snapshotter.snapshot(progress=Progress()) == 0
-    assert not (dst / "foo").is_file()
-
-    # Remove last file from src, run snapshot
-    (src / "foo2").unlink()
-    assert snapshotter.snapshot(progress=Progress()) > 0
-    assert snapshotter.snapshot(progress=Progress()) == 0
-    assert not (dst / "foo2").is_file()
+    for filename in ["foo", "foo2", "foobig", "foobig2"]:
+        (src / filename).unlink()
+        assert snapshotter.snapshot(progress=Progress()) > 0
+        assert snapshotter.snapshot(progress=Progress()) == 0
+        assert not (dst / filename).is_file()
 
     # Now shouldn't have any data hashes
     hashes_empty = snapshotter.get_snapshot_hashes()

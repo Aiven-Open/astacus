@@ -87,20 +87,30 @@ class OpMixin:
         url = self.request.url
         status_url = urlunsplit((url.scheme, url.netloc, f"{url.path}/{op.op_id}", "", ""))
 
-        async def _wrapper():
+        async def _async_wrapper():
             try:
                 op.set_status(Op.Status.running)
-                if inspect.iscoroutinefunction(fun):
-                    await fun()
-                else:
-                    fun()
+                await fun()
                 op.set_status(Op.Status.done, from_state=Op.Status.running)
             except Exception as ex:  # pylint: disable=broad-except
                 op.set_status_fail()
-                logger.warning("Unexpected exception during %s %s %r", op, fun, ex)
+                logger.warning("Unexpected exception during async %s %s %r", op, fun, ex)
                 raise
 
-        self.background_tasks.add_task(_wrapper)
+        def _sync_wrapper():
+            try:
+                op.set_status(Op.Status.running)
+                fun()
+                op.set_status(Op.Status.done, from_state=Op.Status.running)
+            except Exception as ex:  # pylint: disable=broad-except
+                op.set_status_fail()
+                logger.warning("Unexpected exception during sync %s %s %r", op, fun, ex)
+                raise
+
+        if inspect.iscoroutinefunction(fun):
+            self.background_tasks.add_task(_async_wrapper)
+        else:
+            self.background_tasks.add_task(_sync_wrapper)
 
         return Op.StartResult(op_id=op.op_id, status_url=status_url)
 

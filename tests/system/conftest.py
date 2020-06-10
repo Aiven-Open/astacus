@@ -79,7 +79,7 @@ def create_astacus_config_dict(*, tmpdir, root_path, link_path, node):
             "root": str(root_path),
             "root_link": str(link_path),
         },
-        "object_storage": create_rohmu_config(tmpdir).dict(),
+        "object_storage": create_rohmu_config(tmpdir).jsondict(),
         "uvicorn": {
             "port": node.port,
             "log_level": "debug",

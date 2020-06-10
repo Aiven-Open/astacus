@@ -5,12 +5,13 @@ See LICENSE for details
 
 """
 
-from astacus.common import exceptions
+from astacus.common import exceptions, magic, utils
 from astacus.common.ipc import SnapshotFile, SnapshotHash, SnapshotState
 from astacus.common.progress import Progress
 from pathlib import Path
 from typing import Optional
 
+import base64
 import hashlib
 import logging
 import os
@@ -43,14 +44,13 @@ class Snapshotter:
     For actual products, Snapshotter should be subclassed and
     e.g. file_path_filter should be overridden.
     """
-    def __init__(self, *, src, dst, globs, file_path_filter=None):
+    def __init__(self, *, src, dst, globs):
         assert globs  # model has empty; either plugin or configuration must supply them
         self.src = Path(src)
         self.dst = Path(dst)
         self.globs = globs
         self.relative_path_to_snapshotfile = {}
         self.hexdigest_to_snapshotfiles = {}
-        self.file_path_filter = file_path_filter
 
     def _list_files(self, basepath: Path):
         result_files = set()
@@ -59,11 +59,12 @@ class Snapshotter:
                 if not path.is_file() or path.is_symlink():
                     continue
                 relpath = path.relative_to(basepath)
-                result_files.add(relpath)
-        result = sorted(result_files)
-        if self.file_path_filter:
-            result = self.file_path_filter(result)
-        return result
+                for parent in relpath.parents:
+                    if parent.name == magic.ASTACUS_TMPDIR:
+                        break
+                else:
+                    result_files.add(relpath)
+        return sorted(result_files)
 
     def _list_dirs_and_files(self, basepath: Path):
         files = self._list_files(basepath)
@@ -75,26 +76,33 @@ class Snapshotter:
         if old_snapshotfile:
             self._remove_snapshotfile(old_snapshotfile)
         self.relative_path_to_snapshotfile[snapshotfile.relative_path] = snapshotfile
-        self.hexdigest_to_snapshotfiles.setdefault(snapshotfile.hexdigest, []).append(snapshotfile)
+        if snapshotfile.hexdigest:
+            self.hexdigest_to_snapshotfiles.setdefault(snapshotfile.hexdigest, []).append(snapshotfile)
 
     def _remove_snapshotfile(self, snapshotfile: SnapshotFile):
         assert self.relative_path_to_snapshotfile[snapshotfile.relative_path] == snapshotfile
         del self.relative_path_to_snapshotfile[snapshotfile.relative_path]
-        self.hexdigest_to_snapshotfiles[snapshotfile.hexdigest].remove(snapshotfile)
+        if snapshotfile.hexdigest:
+            self.hexdigest_to_snapshotfiles[snapshotfile.hexdigest].remove(snapshotfile)
 
     def _snapshotfile_from_path(self, relative_path):
         src_path = self.src / relative_path
         st = src_path.stat()
-        return SnapshotFile(relative_path=relative_path, mtime_ns=st.st_mtime_ns, file_size=st.st_size, hexdigest="")
+        return SnapshotFile(relative_path=relative_path, mtime_ns=st.st_mtime_ns, file_size=st.st_size)
 
-    def _get_snapshot_hash_list(self, relfilenames):
-        for relfilename in relfilenames:
-            old_snapshotfile = self.relative_path_to_snapshotfile.get(relfilename)
-            snapshotfile = self._snapshotfile_from_path(relfilename)
+    def _get_snapshot_hash_list(self, relative_paths):
+        for relative_path in relative_paths:
+            old_snapshotfile = self.relative_path_to_snapshotfile.get(relative_path)
+            try:
+                snapshotfile = self._snapshotfile_from_path(relative_path)
+            except FileNotFoundError:
+                logger.debug("%s disappeared before stat, ignoring", self.src / relative_path)
+
             if old_snapshotfile:
                 snapshotfile.hexdigest = old_snapshotfile.hexdigest
+                snapshotfile.content_b64 = old_snapshotfile.content_b64
                 if old_snapshotfile == snapshotfile:
-                    logger.debug("%r in %s is same", old_snapshotfile, relfilename)
+                    logger.debug("%r in %s is same", old_snapshotfile, relative_path)
                     continue
             yield snapshotfile
 
@@ -116,17 +124,17 @@ class Snapshotter:
 
         # Create missing directories
         changes = 0
-        for reldirname in set(src_dirs).difference(dst_dirs):
-            dst_path = self.dst / reldirname
+        for relative_dir in set(src_dirs).difference(dst_dirs):
+            dst_path = self.dst / relative_dir
             dst_path.mkdir(parents=True, exist_ok=True)
             changes += 1
 
         progress.add_success()
 
         # Remove extra files
-        for relfilename in set(dst_files).difference(src_files):
-            dst_path = self.dst / relfilename
-            snapshotfile = self.relative_path_to_snapshotfile.get(relfilename)
+        for relative_path in set(dst_files).difference(src_files):
+            dst_path = self.dst / relative_path
+            snapshotfile = self.relative_path_to_snapshotfile.get(relative_path)
             if snapshotfile:
                 self._remove_snapshotfile(snapshotfile)
             dst_path.unlink()
@@ -134,11 +142,14 @@ class Snapshotter:
         progress.add_success()
 
         # Add missing files
-        for relfilename in set(src_files).difference(dst_files):
-            src_path = self.src / relfilename
-            dst_path = self.dst / relfilename
-            os.link(src=src_path, dst=dst_path, follow_symlinks=False)
-            changes += 1
+        for relative_path in set(src_files).difference(dst_files):
+            src_path = self.src / relative_path
+            dst_path = self.dst / relative_path
+            try:
+                os.link(src=src_path, dst=dst_path, follow_symlinks=False)
+                changes += 1
+            except FileNotFoundError:
+                logger.debug("%s disappeared before linking, ignoring", src_path)
         progress.add_success()
 
         # We COULD also remove extra directories, but it is not
@@ -152,20 +163,23 @@ class Snapshotter:
         # TBD: This could be done via e.g. multiprocessing too some day.
         for snapshotfile in snapshotfiles:
             # src may or may not be present; dst is present as it is in snapshot
-            snapshotfile.hexdigest = hash_hexdigest_readable(snapshotfile.open_for_reading(self.dst))
+            if snapshotfile.file_size <= magic.EMBEDDED_FILE_SIZE:
+                snapshotfile.content_b64 = base64.b64encode(snapshotfile.open_for_reading(self.dst).read()).decode()
+            else:
+                snapshotfile.hexdigest = hash_hexdigest_readable(snapshotfile.open_for_reading(self.dst))
             self._add_snapshotfile(snapshotfile)
             changes += 1
             progress.add_success()
         progress.done()
         return changes
 
-    def write_hashes_to_storage(self, *, hashes, storage, progress: Progress, still_running_callback=lambda: True):
+    def write_hashes_to_storage(self, *, hashes, storage, parallel, progress: Progress, still_running_callback=lambda: True):
         todo = set(hash.hexdigest for hash in hashes)
         progress.start(len(todo))
-        total_size, total_stored_size = 0, 0
-        for hexdigest in todo:
-            if not still_running_callback():
-                break
+        sizes = {"total": 0, "stored": 0}
+
+        def _download_hexdigest_in_thread(hexdigest):
+            assert hexdigest
             files = self.hexdigest_to_snapshotfiles.get(hexdigest, [])
             for snapshotfile in files:
                 path = self.dst / snapshotfile.relative_path
@@ -183,22 +197,32 @@ class Snapshotter:
                     # hexdigest; even if sending it failed, we won't try
                     # subsequent files and instead break out of iterating
                     # through candidate files with same hexdigest.
-                    progress.upload_failure(hexdigest)
-                    break
+                    return progress.upload_failure, 0, 0
                 current_hexdigest = hash_hexdigest_readable(snapshotfile.open_for_reading(self.dst))
                 if current_hexdigest != snapshotfile.hexdigest:
                     logger.info("Hash of %s changed after upload", snapshotfile.relative_path)
                     storage.delete_hexdigest(hexdigest)
                     continue
-                total_size += upload_result.size
-                total_stored_size += upload_result.stored_size
-                progress.upload_success(hexdigest)
-                break
-            else:
-                # We didn't find single file with the matching hexdigest.
-                # Report it as missing but keep uploading other files.
-                progress.upload_missing(hexdigest)
+                return progress.upload_success, upload_result.size, upload_result.stored_size
+
+            # We didn't find single file with the matching hexdigest.
+            # Report it as missing but keep uploading other files.
+            return progress.upload_missing, 0, 0
+
+        def _result_cb(*, map_in, map_out):
+            # progress callback in 'main' thread
+            progress_callback, total, stored = map_out
+            sizes["total"] += total
+            sizes["stored"] += stored
+            progress_callback(map_in)  # hexdigest
+            return still_running_callback()
+
+        sorted_todo = sorted(todo, key=lambda hexdigest: -self.hexdigest_to_snapshotfiles[hexdigest][0].file_size)
+        if not utils.parallel_map_to(
+            fun=_download_hexdigest_in_thread, iterable=sorted_todo, result_callback=_result_cb, n=parallel
+        ):
+            progress.add_fail()
 
         # This operation is done. It may or may not have been a success.
         progress.done()
-        return total_size, total_stored_size
+        return sizes["total"], sizes["stored"]

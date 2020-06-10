@@ -4,7 +4,7 @@ See LICENSE for details
 """
 
 from .progress import Progress
-from .utils import AstacusModel, SizeLimitedFile
+from .utils import AstacusModel, now, SizeLimitedFile
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -55,7 +55,8 @@ class SnapshotFile(AstacusModel):
     relative_path: Path
     file_size: int
     mtime_ns: int
-    hexdigest: str
+    hexdigest: str = ''
+    content_b64: Optional[str]
 
     def __lt__(self, o):
         # In our use case, paths uniquely identify files we care about
@@ -111,7 +112,7 @@ class SnapshotUploadResult(NodeResult):
 
 class SnapshotResult(NodeResult):
     # when was the operation started ( / done )
-    start: datetime = Field(default_factory=datetime.utcnow)
+    start: datetime = Field(default_factory=now)
     end: Optional[datetime]
 
     # should be passed opaquely to restore
@@ -145,7 +146,7 @@ class BackupManifest(AstacusModel):
     start: datetime
 
     # .. and when did it finish
-    end: datetime = Field(default_factory=datetime.utcnow)
+    end: datetime = Field(default_factory=now)
 
     # How many attempts did it take (starts from 1)
     attempt: int

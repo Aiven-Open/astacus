@@ -7,8 +7,7 @@ Database cleanup operation
 """
 
 from .coordinator import Coordinator, CoordinatorOpWithClusterLock
-from astacus.common import ipc, magic
-from datetime import datetime
+from astacus.common import ipc, magic, utils
 
 import logging
 
@@ -47,6 +46,7 @@ class CleanupOp(CoordinatorOpWithClusterLock):
         for backup in backups:
             logger.info("deleting backup %r", backup)
             await self.json_storage.delete_json(backup)
+            self.state.cached_list_response = None
         await self.delete_dangling_hexdigests()
 
     async def delete_dangling_hexdigests(self):
@@ -72,7 +72,7 @@ class CleanupOp(CoordinatorOpWithClusterLock):
     async def determine_kept_backups(self, *, retention, backups):
         if retention.minimum_backups is not None and retention.minimum_backups >= len(backups):
             return backups
-        now = datetime.utcnow()
+        now = utils.now()
         manifests = sorted(await self._download_backup_manifests(backups), key=lambda manifest: manifest.start, reverse=True)
         while manifests:
             if retention.maximum_backups is not None:

@@ -9,6 +9,8 @@ coordinator:
 node:
  root: /tmp/astacus/src
  root_link: /tmp/astacus/src-link
+ parallel_downloads: 4
+ parallel_uploads: 4
 
 object_storage:
  temporary_directory: /tmp/astacus/backup-tmp

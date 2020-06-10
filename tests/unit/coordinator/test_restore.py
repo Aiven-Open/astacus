@@ -6,11 +6,10 @@ Test that the coordinator restore endpoint works.
 
 """
 
-from astacus.common import exceptions, ipc
+from astacus.common import exceptions, ipc, utils
 from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins import get_plugin_restore_class
 from contextlib import nullcontext as does_not_raise
-from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -21,8 +20,8 @@ FAILS = [1, 2, None]
 BACKUP_NAME = "dummybackup"
 
 BACKUP_MANIFEST = ipc.BackupManifest(
-    start="2020-01-01 21:43:00",
-    end="2020-02-02 12:34:56",
+    start="2020-01-01 21:43:00Z",
+    end="2020-02-02 12:34:56Z",
     attempt=1,
     snapshot_results=[
         ipc.SnapshotResult(
@@ -110,7 +109,7 @@ class DummyRestoreOp(_RestoreOp):
 def test_node_to_backup_index(node_azlist, backup_azlist, expected_index, exception):
     nodes = [CoordinatorNode(url="unused", az=az) for az in node_azlist]
     manifest = ipc.BackupManifest(
-        start=datetime.utcnow(),
+        start=utils.now(),
         attempt=1,
         snapshot_results=[ipc.SnapshotResult(az=az) for az in backup_azlist],
         upload_results=[],

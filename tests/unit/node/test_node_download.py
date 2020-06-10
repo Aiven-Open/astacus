@@ -11,10 +11,10 @@ from pathlib import Path
 
 
 def test_download(snapshotter, storage, tmpdir):
-    snapshotter.create_2foobar()
+    snapshotter.create_4foobar()
     ss1 = snapshotter.get_snapshot_state()
     hashes = snapshotter.get_snapshot_hashes()
-    snapshotter.write_hashes_to_storage(hashes=hashes, storage=storage, progress=Progress())
+    snapshotter.write_hashes_to_storage(hashes=hashes, storage=storage, progress=Progress(), parallel=1)
 
     # Download the old backup from storage
     dst2 = Path(tmpdir / "dst2")
@@ -23,7 +23,7 @@ def test_download(snapshotter, storage, tmpdir):
     dst3 = Path(tmpdir / "dst3")
     dst3.mkdir()
     snapshotter = Snapshotter(src=dst2, dst=dst3, globs=["*"])
-    downloader = Downloader(storage=storage, snapshotter=snapshotter, dst=dst2)
+    downloader = Downloader(storage=storage, snapshotter=snapshotter, dst=dst2, parallel=1)
 
     downloader.download_from_storage(progress=Progress(), snapshotstate=ss1)
 
