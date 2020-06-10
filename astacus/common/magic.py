@@ -7,6 +7,7 @@ from enum import Enum
 
 ASTACUS_DEFAULT_HOST = "127.0.0.1"  # localhost-only, for testing
 ASTACUS_DEFAULT_PORT = 5515  # random port not assigned by IANA
+ASTACUS_TMPDIR = ".astacus"
 
 
 class LockCall(str, Enum):

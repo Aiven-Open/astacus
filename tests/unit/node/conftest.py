@@ -21,14 +21,13 @@ def fixture_app(tmpdir):
     app.include_router(node_router, prefix="/node", tags=["node"])
     root = Path(tmpdir) / "root"
     backup_root = Path(tmpdir) / "backup-root"
+    backup_root.mkdir()
     tmp_path = Path(tmpdir) / "backup-tmp"
     root.mkdir()
     (root / "foo").write_text("foobar")
     (root / "foo2").write_text("foobar")
-    root_link = Path(tmpdir) / "root-link"
     app.state.node_config = NodeConfig.parse_obj({
         "root": str(root),
-        "root_link": str(root_link),
         "object_storage": {
             "temporary_directory": str(tmp_path),
             "default_storage": "x",

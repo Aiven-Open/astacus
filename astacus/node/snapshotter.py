@@ -5,7 +5,7 @@ See LICENSE for details
 
 """
 
-from astacus.common import exceptions
+from astacus.common import exceptions, magic
 from astacus.common.ipc import SnapshotFile, SnapshotHash, SnapshotState
 from astacus.common.progress import Progress
 from pathlib import Path
@@ -43,14 +43,13 @@ class Snapshotter:
     For actual products, Snapshotter should be subclassed and
     e.g. file_path_filter should be overridden.
     """
-    def __init__(self, *, src, dst, globs, file_path_filter=None):
+    def __init__(self, *, src, dst, globs):
         assert globs  # model has empty; either plugin or configuration must supply them
         self.src = Path(src)
         self.dst = Path(dst)
         self.globs = globs
         self.relative_path_to_snapshotfile = {}
         self.hexdigest_to_snapshotfiles = {}
-        self.file_path_filter = file_path_filter
 
     def _list_files(self, basepath: Path):
         result_files = set()
@@ -59,11 +58,12 @@ class Snapshotter:
                 if not path.is_file() or path.is_symlink():
                     continue
                 relpath = path.relative_to(basepath)
-                result_files.add(relpath)
-        result = sorted(result_files)
-        if self.file_path_filter:
-            result = self.file_path_filter(result)
-        return result
+                for parent in relpath.parents:
+                    if parent.name == magic.ASTACUS_TMPDIR:
+                        break
+                else:
+                    result_files.add(relpath)
+        return sorted(result_files)
 
     def _list_dirs_and_files(self, basepath: Path):
         files = self._list_files(basepath)

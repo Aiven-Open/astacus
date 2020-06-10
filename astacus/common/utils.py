@@ -14,6 +14,7 @@ from starlette.requests import Request
 
 import asyncio
 import httpx
+import json as _json
 import logging
 import os
 import requests
@@ -42,6 +43,18 @@ class AstacusModel(BaseModel):
         # validate_assignment = True
         # TBD: Figure out why this doesn't work in some unit tests;
         # possibly the tests themselves are broken
+
+    def jsondict(self, **kw):
+        # By default,
+        #
+        # .json() returns json string.
+        # .dict() returns Python dict, but it has things that are not
+        # json serializable.
+        #
+        # We provide json seralizable dict (super inefficiently) here.
+        #
+        # This is mostly used for test code so that should be fine
+        return _json.loads(self.json(**kw))
 
 
 def get_or_create_state(*, request: Request, key: str, factory):

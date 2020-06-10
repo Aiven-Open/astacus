@@ -8,6 +8,7 @@ from astacus.common.rohmustorage import RohmuConfig
 from astacus.common.statsd import StatsdConfig
 from astacus.common.utils import AstacusModel
 from fastapi import Request
+from pathlib import Path
 from typing import List, Optional
 
 APP_KEY = "coordinator_config"
@@ -67,7 +68,8 @@ class CoordinatorConfig(AstacusModel):
 
     # Optional object storage cache directory used for caching json
     # manifest fetching
-    object_storage_cache: str = ""
+    # Directory is created if it does not exist
+    object_storage_cache: Optional[Path]
 
     # These can be either globally or locally set
     object_storage: Optional[RohmuConfig] = None

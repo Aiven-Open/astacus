@@ -87,15 +87,17 @@ pip-outdated:
 # For development purposes, run server with the default astacus conf
 # and 'something' to be backed up
 BACKUPROOT=/tmp/astacus/src
+BACKUPSTORAGE=/tmp/astacus/backup
 run-server:
 	rm -rf /tmp/astacus
 	mkdir -p $(BACKUPROOT)
+	mkdir -p $(BACKUPSTORAGE)
 	dd if=/dev/zero of=$(BACKUPROOT)/zeros bs=1000 count=1000
 	dd if=/dev/urandom of=$(BACKUPROOT)/random bs=1000 count=1000
 	echo foo > $(BACKUPROOT)/foo
 	echo foo > $(BACKUPROOT)/foo2
 	echo bar > $(BACKUPROOT)/bar
-	astacus server -c examples/astacus.files-local.conf
+	astacus server -c examples/astacus-files-local.yaml
 
 .PHONY: rpm
 rpm: $(GENERATED) /usr/bin/rpmbuild /usr/lib/rpm/check-buildroot

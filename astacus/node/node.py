@@ -7,7 +7,7 @@ See LICENSE for details
 from .config import node_config, NodeConfig
 from .snapshotter import Snapshotter
 from .state import node_state, NodeState
-from astacus.common import ipc, op, statsd, utils
+from astacus.common import ipc, magic, op, statsd, utils
 from astacus.common.progress import Progress
 from astacus.common.rohmustorage import RohmuStorage
 from fastapi import BackgroundTasks, Depends, Request
@@ -60,7 +60,7 @@ class NodeOp(op.Op):
         if result_json == self._sent_result_json:
             return
         self._sent_result_json = result_json
-        utils.http_request(self.req.result_url, method="put", caller="SnapshotOps.snapshot", data=result_json)
+        utils.http_request(self.req.result_url, method="put", caller="NodeOp.send_result", data=result_json)
 
     def set_status(self, state: op.Op.Status, *, from_state: Optional[op.Op.Status] = None) -> bool:
         if not super().set_status(state, from_state=from_state):
@@ -93,14 +93,13 @@ class Node(op.OpMixin):
         self.stats = statsd.StatsClient(config=config.statsd)
 
     def get_or_create_snapshotter(self, root_globs):
-        def _create_snapshotter():
-            # TBD: Make this be based on configuration somehow?
-            def _file_path_filter(files):
-                return files
+        root_link = self.config.root_link
+        if not root_link:
+            root_link = self.config.root / magic.ASTACUS_TMPDIR
+        root_link.mkdir(exist_ok=True)
 
-            return Snapshotter(
-                src=self.config.root, dst=self.config.root_link, globs=root_globs, file_path_filter=_file_path_filter
-            )
+        def _create_snapshotter():
+            return Snapshotter(src=self.config.root, dst=root_link, globs=root_globs)
 
         return utils.get_or_create_state(request=self.request, key=SNAPSHOTTER_KEY, factory=_create_snapshotter)
 
