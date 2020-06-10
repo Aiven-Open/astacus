@@ -97,7 +97,7 @@ async def httpx_request(url, *, caller, method="get", timeout=10, json: bool = T
     r = None
     # TBD: may need to redact url in future, if we actually wind up
     # using passwords in urls here.
-    logger.debug("request %s %s by %s", method, url, caller)
+    logger.debug("async-request %s %s by %s", method, url, caller)
     async with httpx.AsyncClient() as client:
         try:
             r = await client.request(method, url, timeout=timeout, **kw)
