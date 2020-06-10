@@ -12,8 +12,7 @@ this module with proper parameters.
 
 from .node import NodeOp
 from .snapshotter import Snapshotter
-from astacus.common import ipc
-from datetime import datetime
+from astacus.common import ipc, utils
 from typing import Optional
 
 import hashlib
@@ -46,7 +45,7 @@ class SnapshotOp(NodeOp):
         ]
         self.result.files = len(self.result.state.files)
         self.result.total_size = sum(ssfile.file_size for ssfile in self.result.state.files)
-        self.result.end = datetime.utcnow()
+        self.result.end = utils.now()
 
 
 class UploadOp(NodeOp):

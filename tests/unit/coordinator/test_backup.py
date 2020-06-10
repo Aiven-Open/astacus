@@ -6,11 +6,10 @@ Test that the coordinator backup endpoint works.
 
 """
 
-from astacus.common import ipc
+from astacus.common import ipc, utils
 from astacus.common.ipc import SnapshotHash
 from astacus.coordinator.plugins import get_plugin_backup_class
 from astacus.coordinator.plugins.base import NodeIndexData
-from datetime import datetime
 
 import pytest
 import respx
@@ -90,7 +89,7 @@ _progress_done = ipc.Progress(final=True)
 
 def _ssresults(*kwarg_list):
     return [
-        ipc.SnapshotResult(progress=_progress_done, hostname="host-{i}", start=datetime.utcnow(), **kw)
+        ipc.SnapshotResult(progress=_progress_done, hostname="host-{i}", start=utils.now(), **kw)
         for i, kw in enumerate(kwarg_list, 1)
     ]
 

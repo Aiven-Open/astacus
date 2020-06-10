@@ -113,7 +113,7 @@ class CoordinatorOp(op.Op):
             for attempt in range(1, attempts + 1):
                 logger.debug("%s - attempt #%d/%d", name, attempt, attempts)
                 self.attempt = attempt
-                self.attempt_start = datetime.utcnow()
+                self.attempt_start = utils.now()
                 async with self.stats.async_timing_manager(
                     "astacus_attempt_duration", {
                         "op": name,

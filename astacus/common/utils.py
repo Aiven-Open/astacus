@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from starlette.requests import Request
 
 import asyncio
+import datetime
 import httpx
 import json as _json
 import logging
@@ -137,15 +138,15 @@ def exponential_backoff(*, initial, retries=None, multiplier=2, maximum=None, du
         def _delay(self):
             if retries is not None and self.retry > retries:
                 return None
-            now = time.monotonic()
+            time_now = time.monotonic()
             if not self.retry:
-                self.initial = now
+                self.initial = time_now
                 return 0
             delay = initial * multiplier ** (self.retry - 1)
             if maximum is not None:
                 delay = min(delay, maximum)
             if duration is not None:
-                time_left_after_sleep = (self.initial + duration) - now - delay
+                time_left_after_sleep = (self.initial + duration) - time_now - delay
                 if time_left_after_sleep < 0:
                     return None
             logger.debug("exponential_backoff waiting %.2f seconds (retry %d%s)", delay, self.retry, retries_text)
@@ -221,3 +222,7 @@ def parallel_map_to(*, fun, iterable, result_callback, n=None) -> bool:
             if not result_callback(map_in=map_in, map_out=map_out):
                 return False
     return True
+
+
+def now():
+    return datetime.datetime.now(datetime.timezone.utc)
