@@ -26,21 +26,28 @@ import uvicorn  # type:ignore
 
 
 def init_app():
+    """Initialize the FastAPI app
+
+    Note that we return both the wrapped one, as well as 'astacus'
+    app.  The wrapped one may not provide access to e.g. app.state,
+    which may be needed by something outside this function.
+    """
     config_path = os.environ.get("ASTACUS_CONFIG")
     if not config_path:
-        return None
-    rv = FastAPI()
-    rv.include_router(coordinator_router, tags=["coordinator"])
-    rv.include_router(node_router, prefix="/node", tags=["node"])
-    gconfig = config.set_global_config_from_path(rv, config_path)
+        return None, None
+    api = FastAPI()
+    api.include_router(coordinator_router, tags=["coordinator"])
+    api.include_router(node_router, prefix="/node", tags=["node"])
+    gconfig = config.set_global_config_from_path(api, config_path)
     sentry_dsn = os.environ.get("SENTRY_DSN", gconfig.sentry_dsn)
+    sentry_api = api
     if sentry_dsn:
         sentry_sdk.init(dsn=sentry_dsn)
-        rv = SentryAsgiMiddleware(rv)
-    return rv
+        sentry_api = SentryAsgiMiddleware(api)
+    return sentry_api, api
 
 
-app = init_app()
+app, _ = init_app()
 
 
 def _systemd_notify_ready():
@@ -50,11 +57,12 @@ def _systemd_notify_ready():
 
 
 def _run_server(args):
+    # On reload (and following init_app), the app is configured based on this
     os.environ["ASTACUS_CONFIG"] = args.config
+
     global app  # pylint: disable=global-statement
-    app = init_app()
-    gconfig = app.state.global_config
-    uconfig = gconfig.uvicorn
+    app, app_nosentry = init_app()
+    uconfig = app_nosentry.state.global_config.uvicorn
     _systemd_notify_ready()
     uvicorn.run(
         "astacus.server:app",
@@ -67,7 +75,6 @@ def _run_server(args):
 
 
 def create_server_parser(subparsers):
-
     # TBD: Add overrides for configuration file entries that may be
     # relevant to update in more human-friendly way
     server = subparsers.add_parser("server", help="Run REST server")

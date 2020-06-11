@@ -10,11 +10,12 @@ from astacus.node.snapshotter import Snapshotter
 from pathlib import Path
 
 
-def test_download(snapshotter, storage, tmpdir):
+def test_download(snapshotter, uploader, storage, tmpdir):
     snapshotter.create_4foobar()
     ss1 = snapshotter.get_snapshot_state()
     hashes = snapshotter.get_snapshot_hashes()
-    snapshotter.write_hashes_to_storage(hashes=hashes, storage=storage, progress=Progress(), parallel=1)
+
+    uploader.write_hashes_to_storage(snapshotter=snapshotter, hashes=hashes, progress=Progress(), parallel=1)
 
     # Download the old backup from storage
     dst2 = Path(tmpdir / "dst2")

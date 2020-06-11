@@ -13,6 +13,7 @@ API of this module with proper parameters.
 from .node import NodeOp
 from .snapshotter import Snapshotter
 from astacus.common import ipc, utils
+from astacus.common.storage import Storage, ThreadLocalStorage
 from typing import Dict, List, Optional
 
 import base64
@@ -23,11 +24,11 @@ import shutil
 logger = logging.getLogger(__name__)
 
 
-class Downloader:
-    def __init__(self, *, dst, snapshotter, storage, parallel):
+class Downloader(ThreadLocalStorage):
+    def __init__(self, *, dst, snapshotter, parallel, storage: Storage):
+        super().__init__(storage=storage)
         self.dst = dst
         self.snapshotter = snapshotter
-        self.storage = storage
         self.parallel = parallel
 
     def _snapshotfile_already_exists(self, snapshotfile: ipc.SnapshotFile) -> bool:
@@ -43,11 +44,19 @@ class Downloader:
         download_path.parent.mkdir(parents=True, exist_ok=True)
         with download_path.open("wb") as f:
             if snapshotfile.hexdigest:
-                self.storage.download_hexdigest_to_file(snapshotfile.hexdigest, f)
+                self.local_storage.download_hexdigest_to_file(snapshotfile.hexdigest, f)
             else:
                 assert snapshotfile.content_b64
                 f.write(base64.b64decode(snapshotfile.content_b64))
         os.utime(download_path, ns=(snapshotfile.mtime_ns, snapshotfile.mtime_ns))
+
+    def _download_snapshotfiles_from_storage(self, snapshotfiles):
+        self._download_snapshotfile(snapshotfiles[0])
+
+        # We don't report progress for these, as local copying
+        # should be ~instant
+        for snapshotfile in snapshotfiles[1:]:
+            self._copy_snapshotfile(snapshotfiles[0], snapshotfile)
 
     def _copy_snapshotfile(self, snapshotfile_src: ipc.SnapshotFile, snapshotfile: ipc.SnapshotFile):
         if self._snapshotfile_already_exists(snapshotfile):
@@ -100,14 +109,6 @@ class Downloader:
 
         # This operation is done. It may or may not have been a success.
         progress.done()
-
-    def _download_snapshotfiles_from_storage(self, snapshotfiles):
-        self._download_snapshotfile(snapshotfiles[0])
-
-        # We don't report progress for these, as local copying
-        # should be ~instant
-        for snapshotfile in snapshotfiles[1:]:
-            self._copy_snapshotfile(snapshotfiles[0], snapshotfile)
 
 
 class DownloadOp(NodeOp):

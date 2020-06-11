@@ -12,6 +12,7 @@ this module with proper parameters.
 
 from .node import NodeOp
 from .snapshotter import Snapshotter
+from .uploader import Uploader
 from astacus.common import ipc, utils
 from typing import Optional
 
@@ -58,9 +59,10 @@ class UploadOp(NodeOp):
         return self.start_op(op_name="upload", op=self, fun=self.upload)
 
     def upload(self):
-        self.result.total_size, self.result.total_stored_size = self.get_snapshotter().write_hashes_to_storage(
+        uploader = Uploader(storage=self.storage)
+        self.result.total_size, self.result.total_stored_size = uploader.write_hashes_to_storage(
+            snapshotter=self.get_snapshotter(),
             hashes=self.req.hashes,
-            storage=self.storage,
             parallel=self.config.parallel_uploads,
             progress=self.result.progress,
             still_running_callback=self.still_running_callback

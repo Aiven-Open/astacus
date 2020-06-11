@@ -25,6 +25,9 @@ is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
 - plugin
     - (partial?) cassandra plugin; mostly to validate plugin arch is broad enough
 
+- use result-url instead of polling for somewhat faster results
+    - CLI: nice-to-have
+    - node->coordinator: definitely)
 
 ## Eventually
 
