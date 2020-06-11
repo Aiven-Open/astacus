@@ -9,6 +9,7 @@ from astacus.common.storage import FileStorage
 from astacus.node.api import router as node_router
 from astacus.node.config import NodeConfig
 from astacus.node.snapshotter import Snapshotter
+from astacus.node.uploader import Uploader
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pathlib import Path
@@ -75,6 +76,11 @@ def fixture_snapshotter(tmpdir):
     dst = Path(tmpdir) / "dst"
     dst.mkdir()
     yield SnapshotterWithDefaults(src=src, dst=dst, globs=["*"])
+
+
+@pytest.fixture(name="uploader")
+def fixture_uploader(storage):
+    yield Uploader(storage=storage)
 
 
 @pytest.fixture(name="storage")

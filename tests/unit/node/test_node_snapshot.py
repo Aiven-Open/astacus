@@ -10,7 +10,7 @@ import pytest
 
 
 @pytest.mark.timeout(2)
-def test_snapshot(snapshotter, storage):
+def test_snapshot(snapshotter, uploader):
     # Start with empty
     assert snapshotter.snapshot(progress=Progress()) == 0
     src = snapshotter.src
@@ -43,7 +43,7 @@ def test_snapshot(snapshotter, storage):
     assert (dst / "foo").is_file()
     assert (dst / "foo").read_text() == "barfoo"
 
-    snapshotter.write_hashes_to_storage(hashes=hashes, storage=storage, parallel=1, progress=Progress())
+    uploader.write_hashes_to_storage(snapshotter=snapshotter, hashes=hashes, parallel=1, progress=Progress())
 
     # Remove file from src, run snapshot
     for filename in ["foo", "foo2", "foobig", "foobig2"]:

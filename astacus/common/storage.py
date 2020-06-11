@@ -13,6 +13,7 @@ import io
 import json
 import logging
 import os
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,9 @@ class StorageUploadResult(AstacusModel):
 
 
 class HexDigestStorage:
+    def copy(self):
+        raise NotImplementedError
+
     def delete_hexdigest(self, hexdigest):
         raise NotImplementedError
 
@@ -101,6 +105,9 @@ class FileStorage(Storage):
         self.path.mkdir(parents=True, exist_ok=True)
         self.hexdigest_suffix = hexdigest_suffix
         self.json_suffix = json_suffix
+
+    def copy(self):
+        return FileStorage(path=self.path, hexdigest_suffix=self.hexdigest_suffix, json_suffix=self.json_suffix)
 
     def _hexdigest_to_path(self, hexdigest):
         return self.path / f"{hexdigest}{self.hexdigest_suffix}"
@@ -185,3 +192,17 @@ class MultiFileStorage(MultiStorage):
 
     def list_storages(self):
         return sorted(self._storages)
+
+
+class ThreadLocalStorage:
+    def __init__(self, *, storage: Storage):
+        self.threadlocal = threading.local()
+        self.storage = storage
+
+    @property
+    def local_storage(self):
+        local_storage = getattr(self.threadlocal, "storage", None)
+        if local_storage is None:
+            local_storage = self.storage.copy()
+            setattr(self.threadlocal, "storage", local_storage)
+        return local_storage

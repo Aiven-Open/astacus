@@ -207,6 +207,9 @@ class RohmuStorage(Storage):
         self.storage_config = self.config.storages[storage]
         self.storage = rohmu.get_transfer(self.storage_config.dict())
 
+    def copy(self):
+        return RohmuStorage(config=self.config, storage=self.storage_name)
+
     # HexDigestStorage implementation
 
     @rohmu_error_wrapper
