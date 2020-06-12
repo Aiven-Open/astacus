@@ -7,6 +7,7 @@ from astacus.common import ipc, utils
 from astacus.common.progress import Progress
 from astacus.node.snapshot import SnapshotOp
 
+import os
 import pytest
 
 
@@ -56,6 +57,23 @@ def test_snapshot(snapshotter, uploader):
     # Now shouldn't have any data hashes
     hashes_empty = snapshotter.get_snapshot_hashes()
     assert not hashes_empty
+
+
+@pytest.mark.parametrize("test", [(os, "link", 1, 1), (None, "_snapshotfile_from_path", 3, 0)])
+def test_snapshot_error_filenotfound(snapshotter, mocker, test):
+    (obj, fun, exp_progress_1, exp_progress_2) = test
+
+    def _not_really_found(*a, **kw):
+        raise FileNotFoundError
+
+    obj = obj or snapshotter
+    mocker.patch.object(obj, fun, new=_not_really_found)
+    (snapshotter.src / "foo").write_text("foobar")
+    (snapshotter.src / "bar").write_text("foobar")
+    progress = Progress()
+    assert snapshotter.snapshot(progress=progress) == exp_progress_1
+    progress = Progress()
+    assert snapshotter.snapshot(progress=progress) == exp_progress_2
 
 
 def test_api_snapshot_and_upload(client, mocker):
