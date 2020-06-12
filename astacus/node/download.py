@@ -46,7 +46,7 @@ class Downloader(ThreadLocalStorage):
             if snapshotfile.hexdigest:
                 self.local_storage.download_hexdigest_to_file(snapshotfile.hexdigest, f)
             else:
-                assert snapshotfile.content_b64
+                assert snapshotfile.content_b64 is not None
                 f.write(base64.b64decode(snapshotfile.content_b64))
         os.utime(download_path, ns=(snapshotfile.mtime_ns, snapshotfile.mtime_ns))
 
