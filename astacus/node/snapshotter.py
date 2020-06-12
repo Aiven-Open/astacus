@@ -97,7 +97,7 @@ class Snapshotter:
                 snapshotfile = self._snapshotfile_from_path(relative_path)
             except FileNotFoundError:
                 logger.debug("%s disappeared before stat, ignoring", self.src / relative_path)
-
+                continue
             if old_snapshotfile:
                 snapshotfile.hexdigest = old_snapshotfile.hexdigest
                 snapshotfile.content_b64 = old_snapshotfile.content_b64
@@ -127,6 +127,7 @@ class Snapshotter:
         for relative_dir in set(src_dirs).difference(dst_dirs):
             dst_path = self.dst / relative_dir
             dst_path.mkdir(parents=True, exist_ok=True)
+            logger.debug("new directory: %r", relative_dir)
             changes += 1
 
         progress.add_success()
@@ -138,6 +139,7 @@ class Snapshotter:
             if snapshotfile:
                 self._remove_snapshotfile(snapshotfile)
             dst_path.unlink()
+            logger.debug("extra file: %r", relative_path)
             changes += 1
         progress.add_success()
 
@@ -147,9 +149,11 @@ class Snapshotter:
             dst_path = self.dst / relative_path
             try:
                 os.link(src=src_path, dst=dst_path, follow_symlinks=False)
-                changes += 1
             except FileNotFoundError:
                 logger.debug("%s disappeared before linking, ignoring", src_path)
+                continue
+            logger.debug("new file: %r", relative_path)
+            changes += 1
         progress.add_success()
 
         # We COULD also remove extra directories, but it is not
@@ -158,7 +162,8 @@ class Snapshotter:
 
         # Then, create/update corresponding snapshotfile objects (old
         # ones were already removed)
-        snapshotfiles = list(self._get_snapshot_hash_list(src_files))
+        dst_dirs, dst_files = self._list_dirs_and_files(self.dst)
+        snapshotfiles = list(self._get_snapshot_hash_list(dst_files))
         progress.add_total(len(snapshotfiles))
         # TBD: This could be done via e.g. multiprocessing too some day.
         for snapshotfile in snapshotfiles:
