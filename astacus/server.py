@@ -19,10 +19,13 @@ from astacus.node.api import router as node_router
 from fastapi import FastAPI
 from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
 
+import logging
 import os
 import sentry_sdk
 import subprocess
 import uvicorn  # type:ignore
+
+logger = logging.getLogger(__name__)
 
 
 def init_app():
@@ -53,7 +56,12 @@ app, _ = init_app()
 def _systemd_notify_ready():
     if not os.environ.get("NOTIFY_SOCKET"):
         return
-    subprocess.run(["systemd-notify", "--ready"], check=True)
+    try:
+        from systemd import daemon  # pylint: disable=no-name-in-module,disable=import-outside-toplevel
+        daemon.notify("READY=1")
+    except ImportError:
+        logger.warning("Running under systemd but python-systemd not available, attempting systemd notify via utility")
+        subprocess.run(["systemd-notify", "--ready"], check=True)
 
 
 def _run_server(args):
