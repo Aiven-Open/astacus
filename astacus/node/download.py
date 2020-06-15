@@ -17,6 +17,7 @@ from astacus.common.storage import Storage, ThreadLocalStorage
 from typing import Dict, List, Optional
 
 import base64
+import contextlib
 import logging
 import os
 import shutil
@@ -105,7 +106,8 @@ class Downloader(ThreadLocalStorage):
         for relative_path in self.snapshotter.relative_path_to_snapshotfile.keys():
             if relative_path not in valid_relative_path_set:
                 absolute_path = self.dst / relative_path
-                absolute_path.unlink()
+                with contextlib.suppress(FileNotFoundError):
+                    absolute_path.unlink()
 
         # This operation is done. It may or may not have been a success.
         progress.done()
