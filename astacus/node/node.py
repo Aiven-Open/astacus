@@ -8,7 +8,6 @@ from .config import node_config, NodeConfig
 from .snapshotter import Snapshotter
 from .state import node_state, NodeState
 from astacus.common import ipc, magic, op, statsd, utils
-from astacus.common.progress import Progress
 from astacus.common.rohmustorage import RohmuStorage
 from fastapi import BackgroundTasks, Depends, Request
 from typing import Optional
@@ -21,7 +20,6 @@ SNAPSHOTTER_KEY = "node_snapshotter"
 
 class NodeOp(op.Op):
     req: Optional[ipc.NodeRequest] = None  # Provided by subclass
-    progress: Optional[Progress] = None  # Provided by subclass
 
     def __init__(self, *, n: "Node"):
         super().__init__(info=n.state.op_info)
@@ -67,8 +65,10 @@ class NodeOp(op.Op):
             # State didn't change, do nothing
             return False
         if state == self.Status.fail:
-            if self.progress and not self.progress.final and not self.progress.failed:
-                self.progress.add_fail()
+            progress = self.result.progress
+            if not progress.final:
+                progress.add_fail()
+                progress.done()
         elif state != self.Status.done:
             return True
         # fail or done; either way, we're done, send final result

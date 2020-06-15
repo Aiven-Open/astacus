@@ -54,6 +54,8 @@ class Op:
             raise ExpiredOperationException("operation id mismatch")
         if from_state and from_state != self.info.op_status:
             return False
+        if self.info.op_status == state:
+            return False
         logger.debug("%r state %s -> %s", self, self.info.op_status, state)
         self.info.op_status = state
         return True

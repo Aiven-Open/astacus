@@ -170,6 +170,33 @@ def test_rewrite_single_m3_placement(bytes_in, bytes_out):
     src_node = CoordinatorNode(az="az1", url="unused")
     dst_node = CoordinatorNode(az="az22", url="unused")
     got = m3db.rewrite_single_m3_placement(
-        bytes_in, src_pnode=src_pnode, dst_pnode=dst_pnode, src_node=src_node, dst_node=dst_node
+        bytes_in, src_pnode=src_pnode, dst_pnode=dst_pnode, src_node=src_node, dst_node=dst_node, ensure_all=False
     )
     assert got == bytes_out
+
+
+def test_rewrite_single_m3_placement_missing():
+    src_pnode = m3db.M3PlacementNode(
+        node_id="node-id1",
+        endpoint="endpoint1",
+        hostname="hostname1",
+    )
+    dst_pnode = m3db.M3PlacementNode(
+        node_id="node-id22",
+        endpoint="endpoint22",
+        hostname="hostname22",
+    )
+    src_node = CoordinatorNode(az="az1", url="unused")
+    dst_node = CoordinatorNode(az="az22", url="unused")
+    with pytest.raises(ValueError):
+        m3db.rewrite_single_m3_placement(b"", src_pnode=src_pnode, dst_pnode=dst_pnode, src_node=src_node, dst_node=dst_node)
+
+
+def test_rewrite_single_m3_placement_missing_same():
+    pnode = m3db.M3PlacementNode(
+        node_id="node-id1",
+        endpoint="endpoint1",
+        hostname="hostname1",
+    )
+    node = CoordinatorNode(az="az1", url="unused")
+    m3db.rewrite_single_m3_placement(b"", src_pnode=pnode, dst_pnode=pnode, src_node=node, dst_node=node)
