@@ -72,7 +72,7 @@ class CoordinatorOp(op.Op):
             method="post",
             ignore_status_code=True,
             json=False,
-            caller="request_lock_op_from_nodes"
+            caller="CoordinatorOp.request_lock_op_from_nodes"
         )
         logger.debug("%s results: %r", call, results)
         if call in [LockCall.lock, LockCall.relock]:
@@ -160,7 +160,7 @@ class CoordinatorOp(op.Op):
                 # TBD: This could be done in parallel too
                 if result is not None and result.progress.final:
                     continue
-                r = await utils.httpx_request(url, caller="BackupOp.wait_successful_results")
+                r = await utils.httpx_request(url, caller="CoordinatorOp.wait_successful_results")
                 if r is None:
                     failures[i] = failures.get(i, 0) + 1
                     if failures[i] >= self.config.poll.maximum_failures:
