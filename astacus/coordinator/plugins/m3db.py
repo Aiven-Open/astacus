@@ -39,6 +39,10 @@ from astacus.common.utils import AstacusModel
 from pydantic import validator
 from typing import List, Optional
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class M3IncorrectPlacementNodesLengthException(exceptions.PermanentException):
     pass
@@ -174,6 +178,7 @@ message Instance {
         if src == dst:
             return value
         replaced_value = value.replace(src, dst)
+        logger.debug("Replacing %s %r with %r", what, src, dst)
         if ensure_all and replaced_value == value:
             raise ValueError(f"{what}, expected to be {src!r} missing from placement plan {ovalue!r}")
         return replaced_value
@@ -187,7 +192,11 @@ message Instance {
     # including also the field ids
     value = _replace(protobuf_tlv(2, src_node.az), protobuf_tlv(2, dst_node.az), "az")
     for t, field in [(5, "endpoint"), (8, "hostname")]:
-        old_value = protobuf_tlv(t, getattr(src_pnode, field))
+        old_raw = getattr(src_pnode, field)
+        if field == "hostname" and old_raw == src_pnode.node_id:
+            # node_id was already globally replaced
+            continue
+        old_value = protobuf_tlv(t, old_raw)
         new_value = protobuf_tlv(t, getattr(dst_pnode, field))
         value = _replace(old_value, new_value, field)
     return value
