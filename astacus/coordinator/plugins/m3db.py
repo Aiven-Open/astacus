@@ -190,7 +190,11 @@ message Instance {
 
     # For everything else, replace more conservatively by
     # including also the field ids
-    value = _replace(protobuf_tlv(2, src_node.az), protobuf_tlv(2, dst_node.az), "az")
+    if dst_node.az:
+        # If not set, world won't PROBABLY end in flames, but protobuf
+        # decode fails with empty string for some reason
+        value = _replace(protobuf_tlv(2, src_node.az), protobuf_tlv(2, dst_node.az), "az")
+
     for t, field in [(5, "endpoint"), (8, "hostname")]:
         old_raw = getattr(src_pnode, field)
         if field == "hostname" and old_raw == src_pnode.node_id:
