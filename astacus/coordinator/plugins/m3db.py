@@ -149,10 +149,12 @@ def protobuf_lv(b, *, prefix=b""):
 
 def protobuf_tlv(t, b):
     """ protobuf type-length-value encoding """
-    return protobuf_lv(b, prefix=bytes([2 + t << 3]))
+    return protobuf_lv(b, prefix=bytes([2 + (t << 3)]))
 
 
-def rewrite_single_m3_placement(value, *, src_pnode: M3PlacementNode, dst_pnode: M3PlacementNode, src_node, dst_node):
+def rewrite_single_m3_placement(
+    value, *, src_pnode: M3PlacementNode, dst_pnode: M3PlacementNode, src_node, dst_node, ensure_all=True
+):
     """ rewrite single m3 placement entry in-place in (binary) protobuf
 
 Relevant places ( see m3db src/cluster/generated/proto/placementpb/placement.proto ) :
@@ -166,18 +168,28 @@ message Instance {
   string hostname           = 8;
 }
 """
+    ovalue = value
+
+    def _replace(src, dst, what):
+        if src == dst:
+            return value
+        replaced_value = value.replace(src, dst)
+        if ensure_all and replaced_value == value:
+            raise ValueError(f"{what}, expected to be {src!r} missing from placement plan {ovalue!r}")
+        return replaced_value
+
     # Be bit more brute-force than strictly necessary; just
     # replace 'id' in general, which takes care of both id key
     # as well key in instance map.
-    value = value.replace(protobuf_lv(src_pnode.node_id), protobuf_lv(dst_pnode.node_id))
+    value = _replace(protobuf_lv(src_pnode.node_id), protobuf_lv(dst_pnode.node_id), "node_id")
 
     # For everything else, replace more conservatively by
     # including also the field ids
-    value = value.replace(protobuf_tlv(2, src_node.az), protobuf_tlv(2, dst_node.az))
+    value = _replace(protobuf_tlv(2, src_node.az), protobuf_tlv(2, dst_node.az), "az")
     for t, field in [(5, "endpoint"), (8, "hostname")]:
         old_value = protobuf_tlv(t, getattr(src_pnode, field))
         new_value = protobuf_tlv(t, getattr(dst_pnode, field))
-        value = value.replace(old_value, new_value)
+        value = _replace(old_value, new_value, field)
     return value
 
 
