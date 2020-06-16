@@ -20,6 +20,7 @@ from fastapi import HTTPException
 from typing import Optional
 from urllib.parse import urlunsplit
 
+import contextlib
 import inspect
 import logging
 
@@ -95,8 +96,9 @@ class OpMixin:
                 await fun()
                 op.set_status(Op.Status.done, from_state=Op.Status.running)
             except Exception as ex:  # pylint: disable=broad-except
-                op.set_status_fail()
                 logger.warning("Unexpected exception during async %s %s %r", op, fun, ex)
+                with contextlib.suppress(ExpiredOperationException):
+                    op.set_status_fail()
                 raise
 
         def _sync_wrapper():
@@ -105,8 +107,9 @@ class OpMixin:
                 fun()
                 op.set_status(Op.Status.done, from_state=Op.Status.running)
             except Exception as ex:  # pylint: disable=broad-except
-                op.set_status_fail()
                 logger.warning("Unexpected exception during sync %s %s %r", op, fun, ex)
+                with contextlib.suppress(ExpiredOperationException):
+                    op.set_status_fail()
                 raise
 
         if inspect.iscoroutinefunction(fun):
