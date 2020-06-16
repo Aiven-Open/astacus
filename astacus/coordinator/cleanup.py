@@ -57,8 +57,8 @@ class CleanupOp(CoordinatorOpWithClusterLock):
         kept_hexdigests = set()
         for manifest in manifests:
             for result in manifest.snapshot_results:
-                assert result.hashes
-                kept_hexdigests = kept_hexdigests | set(h.hexdigest for h in result.hashes)
+                assert result.hashes is not None
+                kept_hexdigests = kept_hexdigests | set(h.hexdigest for h in result.hashes if h.hexdigest)
 
         all_hexdigests = await self.hexdigest_storage.list_hexdigests()
         extra_hexdigests = set(all_hexdigests).difference(kept_hexdigests)

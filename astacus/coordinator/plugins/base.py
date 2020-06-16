@@ -68,7 +68,7 @@ class BackupOpBase(OpBase):
         logger.debug("BackupOp._snapshot")
         req = ipc.SnapshotRequest(root_globs=self.snapshot_root_globs)
         start_results = await self.request_from_nodes(
-            "snapshot", method="post", caller="BackupOpBase.step_snapshot", data=req.json()
+            "snapshot", method="post", caller="BackupOpBase.step_snapshot", req=req
         )
         if not start_results:
             return []
@@ -115,7 +115,7 @@ class BackupOpBase(OpBase):
             node = self.nodes[data.node_index]
             req = ipc.SnapshotUploadRequest(hashes=data.sshashes, storage=self.default_storage_name)
             start_result = await self.request_from_nodes(
-                "upload", caller="BackupOpBase._upload", method="post", data=req.json(), nodes=[node]
+                "upload", caller="BackupOpBase._upload", method="post", req=req, nodes=[node]
             )
             if len(start_result) != 1:
                 return []
@@ -197,9 +197,9 @@ class RestoreOpBase(OpBase):
                 root_globs = self.result_backup_manifest.snapshot_results[0].state.root_globs
                 # Restore fake, empty backup to ensure node is clean
                 result = ipc.SnapshotResult(state=ipc.SnapshotState(root_globs=root_globs, files=[]))
-            data = ipc.SnapshotDownloadRequest(state=result.state, storage=self.default_storage_name).json()
+            req = ipc.SnapshotDownloadRequest(state=result.state, storage=self.default_storage_name)
             start_result = await self.request_from_nodes(
-                "download", caller="RestoreOpBase.step_restore", method="post", data=data, nodes=[node]
+                "download", caller="RestoreOpBase.step_restore", method="post", req=req, nodes=[node]
             )
             if len(start_result) != 1:
                 return []

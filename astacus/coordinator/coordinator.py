@@ -14,6 +14,7 @@ from datetime import datetime
 from enum import Enum
 from fastapi import BackgroundTasks, Depends, Request
 from typing import Optional
+from urllib.parse import urlunsplit
 
 import asyncio
 import json
@@ -43,6 +44,13 @@ class CoordinatorOp(op.Op):
         self.hexdigest_mstorage = c.hexdigest_mstorage
         self.json_mstorage = c.json_mstorage
         self.set_storage_name(self.default_storage_name)
+        self.subresult_received_event = asyncio.Event()
+
+    @property
+    def subresult_url(self):
+        url = self.request_url
+        parts = [url.scheme, url.netloc, f"{url.path}/{self.op_id}/sub-result", "", ""]
+        return urlunsplit(parts)
 
     hexdigest_storage: Optional[HexDigestStorage] = None
     json_storage: Optional[JsonStorage] = None
@@ -55,9 +63,13 @@ class CoordinatorOp(op.Op):
     def default_storage_name(self):
         return self.json_mstorage.get_default_storage_name()
 
-    async def request_from_nodes(self, url, *, caller, nodes=None, **kw):
+    async def request_from_nodes(self, url, *, caller, req=None, nodes=None, **kw):
         if nodes is None:
             nodes = self.nodes
+        if req is not None:
+            assert isinstance(req, ipc.NodeRequest)
+            req.result_url = self.subresult_url
+            kw["data"] = req.json()
         urls = [f"{node.url}/{url}" for node in nodes]
         aws = [utils.httpx_request(url, caller=caller, **kw) for url in urls]
         results = await asyncio.gather(*aws, return_exceptions=True)
@@ -150,12 +162,18 @@ class CoordinatorOp(op.Op):
         # however, if re-locking times out, we will bail out. TBD if
         # we need timeout mechanism here anyway.
         failures = {}
+
+        def _event_awaitable_factory():
+            return self.subresult_received_event.wait()
+
         async for _ in utils.exponential_backoff(
             initial=delay,
             multiplier=self.config.poll.delay_multiplier,
             maximum=self.config.poll.delay_max,
-            duration=self.config.poll.duration
+            duration=self.config.poll.duration,
+            event_awaitable_factory=_event_awaitable_factory,
         ):
+            self.subresult_received_event.clear()
             for i, (url, result) in enumerate(zip(urls, results)):
                 # TBD: This could be done in parallel too
                 if result is not None and result.progress.final:

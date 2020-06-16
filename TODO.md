@@ -25,9 +25,6 @@ is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
 - plugin
     - (partial?) cassandra plugin; mostly to validate plugin arch is broad enough
 
-- use result-url instead of polling for somewhat faster results
-    - CLI: nice-to-have
-    - node->coordinator: definitely)
 
 ## Eventually
 
@@ -41,6 +38,8 @@ is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
 - package (or have someone do it?) this for distros
 
 - separate rohmu from pghoard (right now, pghoard dependency is bit .. ugly ..)
+
+- use result-url instead of polling for somewhat faster results for CLI
 
 
 ## Maybe not - known design choice for now

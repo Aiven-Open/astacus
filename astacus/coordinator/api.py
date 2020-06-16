@@ -62,14 +62,14 @@ def unlock(*, locker: str, c: Coordinator = Depends()):
 
 
 @router.post("/backup")
-def backup(*, c: Coordinator = Depends()):
+async def backup(*, c: Coordinator = Depends()):
     op_class = get_plugin_backup_class(c.config.plugin)
     op = op_class(c=c)
     return c.start_op(op_name=OpName.backup, op=op, fun=op.run)
 
 
 @router.post("/restore")
-def restore(*, req: ipc.RestoreRequest = ipc.RestoreRequest(), c: Coordinator = Depends()):
+async def restore(*, req: ipc.RestoreRequest = ipc.RestoreRequest(), c: Coordinator = Depends()):
     op_class = get_plugin_restore_class(c.config.plugin)
     op = op_class(c=c, req=req)
     return c.start_op(op_name=OpName.restore, op=op, fun=op.run)
@@ -88,6 +88,18 @@ def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordinator = 
 
 
 @router.post("/cleanup")
-def cleanup(*, req: ipc.CleanupRequest = ipc.CleanupRequest(), c: Coordinator = Depends()):
+async def cleanup(*, req: ipc.CleanupRequest = ipc.CleanupRequest(), c: Coordinator = Depends()):
     op = CleanupOp(c=c, req=req)
     return c.start_op(op_name=OpName.cleanup, op=op, fun=op.run)
+
+
+@router.put("/{op_name}/{op_id}/sub-result")
+async def op_sub_result(*, op_name: OpName, op_id: int, c: Coordinator = Depends()):
+    op, _ = c.get_op_and_op_info(op_id=op_id, op_name=op_name)
+    # Someday, we might want to actually store results. This is sort
+    # of spoofable endpoint though, so just triggering subsequent
+    # result fetching faster. In case of terminal results, this
+    # results only in one extra fetch per node, so not big deal.
+    if not op.subresult_received_event:
+        return
+    op.subresult_received_event.set()
