@@ -115,11 +115,11 @@ def print_list_result(result):
                 "files": b.files,
                 "total_size": utils.size_as_short_str(b.total_size),
             })
+            for field_name in local_fields:
+                table[-1][field_name] = getattr(b, field_name)
             tsize += b.total_size
             usize += b.upload_size
             ssize += b.upload_stored_size
-            for field_name in local_fields:
-                table[field_name] = getattr(b, field_name)
 
         if tsize:
             gtable[0]["pchanged"] = "%.2f%%" % (100.0 * usize / tsize)
