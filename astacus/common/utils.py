@@ -115,7 +115,7 @@ async def httpx_request(url, *, caller, method="get", timeout=10, json: bool = T
         return None
 
 
-def exponential_backoff(*, initial, retries=None, multiplier=2, maximum=None, duration=None):
+def exponential_backoff(*, initial, retries=None, multiplier=2, maximum=None, duration=None, event_awaitable_factory=None):
     """Exponential backoff iterator which works with both 'for' and 'async for'
 
     First attempt is never delayed. The delays are only for retries.
@@ -159,10 +159,16 @@ def exponential_backoff(*, initial, retries=None, multiplier=2, maximum=None, du
             if delay is None:
                 raise StopAsyncIteration
             if delay:
-                await asyncio.sleep(delay)
+                coros = [asyncio.sleep(delay)]
+                if event_awaitable_factory is not None:
+                    event_awaitable = event_awaitable_factory()
+                    coros.append(event_awaitable)
+                aws = [asyncio.create_task(coro) for coro in coros]
+                await asyncio.wait(aws, return_when=asyncio.FIRST_COMPLETED)
             return self.retry
 
         def __next__(self):
+            assert event_awaitable_factory is None
             self.retry += 1
             delay = self._delay
             if delay is None:
