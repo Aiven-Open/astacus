@@ -66,7 +66,7 @@ COORDINATOR_NODES = [
 
 
 @pytest.fixture(name="app")
-def fixture_app(mocker, sleepless, storage, tmpdir):  # pylint: disable=unused-argument
+def fixture_app(mocker, sleepless, storage, tmpdir):
     app = FastAPI()
     app.include_router(router, tags=["coordinator"])
     app.state.coordinator_config = CoordinatorConfig(

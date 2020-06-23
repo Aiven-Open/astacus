@@ -47,6 +47,7 @@ class SnapshotOp(NodeOp):
         self.result.files = len(self.result.state.files)
         self.result.total_size = sum(ssfile.file_size for ssfile in self.result.state.files)
         self.result.end = utils.now()
+        self.result.progress.done()
 
 
 class UploadOp(NodeOp):
@@ -63,7 +64,8 @@ class UploadOp(NodeOp):
         self.result.total_size, self.result.total_stored_size = uploader.write_hashes_to_storage(
             snapshotter=self.get_snapshotter(),
             hashes=self.req.hashes,
-            parallel=self.config.parallel_uploads,
+            parallel=self.config.parallel.uploads,
             progress=self.result.progress,
             still_running_callback=self.still_running_callback
         )
+        self.result.progress.done()

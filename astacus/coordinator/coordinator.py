@@ -84,6 +84,7 @@ class CoordinatorOp(op.Op):
             method="post",
             ignore_status_code=True,
             json=False,
+            nodes=nodes,
             caller="CoordinatorOp.request_lock_op_from_nodes"
         )
         logger.debug("%s results: %r", call, results)

@@ -5,7 +5,7 @@ See LICENSE for details
 
 """
 
-from astacus.common import magic
+from astacus.common import magic, utils
 from astacus.common.ipc import SnapshotFile, SnapshotHash, SnapshotState
 from astacus.common.progress import Progress
 from pathlib import Path
@@ -44,13 +44,14 @@ class Snapshotter:
     For actual products, Snapshotter should be subclassed and
     e.g. file_path_filter should be overridden.
     """
-    def __init__(self, *, src, dst, globs):
+    def __init__(self, *, src, dst, globs, parallel):
         assert globs  # model has empty; either plugin or configuration must supply them
         self.src = Path(src)
         self.dst = Path(dst)
         self.globs = globs
         self.relative_path_to_snapshotfile = {}
         self.hexdigest_to_snapshotfiles = {}
+        self.parallel = parallel
 
     def _list_files(self, basepath: Path):
         result_files = set()
@@ -165,15 +166,20 @@ class Snapshotter:
         dst_dirs, dst_files = self._list_dirs_and_files(self.dst)
         snapshotfiles = list(self._get_snapshot_hash_list(dst_files))
         progress.add_total(len(snapshotfiles))
-        # TBD: This could be done via e.g. multiprocessing too some day.
-        for snapshotfile in snapshotfiles:
+
+        def _cb(snapshotfile):
             # src may or may not be present; dst is present as it is in snapshot
             if snapshotfile.file_size <= magic.EMBEDDED_FILE_SIZE:
                 snapshotfile.content_b64 = base64.b64encode(snapshotfile.open_for_reading(self.dst).read()).decode()
             else:
                 snapshotfile.hexdigest = hash_hexdigest_readable(snapshotfile.open_for_reading(self.dst))
-            self._add_snapshotfile(snapshotfile)
-            changes += 1
+            return snapshotfile
+
+        def _result_cb(*, map_in, map_out):
+            self._add_snapshotfile(map_out)
             progress.add_success()
-        progress.done()
+            return True
+
+        changes += len(snapshotfiles)
+        utils.parallel_map_to(iterable=snapshotfiles, fun=_cb, result_callback=_result_cb, n=self.parallel)
         return changes

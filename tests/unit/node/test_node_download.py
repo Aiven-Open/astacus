@@ -23,7 +23,7 @@ def test_download(snapshotter, uploader, storage, tmpdir):
 
     dst3 = Path(tmpdir / "dst3")
     dst3.mkdir()
-    snapshotter = Snapshotter(src=dst2, dst=dst3, globs=["*"])
+    snapshotter = Snapshotter(src=dst2, dst=dst3, globs=["*"], parallel=1)
     downloader = Downloader(storage=storage, snapshotter=snapshotter, dst=dst2, parallel=1)
 
     downloader.download_from_storage(progress=Progress(), snapshotstate=ss1)

@@ -6,14 +6,15 @@ jobs=4
 
 [MESSAGES CONTROL]
 disable=
-    bad-continuation,  # yapf style
-    invalid-name,  # fastapi conventions break this
+    bad-continuation,              # yapf style
+    invalid-name,                  # fastapi conventions break this
     missing-docstring,
-    no-member,  # broken with pydantic + inheritance for some reason
-    no-self-use,  # annoying when minimally fullfilling some API
-    wrong-import-order,  # we use isort anyway
-    too-few-public-methods,  # some pydantic models have 0 and it is fine
-    too-many-instance-attributes  # give me a break, <= 7
+    no-member,                     # broken with pydantic + inheritance
+    no-self-use,                   # annoying when fullfilling some API
+    too-few-public-methods,        # some pydantic models have 0 and it is fine
+    too-many-instance-attributes,  # give me a break, <= 7
+    unused-argument,               # annoying when fullfilling some API
+    wrong-import-order,            # we use isort anyway
 
 [FORMAT]
 max-line-length=125
