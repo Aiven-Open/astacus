@@ -128,7 +128,7 @@ class DownloadOp(NodeOp):
             dst=self.config.root,
             snapshotter=self.snapshotter,
             storage=self.storage,
-            parallel=self.config.parallel_downloads
+            parallel=self.config.parallel.downloads
         )
         downloader.download_from_storage(
             snapshotstate=self.req.state, progress=self.result.progress, still_running_callback=self.still_running_callback

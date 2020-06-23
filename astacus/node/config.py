@@ -8,10 +8,17 @@ from astacus.common.statsd import StatsdConfig
 from astacus.common.utils import AstacusModel
 from fastapi import Request
 from pathlib import Path
-from pydantic import DirectoryPath
+from pydantic import DirectoryPath, Field
 from typing import Optional
 
 APP_KEY = "node_config"
+
+
+class NodeParallel(AstacusModel):
+    # Optional parallelization of operations
+    downloads: int = 1
+    hashes: int = 1
+    uploads: int = 1
 
 
 class NodeConfig(AstacusModel):
@@ -30,9 +37,7 @@ class NodeConfig(AstacusModel):
     object_storage: Optional[RohmuConfig] = None
     statsd: Optional[StatsdConfig] = None
 
-    # Optional parallelization of down[/upload]
-    parallel_downloads: int = 1
-    parallel_uploads: int = 1
+    parallel: NodeParallel = Field(default_factory=NodeParallel)
 
 
 def node_config(request: Request) -> NodeConfig:

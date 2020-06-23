@@ -74,7 +74,7 @@ def fixture_snapshotter(tmpdir):
     src.mkdir()
     dst = Path(tmpdir) / "dst"
     dst.mkdir()
-    yield SnapshotterWithDefaults(src=src, dst=dst, globs=["*"])
+    yield SnapshotterWithDefaults(src=src, dst=dst, globs=["*"], parallel=1)
 
 
 @pytest.fixture(name="uploader")
