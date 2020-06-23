@@ -47,6 +47,7 @@ class SnapshotOp(NodeOp):
         self.result.files = len(self.result.state.files)
         self.result.total_size = sum(ssfile.file_size for ssfile in self.result.state.files)
         self.result.end = utils.now()
+        self.result.progress.done()
 
 
 class UploadOp(NodeOp):
@@ -67,3 +68,4 @@ class UploadOp(NodeOp):
             progress=self.result.progress,
             still_running_callback=self.still_running_callback
         )
+        self.result.progress.done()

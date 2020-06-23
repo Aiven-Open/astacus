@@ -175,5 +175,4 @@ class Snapshotter:
             self._add_snapshotfile(snapshotfile)
             changes += 1
             progress.add_success()
-        progress.done()
         return changes

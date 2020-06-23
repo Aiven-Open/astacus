@@ -71,7 +71,4 @@ class Uploader(ThreadLocalStorage):
             fun=_download_hexdigest_in_thread, iterable=sorted_todo, result_callback=_result_cb, n=parallel
         ):
             progress.add_fail()
-
-        # This operation is done. It may or may not have been a success.
-        progress.done()
         return sizes["total"], sizes["stored"]

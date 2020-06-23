@@ -62,7 +62,6 @@ class SnapshotterWithDefaults(Snapshotter):
         (self.src / "foobig2").write_text("foobar" * magic.EMBEDDED_FILE_SIZE)
         progress = Progress()
         assert self.snapshot(progress=progress) > 0
-        assert progress.finished_successfully
         ss1 = self.get_snapshot_state()
         assert self.snapshot(progress=Progress()) == 0
         ss2 = self.get_snapshot_state()
