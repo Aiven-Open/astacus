@@ -25,3 +25,7 @@ jobs:
 
     - name: Execute unit-tests
       run: make unittest
+
+    - uses: codecov/codecov-action@v1
+      with:
+        fail_ci_if_error: true
