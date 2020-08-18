@@ -6,6 +6,10 @@ Test that the coordinator lock endpoint works.
 
 """
 
+from astacus.common.magic import LockCall
+from astacus.common.statsd import StatsClient
+from unittest.mock import patch
+
 import respx
 
 
@@ -52,8 +56,10 @@ def test_lock_onefail(app, client):
         for i, node in enumerate(nodes):
             respx.post(f"{node.url}/lock?locker=z&ttl=60", content={"locked": i == 0})
             respx.post(f"{node.url}/unlock?locker=z", content=None)
-        response = client.post("/lock?locker=z")
-        assert response.status_code == 200, response.json()
+        with patch.object(StatsClient, "increase", return_value=None) as mock_stats_increase:
+            response = client.post("/lock?locker=z")
+            assert response.status_code == 200, response.json()
+        mock_stats_increase.assert_any_call("astacus_lock_call_failure", tags={"call": LockCall.lock, "locker": "z"})
 
     response = client.get(response.json()["status_url"])
     assert response.status_code == 200, response.json()

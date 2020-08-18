@@ -112,6 +112,11 @@ class CoordinatorOp(op.Op):
                 if decoded_result != expected_result:
                     logger.info("%s of %s failed - unexpected result %r", call, node, decoded_result)
                     rv = LockResult.failure
+        if rv == LockResult.failure and self.stats is not None:
+            self.stats.increase("astacus_lock_call_failure", tags={
+                "call": call,
+                "locker": locker,
+            })
         return rv
 
     async def request_lock_from_nodes(self, *, locker: str, ttl: int) -> bool:
