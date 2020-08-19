@@ -43,7 +43,7 @@ class OpBase(CoordinatorOpWithClusterLock):
             logger.debug("step %d/%d: %s", i, len(self.steps), step)
             step_name = f"step_{step}"
             step_callable = getattr(self, step_name)
-            assert step_callable, "Step method {step_name} not found in {self!r}"
+            assert step_callable, f"Step method {step_name} not found in {self!r}"
             if self.stats is not None:
                 name = self.__class__.__name__
                 async with self.stats.async_timing_manager("astacus_step_duration", {"op": name, "step": step_name}):
