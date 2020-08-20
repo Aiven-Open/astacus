@@ -62,6 +62,9 @@ class Op:
         return True
 
     def set_status_fail(self):
+        if self.stats is not None:
+            name = self.__class__.__name__
+            self.stats.increase("astacus_fail", {"op": name})
         self.set_status(self.Status.fail)
 
 

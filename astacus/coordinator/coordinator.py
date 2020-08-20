@@ -147,11 +147,6 @@ class CoordinatorOp(op.Op):
             logger.info("%s - permanent failure: %r", name, ex)
         self.set_status_fail()
 
-    def set_status_fail(self):
-        super().set_status_fail()
-        name = self.__class__.__name__
-        self.stats.increase("astacus_fail", {"op": name})
-
     async def wait_successful_results(self, start_results, *, result_class, all_nodes=True):
         urls = []
         for i, result in enumerate(start_results, 1):
