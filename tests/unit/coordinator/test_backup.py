@@ -8,9 +8,13 @@ Test that the coordinator backup endpoint works.
 
 from astacus.common import ipc, utils
 from astacus.common.ipc import SnapshotHash
+from astacus.common.statsd import StatsClient
+from astacus.coordinator.api import OpName
 from astacus.coordinator.plugins import get_plugin_backup_class
 from astacus.coordinator.plugins.base import NodeIndexData
+from unittest.mock import patch
 
+import itertools
 import pytest
 import respx
 
@@ -148,3 +152,38 @@ def _ssresults(*kwarg_list):
 def test_upload_optimization(hexdigests, snapshot_results, uploads):
     op = DummyBackupOp(hexdigests, snapshot_results)
     op.assert_upload_of_snapshot_is(uploads)
+
+
+@patch("astacus.common.utils.monotonic_time")
+def test_backup_stats(mock_time, app, client):
+    mock_time.side_effect = itertools.count(start=0.0, step=0.5)
+    nodes = app.state.coordinator_config.nodes
+    with respx.mock:
+        for node in nodes:
+            respx.post(f"{node.url}/unlock?locker=x&ttl=0", content={"locked": False})
+            respx.post(f"{node.url}/lock?locker=x&ttl=60", content={"locked": True})
+            respx.post(f"{node.url}/snapshot", content={"op_id": 42, "status_url": f"{node.url}/snapshot/result"})
+            respx.get(
+                f"{node.url}/snapshot/result",
+                content={
+                    "progress": {
+                        "final": True
+                    },
+                    "hashes": [{
+                        "hexdigest": "HASH",
+                        "size": 42
+                    }]
+                }
+            )
+            respx.post(f"{node.url}/upload", content={"op_id": 43, "status_url": f"{node.url}/upload/result"})
+            respx.get(f"{node.url}/upload/result", content={"progress": {"final": True}})
+
+        with patch.object(StatsClient, "gauge") as mock_stats_gauge:
+            response = client.post("/backup")
+
+        assert response.status_code == 200, response.json()
+
+        mock_stats_gauge.assert_called_with("astacus_op_running_for", 0, tags={"op": OpName.backup, "id": 1})
+        for mock_call in mock_stats_gauge.call_args_list:
+            if mock_call.args[0] == "astacus_op_running_for":
+                assert mock_call.args[1] >= 0

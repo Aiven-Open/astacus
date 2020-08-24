@@ -232,3 +232,7 @@ def parallel_map_to(*, fun, iterable, result_callback, n=None) -> bool:
 
 def now():
     return datetime.datetime.now(datetime.timezone.utc)
+
+
+def monotonic_time():
+    return time.monotonic()

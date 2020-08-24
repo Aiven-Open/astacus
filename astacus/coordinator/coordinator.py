@@ -207,6 +207,8 @@ class CoordinatorOp(op.Op):
 
 
 class CoordinatorOpWithClusterLock(CoordinatorOp):
+    op_started: Optional[float]  # set when op_info.status is set to starting
+
     def __init__(self, *, c: "Coordinator"):
         super().__init__(c=c)
         self.ttl = self.config.default_lock_ttl
@@ -239,6 +241,22 @@ class CoordinatorOpWithClusterLock(CoordinatorOp):
                 await asyncio.gather(*relock_tasks, return_exceptions=True)
             await self.request_unlock_from_nodes(locker=self.locker)
 
+    def set_status(self, state: op.Op.Status, *, from_state: Optional[op.Op.Status] = None) -> bool:
+        changed = super().set_status(state=state, from_state=from_state)
+        if state == op.Op.Status.starting and changed:
+            self.op_started = utils.monotonic_time()
+        self._update_running_stats()
+        return changed
+
+    def _update_running_stats(self):
+        if self.stats is not None:
+            if self.info.op_status in {op.Op.Status.done, op.Op.Status.fail}:
+                op_running_for = 0
+            else:
+                op_running_for = int(utils.monotonic_time() - self.op_started)
+            logger.debug("Sending op_running_for metric. value=%d", op_running_for)
+            self.stats.gauge("astacus_op_running_for", op_running_for, tags={"op": self.info.op_name, "id": self.info.op_id})
+
     async def _create_relock_tasks(self):
         current_task = asyncio.current_task()
         return [asyncio.create_task(self._node_relock_loop(current_task, node)) for node in self.nodes]
@@ -247,6 +265,7 @@ class CoordinatorOpWithClusterLock(CoordinatorOp):
         lock_eol = self.initial_lock_start + self.ttl
         next_lock = self.initial_lock_start + self.ttl / 2
         while True:
+            self._update_running_stats()
             t = time.monotonic()
             if t > lock_eol:
                 logger.info("Lock of node %r expired, canceling operation", node)
