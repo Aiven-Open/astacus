@@ -13,7 +13,7 @@ pytest-cov==2.10.1
 # fastapi testclient needs this yet does not depend on it, gnn
 requests
 
-respx==0.10.1
+respx==0.11.2
 
 # convenience things that don't actually matter which version they are
 pip-outdated
