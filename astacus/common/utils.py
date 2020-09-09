@@ -107,11 +107,11 @@ async def httpx_request(url, *, caller, method="get", timeout=10, json: bool = T
                 return r.json() if json else r
             if ignore_status_code:
                 return r.json() if json else r
-            logger.warning("Unexpected response from %s to %s: %s %r", url, caller, r.status_code, r.text)
+            logger.warning("Unexpected response status code from %s to %s: %s %r", url, caller, r.status_code, r.text)
         except httpx.HTTPError as ex:
             logger.warning("Unexpected response from %s to %s: %r", url, caller, ex)
-        except AssertionError as ex:
-            logger.error("AssertionError - probably respx - from %s to %s: %r", url, caller, ex)
+        except Exception as ex:  # pylint: disable=broad-except
+            logger.error("Unexpected exception from %s to %s: %r", url, caller, ex)
         return None
 
 
