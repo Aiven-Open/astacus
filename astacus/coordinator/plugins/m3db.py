@@ -7,35 +7,12 @@ All of the actual heavy lifting is done using the base file
 snapshot/restore functionality. m3db plugin will simply ensure etcd
 state is consistent.
 
-Note that the rewriting of etcd content is pretty hacky; instead of
-dealing with the pretty heavy protobuf stuff, we simply do binary
-rewrites of the specific m3db content. The relevant bits to know here
-are that each entry protobuf contains ( see
-https://developers.google.com/protocol-buffers/docs/encoding ) :
-
-  <wire-type: 3 bits> <field-number : varint>
-
-and then wire-type specific data, notably:
-
-  <wire-type = 2: length-delimited> <field-number> =>
-
-  <length : varint> (probably just one byte)
-  <bytes>: #length bytes
-
-We make the optimistic assumption that there are no false positives
-for the (relatively long) (wiretype,fieldnumber,fieldlength,fielddata)
-tuple. Due to how the encoding works, ASCII text is unlikely to be
-mistaken for varints as (large) varints have highest bit set.
-
-Probably option to (detect/)skip this altogether would make sense at
-some point as well, as if cluster has static hostnames, no rewrites
-are needed anyway.
-
 """
 
 from .etcd import ETCDBackupOpBase, ETCDConfiguration, ETCDDump, ETCDRestoreOpBase
 from astacus.common import exceptions, ipc
 from astacus.common.utils import AstacusModel
+from astacus.proto import m3_placement_pb2
 from pydantic import validator
 from typing import List, Optional
 
@@ -142,26 +119,12 @@ class M3DBBackupOp(ETCDBackupOpBase):
         return m3manifest
 
 
-def protobuf_lv(b, *, prefix=b""):
-    """ protobuf length-value encoding """
-    if isinstance(b, str):
-        b = b.encode()
-    assert isinstance(b, bytes)
-    assert len(b) < MAXIMUM_PROTOBUF_STR_LENGTH  # we don't support real varints
-    return prefix + bytes([len(b)]) + b
+def rewrite_single_m3_placement(placement, *, src_pnode: M3PlacementNode, dst_pnode: M3PlacementNode, dst_isolation_group):
+    """rewrite single m3 placement entry in-place in protobuf
 
-
-def protobuf_tlv(t, b):
-    """ protobuf type-length-value encoding """
-    return protobuf_lv(b, prefix=bytes([2 + (t << 3)]))
-
-
-def rewrite_single_m3_placement(
-    value, *, src_pnode: M3PlacementNode, dst_pnode: M3PlacementNode, src_node, dst_node, ensure_all=True
-):
-    """ rewrite single m3 placement entry in-place in (binary) protobuf
-
-Relevant places ( see m3db src/cluster/generated/proto/placementpb/placement.proto ) :
+Relevant places ( see m3db
+src/cluster/generated/proto/placementpb/placement.proto which is
+copied to astacus/proto/m3_placement.proto )) :
 
 instance<str,Instance> map = 1, and then
 
@@ -171,39 +134,20 @@ message Instance {
   string endpoint           = 5;
   string hostname           = 8;
 }
-"""
-    ovalue = value
 
-    def _replace(src, dst, what):
-        if src == dst:
-            return value
-        replaced_value = value.replace(src, dst)
-        logger.debug("Replacing %s %r with %r", what, src, dst)
-        if ensure_all and replaced_value == value:
-            raise ValueError(f"{what}, expected to be {src!r} missing from placement plan {ovalue!r}")
-        return replaced_value
+    """
+    instance = placement.instances[src_pnode.node_id]
+    # az may or may not be set; if not, keep original
+    if dst_isolation_group:
+        instance.isolation_group = dst_isolation_group
+    # Copy the rest of the fields
+    instance.endpoint = dst_pnode.endpoint
+    instance.hostname = dst_pnode.hostname
 
-    # Be bit more brute-force than strictly necessary; just
-    # replace 'id' in general, which takes care of both id key
-    # as well key in instance map.
-    value = _replace(protobuf_lv(src_pnode.node_id), protobuf_lv(dst_pnode.node_id), "node_id")
-
-    # For everything else, replace more conservatively by
-    # including also the field ids
-    if dst_node.az:
-        # If not set, world won't PROBABLY end in flames, but protobuf
-        # decode fails with empty string for some reason
-        value = _replace(protobuf_tlv(2, src_node.az), protobuf_tlv(2, dst_node.az), "az")
-
-    for t, field in [(5, "endpoint"), (8, "hostname")]:
-        old_raw = getattr(src_pnode, field)
-        if field == "hostname" and old_raw == src_pnode.node_id:
-            # node_id was already globally replaced
-            continue
-        old_value = protobuf_tlv(t, old_raw)
-        new_value = protobuf_tlv(t, getattr(dst_pnode, field))
-        value = _replace(old_value, new_value, field)
-    return value
+    # Handle (potential) id change (bit painful as it is also map key)
+    instance.id = dst_pnode.node_id
+    del placement.instances[src_pnode.node_id]
+    placement.instances[dst_pnode.node_id].CopyFrom(instance)
 
 
 class M3DRestoreOp(ETCDRestoreOpBase):
@@ -226,20 +170,15 @@ class M3DRestoreOp(ETCDRestoreOpBase):
         node_to_backup_index = self._get_node_to_backup_index()
         value = key.value_bytes
 
+        placement = m3_placement_pb2.Placement()
+        placement.ParseFromString(value)
+
         for idx, node, pnode in zip(node_to_backup_index, self.nodes, self.plugin_config.placement_nodes):
             if idx is None:
                 continue
             src_pnode = self.plugin_manifest.placement_nodes[idx]
-
-            # not technically node, but has az, which is enough ( and
-            # hostname, but it is derived potentially differently from
-            # 'configured' value in etcd so it is nbot used )
-            src_node = self.result_backup_manifest.snapshot_results[idx]
-
-            value = rewrite_single_m3_placement(
-                value, src_pnode=src_pnode, src_node=src_node, dst_node=node, dst_pnode=pnode
-            )
-        key.set_value_bytes(value)
+            rewrite_single_m3_placement(placement, src_pnode=src_pnode, dst_isolation_group=node.az, dst_pnode=pnode)
+        key.set_value_bytes(placement.SerializeToString())
 
     async def step_rewrite_etcd(self):
         etcd = self.plugin_manifest.etcd.copy(deep=True)
