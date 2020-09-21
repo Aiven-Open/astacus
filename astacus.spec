@@ -7,6 +7,7 @@ License:        ASL 2.0
 Source0:        astacus-rpm-src.tar
 BuildArch:      noarch
 
+BuildRequires:  protobuf-compiler
 BuildRequires:  python3-devel
 
 Requires:       pghoard

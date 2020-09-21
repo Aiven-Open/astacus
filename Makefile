@@ -3,14 +3,21 @@ LONG_VER = $(shell git describe --long 2>/dev/null || echo $(SHORT_VER)-0-unknow
 PYTHON_SOURCE_DIRS = astacus/
 PYTHON_TEST_DIRS = tests/
 ALL_PYTHON_DIRS = $(PYTHON_SOURCE_DIRS) $(PYTHON_TEST_DIRS)
-GENERATED = astacus/version.py
+
+# protobuf handling
+PROTODIR=astacus/proto
+PROTOBUFS = $(wildcard $(PROTODIR)/*.proto)
+GENERATED_PROTOBUFS = $(patsubst %.proto,%_pb2.py,$(PROTOBUFS))
+
+GENERATED = astacus/version.py $(GENERATED_PROTOBUFS)
+
 PYTHON = python3
 DNF_INSTALL = sudo dnf install -y
 
 default: $(GENERATED)
 
 clean:
-	rm -rf rpm/
+	rm -rf rpm/ $(GENERATED)
 
 .PHONY: build-dep-fedora
 build-dep-fedora:
@@ -20,7 +27,7 @@ build-dep-fedora:
 
 .PHONY: build-dep-ubuntu
 build-dep-ubuntu:
-	sudo apt-get install -y git libsnappy-dev python3-pip python3-psycopg2
+	sudo apt-get install -y git libsnappy-dev python3-pip python3-psycopg2 protobuf-compiler
 
 .PHONY: pylint
 pylint: $(GENERATED)
@@ -114,3 +121,6 @@ rpm: $(GENERATED) /usr/bin/rpmbuild /usr/lib/rpm/check-buildroot
 
 astacus/version.py: version.py
 	$(PYTHON) $^ $@
+
+%_pb2.py: %.proto
+	protoc -I $(PROTODIR) $< --python_out=$(PROTODIR)
