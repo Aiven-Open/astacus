@@ -58,4 +58,4 @@ repos:
         language: system
         types: [python]
         files: \.py$
-        exclude: ^setup.py|^tests/|^vendor/
+        exclude: ^setup.py|^tests/|^vendor/|^astacus/proto/

@@ -136,3 +136,6 @@ astacus/version.py
 
 # generated rpm packages
 rpm/
+
+# generated protobufs
+astacus/proto/*_pb2.py

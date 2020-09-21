@@ -11,8 +11,9 @@ Test that the plugin m3 specific flow (backup + restore) works
 from ..conftest import COORDINATOR_NODES
 from astacus.common import ipc
 from astacus.common.etcd import b64encode_to_str
-from astacus.coordinator.config import CoordinatorConfig, CoordinatorNode
+from astacus.coordinator.config import CoordinatorConfig
 from astacus.coordinator.plugins import base, m3db
+from astacus.proto import m3_placement_pb2
 
 import pytest
 import respx
@@ -51,11 +52,20 @@ class DummyM3DBBackupOp(m3db.M3DBBackupOp):
         self.steps = [step for step in self.steps if getattr(base.BackupOpBase, f"step_{step}", None) is None]
 
 
+def _create_dummy_placement():
+    placement = m3_placement_pb2.Placement()
+    instance = placement.instances["node-id1"]
+    instance.id = "node-id1"
+    instance.endpoint = "endpoint1"
+    instance.hostname = "hostname1"
+    return placement
+
+
 BACKUP_FAILS = [1, None]
 
 KEY1_B64 = b64encode_to_str(f"_sd.placement/{ENV}/m3db".encode())
 KEY2_B64 = b64encode_to_str(b"key2")
-VALUE1_B64 = b64encode_to_str(b"value1")
+VALUE1_B64 = b64encode_to_str(_create_dummy_placement().SerializeToString())
 VALUE2_B64 = b64encode_to_str(b"value2")
 
 PREFIXES = [{
@@ -138,65 +148,23 @@ async def test_m3_restore(fail_at):
         assert await op.try_run() == (fail_at is None)
 
 
-@pytest.mark.parametrize(
-    "bytes_in,bytes_out",
-    [
-        (b"", b""),
-        (b"foo", b"foo"),
-        # node-id is replaced everywhere -> one non-covered case is enough
-        (m3db.protobuf_tlv(15, "node-id1"), m3db.protobuf_tlv(15, "node-id22")),
-        # az is replaced only in isolation_group -> check both
-        (m3db.protobuf_tlv(15, "az1"), m3db.protobuf_tlv(15, "az1")),
-        (m3db.protobuf_tlv(2, "az1"), m3db.protobuf_tlv(2, "az22")),
-        # endpoint is replaced only in endpoint -> check both
-        (m3db.protobuf_tlv(15, "endpoint1"), m3db.protobuf_tlv(15, "endpoint1")),
-        (m3db.protobuf_tlv(5, "endpoint1"), m3db.protobuf_tlv(5, "endpoint22")),
-        # hostname is replaced only in hostname -> check both
-        (m3db.protobuf_tlv(15, "hostname1"), m3db.protobuf_tlv(15, "hostname1")),
-        (m3db.protobuf_tlv(8, "hostname1"), m3db.protobuf_tlv(8, "hostname22")),
-    ]
-)
-def test_rewrite_single_m3_placement(bytes_in, bytes_out):
+def test_rewrite_single_m3_placement():
+    # What's in the (recorded, historic) placement plan
     src_pnode = m3db.M3PlacementNode(
         node_id="node-id1",
         endpoint="endpoint1",
         hostname="hostname1",
     )
+    # What we want to replace it with
     dst_pnode = m3db.M3PlacementNode(
         node_id="node-id22",
         endpoint="endpoint22",
         hostname="hostname22",
     )
-    src_node = CoordinatorNode(az="az1", url="unused")
-    dst_node = CoordinatorNode(az="az22", url="unused")
-    got = m3db.rewrite_single_m3_placement(
-        bytes_in, src_pnode=src_pnode, dst_pnode=dst_pnode, src_node=src_node, dst_node=dst_node, ensure_all=False
-    )
-    assert got == bytes_out
 
-
-def test_rewrite_single_m3_placement_missing():
-    src_pnode = m3db.M3PlacementNode(
-        node_id="node-id1",
-        endpoint="endpoint1",
-        hostname="hostname1",
-    )
-    dst_pnode = m3db.M3PlacementNode(
-        node_id="node-id22",
-        endpoint="endpoint22",
-        hostname="hostname22",
-    )
-    src_node = CoordinatorNode(az="az1", url="unused")
-    dst_node = CoordinatorNode(az="az22", url="unused")
-    with pytest.raises(ValueError):
-        m3db.rewrite_single_m3_placement(b"", src_pnode=src_pnode, dst_pnode=dst_pnode, src_node=src_node, dst_node=dst_node)
-
-
-def test_rewrite_single_m3_placement_missing_same():
-    pnode = m3db.M3PlacementNode(
-        node_id="node-id1",
-        endpoint="endpoint1",
-        hostname="hostname1",
-    )
-    node = CoordinatorNode(az="az1", url="unused")
-    m3db.rewrite_single_m3_placement(b"", src_pnode=pnode, dst_pnode=pnode, src_node=node, dst_node=node)
+    placement = _create_dummy_placement()
+    m3db.rewrite_single_m3_placement(placement, src_pnode=src_pnode, dst_pnode=dst_pnode, dst_isolation_group="az22")
+    instance2 = placement.instances["node-id22"]
+    assert instance2.endpoint == "endpoint22"
+    assert instance2.hostname == "hostname22"
+    assert instance2.isolation_group == "az22"
