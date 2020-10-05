@@ -20,6 +20,7 @@ from fastapi import HTTPException
 from typing import Optional
 from urllib.parse import urlunsplit
 
+import asyncio
 import contextlib
 import inspect
 import logging
@@ -98,6 +99,11 @@ class OpMixin:
                 op.set_status(Op.Status.running)
                 await fun()
                 op.set_status(Op.Status.done, from_state=Op.Status.running)
+            except ExpiredOperationException:
+                pass
+            except asyncio.CancelledError:
+                with contextlib.suppress(ExpiredOperationException):
+                    op.set_status_fail()
             except Exception as ex:  # pylint: disable=broad-except
                 logger.warning("Unexpected exception during async %s %s %r", op, fun, ex)
                 with contextlib.suppress(ExpiredOperationException):
@@ -105,15 +111,15 @@ class OpMixin:
                 raise
 
         def _sync_wrapper():
-            try:
-                op.set_status(Op.Status.running)
-                fun()
-                op.set_status(Op.Status.done, from_state=Op.Status.running)
-            except Exception as ex:  # pylint: disable=broad-except
-                logger.warning("Unexpected exception during sync %s %s %r", op, fun, ex)
-                with contextlib.suppress(ExpiredOperationException):
+            with contextlib.suppress(ExpiredOperationException):
+                try:
+                    op.set_status(Op.Status.running)
+                    fun()
+                    op.set_status(Op.Status.done, from_state=Op.Status.running)
+                except Exception as ex:  # pylint: disable=broad-except
+                    logger.warning("Unexpected exception during sync %s %s %r", op, fun, ex)
                     op.set_status_fail()
-                raise
+                    raise
 
         if inspect.iscoroutinefunction(fun):
             self.background_tasks.add_task(_async_wrapper)
