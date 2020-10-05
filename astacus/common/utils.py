@@ -110,6 +110,8 @@ async def httpx_request(url, *, caller, method="get", timeout=10, json: bool = T
             logger.warning("Unexpected response status code from %s to %s: %s %r", url, caller, r.status_code, r.text)
         except httpx.HTTPError as ex:
             logger.warning("Unexpected response from %s to %s: %r", url, caller, ex)
+        except asyncio.CancelledError:
+            raise
         except Exception as ex:  # pylint: disable=broad-except
             logger.error("Unexpected exception from %s to %s: %r", url, caller, ex)
         return None
