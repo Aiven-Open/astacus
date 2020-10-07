@@ -1,10 +1,11 @@
 # List of things that need to be implemented #
 
 Note: This is more granular and detailed version what should be done; there
-is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
+is also (Aiven-internal) backlog of Astacus tickets that track subset of
+these.
 
 
-## Short-term; before public availability
+## Short-term
 
 - document
     - (better) README
@@ -28,12 +29,9 @@ is also (Aiven-internal) backlog of Astacus tickets that track subset of these.
 
 ## Eventually
 
-- figure out why S3 didn't work - I got
-  `botocore.exceptions.ClientError: An error occurred (AccessDenied) when
-  calling the ListObjectsV2 operation: Access Denied`
-  with allegedly properly configured token+bucket
-
 - package (or have someone do it?) this for distros
+
+- push this to PIP
 
 - separate rohmu from pghoard (right now, pghoard dependency is bit .. ugly ..)
 
