@@ -20,6 +20,7 @@ def test_config_sample_load(path, tmpdir):
 
     (astacus_dir / "src").mkdir()  # root
     (astacus_dir / "backup").mkdir()  # object storage
+    (astacus_dir / "m3").mkdir()  # m3 data
 
     app = FastAPI()
     rewritten_conf = tmpdir / "astacus.conf"
