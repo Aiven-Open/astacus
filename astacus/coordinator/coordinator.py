@@ -12,8 +12,8 @@ from astacus.common.rohmustorage import MultiRohmuStorage
 from astacus.common.storage import HexDigestStorage, JsonStorage, MultiFileStorage, MultiStorage
 from datetime import datetime
 from enum import Enum
-from fastapi import BackgroundTasks, Depends, Request
-from typing import Optional
+from fastapi import BackgroundTasks, Depends, HTTPException, Request
+from typing import List, Optional
 from urllib.parse import urlunsplit
 
 import asyncio
@@ -214,31 +214,33 @@ class CoordinatorOpWithClusterLock(CoordinatorOp):
         self.ttl = self.config.default_lock_ttl
         self.initial_lock_start = time.monotonic()
         self.locker = self.get_locker()
+        self.relock_tasks: List[asyncio.Task] = []
 
     def get_locker(self):
         return f"{socket.gethostname()}-{id(self)}"
 
-    async def run_with_lock(self):
-        raise NotImplementedError
+    async def acquire_cluster_lock(self):
+        # Acquire initial locks
+        r = await self.request_lock_from_nodes(locker=self.locker, ttl=self.ttl)
+        if not r:
+            # Ensure we don't wind up holding partial lock on the cluster
+            await self.request_unlock_from_nodes(locker=self.locker)
+            raise HTTPException(
+                409, {
+                    "code": magic.ErrorCode.cluster_lock_unavailable,
+                    "message": "Unable to acquire cluster lock to create operation"
+                }
+            )
+        self.relock_tasks = await self._create_relock_tasks()
 
     async def run(self):
-        relock_tasks = []
-        # Acquire initial locks
+        assert self.relock_tasks
         try:
-            r = await self.request_lock_from_nodes(locker=self.locker, ttl=self.ttl)
-            if r:
-                logger.debug("Locks acquired, creating relock tasks")
-                relock_tasks = await self._create_relock_tasks()
-                logger.debug("Calling run_with_lock")
-                await self.run_with_lock()
-            else:
-                logger.info("Initial lock failed")
-                self.set_status_fail()
+            await self.run_with_lock()
         finally:
-            if relock_tasks:
-                for task in relock_tasks:
-                    task.cancel()
-                await asyncio.gather(*relock_tasks, return_exceptions=True)
+            for task in self.relock_tasks:
+                task.cancel()
+            await asyncio.gather(*self.relock_tasks, return_exceptions=True)
             await self.request_unlock_from_nodes(locker=self.locker)
 
     def set_status(self, status: op.Op.Status, *, from_status: Optional[op.Op.Status] = None) -> bool:
@@ -319,3 +321,8 @@ class Coordinator(op.OpMixin):
             file_mstorage = MultiFileStorage(self.config.object_storage_cache)
             json_mstorage = MultiCachingJsonStorage(backend_mstorage=mstorage, cache_mstorage=file_mstorage)
         self.json_mstorage = json_mstorage
+
+    async def start_op_async(self, *, op, op_name, fun):  # pylint: disable=redefined-outer-name
+        if isinstance(op, CoordinatorOpWithClusterLock):
+            await op.acquire_cluster_lock()
+        return super().start_op(op=op, op_name=op_name, fun=fun)

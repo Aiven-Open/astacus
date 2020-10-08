@@ -65,6 +65,11 @@ def test_restore(fail_at, app, client, storage):
                 })
 
         response = client.post("/restore")
+        if fail_at == 1:
+            # Cluster lock failure is immediate
+            assert response.status_code == 409, response.json()
+            assert app.state.coordinator_state.op_info.op_id == 0
+            return
         assert response.status_code == 200, response.json()
 
         response = client.get(response.json()["status_url"])

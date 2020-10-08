@@ -65,14 +65,14 @@ def unlock(*, locker: str, c: Coordinator = Depends()):
 async def backup(*, c: Coordinator = Depends()):
     op_class = get_plugin_backup_class(c.config.plugin)
     op = op_class(c=c)
-    return c.start_op(op_name=OpName.backup, op=op, fun=op.run)
+    return await c.start_op_async(op_name=OpName.backup, op=op, fun=op.run)
 
 
 @router.post("/restore")
 async def restore(*, req: ipc.RestoreRequest = ipc.RestoreRequest(), c: Coordinator = Depends()):
     op_class = get_plugin_restore_class(c.config.plugin)
     op = op_class(c=c, req=req)
-    return c.start_op(op_name=OpName.restore, op=op, fun=op.run)
+    return await c.start_op_async(op_name=OpName.restore, op=op, fun=op.run)
 
 
 @router.get("/list")
@@ -90,7 +90,7 @@ def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordinator = 
 @router.post("/cleanup")
 async def cleanup(*, req: ipc.CleanupRequest = ipc.CleanupRequest(), c: Coordinator = Depends()):
     op = CleanupOp(c=c, req=req)
-    return c.start_op(op_name=OpName.cleanup, op=op, fun=op.run)
+    return await c.start_op_async(op_name=OpName.cleanup, op=op, fun=op.run)
 
 
 @router.put("/{op_name}/{op_id}/sub-result")

@@ -25,6 +25,11 @@ def _run(*, client, populated_mstorage, app, fail_at=None, retention, exp_jsons,
             # Failure point 1: Lock fails
             respx.post(f"{node.url}/lock?locker=x&ttl=60", content={"locked": fail_at != 1})
         response = client.post("/cleanup")
+        if fail_at == 1:
+            # Cluster lock failure is immediate
+            assert response.status_code == 409, response.json()
+            assert app.state.coordinator_state.op_info.op_id == 0
+            return
         assert response.status_code == 200, response.json()
 
         response = client.get(response.json()["status_url"])
