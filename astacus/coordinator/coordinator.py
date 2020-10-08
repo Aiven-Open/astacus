@@ -241,9 +241,9 @@ class CoordinatorOpWithClusterLock(CoordinatorOp):
                 await asyncio.gather(*relock_tasks, return_exceptions=True)
             await self.request_unlock_from_nodes(locker=self.locker)
 
-    def set_status(self, state: op.Op.Status, *, from_state: Optional[op.Op.Status] = None) -> bool:
-        changed = super().set_status(state=state, from_state=from_state)
-        if state == op.Op.Status.starting and changed:
+    def set_status(self, status: op.Op.Status, *, from_status: Optional[op.Op.Status] = None) -> bool:
+        changed = super().set_status(status=status, from_status=from_status)
+        if status == op.Op.Status.starting and changed:
             self.op_started = utils.monotonic_time()
         self._update_running_stats()
         return changed

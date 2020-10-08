@@ -30,8 +30,8 @@ class MockBackgroundTasks(list):
 class MockOp:
     status = None
 
-    def set_status(self, state, *, from_state=None):
-        if from_state and from_state != self.status:
+    def set_status(self, state, *, from_status=None):
+        if from_status and from_status != self.status:
             return
         self.status = state
 
