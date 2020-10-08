@@ -188,6 +188,7 @@ class CoordinatorOp(op.Op):
                 # We got something -> decode the result
                 result = result_class.parse_obj(r)
                 results[i] = result
+                failures[i] = 0
                 if result.progress.finished_failed:
                     return []
             if not any(True for result in results if result is None or not result.progress.final):
