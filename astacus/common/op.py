@@ -111,15 +111,17 @@ class OpMixin:
                 raise
 
         def _sync_wrapper():
-            with contextlib.suppress(ExpiredOperationException):
-                try:
-                    op.set_status(Op.Status.running)
-                    fun()
-                    op.set_status(Op.Status.done, from_state=Op.Status.running)
-                except Exception as ex:  # pylint: disable=broad-except
-                    logger.warning("Unexpected exception during sync %s %s %r", op, fun, ex)
+            try:
+                op.set_status(Op.Status.running)
+                fun()
+                op.set_status(Op.Status.done, from_state=Op.Status.running)
+            except ExpiredOperationException:
+                pass
+            except Exception as ex:  # pylint: disable=broad-except
+                logger.warning("Unexpected exception during sync %s %s %r", op, fun, ex)
+                with contextlib.suppress(ExpiredOperationException):
                     op.set_status_fail()
-                    raise
+                raise
 
         if inspect.iscoroutinefunction(fun):
             self.background_tasks.add_task(_async_wrapper)
