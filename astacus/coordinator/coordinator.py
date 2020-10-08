@@ -179,7 +179,9 @@ class CoordinatorOp(op.Op):
                 # TBD: This could be done in parallel too
                 if result is not None and result.progress.final:
                     continue
-                r = await utils.httpx_request(url, caller="CoordinatorOp.wait_successful_results")
+                r = await utils.httpx_request(
+                    url, caller="CoordinatorOp.wait_successful_results", timeout=self.config.poll.result_timeout
+                )
                 if r is None:
                     failures[i] = failures.get(i, 0) + 1
                     if failures[i] >= self.config.poll.maximum_failures:

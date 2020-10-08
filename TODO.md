@@ -31,6 +31,9 @@ these.
 
 - package (or have someone do it?) this for distros
 
+- page the result from operations (as it is, some of the stuff may take
+  e.g. 30 seconds to get across in our prod cluster)
+
 - push this to PIP
 
 - separate rohmu from pghoard (right now, pghoard dependency is bit .. ugly ..)
