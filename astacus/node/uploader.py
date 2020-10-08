@@ -33,21 +33,22 @@ class Uploader(ThreadLocalStorage):
                 if not path.is_file():
                     logger.warning("%s disappeared post-snapshot", path)
                     continue
-                current_hexdigest = hash_hexdigest_readable(snapshotfile.open_for_reading(snapshotter.dst))
+                with snapshotfile.open_for_reading(snapshotter.dst) as f:
+                    current_hexdigest = hash_hexdigest_readable(f)
                 if current_hexdigest != snapshotfile.hexdigest:
                     logger.info("Hash of %s changed before upload", snapshotfile.relative_path)
                     continue
                 try:
-                    upload_result = storage.upload_hexdigest_from_file(
-                        hexdigest, snapshotfile.open_for_reading(snapshotter.dst)
-                    )
+                    with snapshotfile.open_for_reading(snapshotter.dst) as f:
+                        upload_result = storage.upload_hexdigest_from_file(hexdigest, f)
                 except exceptions.TransientException:
                     # We found and processed one file with the particular
                     # hexdigest; even if sending it failed, we won't try
                     # subsequent files and instead break out of iterating
                     # through candidate files with same hexdigest.
                     return progress.upload_failure, 0, 0
-                current_hexdigest = hash_hexdigest_readable(snapshotfile.open_for_reading(snapshotter.dst))
+                with snapshotfile.open_for_reading(snapshotter.dst) as f:
+                    current_hexdigest = hash_hexdigest_readable(f)
                 if current_hexdigest != snapshotfile.hexdigest:
                     logger.info("Hash of %s changed after upload", snapshotfile.relative_path)
                     storage.delete_hexdigest(hexdigest)

@@ -20,6 +20,7 @@ class LockCall(str, Enum):
 
 
 class ErrorCode(str, Enum):
+    cluster_lock_unavailable = "cluster_lock_unavailable"
     operation_id_mismatch = "operation_id_mismatch"
 
 

@@ -196,6 +196,12 @@ class SizeLimitedFile:
         self._file_size = file_size
         self.tell = self._f.tell
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, t, v, tb):
+        self._f.close()
+
     def read(self, n=None):
         can_read = max(0, self._file_size - self._f.tell())
         if n is None:

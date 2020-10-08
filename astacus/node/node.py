@@ -60,16 +60,16 @@ class NodeOp(op.Op):
         self._sent_result_json = result_json
         utils.http_request(self.req.result_url, method="put", caller="NodeOp.send_result", data=result_json)
 
-    def set_status(self, state: op.Op.Status, *, from_state: Optional[op.Op.Status] = None) -> bool:
-        if not super().set_status(state, from_state=from_state):
-            # State didn't change, do nothing
+    def set_status(self, status: op.Op.Status, *, from_status: Optional[op.Op.Status] = None) -> bool:
+        if not super().set_status(status, from_status=from_status):
+            # Status didn't change, do nothing
             return False
-        if state == self.Status.fail:
+        if status == self.Status.fail:
             progress = self.result.progress
             if not progress.final:
                 progress.add_fail()
                 progress.done()
-        elif state != self.Status.done:
+        elif status != self.Status.done:
             return True
         # fail or done; either way, we're done, send final result
         self.send_result()

@@ -26,6 +26,10 @@ class PollConfig(AstacusModel):
     # How many times can poll fail in row before we call it a day
     maximum_failures: int = 5
 
+    # Sometimes Astacus blobs can be .. big.
+    # (TBD: This should be paged somehow)
+    result_timeout: int = 300
+
 
 class CoordinatorNode(AstacusModel):
     # What is the Astacus url of the node

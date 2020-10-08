@@ -7,7 +7,7 @@ See LICENSE for details
 
 from astacus.common import magic, utils
 from astacus.common.ipc import SnapshotFile, SnapshotHash, SnapshotState
-from astacus.common.progress import Progress
+from astacus.common.progress import increase_worth_reporting, Progress
 from pathlib import Path
 from typing import Optional
 
@@ -92,18 +92,24 @@ class Snapshotter:
         return SnapshotFile(relative_path=relative_path, mtime_ns=st.st_mtime_ns, file_size=st.st_size)
 
     def _get_snapshot_hash_list(self, relative_paths):
+        same = 0
+        lost = 0
         for relative_path in relative_paths:
             old_snapshotfile = self.relative_path_to_snapshotfile.get(relative_path)
             try:
                 snapshotfile = self._snapshotfile_from_path(relative_path)
             except FileNotFoundError:
-                logger.debug("%s disappeared before stat, ignoring", self.src / relative_path)
+                lost += 1
+                if increase_worth_reporting(lost):
+                    logger.debug("#%d. lost - %s disappeared before stat, ignoring", lost, self.src / relative_path)
                 continue
             if old_snapshotfile:
                 snapshotfile.hexdigest = old_snapshotfile.hexdigest
                 snapshotfile.content_b64 = old_snapshotfile.content_b64
                 if old_snapshotfile == snapshotfile:
-                    logger.debug("%r in %s is same", old_snapshotfile, relative_path)
+                    same += 1
+                    if increase_worth_reporting(same):
+                        logger.debug("#%d. same - %r in %s is same", same, old_snapshotfile, relative_path)
                     continue
             yield snapshotfile
 
@@ -115,6 +121,47 @@ class Snapshotter:
     def get_snapshot_state(self):
         return SnapshotState(root_globs=self.globs, files=sorted(self.relative_path_to_snapshotfile.values()))
 
+    def _snapshot_create_missing_directories(self, *, src_dirs, dst_dirs):
+        changes = 0
+        for i, relative_dir in enumerate(set(src_dirs).difference(dst_dirs), 1):
+            dst_path = self.dst / relative_dir
+            dst_path.mkdir(parents=True, exist_ok=True)
+            if increase_worth_reporting(i):
+                logger.debug("#%d. new directory: %r", i, relative_dir)
+            changes += 1
+        return changes
+
+    def _snapshot_remove_extra_files(self, *, src_files, dst_files):
+        changes = 0
+        for i, relative_path in enumerate(set(dst_files).difference(src_files), 1):
+            dst_path = self.dst / relative_path
+            snapshotfile = self.relative_path_to_snapshotfile.get(relative_path)
+            if snapshotfile:
+                self._remove_snapshotfile(snapshotfile)
+            dst_path.unlink()
+            if increase_worth_reporting(i):
+                logger.debug("#%d. extra file: %r", i, relative_path)
+            changes += 1
+        return changes
+
+    def _snapshot_add_missing_files(self, *, src_files, dst_files):
+        disappeared = 0
+        changes = 0
+        for i, relative_path in enumerate(set(src_files).difference(dst_files), 1):
+            src_path = self.src / relative_path
+            dst_path = self.dst / relative_path
+            try:
+                os.link(src=src_path, dst=dst_path, follow_symlinks=False)
+            except FileNotFoundError:
+                disappeared += 1
+                if increase_worth_reporting(disappeared):
+                    logger.debug("#%d. %s disappeared before linking, ignoring", disappeared, src_path)
+                continue
+            if increase_worth_reporting(i - disappeared):
+                logger.debug("#%d. new file: %r", i - disappeared, relative_path)
+            changes += 1
+        return changes
+
     def snapshot(self, *, progress: Optional[Progress] = None):
         if progress is None:
             progress = Progress()
@@ -124,37 +171,15 @@ class Snapshotter:
         dst_dirs, dst_files = self._list_dirs_and_files(self.dst)
 
         # Create missing directories
-        changes = 0
-        for relative_dir in set(src_dirs).difference(dst_dirs):
-            dst_path = self.dst / relative_dir
-            dst_path.mkdir(parents=True, exist_ok=True)
-            logger.debug("new directory: %r", relative_dir)
-            changes += 1
-
+        changes = self._snapshot_create_missing_directories(src_dirs=src_dirs, dst_dirs=dst_dirs)
         progress.add_success()
 
         # Remove extra files
-        for relative_path in set(dst_files).difference(src_files):
-            dst_path = self.dst / relative_path
-            snapshotfile = self.relative_path_to_snapshotfile.get(relative_path)
-            if snapshotfile:
-                self._remove_snapshotfile(snapshotfile)
-            dst_path.unlink()
-            logger.debug("extra file: %r", relative_path)
-            changes += 1
+        changes += self._snapshot_remove_extra_files(src_files=src_files, dst_files=dst_files)
         progress.add_success()
 
         # Add missing files
-        for relative_path in set(src_files).difference(dst_files):
-            src_path = self.src / relative_path
-            dst_path = self.dst / relative_path
-            try:
-                os.link(src=src_path, dst=dst_path, follow_symlinks=False)
-            except FileNotFoundError:
-                logger.debug("%s disappeared before linking, ignoring", src_path)
-                continue
-            logger.debug("new file: %r", relative_path)
-            changes += 1
+        changes += self._snapshot_add_missing_files(src_files=src_files, dst_files=dst_files)
         progress.add_success()
 
         # We COULD also remove extra directories, but it is not
@@ -169,10 +194,11 @@ class Snapshotter:
 
         def _cb(snapshotfile):
             # src may or may not be present; dst is present as it is in snapshot
-            if snapshotfile.file_size <= magic.EMBEDDED_FILE_SIZE:
-                snapshotfile.content_b64 = base64.b64encode(snapshotfile.open_for_reading(self.dst).read()).decode()
-            else:
-                snapshotfile.hexdigest = hash_hexdigest_readable(snapshotfile.open_for_reading(self.dst))
+            with snapshotfile.open_for_reading(self.dst) as f:
+                if snapshotfile.file_size <= magic.EMBEDDED_FILE_SIZE:
+                    snapshotfile.content_b64 = base64.b64encode(f.read()).decode()
+                else:
+                    snapshotfile.hexdigest = hash_hexdigest_readable(f)
             return snapshotfile
 
         def _result_cb(*, map_in, map_out):

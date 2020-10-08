@@ -50,16 +50,16 @@ class Op:
     def __init__(self, *, info: Info):
         self.info = info
 
-    def set_status(self, state: Status, *, from_state: Optional[Status] = None) -> bool:
+    def set_status(self, status: Status, *, from_status: Optional[Status] = None) -> bool:
         assert self.op_id, "start_op() should be called before set_status()"
         if self.info.op_id != self.op_id:
             raise ExpiredOperationException("operation id mismatch")
-        if from_state and from_state != self.info.op_status:
+        if from_status and from_status != self.info.op_status:
             return False
-        if self.info.op_status == state:
+        if self.info.op_status == status:
             return False
-        logger.debug("%r state %s -> %s", self, self.info.op_status, state)
-        self.info.op_status = state
+        logger.debug("%r status %s -> %s", self, self.info.op_status, status)
+        self.info.op_status = status
         return True
 
     def set_status_fail(self):
@@ -98,7 +98,7 @@ class OpMixin:
             try:
                 op.set_status(Op.Status.running)
                 await fun()
-                op.set_status(Op.Status.done, from_state=Op.Status.running)
+                op.set_status(Op.Status.done, from_status=Op.Status.running)
             except ExpiredOperationException:
                 pass
             except asyncio.CancelledError:
@@ -111,15 +111,17 @@ class OpMixin:
                 raise
 
         def _sync_wrapper():
-            with contextlib.suppress(ExpiredOperationException):
-                try:
-                    op.set_status(Op.Status.running)
-                    fun()
-                    op.set_status(Op.Status.done, from_state=Op.Status.running)
-                except Exception as ex:  # pylint: disable=broad-except
-                    logger.warning("Unexpected exception during sync %s %s %r", op, fun, ex)
+            try:
+                op.set_status(Op.Status.running)
+                fun()
+                op.set_status(Op.Status.done, from_status=Op.Status.running)
+            except ExpiredOperationException:
+                pass
+            except Exception as ex:  # pylint: disable=broad-except
+                logger.warning("Unexpected exception during sync %s %s %r", op, fun, ex)
+                with contextlib.suppress(ExpiredOperationException):
                     op.set_status_fail()
-                    raise
+                raise
 
         if inspect.iscoroutinefunction(fun):
             self.background_tasks.add_task(_async_wrapper)
