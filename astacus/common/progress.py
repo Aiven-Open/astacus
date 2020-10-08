@@ -8,8 +8,29 @@ See LICENSE for details
 from .utils import AstacusModel
 
 import logging
+import math
 
 logger = logging.getLogger(__name__)
+
+_log_1_1 = math.log(1.1)
+
+
+def increase_worth_reporting(old_value, new_value, *, total=None):
+    """ Make reporting sparser and sparser as values grow larger
+    - report every 1.1**N or so
+    - if we know total, report every percent
+    """
+    if total is not None:
+        if new_value == total or total <= 100:
+            return True
+        old_percent = 100 * old_value // total
+        new_percent = 100 * new_value // total
+        return old_percent != new_percent
+    if old_value <= 10 or new_value <= 10:
+        return True
+    old_exp = int(math.log(old_value) / _log_1_1)
+    new_exp = int(math.log(new_value) / _log_1_1)
+    return old_exp != new_exp
 
 
 class Progress(AstacusModel):
@@ -32,21 +53,27 @@ class Progress(AstacusModel):
     def add_total(self, n):
         if not n:
             return
+        old_total = self.total
         self.total += n
-        logger.debug("add_total %r -> %r", n, self)
+        if increase_worth_reporting(old_total, self.total):
+            logger.debug("add_total %r -> %r", n, self)
         assert not self.final
 
     def add_fail(self, n=1, *, info="add_fail"):
         assert n > 0
+        old_failed = self.failed
         self.failed += n
-        logger.debug("%s %r -> %r", info, n, self)
+        if increase_worth_reporting(old_failed, self.failed):
+            logger.debug("%s %r -> %r", info, n, self)
         assert not self.final
 
     def add_success(self, n=1, *, info="add_success"):
         assert n > 0
+        old_handled = self.handled
         self.handled += n
         assert self.handled <= self.total
-        logger.debug("%s %r -> %r", info, n, self)
+        if increase_worth_reporting(old_handled, self.handled, total=self.total):
+            logger.debug("%s %r -> %r", info, n, self)
         assert not self.final
 
     def download_success(self, size):
