@@ -27,6 +27,12 @@ import pytest
         (999, 1000, 100_000, True),
         (1000, 1999, 100_000, False),
         (1999, 2000, 100_000, True),
+
+        # Test +1 logic
+        (1, None, None, True),
+        (16674, None, None, False),
+        (16675, None, None, True),
+        (16676, None, None, False),
     ]
 )
 def test_increase_worth_reporting(old_value, new_value, total, exp):

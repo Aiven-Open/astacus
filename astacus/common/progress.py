@@ -15,20 +15,23 @@ logger = logging.getLogger(__name__)
 _log_1_1 = math.log(1.1)
 
 
-def increase_worth_reporting(old_value, new_value, *, total=None):
+def increase_worth_reporting(value, new_value=None, *, total=None):
     """ Make reporting sparser and sparser as values grow larger
     - report every 1.1**N or so
     - if we know total, report every percent
     """
+    if new_value is None:
+        new_value = value
+        value = new_value - 1
     if total is not None:
         if new_value == total or total <= 100:
             return True
-        old_percent = 100 * old_value // total
+        old_percent = 100 * value // total
         new_percent = 100 * new_value // total
         return old_percent != new_percent
-    if old_value <= 10 or new_value <= 10:
+    if value <= 10 or new_value <= 10:
         return True
-    old_exp = int(math.log(old_value) / _log_1_1)
+    old_exp = int(math.log(value) / _log_1_1)
     new_exp = int(math.log(new_value) / _log_1_1)
     return old_exp != new_exp
 
