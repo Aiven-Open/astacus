@@ -20,6 +20,7 @@ import asyncio
 import json
 import logging
 import socket
+import threading
 import time
 
 logger = logging.getLogger(__name__)
@@ -324,6 +325,7 @@ class Coordinator(op.OpMixin):
             file_mstorage = MultiFileStorage(self.config.object_storage_cache)
             json_mstorage = MultiCachingJsonStorage(backend_mstorage=mstorage, cache_mstorage=file_mstorage)
         self.json_mstorage = json_mstorage
+        self.sync_lock = utils.get_or_create_state(request=request, key="sync_lock", factory=threading.RLock)
 
     async def start_op_async(self, *, op, op_name, fun):  # pylint: disable=redefined-outer-name
         if isinstance(op, CoordinatorOpWithClusterLock):

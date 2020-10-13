@@ -37,6 +37,7 @@ class CoordinatorState(OpState):
     mutated.
     """
     cached_list_response: Optional[CachedListResponse] = None
+    cached_list_running: bool = False
 
 
 async def coordinator_state(request: Request) -> CoordinatorState:
