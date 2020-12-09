@@ -12,10 +12,9 @@ from astacus.coordinator.plugins import get_plugin_restore_class
 from contextlib import nullcontext as does_not_raise
 from pathlib import Path
 
+import json
 import pytest
 import respx
-
-FAILS = [1, 2, None]
 
 BACKUP_NAME = "dummybackup"
 
@@ -41,9 +40,19 @@ BACKUP_MANIFEST = ipc.BackupManifest(
 )
 
 
-@pytest.mark.parametrize("fail_at", FAILS)
-def test_restore(fail_at, app, client, storage):
+@pytest.mark.parametrize(
+    "storage_name,fail_at", [
+        (None, 1),
+        (None, 2),
+        (None, 3),
+        (None, None),
+        ("x", None),
+        ("y", None),
+    ]
+)
+def test_restore(storage_name, fail_at, app, client, mstorage):
     # Create fake backup (not pretty but sufficient?)
+    storage = mstorage.get_storage(storage_name)
     storage.upload_json(BACKUP_NAME, BACKUP_MANIFEST)
     nodes = app.state.coordinator_config.nodes
     with respx.mock:
@@ -54,7 +63,16 @@ def test_restore(fail_at, app, client, storage):
 
             # Failure point 2: download call fails
             if fail_at != 2:
-                respx.post(f"{node.url}/download", content={"op_id": 42, "status_url": f"{node.url}/download/result"})
+                download_url = f"{node.url}/download"
+
+                def match_download(request, response, *, _url=download_url):
+                    if request.method != "POST" or _url != str(request.url):
+                        return None
+                    if json.loads(request.read())["storage"] != storage.storage_name:
+                        return None
+                    return response
+
+                respx.add(match_download, content={"op_id": 42, "status_url": f"{node.url}/download/result"})
 
             # Failure point 3: download result call fails
             if fail_at != 3:
@@ -64,7 +82,7 @@ def test_restore(fail_at, app, client, storage):
                     },
                 })
 
-        response = client.post("/restore")
+        response = client.post("/restore", json={"storage": storage_name} if storage_name else None)
         if fail_at == 1:
             # Cluster lock failure is immediate
             assert response.status_code == 409, response.json()
