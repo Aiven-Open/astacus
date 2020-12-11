@@ -167,6 +167,10 @@ class RestoreOpBase(OpBase):
         if req.storage:
             self.set_storage_name(req.storage)
 
+    @property
+    def restore_storage_name(self):
+        return self.req.storage if self.req.storage else self.default_storage_name
+
     async def step_backup_name(self) -> str:
         assert self.json_storage
         name = self.req.name
@@ -202,7 +206,7 @@ class RestoreOpBase(OpBase):
                 root_globs = self.result_backup_manifest.snapshot_results[0].state.root_globs
                 # Restore fake, empty backup to ensure node is clean
                 result = ipc.SnapshotResult(state=ipc.SnapshotState(root_globs=root_globs, files=[]))
-            req = ipc.SnapshotDownloadRequest(state=result.state, storage=self.default_storage_name)
+            req = ipc.SnapshotDownloadRequest(state=result.state, storage=self.restore_storage_name)
             start_result = await self.request_from_nodes(
                 "download", caller="RestoreOpBase.step_restore", method="post", req=req, nodes=[node]
             )
