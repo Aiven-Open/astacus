@@ -145,6 +145,7 @@ class Snapshotter:
         return changes
 
     def _snapshot_add_missing_files(self, *, src_files, dst_files):
+        existing = 0
         disappeared = 0
         changes = 0
         for i, relative_path in enumerate(set(src_files).difference(dst_files), 1):
@@ -152,6 +153,15 @@ class Snapshotter:
             dst_path = self.dst / relative_path
             try:
                 os.link(src=src_path, dst=dst_path, follow_symlinks=False)
+            except FileExistsError:
+                # This happens only if snapshot is started twice at
+                # same time. While it is technically speaking upstream
+                # error, we rather handle it here than leave
+                # exceptions not handled.
+                existing += 1
+                if increase_worth_reporting(existing):
+                    logger.debug("#%d. %s already existed, ignoring", existing, src_path)
+                continue
             except FileNotFoundError:
                 disappeared += 1
                 if increase_worth_reporting(disappeared):
