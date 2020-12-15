@@ -12,7 +12,7 @@ By design it cannot be persisted to disk, but e.g. op_info can be if necessary.
 from astacus.common import ipc, utils
 from astacus.common.op import OpState
 from dataclasses import dataclass
-from fastapi import Request
+from fastapi import FastAPI, Request
 from pydantic import Field
 from typing import Optional
 
@@ -38,7 +38,12 @@ class CoordinatorState(OpState):
     """
     cached_list_response: Optional[CachedListResponse] = None
     cached_list_running: bool = False
+    shutting_down: bool = False
+
+
+async def app_coordinator_state(app: FastAPI) -> CoordinatorState:
+    return utils.get_or_create_state(app=app, key=APP_KEY, factory=CoordinatorState)
 
 
 async def coordinator_state(request: Request) -> CoordinatorState:
-    return utils.get_or_create_state(request=request, key=APP_KEY, factory=CoordinatorState)
+    return await app_coordinator_state(app=request.app)

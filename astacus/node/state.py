@@ -67,4 +67,4 @@ class NodeState(OpState):
 
 
 def node_state(request: Request) -> NodeState:
-    return utils.get_or_create_state(request=request, key=APP_KEY, factory=NodeState)
+    return utils.get_or_create_state(app=request.app, key=APP_KEY, factory=NodeState)

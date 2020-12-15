@@ -9,9 +9,9 @@ Shared utilities (between coordinator and node)
 
 """
 
+from fastapi import FastAPI
 from multiprocessing.dummy import Pool  # fastapi + fork = bad idea
 from pydantic import BaseModel
-from starlette.requests import Request
 
 import asyncio
 import datetime
@@ -59,12 +59,12 @@ class AstacusModel(BaseModel):
         return _json.loads(self.json(**kw))
 
 
-def get_or_create_state(*, request: Request, key: str, factory):
+def get_or_create_state(*, app: FastAPI, key: str, factory):
     """ Get or create sub-state entry (using factory callback) """
-    value = getattr(request.app.state, key, None)
+    value = getattr(app.state, key, None)
     if value is None:
         value = factory()
-        setattr(request.app.state, key, value)
+        setattr(app.state, key, value)
     return value
 
 

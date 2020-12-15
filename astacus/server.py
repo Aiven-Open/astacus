@@ -15,6 +15,7 @@ it allows for nice in-place-reloading.
 
 from astacus import config
 from astacus.coordinator.api import router as coordinator_router
+from astacus.coordinator.state import app_coordinator_state
 from astacus.node.api import router as node_router
 from fastapi import FastAPI
 from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
@@ -41,6 +42,12 @@ def init_app():
     api = FastAPI()
     api.include_router(coordinator_router, tags=["coordinator"])
     api.include_router(node_router, prefix="/node", tags=["node"])
+
+    @api.on_event("shutdown")
+    async def _shutdown_event():
+        state = await app_coordinator_state(app=app)
+        state.shutting_down = True
+
     gconfig = config.set_global_config_from_path(api, config_path)
     sentry_dsn = os.environ.get("SENTRY_DSN", gconfig.sentry_dsn)
     sentry_api = api

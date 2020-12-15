@@ -13,6 +13,7 @@ from astacus.common import ipc
 from astacus.common.etcd import b64encode_to_str
 from astacus.coordinator.config import CoordinatorConfig
 from astacus.coordinator.plugins import base, m3db
+from astacus.coordinator.state import CoordinatorState
 from astacus.proto import m3_placement_pb2
 
 import pytest
@@ -50,6 +51,7 @@ class DummyM3DBBackupOp(m3db.M3DBBackupOp):
         # pylint: disable=super-init-not-called
         self.config = CoordinatorConfig.parse_obj(COORDINATOR_CONFIG)
         self.steps = [step for step in self.steps if getattr(base.BackupOpBase, f"step_{step}", None) is None]
+        self.state = CoordinatorState()
 
 
 def _create_dummy_placement():
@@ -61,7 +63,7 @@ def _create_dummy_placement():
     return placement
 
 
-BACKUP_FAILS = [1, None]
+BACKUP_FAILS = [0, 1, None]
 
 KEY1_B64 = b64encode_to_str(f"_sd.placement/{ENV}/m3db".encode())
 KEY2_B64 = b64encode_to_str(b"key2")
@@ -91,6 +93,7 @@ async def test_m3_backup(fail_at):
     op = DummyM3DBBackupOp()
     assert op.steps == ['init', 'retrieve_etcd', 'retrieve_etcd_again', 'create_m3_manifest']
     with respx.mock:
+        op.state.shutting_down = fail_at == 0
         if fail_at != 1:
             respx.post(
                 "http://dummy/etcd/kv/range",
@@ -106,7 +109,7 @@ async def test_m3_backup(fail_at):
                 ]}
             )
         assert await op.try_run() == (fail_at is None)
-    if fail_at:
+    if fail_at is not None:
         return
     assert op.plugin_data == PLUGIN_DATA
 
@@ -118,6 +121,7 @@ class DummyM3DRestoreOp(m3db.M3DRestoreOp):
     def __init__(self):
         # pylint: disable=super-init-not-called
         self.config = CoordinatorConfig.parse_obj(COORDINATOR_CONFIG)
+        self.state = CoordinatorState()
 
     result_backup_name = "x"
 
@@ -133,7 +137,7 @@ class DummyM3DRestoreOp(m3db.M3DRestoreOp):
         })
 
 
-RESTORE_FAILS = [1, 2, None]
+RESTORE_FAILS = [0, 1, 2, None]
 
 
 @pytest.mark.asyncio
@@ -141,6 +145,7 @@ RESTORE_FAILS = [1, 2, None]
 async def test_m3_restore(fail_at):
     op = DummyM3DRestoreOp()
     with respx.mock:
+        op.state.shutting_down = fail_at == 0
         if fail_at != 1:
             respx.post("http://dummy/etcd/kv/deleterange", content={"ok": True})
         if fail_at != 2:

@@ -40,6 +40,9 @@ class OpBase(CoordinatorOpWithClusterLock):
 
     async def try_run(self) -> bool:
         for i, step in enumerate(self.steps, 1):
+            if self.state.shutting_down:
+                logger.info("Step %s not even started due to shutdown", step)
+                return False
             logger.debug("step %d/%d: %s", i, len(self.steps), step)
             step_name = f"step_{step}"
             step_callable = getattr(self, step_name)
