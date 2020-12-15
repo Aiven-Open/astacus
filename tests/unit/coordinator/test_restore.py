@@ -62,25 +62,29 @@ def test_restore(storage_name, fail_at, app, client, mstorage):
             respx.post(f"{node.url}/lock?locker=x&ttl=60", content={"locked": fail_at != 1})
 
             # Failure point 2: download call fails
-            if fail_at != 2:
-                download_url = f"{node.url}/download"
+            download_url = f"{node.url}/download"
 
-                def match_download(request, response, *, _url=download_url):
-                    if request.method != "POST" or _url != str(request.url):
-                        return None
-                    if json.loads(request.read())["storage"] != storage.storage_name:
-                        return None
-                    return response
+            def match_download(request, response, *, _url=download_url):
+                if fail_at == 2:
+                    return None
+                if request.method != "POST" or _url != str(request.url):
+                    return None
+                if json.loads(request.read())["storage"] != storage.storage_name:
+                    return None
+                return response
 
-                respx.add(match_download, content={"op_id": 42, "status_url": f"{node.url}/download/result"})
+            respx.add(match_download, content={"op_id": 42, "status_url": f"{node.url}/download/result"})
 
             # Failure point 3: download result call fails
-            if fail_at != 3:
-                respx.get(f"{node.url}/download/result", content={
+            respx.get(
+                f"{node.url}/download/result",
+                content={
                     "progress": {
                         "final": True
                     },
-                })
+                },
+                status_code=200 if fail_at != 3 else 500
+            )
 
         response = client.post("/restore", json={"storage": storage_name} if storage_name else None)
         if fail_at == 1:

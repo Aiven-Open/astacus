@@ -19,6 +19,13 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.asyncio
+async def test_httpx_request_connect_failure():
+    # Known (most likely) unreachable local IP address
+    r = await utils.httpx_request("http://127.0.0.42:12345/foo", caller="test")
+    assert r is None
+
+
+@pytest.mark.asyncio
 async def test_exponential_backoff(mocker):
     _waits = []
     base = 42

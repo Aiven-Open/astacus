@@ -94,20 +94,20 @@ async def test_m3_backup(fail_at):
     assert op.steps == ['init', 'retrieve_etcd', 'retrieve_etcd_again', 'create_m3_manifest']
     with respx.mock:
         op.state.shutting_down = fail_at == 0
-        if fail_at != 1:
-            respx.post(
-                "http://dummy/etcd/kv/range",
-                content={"kvs": [
-                    {
-                        "key": KEY1_B64,
-                        "value": VALUE1_B64
-                    },
-                    {
-                        "key": KEY2_B64,
-                        "value": VALUE2_B64
-                    },
-                ]}
-            )
+        respx.post(
+            "http://dummy/etcd/kv/range",
+            content={"kvs": [
+                {
+                    "key": KEY1_B64,
+                    "value": VALUE1_B64
+                },
+                {
+                    "key": KEY2_B64,
+                    "value": VALUE2_B64
+                },
+            ]},
+            status_code=200 if fail_at != 1 else 500,
+        )
         assert await op.try_run() == (fail_at is None)
     if fail_at is not None:
         return
@@ -146,10 +146,8 @@ async def test_m3_restore(fail_at):
     op = DummyM3DRestoreOp()
     with respx.mock:
         op.state.shutting_down = fail_at == 0
-        if fail_at != 1:
-            respx.post("http://dummy/etcd/kv/deleterange", content={"ok": True})
-        if fail_at != 2:
-            respx.post("http://dummy/etcd/kv/put", content={"ok": True})
+        respx.post("http://dummy/etcd/kv/deleterange", content={"ok": True}, status_code=200 if fail_at != 1 else 500)
+        respx.post("http://dummy/etcd/kv/put", content={"ok": True}, status_code=200 if fail_at != 2 else 500)
         assert await op.try_run() == (fail_at is None)
 
 
