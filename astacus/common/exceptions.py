@@ -36,6 +36,12 @@ class CompressionOrEncryptionRequired(PermanentException):
     pass
 
 
+# rohmu has given us 'some' exception we do not support; assume it is
+# permanent until proven otherwise
+class RohmuException(PermanentException):
+    pass
+
+
 class TransientException(AstacusException):
     pass
 
