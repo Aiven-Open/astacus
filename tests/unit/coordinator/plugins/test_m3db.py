@@ -15,6 +15,8 @@ from astacus.coordinator.config import CoordinatorConfig
 from astacus.coordinator.plugins import base, m3db
 from astacus.coordinator.state import CoordinatorState
 from astacus.proto import m3_placement_pb2
+from dataclasses import dataclass
+from typing import Optional
 
 import pytest
 import respx
@@ -118,10 +120,14 @@ class DummyM3DRestoreOp(m3db.M3DRestoreOp):
     nodes = COORDINATOR_NODES
     steps = ["init", "backup_manifest", "rewrite_etcd", "restore_etcd"]
 
-    def __init__(self):
+    def __init__(self, *, partial):
         # pylint: disable=super-init-not-called
         self.config = CoordinatorConfig.parse_obj(COORDINATOR_CONFIG)
         self.state = CoordinatorState()
+        req = ipc.RestoreRequest()
+        if partial:
+            req.partial_restore_nodes = [ipc.PartialRestoreRequestNode(backup_index=0, node_index=0)]
+        self.req = req
 
     result_backup_name = "x"
 
@@ -137,13 +143,17 @@ class DummyM3DRestoreOp(m3db.M3DRestoreOp):
         })
 
 
-RESTORE_FAILS = [0, 1, 2, None]
+@dataclass
+class RestoreTest:
+    fail_at: Optional[int] = None
+    partial: bool = False
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("fail_at", RESTORE_FAILS)
-async def test_m3_restore(fail_at):
-    op = DummyM3DRestoreOp()
+@pytest.mark.parametrize("rt", [RestoreTest(fail_at=i) for i in range(3)] + [RestoreTest(), RestoreTest(partial=True)])
+async def test_m3_restore(rt):
+    fail_at = rt.fail_at
+    op = DummyM3DRestoreOp(partial=rt.partial)
     with respx.mock:
         op.state.shutting_down = fail_at == 0
         respx.post("http://dummy/etcd/kv/deleterange", content={"ok": True}, status_code=200 if fail_at != 1 else 500)

@@ -10,9 +10,12 @@ from astacus.common import exceptions, ipc, utils
 from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins import get_plugin_restore_class
 from contextlib import nullcontext as does_not_raise
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 import json
+import pydantic
 import pytest
 import respx
 
@@ -40,19 +43,29 @@ BACKUP_MANIFEST = ipc.BackupManifest(
 )
 
 
+@dataclass
+class RestoreTest:
+    fail_at: Optional[int] = None
+    partial: bool = False
+    storage_name: Optional[str] = None
+
+
 @pytest.mark.parametrize(
-    "storage_name,fail_at", [
-        (None, 1),
-        (None, 2),
-        (None, 3),
-        (None, None),
-        ("x", None),
-        ("y", None),
+    "rt",
+    [RestoreTest(fail_at=i) for i in range(1, 4)] + [
+        # success cases
+        RestoreTest(),  # default
+        # named storage
+        RestoreTest(storage_name="x"),
+        RestoreTest(storage_name="y"),
+        # partial
+        RestoreTest(partial=True)
     ]
 )
-def test_restore(storage_name, fail_at, app, client, mstorage):
+def test_restore(rt, app, client, mstorage):
+    fail_at = rt.fail_at
     # Create fake backup (not pretty but sufficient?)
-    storage = mstorage.get_storage(storage_name)
+    storage = mstorage.get_storage(rt.storage_name)
     storage.upload_json(BACKUP_NAME, BACKUP_MANIFEST)
     nodes = app.state.coordinator_config.nodes
     with respx.mock:
@@ -86,7 +99,12 @@ def test_restore(storage_name, fail_at, app, client, mstorage):
                 status_code=200 if fail_at != 3 else 500
             )
 
-        response = client.post("/restore", json={"storage": storage_name} if storage_name else None)
+        req = {}
+        if rt.storage_name:
+            req["storage"] = rt.storage_name
+        if rt.partial:
+            req["partial_restore_nodes"] = [{"node_index": 0, "backup_index": 0}]
+        response = client.post("/restore", json=req)
         if fail_at == 1:
             # Cluster lock failure is immediate
             assert response.status_code == 409, response.json()
@@ -100,7 +118,6 @@ def test_restore(storage_name, fail_at, app, client, mstorage):
             assert response.json() == {"state": "fail"}
         else:
             assert response.json() == {"state": "done"}
-
         assert app.state.coordinator_state.op_info.op_id == 1
 
 
@@ -113,6 +130,7 @@ class DummyRestoreOp(_RestoreOp):
         # NOP __init__, we mock whatever we care about
         self.nodes = nodes
         self.result_backup_manifest = manifest
+        self.req = ipc.RestoreRequest()
 
     def assert_node_to_backup_index_is(self, expected):
         assert self._get_node_to_backup_index() == expected
@@ -145,4 +163,82 @@ def test_node_to_backup_index(node_azlist, backup_azlist, expected_index, except
 
     op = DummyRestoreOp(nodes, manifest)
     with exception:
+        op.assert_node_to_backup_index_is(expected_index)
+
+
+@pytest.mark.parametrize(
+    "partial_node_spec,expected_index,exception",
+    [
+        # 4 (supported) ways of expressing same thing
+        ({
+            "backup_index": 1,
+            "node_index": 2
+        }, [None, None, 1], does_not_raise()),
+        ({
+            "backup_hostname": "host1",
+            "node_index": 2
+        }, [None, None, 1], does_not_raise()),
+        ({
+            "backup_index": 1,
+            "node_url": "url2"
+        }, [None, None, 1], does_not_raise()),
+        ({
+            "backup_hostname": "host1",
+            "node_url": "url2"
+        }, [None, None, 1], does_not_raise()),
+
+        # errors - invalid node spec
+        ({}, None, pytest.raises(pydantic.ValidationError)),
+        ({
+            "backup_index": 42,
+            "backup_hostname": "foo",
+            "node_index": 42
+        }, None, pytest.raises(pydantic.ValidationError)),
+        ({
+            "backup_index": 42,
+            "node_index": 42,
+            "node_url": "foo"
+        }, None, pytest.raises(pydantic.ValidationError)),
+
+        # out of range
+        ({
+            "backup_index": -1,
+            "node_index": 2
+        }, [None, None, 1], pytest.raises(exceptions.NotFoundException)),
+        ({
+            "backup_index": 1,
+            "node_index": -2
+        }, [None, None, 1], pytest.raises(exceptions.NotFoundException)),
+        ({
+            "backup_index": 123,
+            "node_index": 2
+        }, [None, None, 1], pytest.raises(exceptions.NotFoundException)),
+        ({
+            "backup_index": 1,
+            "node_index": 123
+        }, [None, None, 1], pytest.raises(exceptions.NotFoundException)),
+        # invalid url / hostname
+        ({
+            "backup_hostname": "host123",
+            "node_index": 2
+        }, [None, None, 1], pytest.raises(exceptions.NotFoundException)),
+        ({
+            "backup_index": 1,
+            "node_url": "url123"
+        }, [None, None, 1], pytest.raises(exceptions.NotFoundException)),
+    ]
+)
+def test_partial_node_to_backup_index(partial_node_spec, expected_index, exception):
+    num_nodes = 3
+    nodes = [CoordinatorNode(url=f"url{i}") for i in range(num_nodes)]
+    manifest = ipc.BackupManifest(
+        start=utils.now(),
+        attempt=1,
+        snapshot_results=[ipc.SnapshotResult(hostname=f"host{i}") for i in range(num_nodes)],
+        upload_results=[],
+        plugin="files"
+    )
+    op = DummyRestoreOp(nodes, manifest)
+    with exception:
+        op.req.partial_restore_nodes = [ipc.PartialRestoreRequestNode.parse_obj(partial_node_spec)]
         op.assert_node_to_backup_index_is(expected_index)
