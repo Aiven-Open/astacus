@@ -40,24 +40,28 @@ def test_download(snapshotter, uploader, storage, tmpdir):
 
 
 def test_api_download(client, mocker):
-    url = "http://addr/result"
-    m = mocker.patch.object(utils, "http_request")
+    mocker.patch.object(utils, "http_request")
     response = client.post("/node/download")
     assert response.status_code == 422, response.json()
 
-    # Actual restoration is painful. So we trust above test_download to work,
-    # and pass empty list of files to be downloaded
-    req_json = {"result_url": url, "storage": "x", "state": {"root_globs": ["*"], "files": []}}
 
-    response = client.post("/node/download", json=req_json)
+def test_api_clear(client, mocker):
+    url = "http://addr/result"
+    m = mocker.patch.object(utils, "http_request")
+    # Actual restoration is painful. So we trust above test_download
+    # (and systest) to work, and pass empty list of files to be
+    # downloaded
+    req_json = {"result_url": url, "root_globs": ["*"]}
+
+    response = client.post("/node/clear", json=req_json)
     assert response.status_code == 409, response.json()
 
     response = client.post("/node/lock?locker=x&ttl=10")
     assert response.status_code == 200, response.json()
-    response = client.post("/node/download")
+    response = client.post("/node/clear")
     assert response.status_code == 422, response.json()
 
-    response = client.post("/node/download", json=req_json)
+    response = client.post("/node/clear", json=req_json)
     assert response.status_code == 200, response.json()
 
     # Decode the (result endpoint) response using the model

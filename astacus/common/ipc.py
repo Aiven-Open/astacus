@@ -130,11 +130,24 @@ class SnapshotResult(NodeResult):
 
 
 class SnapshotDownloadRequest(NodeRequest):
-    # state to be downloaded
-    state: SnapshotState
-
     # which (sub)object storage entry should be used
     storage: str
+
+    # which backup
+    backup_name: str
+
+    # which snapshot within the backup
+    snapshot_index: int
+
+    # this is used to configure snapshotter; it is needed in the main
+    # thread of node, so due to that, it is included here and not
+    # retrieved via backup manifest.
+    root_globs: List[str]
+
+
+class SnapshotClearRequest(NodeRequest):
+    # Files not matching this are not deleted
+    root_globs: List[str]
 
 
 # coordinator.api

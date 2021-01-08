@@ -3,6 +3,7 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 
+from .clear import ClearOp
 from .download import DownloadOp
 from .node import Node
 from .snapshot import SnapshotOp, UploadOp
@@ -16,6 +17,7 @@ router = APIRouter()
 
 class OpName(str, Enum):
     """ (Long-running) operations defined in this API (for node) """
+    clear = "clear"
     download = "download"
     snapshot = "snapshot"
     upload = "upload"
@@ -88,4 +90,17 @@ def download(req: ipc.SnapshotDownloadRequest, n: Node = Depends()):
 @router.get("/download/{op_id}")
 def download_result(*, op_id: int, n: Node = Depends()):
     op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.download)
+    return op.result
+
+
+@router.post("/clear")
+def clear(req: ipc.SnapshotClearRequest, n: Node = Depends()):
+    if not n.state.is_locked:
+        raise HTTPException(status_code=409, detail="Not locked")
+    return ClearOp(n=n).start(req=req)
+
+
+@router.get("/clear/{op_id}")
+def clear_result(*, op_id: int, n: Node = Depends()):
+    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.clear)
     return op.result

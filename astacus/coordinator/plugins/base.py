@@ -204,17 +204,22 @@ class RestoreOpBase(OpBase):
         for idx, node in zip(node_to_backup_index, self.nodes):
             if idx is not None:
                 # Restore whatever was backed up
-                result = self.result_backup_manifest.snapshot_results[idx]
+                root_globs = self.result_backup_manifest.snapshot_results[idx].state.root_globs
+                req = ipc.SnapshotDownloadRequest(
+                    storage=self.restore_storage_name,
+                    backup_name=self.result_backup_name,
+                    snapshot_index=idx,
+                    root_globs=root_globs
+                )
+                op = "download"
             elif self.req.partial_restore_nodes:
                 # If partial restore, do not clear other nodes
                 continue
             else:
-                root_globs = self.result_backup_manifest.snapshot_results[0].state.root_globs
-                # Restore fake, empty backup to ensure node is clean
-                result = ipc.SnapshotResult(state=ipc.SnapshotState(root_globs=root_globs, files=[]))
-            req = ipc.SnapshotDownloadRequest(state=result.state, storage=self.restore_storage_name)
+                req = ipc.SnapshotClearRequest(root_globs=self.result_backup_manifest.snapshot_results[0].state.root_globs)
+                op = "clear"
             start_result = await self.request_from_nodes(
-                "download", caller="RestoreOpBase.step_restore", method="post", req=req, nodes=[node]
+                op, caller="RestoreOpBase.step_restore", method="post", req=req, nodes=[node]
             )
             if len(start_result) != 1:
                 return []

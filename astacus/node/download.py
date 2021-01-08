@@ -103,11 +103,10 @@ class Downloader(ThreadLocalStorage):
             return
 
         # Delete files that were not supposed to exist
-        for relative_path in self.snapshotter.relative_path_to_snapshotfile.keys():
-            if relative_path not in valid_relative_path_set:
-                absolute_path = self.dst / relative_path
-                with contextlib.suppress(FileNotFoundError):
-                    absolute_path.unlink()
+        for relative_path in set(self.snapshotter.relative_path_to_snapshotfile.keys()).difference(valid_relative_path_set):
+            absolute_path = self.dst / relative_path
+            with contextlib.suppress(FileNotFoundError):
+                absolute_path.unlink()
 
         # This operation is done. It may or may not have been a success.
         progress.done()
@@ -118,12 +117,16 @@ class DownloadOp(NodeOp):
 
     def start(self, *, req: ipc.SnapshotDownloadRequest):
         self.req = req
-        self.snapshotter = self.get_or_create_snapshotter(req.state.root_globs)
+        self.snapshotter = self.get_or_create_snapshotter(req.root_globs)
         logger.debug("start_download %r", req)
         return self.start_op(op_name="download", op=self, fun=self.download)
 
     def download(self):
         assert self.snapshotter
+        # Actual 'restore from backup'
+        manifest = ipc.BackupManifest.parse_obj(self.storage.download_json(self.req.backup_name))
+        snapshotstate = manifest.snapshot_results[self.req.snapshot_index].state
+
         # 'snapshotter' is global; ensure we have sole access to it
         with self.snapshotter.lock:
             self.check_op_id()
@@ -134,7 +137,7 @@ class DownloadOp(NodeOp):
                 parallel=self.config.parallel.downloads
             )
             downloader.download_from_storage(
-                snapshotstate=self.req.state,
+                snapshotstate=snapshotstate,
                 progress=self.result.progress,
                 still_running_callback=self.still_running_callback
             )

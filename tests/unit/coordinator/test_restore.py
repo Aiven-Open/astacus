@@ -52,7 +52,8 @@ class RestoreTest:
 
 @pytest.mark.parametrize(
     "rt",
-    [RestoreTest(fail_at=i) for i in range(1, 4)] + [
+    # failures: [0] - [4]
+    [RestoreTest(fail_at=i) for i in range(1, 6)] + [
         # success cases
         RestoreTest(),  # default
         # named storage
@@ -63,41 +64,63 @@ class RestoreTest:
     ]
 )
 def test_restore(rt, app, client, mstorage):
-    fail_at = rt.fail_at
     # Create fake backup (not pretty but sufficient?)
     storage = mstorage.get_storage(rt.storage_name)
     storage.upload_json(BACKUP_NAME, BACKUP_MANIFEST)
     nodes = app.state.coordinator_config.nodes
     with respx.mock:
-        for node in nodes:
+        for i, node in enumerate(nodes):
             respx.post(f"{node.url}/unlock?locker=x&ttl=0", content={"locked": False})
             # Failure point 1: Lock fails
-            respx.post(f"{node.url}/lock?locker=x&ttl=60", content={"locked": fail_at != 1})
+            respx.post(f"{node.url}/lock?locker=x&ttl=60", content={"locked": rt.fail_at != 1})
 
-            # Failure point 2: download call fails
-            download_url = f"{node.url}/download"
+            if i == 0:
+                # Failure point 2: download call fails
+                url = f"{node.url}/download"
 
-            def match_download(request, response, *, _url=download_url):
-                if fail_at == 2:
-                    return None
-                if request.method != "POST" or _url != str(request.url):
-                    return None
-                if json.loads(request.read())["storage"] != storage.storage_name:
-                    return None
-                return response
+                def match_download(request, response, *, _url=url):
+                    if request.method != "POST" or _url != str(request.url):
+                        return None
+                    if rt.fail_at == 2:
+                        return None
+                    if json.loads(request.read())["storage"] != storage.storage_name:
+                        return None
+                    if json.loads(request.read())["root_globs"] != ["*"]:
+                        return None
+                    return response
 
-            respx.add(match_download, content={"op_id": 42, "status_url": f"{node.url}/download/result"})
+                result_url = f"{node.url}/download/result"
 
-            # Failure point 3: download result call fails
-            respx.get(
-                f"{node.url}/download/result",
-                content={
+                respx.add(match_download, content={"op_id": 42, "status_url": result_url})
+
+                # Failure point 3: download result call fails
+                respx.get(result_url, content={
                     "progress": {
                         "final": True
                     },
-                },
-                status_code=200 if fail_at != 3 else 500
-            )
+                }, status_code=200 if rt.fail_at != 3 else 500)
+            else:
+                url = f"{node.url}/clear"
+
+                def match_clear(request, response, *, _url=url):
+                    if request.method != "POST" or _url != str(request.url):
+                        return None
+                    if rt.fail_at == 4:
+                        return None
+                    if json.loads(request.read())["root_globs"] != ["*"]:
+                        return None
+                    return response
+
+                result_url = f"{node.url}/clear/result"
+
+                respx.add(match_clear, content={"op_id": 42, "status_url": result_url})
+
+                # Failure point 5: clear result call fails
+                respx.get(result_url, content={
+                    "progress": {
+                        "final": True
+                    },
+                }, status_code=200 if rt.fail_at != 5 else 500)
 
         req = {}
         if rt.storage_name:
@@ -105,7 +128,7 @@ def test_restore(rt, app, client, mstorage):
         if rt.partial:
             req["partial_restore_nodes"] = [{"node_index": 0, "backup_index": 0}]
         response = client.post("/restore", json=req)
-        if fail_at == 1:
+        if rt.fail_at == 1:
             # Cluster lock failure is immediate
             assert response.status_code == 409, response.json()
             assert app.state.coordinator_state.op_info.op_id == 0
@@ -114,7 +137,7 @@ def test_restore(rt, app, client, mstorage):
 
         response = client.get(response.json()["status_url"])
         assert response.status_code == 200, response.json()
-        if fail_at:
+        if rt.fail_at:
             assert response.json() == {"state": "fail"}
         else:
             assert response.json() == {"state": "done"}
