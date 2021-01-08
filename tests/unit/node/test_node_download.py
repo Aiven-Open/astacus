@@ -11,9 +11,10 @@ from pathlib import Path
 
 
 def test_download(snapshotter, uploader, storage, tmpdir):
-    snapshotter.create_4foobar()
-    ss1 = snapshotter.get_snapshot_state()
-    hashes = snapshotter.get_snapshot_hashes()
+    with snapshotter.lock:
+        snapshotter.create_4foobar()
+        ss1 = snapshotter.get_snapshot_state()
+        hashes = snapshotter.get_snapshot_hashes()
 
     uploader.write_hashes_to_storage(snapshotter=snapshotter, hashes=hashes, progress=Progress(), parallel=1)
 
@@ -25,12 +26,12 @@ def test_download(snapshotter, uploader, storage, tmpdir):
     dst3.mkdir()
     snapshotter = Snapshotter(src=dst2, dst=dst3, globs=["*"], parallel=1)
     downloader = Downloader(storage=storage, snapshotter=snapshotter, dst=dst2, parallel=1)
+    with snapshotter.lock:
+        downloader.download_from_storage(progress=Progress(), snapshotstate=ss1)
 
-    downloader.download_from_storage(progress=Progress(), snapshotstate=ss1)
-
-    # And ensure we get same snapshot state by snapshotting it
-    assert snapshotter.snapshot(progress=Progress()) > 0
-    ss2 = snapshotter.get_snapshot_state()
+        # And ensure we get same snapshot state by snapshotting it
+        assert snapshotter.snapshot(progress=Progress()) > 0
+        ss2 = snapshotter.get_snapshot_state()
 
     # Ensure the files are same (modulo mtime_ns, which doesn't
     # guaranteedly hit quite same numbers)

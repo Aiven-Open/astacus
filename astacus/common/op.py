@@ -50,10 +50,13 @@ class Op:
     def __init__(self, *, info: Info):
         self.info = info
 
-    def set_status(self, status: Status, *, from_status: Optional[Status] = None) -> bool:
-        assert self.op_id, "start_op() should be called before set_status()"
+    def check_op_id(self):
         if self.info.op_id != self.op_id:
             raise ExpiredOperationException("operation id mismatch")
+
+    def set_status(self, status: Status, *, from_status: Optional[Status] = None) -> bool:
+        assert self.op_id, "start_op() should be called before set_status()"
+        self.check_op_id()
         if from_status and from_status != self.info.op_status:
             return False
         if self.info.op_status == status:

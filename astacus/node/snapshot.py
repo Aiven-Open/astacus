@@ -37,17 +37,20 @@ class SnapshotOp(NodeOp):
         return self.start_op(op_name="snapshot", op=self, fun=self.snapshot)
 
     def snapshot(self):
-        self.snapshotter.snapshot(progress=self.result.progress)
-        self.result.state = self.snapshotter.get_snapshot_state()
-        self.result.hashes = [
-            ipc.SnapshotHash(hexdigest=ssfile.hexdigest, size=ssfile.file_size)
-            for ssfile in self.result.state.files
-            if ssfile.hexdigest
-        ]
-        self.result.files = len(self.result.state.files)
-        self.result.total_size = sum(ssfile.file_size for ssfile in self.result.state.files)
-        self.result.end = utils.now()
-        self.result.progress.done()
+        # 'snapshotter' is global; ensure we have sole access to it
+        with self.snapshotter.lock:
+            self.check_op_id()
+            self.snapshotter.snapshot(progress=self.result.progress)
+            self.result.state = self.snapshotter.get_snapshot_state()
+            self.result.hashes = [
+                ipc.SnapshotHash(hexdigest=ssfile.hexdigest, size=ssfile.file_size)
+                for ssfile in self.result.state.files
+                if ssfile.hexdigest
+            ]
+            self.result.files = len(self.result.state.files)
+            self.result.total_size = sum(ssfile.file_size for ssfile in self.result.state.files)
+            self.result.end = utils.now()
+            self.result.progress.done()
 
 
 class UploadOp(NodeOp):
@@ -61,11 +64,15 @@ class UploadOp(NodeOp):
 
     def upload(self):
         uploader = Uploader(storage=self.storage)
-        self.result.total_size, self.result.total_stored_size = uploader.write_hashes_to_storage(
-            snapshotter=self.get_snapshotter(),
-            hashes=self.req.hashes,
-            parallel=self.config.parallel.uploads,
-            progress=self.result.progress,
-            still_running_callback=self.still_running_callback
-        )
-        self.result.progress.done()
+        snapshotter = self.get_snapshotter()
+        # 'snapshotter' is global; ensure we have sole access to it
+        with snapshotter.lock:
+            self.check_op_id()
+            self.result.total_size, self.result.total_stored_size = uploader.write_hashes_to_storage(
+                snapshotter=snapshotter,
+                hashes=self.req.hashes,
+                parallel=self.config.parallel.uploads,
+                progress=self.result.progress,
+                still_running_callback=self.still_running_callback
+            )
+            self.result.progress.done()

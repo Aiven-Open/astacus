@@ -124,12 +124,17 @@ class DownloadOp(NodeOp):
 
     def download(self):
         assert self.snapshotter
-        downloader = Downloader(
-            dst=self.config.root,
-            snapshotter=self.snapshotter,
-            storage=self.storage,
-            parallel=self.config.parallel.downloads
-        )
-        downloader.download_from_storage(
-            snapshotstate=self.req.state, progress=self.result.progress, still_running_callback=self.still_running_callback
-        )
+        # 'snapshotter' is global; ensure we have sole access to it
+        with self.snapshotter.lock:
+            self.check_op_id()
+            downloader = Downloader(
+                dst=self.config.root,
+                snapshotter=self.snapshotter,
+                storage=self.storage,
+                parallel=self.config.parallel.downloads
+            )
+            downloader.download_from_storage(
+                snapshotstate=self.req.state,
+                progress=self.result.progress,
+                still_running_callback=self.still_running_callback
+            )

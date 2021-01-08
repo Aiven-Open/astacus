@@ -15,6 +15,7 @@ import base64
 import hashlib
 import logging
 import os
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +42,15 @@ class Snapshotter:
     of other hashes which correspond to files referred to within the
     file list contained in root object.
 
-    For actual products, Snapshotter should be subclassed and
-    e.g. file_path_filter should be overridden.
+    Note that any call to public API MUST be made with
+    snapshotter.lock held. This is because Snapshotter is process-wide
+    utility that is shared across operations, possibly used from
+    multiple threads, and the single-operation-only mode of operation
+    is not exactly flawless (the 'new operation can be started with
+    old running' is intentional feature but new operation should
+    eventually replace the old). The lock itself might not need to be
+    built-in to Snapshotter, but having it there enables asserting its
+    state during public API calls.
     """
     def __init__(self, *, src, dst, globs, parallel):
         assert globs  # model has empty; either plugin or configuration must supply them
@@ -52,6 +60,7 @@ class Snapshotter:
         self.relative_path_to_snapshotfile = {}
         self.hexdigest_to_snapshotfiles = {}
         self.parallel = parallel
+        self.lock = threading.Lock()
 
     def _list_files(self, basepath: Path):
         result_files = set()
@@ -114,11 +123,13 @@ class Snapshotter:
             yield snapshotfile
 
     def get_snapshot_hashes(self):
+        assert self.lock.locked()
         return [
             SnapshotHash(hexdigest=dig, size=sf[0].file_size) for dig, sf in self.hexdigest_to_snapshotfiles.items() if sf
         ]
 
     def get_snapshot_state(self):
+        assert self.lock.locked()
         return SnapshotState(root_globs=self.globs, files=sorted(self.relative_path_to_snapshotfile.values()))
 
     def _snapshot_create_missing_directories(self, *, src_dirs, dst_dirs):
@@ -173,6 +184,8 @@ class Snapshotter:
         return changes
 
     def snapshot(self, *, progress: Optional[Progress] = None):
+        assert self.lock.locked()
+
         if progress is None:
             progress = Progress()
         progress.start(3)
