@@ -74,7 +74,7 @@ class CoordinatorOp(op.Op):
         urls = [f"{node.url}/{url}" for node in nodes]
         aws = [utils.httpx_request(url, caller=caller, **kw) for url in urls]
         results = await asyncio.gather(*aws, return_exceptions=True)
-        logger.debug("request_from_nodes %r => %r", nodes, results)
+        logger.info("request_from_nodes %r => %r", urls, results)
         return results
 
     async def request_lock_call_from_nodes(self, *, call: LockCall, locker: str, ttl: int = 0, nodes=None) -> LockResult:
