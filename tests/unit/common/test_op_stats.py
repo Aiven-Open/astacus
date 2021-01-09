@@ -9,6 +9,7 @@ Test stats sending.
 from astacus.common.op import Op
 from astacus.common.statsd import StatsClient
 from astacus.coordinator.plugins.base import OpBase
+from astacus.coordinator.state import CoordinatorState
 from unittest.mock import patch
 
 import pytest
@@ -21,6 +22,7 @@ class DummyOp(OpBase):
         self.steps = ["one", "two", "three"]
         self.stats = StatsClient(config=None)
         self.info = Op.Info(op_id=1)
+        self.state = CoordinatorState()
 
     async def step_one(self):
         return True

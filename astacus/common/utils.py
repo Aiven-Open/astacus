@@ -9,12 +9,13 @@ Shared utilities (between coordinator and node)
 
 """
 
+from fastapi import FastAPI
 from multiprocessing.dummy import Pool  # fastapi + fork = bad idea
 from pydantic import BaseModel
-from starlette.requests import Request
 
 import asyncio
 import datetime
+import httpcore
 import httpx
 import json as _json
 import logging
@@ -59,12 +60,12 @@ class AstacusModel(BaseModel):
         return _json.loads(self.json(**kw))
 
 
-def get_or_create_state(*, request: Request, key: str, factory):
+def get_or_create_state(*, app: FastAPI, key: str, factory):
     """ Get or create sub-state entry (using factory callback) """
-    value = getattr(request.app.state, key, None)
+    value = getattr(app.state, key, None)
     if value is None:
         value = factory()
-        setattr(request.app.state, key, value)
+        setattr(app.state, key, value)
     return value
 
 
@@ -108,12 +109,14 @@ async def httpx_request(url, *, caller, method="get", timeout=10, json: bool = T
             if ignore_status_code:
                 return r.json() if json else r
             logger.warning("Unexpected response status code from %s to %s: %s %r", url, caller, r.status_code, r.text)
+        except httpcore.ConnectError:
+            # Unfortunately at least current httpx leaks this
+            # exception without wrapping it. Future versions may
+            # address this hopefully. I believe httpx.TransportError
+            # replaces it in future versions once we upgrade.
+            pass
         except httpx.HTTPError as ex:
             logger.warning("Unexpected response from %s to %s: %r", url, caller, ex)
-        except asyncio.CancelledError:
-            raise
-        except Exception as ex:  # pylint: disable=broad-except
-            logger.error("Unexpected exception from %s to %s: %r", url, caller, ex)
         return None
 
 

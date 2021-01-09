@@ -181,6 +181,9 @@ class M3DRestoreOp(ETCDRestoreOpBase):
         key.set_value_bytes(placement.SerializeToString())
 
     async def step_rewrite_etcd(self):
+        if self.req.partial_restore_nodes:
+            logger.debug("Skipping etcd rewrite due to partial backup restoration")
+            return True
         etcd = self.plugin_manifest.etcd.copy(deep=True)
         for prefix in etcd.prefixes:
             for key in prefix.keys:
@@ -190,6 +193,9 @@ class M3DRestoreOp(ETCDRestoreOpBase):
         return etcd
 
     async def step_restore_etcd(self):
+        if self.req.partial_restore_nodes:
+            logger.debug("Skipping etcd restoration due to partial backup restoration")
+            return True
         return await self.restore_etcd_dump(self.result_rewrite_etcd)
 
 

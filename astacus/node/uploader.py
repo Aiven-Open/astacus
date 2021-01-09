@@ -23,7 +23,7 @@ class Uploader(ThreadLocalStorage):
         progress.start(len(todo))
         sizes = {"total": 0, "stored": 0}
 
-        def _download_hexdigest_in_thread(hexdigest):
+        def _upload_hexdigest_in_thread(hexdigest):
             storage = self.local_storage
 
             assert hexdigest
@@ -41,11 +41,13 @@ class Uploader(ThreadLocalStorage):
                 try:
                     with snapshotfile.open_for_reading(snapshotter.dst) as f:
                         upload_result = storage.upload_hexdigest_from_file(hexdigest, f)
-                except exceptions.TransientException:
-                    # We found and processed one file with the particular
-                    # hexdigest; even if sending it failed, we won't try
-                    # subsequent files and instead break out of iterating
-                    # through candidate files with same hexdigest.
+                except exceptions.TransientException as ex:
+                    # Do not pollute logs with transient exceptions
+                    logger.debug("Transient exception uploading %r: %r", path, ex)
+                    return progress.upload_failure, 0, 0
+                except exceptions.AstacusException:
+                    # Report failure - whole step will be retried later
+                    logger.exception("Exception uploading %r", path)
                     return progress.upload_failure, 0, 0
                 with snapshotfile.open_for_reading(snapshotter.dst) as f:
                     current_hexdigest = hash_hexdigest_readable(f)
@@ -69,7 +71,7 @@ class Uploader(ThreadLocalStorage):
 
         sorted_todo = sorted(todo, key=lambda hexdigest: -snapshotter.hexdigest_to_snapshotfiles[hexdigest][0].file_size)
         if not utils.parallel_map_to(
-            fun=_download_hexdigest_in_thread, iterable=sorted_todo, result_callback=_result_cb, n=parallel
+            fun=_upload_hexdigest_in_thread, iterable=sorted_todo, result_callback=_result_cb, n=parallel
         ):
             progress.add_fail()
         return sizes["total"], sizes["stored"]

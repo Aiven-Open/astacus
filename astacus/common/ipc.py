@@ -3,12 +3,15 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 
+# pydantic validators are class methods in disguise
+# pylint: disable=no-self-argument
+
 from .progress import Progress
 from .utils import AstacusModel, now, SizeLimitedFile
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from pydantic import Field
+from pydantic import Field, root_validator
 from typing import List, Optional
 
 import functools
@@ -127,17 +130,59 @@ class SnapshotResult(NodeResult):
 
 
 class SnapshotDownloadRequest(NodeRequest):
-    # state to be downloaded
-    state: SnapshotState
-
     # which (sub)object storage entry should be used
     storage: str
 
+    # which backup
+    backup_name: str
+
+    # which snapshot within the backup
+    snapshot_index: int
+
+    # this is used to configure snapshotter; it is needed in the main
+    # thread of node, so due to that, it is included here and not
+    # retrieved via backup manifest.
+    root_globs: List[str]
+
+
+class SnapshotClearRequest(NodeRequest):
+    # Files not matching this are not deleted
+    root_globs: List[str]
+
 
 # coordinator.api
+class PartialRestoreRequestNode(AstacusModel):
+    # One of these has to be specified
+    #
+    # index = index in configuration
+    # hostname = hostname of the host that did the backup
+    backup_index: Optional[int]
+    backup_hostname: Optional[str]
+
+    @root_validator
+    def _check_only_one_backup_criteria(cls, values):
+        if (values["backup_index"] is None) == (values["backup_hostname"] is None):
+            raise ValueError("Exactly one of backup_index or backup_hostname supported")
+        return values
+
+    # One of these has to be specified
+    #
+    # index = index in configuration
+    # url = URL of the Astacus endpoint for the particular node
+    node_index: Optional[int]
+    node_url: Optional[str]
+
+    @root_validator
+    def _check_only_one_node_criteria(cls, values):
+        if (values["node_index"] is None) == (values["node_url"] is None):
+            raise ValueError("Exactly one of node_index or node_url supported")
+        return values
+
+
 class RestoreRequest(AstacusModel):
     storage: str = ""
     name: str = ""
+    partial_restore_nodes: Optional[List[PartialRestoreRequestNode]]
 
 
 # coordinator.plugins backup/restore

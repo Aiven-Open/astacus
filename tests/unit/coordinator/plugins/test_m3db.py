@@ -13,7 +13,10 @@ from astacus.common import ipc
 from astacus.common.etcd import b64encode_to_str
 from astacus.coordinator.config import CoordinatorConfig
 from astacus.coordinator.plugins import base, m3db
+from astacus.coordinator.state import CoordinatorState
 from astacus.proto import m3_placement_pb2
+from dataclasses import dataclass
+from typing import Optional
 
 import pytest
 import respx
@@ -50,6 +53,7 @@ class DummyM3DBBackupOp(m3db.M3DBBackupOp):
         # pylint: disable=super-init-not-called
         self.config = CoordinatorConfig.parse_obj(COORDINATOR_CONFIG)
         self.steps = [step for step in self.steps if getattr(base.BackupOpBase, f"step_{step}", None) is None]
+        self.state = CoordinatorState()
 
 
 def _create_dummy_placement():
@@ -61,7 +65,7 @@ def _create_dummy_placement():
     return placement
 
 
-BACKUP_FAILS = [1, None]
+BACKUP_FAILS = [0, 1, None]
 
 KEY1_B64 = b64encode_to_str(f"_sd.placement/{ENV}/m3db".encode())
 KEY2_B64 = b64encode_to_str(b"key2")
@@ -91,22 +95,23 @@ async def test_m3_backup(fail_at):
     op = DummyM3DBBackupOp()
     assert op.steps == ['init', 'retrieve_etcd', 'retrieve_etcd_again', 'create_m3_manifest']
     with respx.mock:
-        if fail_at != 1:
-            respx.post(
-                "http://dummy/etcd/kv/range",
-                content={"kvs": [
-                    {
-                        "key": KEY1_B64,
-                        "value": VALUE1_B64
-                    },
-                    {
-                        "key": KEY2_B64,
-                        "value": VALUE2_B64
-                    },
-                ]}
-            )
+        op.state.shutting_down = fail_at == 0
+        respx.post(
+            "http://dummy/etcd/kv/range",
+            content={"kvs": [
+                {
+                    "key": KEY1_B64,
+                    "value": VALUE1_B64
+                },
+                {
+                    "key": KEY2_B64,
+                    "value": VALUE2_B64
+                },
+            ]},
+            status_code=200 if fail_at != 1 else 500,
+        )
         assert await op.try_run() == (fail_at is None)
-    if fail_at:
+    if fail_at is not None:
         return
     assert op.plugin_data == PLUGIN_DATA
 
@@ -115,9 +120,14 @@ class DummyM3DRestoreOp(m3db.M3DRestoreOp):
     nodes = COORDINATOR_NODES
     steps = ["init", "backup_manifest", "rewrite_etcd", "restore_etcd"]
 
-    def __init__(self):
+    def __init__(self, *, partial):
         # pylint: disable=super-init-not-called
         self.config = CoordinatorConfig.parse_obj(COORDINATOR_CONFIG)
+        self.state = CoordinatorState()
+        req = ipc.RestoreRequest()
+        if partial:
+            req.partial_restore_nodes = [ipc.PartialRestoreRequestNode(backup_index=0, node_index=0)]
+        self.req = req
 
     result_backup_name = "x"
 
@@ -133,18 +143,21 @@ class DummyM3DRestoreOp(m3db.M3DRestoreOp):
         })
 
 
-RESTORE_FAILS = [1, 2, None]
+@dataclass
+class RestoreTest:
+    fail_at: Optional[int] = None
+    partial: bool = False
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("fail_at", RESTORE_FAILS)
-async def test_m3_restore(fail_at):
-    op = DummyM3DRestoreOp()
+@pytest.mark.parametrize("rt", [RestoreTest(fail_at=i) for i in range(3)] + [RestoreTest(), RestoreTest(partial=True)])
+async def test_m3_restore(rt):
+    fail_at = rt.fail_at
+    op = DummyM3DRestoreOp(partial=rt.partial)
     with respx.mock:
-        if fail_at != 1:
-            respx.post("http://dummy/etcd/kv/deleterange", content={"ok": True})
-        if fail_at != 2:
-            respx.post("http://dummy/etcd/kv/put", content={"ok": True})
+        op.state.shutting_down = fail_at == 0
+        respx.post("http://dummy/etcd/kv/deleterange", content={"ok": True}, status_code=200 if fail_at != 1 else 500)
+        respx.post("http://dummy/etcd/kv/put", content={"ok": True}, status_code=200 if fail_at != 2 else 500)
         assert await op.try_run() == (fail_at is None)
 
 

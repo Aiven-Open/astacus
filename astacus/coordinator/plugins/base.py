@@ -40,6 +40,9 @@ class OpBase(CoordinatorOpWithClusterLock):
 
     async def try_run(self) -> bool:
         for i, step in enumerate(self.steps, 1):
+            if self.state.shutting_down:
+                logger.info("Step %s not even started due to shutdown", step)
+                return False
             logger.debug("step %d/%d: %s", i, len(self.steps), step)
             step_name = f"step_{step}"
             step_callable = getattr(self, step_name)
@@ -201,19 +204,29 @@ class RestoreOpBase(OpBase):
         for idx, node in zip(node_to_backup_index, self.nodes):
             if idx is not None:
                 # Restore whatever was backed up
-                result = self.result_backup_manifest.snapshot_results[idx]
+                root_globs = self.result_backup_manifest.snapshot_results[idx].state.root_globs
+                req = ipc.SnapshotDownloadRequest(
+                    storage=self.restore_storage_name,
+                    backup_name=self.result_backup_name,
+                    snapshot_index=idx,
+                    root_globs=root_globs
+                )
+                op = "download"
+            elif self.req.partial_restore_nodes:
+                # If partial restore, do not clear other nodes
+                continue
             else:
-                root_globs = self.result_backup_manifest.snapshot_results[0].state.root_globs
-                # Restore fake, empty backup to ensure node is clean
-                result = ipc.SnapshotResult(state=ipc.SnapshotState(root_globs=root_globs, files=[]))
-            req = ipc.SnapshotDownloadRequest(state=result.state, storage=self.restore_storage_name)
+                req = ipc.SnapshotClearRequest(root_globs=self.result_backup_manifest.snapshot_results[0].state.root_globs)
+                op = "clear"
             start_result = await self.request_from_nodes(
-                "download", caller="RestoreOpBase.step_restore", method="post", req=req, nodes=[node]
+                op, caller="RestoreOpBase.step_restore", method="post", req=req, nodes=[node]
             )
             if len(start_result) != 1:
                 return []
             start_results.extend(start_result)
-        return await self.wait_successful_results(start_results, result_class=ipc.NodeResult)
+        return await self.wait_successful_results(
+            start_results, result_class=ipc.NodeResult, all_nodes=not self.req.partial_restore_nodes
+        )
 
     def _get_node_to_backup_index_from_azs(self, *, azs_in_backup, azs_in_nodes):
         node_to_backup_index = [None] * len(self.nodes)
@@ -237,8 +250,48 @@ class RestoreOpBase(OpBase):
                     break
         return node_to_backup_index
 
+    def _get_node_to_backup_index_from_partial_restore_nodes(self):
+        node_to_backup_index = [None] * len(self.nodes)
+        hostname_to_backup_index = {}
+        url_to_node_index = {}
+        for i, node in enumerate(self.nodes):
+            url_to_node_index[node.url] = i
+        for i, res in enumerate(self.result_backup_manifest.snapshot_results):
+            hostname_to_backup_index[res.hostname] = i
+        for req_node in self.req.partial_restore_nodes:
+            node_index = req_node.node_index
+            if node_index is not None:
+                num_nodes = len(self.nodes)
+                if node_index < 0 or node_index >= num_nodes:
+                    raise exceptions.NotFoundException(
+                        f"Invalid node_index in partial restore: Must be 0 <= {node_index} < {num_nodes}"
+                    )
+            else:
+                node_index = url_to_node_index.get(req_node.node_url)
+                if node_index is None:
+                    raise exceptions.NotFoundException(
+                        f"Partial restore url {req_node.node_url} not found in active configuration"
+                    )
+            backup_index = req_node.backup_index
+            if backup_index is not None:
+                num_backup_nodes = len(self.result_backup_manifest.snapshot_results)
+                if backup_index < 0 or backup_index >= num_backup_nodes:
+                    raise exceptions.NotFoundException(
+                        f"Invalid backup_index in partial restore: Must be 0 <= {backup_index} < {num_backup_nodes}"
+                    )
+            else:
+                backup_index = hostname_to_backup_index.get(req_node.backup_hostname)
+                if backup_index is None:
+                    raise exceptions.NotFoundException(
+                        f"Partial restore hostname {req_node.backup_hostname} not found in backup manifest"
+                    )
+            node_to_backup_index[node_index] = backup_index
+        return node_to_backup_index
+
     def _get_node_to_backup_index(self):
         assert self.result_backup_manifest
+        if self.req.partial_restore_nodes:
+            return self._get_node_to_backup_index_from_partial_restore_nodes()
         covered_nodes = len(self.result_backup_manifest.snapshot_results)
         configured_nodes = len(self.nodes)
         if configured_nodes < covered_nodes:

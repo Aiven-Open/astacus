@@ -7,9 +7,9 @@ Rohmu-specific actual object storage implementation
 
 """
 
-from .exceptions import CompressionOrEncryptionRequired, NotFoundException
 from .storage import MultiStorage, Storage, StorageUploadResult
 from .utils import AstacusModel
+from astacus.common import exceptions
 from enum import Enum
 from pghoard import rohmu  # type: ignore
 from pghoard.rohmu import rohmufile  # type: ignore
@@ -127,7 +127,9 @@ def rohmu_error_wrapper(fun):
         try:
             return fun(*a, **kw)
         except errors.FileNotFoundFromStorageError as ex:
-            raise NotFoundException from ex
+            raise exceptions.NotFoundException from ex
+        except Exception as ex:  # pylint: disable=broad-except
+            raise exceptions.RohmuException from ex
 
     return _f
 
@@ -142,7 +144,7 @@ class RohmuStorage(Storage):
         self._choose_storage(storage)
         os.makedirs(config.temporary_directory, exist_ok=True)
         if not self.config.compression.algorithm and not self.config.encryption_key_id:
-            raise CompressionOrEncryptionRequired()
+            raise exceptions.CompressionOrEncryptionRequired()
 
     @rohmu_error_wrapper
     def _download_key_to_file(self, key, f) -> bool:

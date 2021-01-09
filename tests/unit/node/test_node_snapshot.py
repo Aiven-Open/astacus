@@ -13,50 +13,60 @@ import pytest
 
 @pytest.mark.timeout(2)
 def test_snapshot(snapshotter, uploader):
-    # Start with empty
-    assert snapshotter.snapshot(progress=Progress()) == 0
-    src = snapshotter.src
-    dst = snapshotter.dst
-    assert not (dst / "foo").is_file()
-
-    # Create files in src, run snapshot
-    snapshotter.create_4foobar()
-    ss2 = snapshotter.get_snapshot_state()
-
-    assert (dst / "foo").is_file()
-    assert (dst / "foo").read_text() == "foobar"
-    assert (dst / "foo2").read_text() == "foobar"
-
-    hashes = snapshotter.get_snapshot_hashes()
-    assert len(hashes) == 1
-    assert hashes == [
-        ipc.SnapshotHash(hexdigest='326827fe6fd23503bf16eed91861766df522748794814a1bf46d479d9feae1a0', size=600)
-    ]
-
-    while True:
-        (src / "foo").write_text("barfoo")  # same length
-        if snapshotter.snapshot(progress=Progress()) > 0:
-            # Sometimes fails on first iteration(s) due to same mtime
-            # (inaccurate timestamps)
-            break
-    ss3 = snapshotter.get_snapshot_state()
-    assert ss2 != ss3
-    assert snapshotter.snapshot(progress=Progress()) == 0
-    assert (dst / "foo").is_file()
-    assert (dst / "foo").read_text() == "barfoo"
-
-    uploader.write_hashes_to_storage(snapshotter=snapshotter, hashes=hashes, parallel=1, progress=Progress())
-
-    # Remove file from src, run snapshot
-    for filename in ["foo", "foo2", "foobig", "foobig2"]:
-        (src / filename).unlink()
-        assert snapshotter.snapshot(progress=Progress()) > 0
+    with snapshotter.lock:
+        # Start with empty
         assert snapshotter.snapshot(progress=Progress()) == 0
-        assert not (dst / filename).is_file()
+        src = snapshotter.src
+        dst = snapshotter.dst
+        assert not (dst / "foo").is_file()
 
-    # Now shouldn't have any data hashes
-    hashes_empty = snapshotter.get_snapshot_hashes()
-    assert not hashes_empty
+        # Create files in src, run snapshot
+        snapshotter.create_4foobar()
+        ss2 = snapshotter.get_snapshot_state()
+
+        assert (dst / "foo").is_file()
+        assert (dst / "foo").read_text() == "foobar"
+        assert (dst / "foo2").read_text() == "foobar"
+
+        hashes = snapshotter.get_snapshot_hashes()
+        assert len(hashes) == 1
+        assert hashes == [
+            ipc.SnapshotHash(hexdigest='326827fe6fd23503bf16eed91861766df522748794814a1bf46d479d9feae1a0', size=600)
+        ]
+
+        while True:
+            (src / "foo").write_text("barfoo")  # same length
+            if snapshotter.snapshot(progress=Progress()) > 0:
+                # Sometimes fails on first iteration(s) due to same mtime
+                # (inaccurate timestamps)
+                break
+        ss3 = snapshotter.get_snapshot_state()
+        assert ss2 != ss3
+        assert snapshotter.snapshot(progress=Progress()) == 0
+        assert (dst / "foo").is_file()
+        assert (dst / "foo").read_text() == "barfoo"
+
+        uploader.write_hashes_to_storage(snapshotter=snapshotter, hashes=hashes, parallel=1, progress=Progress())
+
+        # Remove file from src, run snapshot
+        for filename in ["foo", "foo2", "foobig", "foobig2"]:
+            (src / filename).unlink()
+            assert snapshotter.snapshot(progress=Progress()) > 0
+            assert snapshotter.snapshot(progress=Progress()) == 0
+            assert not (dst / filename).is_file()
+
+        # Now shouldn't have any data hashes
+        hashes_empty = snapshotter.get_snapshot_hashes()
+        assert not hashes_empty
+
+    with pytest.raises(AssertionError):
+        snapshotter.snapshot(progress=Progress())
+
+    with pytest.raises(AssertionError):
+        snapshotter.get_snapshot_state()
+
+    with pytest.raises(AssertionError):
+        snapshotter.get_snapshot_hashes()
 
 
 @pytest.mark.parametrize("test", [(os, "link", 1, 1), (None, "_snapshotfile_from_path", 3, 0)])
@@ -70,10 +80,11 @@ def test_snapshot_error_filenotfound(snapshotter, mocker, test):
     mocker.patch.object(obj, fun, new=_not_really_found)
     (snapshotter.src / "foo").write_text("foobar")
     (snapshotter.src / "bar").write_text("foobar")
-    progress = Progress()
-    assert snapshotter.snapshot(progress=progress) == exp_progress_1
-    progress = Progress()
-    assert snapshotter.snapshot(progress=progress) == exp_progress_2
+    with snapshotter.lock:
+        progress = Progress()
+        assert snapshotter.snapshot(progress=progress) == exp_progress_1
+        progress = Progress()
+        assert snapshotter.snapshot(progress=progress) == exp_progress_2
 
 
 def test_api_snapshot_and_upload(client, mocker):

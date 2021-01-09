@@ -101,7 +101,7 @@ class Node(op.OpMixin):
         def _create_snapshotter():
             return Snapshotter(src=self.config.root, dst=root_link, globs=root_globs, parallel=self.config.parallel.hashes)
 
-        return utils.get_or_create_state(request=self.request, key=SNAPSHOTTER_KEY, factory=_create_snapshotter)
+        return utils.get_or_create_state(app=self.request.app, key=SNAPSHOTTER_KEY, factory=_create_snapshotter)
 
     def get_snapshotter(self):
         return getattr(self.request.app.state, SNAPSHOTTER_KEY)

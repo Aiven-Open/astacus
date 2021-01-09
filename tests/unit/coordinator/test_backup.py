@@ -31,31 +31,46 @@ def test_backup(fail_at, app, client, storage):
             respx.post(f"{node.url}/lock?locker=x&ttl=60", content={"locked": fail_at != 1})
 
             # Failure point 2: snapshot call fails
-            if fail_at != 2:
-                respx.post(f"{node.url}/snapshot", content={"op_id": 42, "status_url": f"{node.url}/snapshot/result"})
+            respx.post(
+                f"{node.url}/snapshot",
+                content={
+                    "op_id": 42,
+                    "status_url": f"{node.url}/snapshot/result"
+                },
+                status_code=200 if fail_at != 2 else 500
+            )
 
             # Failure point 3: snapshot result call fails
-            if fail_at != 3:
-                respx.get(
-                    f"{node.url}/snapshot/result",
-                    content={
-                        "progress": {
-                            "final": True
-                        },
-                        "hashes": [{
-                            "hexdigest": "HASH",
-                            "size": 42
-                        }]
-                    }
-                )
+            respx.get(
+                f"{node.url}/snapshot/result",
+                content={
+                    "progress": {
+                        "final": True
+                    },
+                    "hashes": [{
+                        "hexdigest": "HASH",
+                        "size": 42
+                    }]
+                },
+                status_code=200 if fail_at != 3 else 500
+            )
 
             # Failure point 4: upload call fails
-            if fail_at != 4:
-                respx.post(f"{node.url}/upload", content={"op_id": 43, "status_url": f"{node.url}/upload/result"})
+            respx.post(
+                f"{node.url}/upload",
+                content={
+                    "op_id": 43,
+                    "status_url": f"{node.url}/upload/result"
+                },
+                status_code=200 if fail_at != 4 else 500
+            )
 
             # Failure point 5: upload result call fails
-            if fail_at != 5:
-                respx.get(f"{node.url}/upload/result", content={"progress": {"final": True}})
+            respx.get(
+                f"{node.url}/upload/result", content={"progress": {
+                    "final": True
+                }}, status_code=200 if fail_at != 5 else 500
+            )
 
         response = client.post("/backup")
         if fail_at == 1:
