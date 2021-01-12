@@ -14,8 +14,8 @@ from astacus.common.etcd import b64encode_to_str
 from astacus.coordinator.config import CoordinatorConfig
 from astacus.coordinator.plugins import base, m3db
 from astacus.coordinator.state import CoordinatorState
-from astacus.proto import m3_placement_pb2
 from dataclasses import dataclass
+from tests.unit.common.test_m3placement import create_dummy_placement
 from typing import Optional
 
 import pytest
@@ -56,20 +56,11 @@ class DummyM3DBBackupOp(m3db.M3DBBackupOp):
         self.state = CoordinatorState()
 
 
-def _create_dummy_placement():
-    placement = m3_placement_pb2.Placement()
-    instance = placement.instances["node-id1"]
-    instance.id = "node-id1"
-    instance.endpoint = "endpoint1"
-    instance.hostname = "hostname1"
-    return placement
-
-
 BACKUP_FAILS = [0, 1, None]
 
 KEY1_B64 = b64encode_to_str(f"_sd.placement/{ENV}/m3db".encode())
 KEY2_B64 = b64encode_to_str(b"key2")
-VALUE1_B64 = b64encode_to_str(_create_dummy_placement().SerializeToString())
+VALUE1_B64 = b64encode_to_str(create_dummy_placement().SerializeToString())
 VALUE2_B64 = b64encode_to_str(b"value2")
 
 PREFIXES = [{
@@ -159,25 +150,3 @@ async def test_m3_restore(rt):
         respx.post("http://dummy/etcd/kv/deleterange", content={"ok": True}, status_code=200 if fail_at != 1 else 500)
         respx.post("http://dummy/etcd/kv/put", content={"ok": True}, status_code=200 if fail_at != 2 else 500)
         assert await op.try_run() == (fail_at is None)
-
-
-def test_rewrite_single_m3_placement():
-    # What's in the (recorded, historic) placement plan
-    src_pnode = m3db.M3PlacementNode(
-        node_id="node-id1",
-        endpoint="endpoint1",
-        hostname="hostname1",
-    )
-    # What we want to replace it with
-    dst_pnode = m3db.M3PlacementNode(
-        node_id="node-id22",
-        endpoint="endpoint22",
-        hostname="hostname22",
-    )
-
-    placement = _create_dummy_placement()
-    m3db.rewrite_single_m3_placement(placement, src_pnode=src_pnode, dst_pnode=dst_pnode, dst_isolation_group="az22")
-    instance2 = placement.instances["node-id22"]
-    assert instance2.endpoint == "endpoint22"
-    assert instance2.hostname == "hostname22"
-    assert instance2.isolation_group == "az22"
