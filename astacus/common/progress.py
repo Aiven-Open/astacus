@@ -104,3 +104,13 @@ class Progress(AstacusModel):
     @property
     def finished_failed(self):
         return self.final and not self.finished_successfully
+
+    @classmethod
+    def merge(cls, progresses):
+        p = cls()
+        for progress in progresses:
+            p.handled += progress.handled
+            p.failed += progress.failed
+            p.total += progress.total
+        p.final = all(progress.final for progress in progresses)
+        return p

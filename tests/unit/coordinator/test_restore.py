@@ -64,6 +64,7 @@ class RestoreTest:
     ]
 )
 def test_restore(rt, app, client, mstorage):
+    # pylint: disable=too-many-statements
     # Create fake backup (not pretty but sufficient?)
     storage = mstorage.get_storage(rt.storage_name)
     storage.upload_json(BACKUP_NAME, BACKUP_MANIFEST)
@@ -94,11 +95,18 @@ def test_restore(rt, app, client, mstorage):
                 respx.add(match_download, content={"op_id": 42, "status_url": result_url})
 
                 # Failure point 3: download result call fails
-                respx.get(result_url, content={
-                    "progress": {
-                        "final": True
+                respx.get(
+                    result_url,
+                    content={
+                        "progress": {
+                            "handled": 10,
+                            "failed": 0,
+                            "total": 10,
+                            "final": True
+                        },
                     },
-                }, status_code=200 if rt.fail_at != 3 else 500)
+                    status_code=200 if rt.fail_at != 3 else 500
+                )
             else:
                 url = f"{node.url}/clear"
 
@@ -138,9 +146,22 @@ def test_restore(rt, app, client, mstorage):
         response = client.get(response.json()["status_url"])
         assert response.status_code == 200, response.json()
         if rt.fail_at:
-            assert response.json() == {"state": "fail"}
+            assert response.json().get("state") == "fail"
+            assert response.json().get("progress") is not None
+            assert response.json().get("progress")["final"]
         else:
-            assert response.json() == {"state": "done"}
+            assert response.json().get("state") == "done"
+            assert response.json().get("progress") is not None
+            assert response.json().get("progress")["final"]
+        if rt.fail_at == 5 or rt.fail_at is None:
+            assert response.json().get("progress")["handled"] == 10
+            assert response.json().get("progress")["failed"] == 0
+            assert response.json().get("progress")["total"] == 10
+        else:
+            assert response.json().get("progress")["handled"] == 0
+            assert response.json().get("progress")["failed"] == 0
+            assert response.json().get("progress")["total"] == 0
+
         assert app.state.coordinator_state.op_info.op_id == 1
 
 

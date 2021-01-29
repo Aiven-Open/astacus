@@ -8,6 +8,7 @@ from .state import coordinator_state, CoordinatorState
 from astacus.common import asyncstorage, exceptions, ipc, magic, op, statsd, utils
 from astacus.common.cachingjsonstorage import MultiCachingJsonStorage
 from astacus.common.magic import LockCall
+from astacus.common.progress import Progress
 from astacus.common.rohmustorage import MultiRohmuStorage
 from astacus.common.storage import HexDigestStorage, JsonStorage, MultiFileStorage, MultiStorage
 from datetime import datetime
@@ -150,6 +151,7 @@ class CoordinatorOp(op.Op):
 
     async def wait_successful_results(self, start_results, *, result_class, all_nodes=True):
         urls = []
+
         for i, result in enumerate(start_results, 1):
             if not result or isinstance(result, Exception):
                 logger.info("wait_successful_results: Incorrect start result for #%d/%d: %r", i, len(start_results), result)
@@ -192,6 +194,8 @@ class CoordinatorOp(op.Op):
                 result = result_class.parse_obj(r)
                 results[i] = result
                 failures[i] = 0
+                assert self.current_step
+                self.step_progress[self.current_step] = Progress.merge(r.progress for r in results if r is not None)
                 if result.progress.finished_failed:
                     return []
             if not any(True for result in results if result is None or not result.progress.final):

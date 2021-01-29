@@ -37,3 +37,17 @@ import pytest
 )
 def test_increase_worth_reporting(old_value, new_value, total, exp):
     assert progress.increase_worth_reporting(old_value, new_value, total=total) == exp
+
+
+@pytest.mark.parametrize("is_final", [True, False])
+def test_progress_merge(is_final):
+    p1 = progress.Progress(handled=0, failed=1000, total=10, final=True)
+    p2 = progress.Progress(handled=100, failed=100, total=1000, final=is_final)
+    p3 = progress.Progress(handled=1000, failed=10, total=10000, final=True)
+    p4 = progress.Progress(handled=10000, failed=1, total=100000, final=True)
+
+    p = progress.Progress.merge([p1, p2, p3, p4])
+    assert p.handled == 11100
+    assert p.failed == 1111
+    assert p.total == 111010
+    assert p.final == is_final
