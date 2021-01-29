@@ -27,7 +27,7 @@ build-dep-fedora:
 
 .PHONY: build-dep-ubuntu
 build-dep-ubuntu:
-	sudo apt-get install -y git libsnappy-dev python3-pip python3-psycopg2 protobuf-compiler
+	sudo sh -c 'apt-get update && apt-get install -y git libsnappy-dev python3-pip python3-psycopg2 protobuf-compiler'
 
 .PHONY: pylint
 pylint: $(GENERATED)
