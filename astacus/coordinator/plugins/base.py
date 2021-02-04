@@ -7,6 +7,7 @@ Common base classes for the plugins
 """
 
 from astacus.common import exceptions, ipc, magic
+from astacus.common.progress import Progress
 from astacus.coordinator import plugins
 from astacus.coordinator.coordinator import Coordinator, CoordinatorOpWithClusterLock
 from collections import Counter
@@ -29,8 +30,13 @@ class NodeIndexData(ipc.AstacusModel):
 
 class OpBase(CoordinatorOpWithClusterLock):
     steps: List[str] = []
-
+    step_progress: Dict[str, Progress] = {}
+    current_step: Optional[str] = None
     plugin: Optional[ipc.Plugin] = None
+
+    @property
+    def progress(self):
+        return Progress.merge(self.step_progress.values())
 
     @property
     def plugin_config(self):
@@ -47,12 +53,14 @@ class OpBase(CoordinatorOpWithClusterLock):
             step_name = f"step_{step}"
             step_callable = getattr(self, step_name)
             assert step_callable, f"Step method {step_name} not found in {self!r}"
+            self.current_step = step
             if self.stats is not None:
                 name = self.__class__.__name__
                 async with self.stats.async_timing_manager("astacus_step_duration", {"op": name, "step": step_name}):
                     r = await step_callable()
             else:
                 r = await step_callable()
+            self.current_step = None
             if not r:
                 logger.info("Step %s failed", step)
                 return False

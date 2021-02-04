@@ -67,9 +67,14 @@ def test_backup(fail_at, app, client, storage):
 
             # Failure point 5: upload result call fails
             respx.get(
-                f"{node.url}/upload/result", content={"progress": {
-                    "final": True
-                }}, status_code=200 if fail_at != 5 else 500
+                f"{node.url}/upload/result",
+                content={"progress": {
+                    "final": True,
+                    "handled": 10,
+                    "failed": 0,
+                    "total": 10,
+                }},
+                status_code=200 if fail_at != 5 else 500
             )
 
         response = client.post("/backup")
@@ -83,11 +88,23 @@ def test_backup(fail_at, app, client, storage):
         response = client.get(response.json()["status_url"])
         assert response.status_code == 200, response.json()
         if fail_at:
-            assert response.json() == {"state": "fail"}
+            assert response.json().get("state") == "fail"
+            assert response.json().get("progress") is not None
+            assert response.json().get("progress")["final"]
             assert not storage.list_jsons()
         else:
-            assert response.json() == {"state": "done"}
+            assert response.json().get("state") == "done"
+            assert response.json().get("progress") is not None
+            assert response.json().get("progress")["final"]
             assert len(storage.list_jsons()) == 1
+        if fail_at is None:
+            assert response.json().get("progress")["handled"] == 10
+            assert response.json().get("progress")["failed"] == 0
+            assert response.json().get("progress")["total"] == 10
+        else:
+            assert response.json().get("progress")["handled"] == 0
+            assert response.json().get("progress")["failed"] == 0
+            assert response.json().get("progress")["total"] == 0
 
         assert app.state.coordinator_state.op_info.op_id == 1
 
