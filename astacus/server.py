@@ -19,6 +19,7 @@ from astacus.coordinator.state import app_coordinator_state
 from astacus.node.api import router as node_router
 from fastapi import FastAPI
 from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
+from typing import Optional
 
 import logging
 import os
@@ -27,6 +28,8 @@ import subprocess
 import uvicorn  # type:ignore
 
 logger = logging.getLogger(__name__)
+
+app: Optional[FastAPI] = None
 
 
 def init_app():
@@ -45,19 +48,16 @@ def init_app():
 
     @api.on_event("shutdown")
     async def _shutdown_event():
-        state = await app_coordinator_state(app=app)
-        state.shutting_down = True
+        if app is not None:
+            state = await app_coordinator_state(app=app)
+            state.shutting_down = True
 
     gconfig = config.set_global_config_from_path(api, config_path)
     sentry_dsn = os.environ.get("SENTRY_DSN", gconfig.sentry_dsn)
-    sentry_api = api
     if sentry_dsn:
         sentry_sdk.init(dsn=sentry_dsn)
-        sentry_api = SentryAsgiMiddleware(api)
-    return sentry_api, api
-
-
-app, _ = init_app()
+        api.add_middleware(SentryAsgiMiddleware)
+    return api
 
 
 def _systemd_notify_ready():
@@ -76,8 +76,8 @@ def _run_server(args):
     os.environ["ASTACUS_CONFIG"] = args.config
 
     global app  # pylint: disable=global-statement
-    app, app_nosentry = init_app()
-    uconfig = app_nosentry.state.global_config.uvicorn
+    app = init_app()
+    uconfig = app.state.global_config.uvicorn
     _systemd_notify_ready()
     uvicorn.run(
         "astacus.server:app",
