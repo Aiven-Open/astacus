@@ -44,6 +44,24 @@ class RohmuModel(AstacusModel):
         use_enum_values = True
 
 
+class RohmuProxyType(str, Enum):
+    socks5 = "socks5"
+    http = "http"
+
+
+class RohmuProxyInfo(RohmuModel):
+    type: RohmuProxyType
+    host: str
+    port: int
+    user: Optional[str] = None
+    password: Optional[str] = Field(None, alias="pass")
+
+
+class RohmuProxyStorage(RohmuModel):
+    """Storage backend with support for optional socks5 or http proxy connections"""
+    proxy_info: Optional[RohmuProxyInfo] = None
+
+
 class RohmuLocalStorageConfig(RohmuModel):
     storage_type: Literal[RohmuStorageType.local]
     directory: DirectoryPath
@@ -69,7 +87,7 @@ class RohmuAzureStorageConfig(RohmuModel):
     azure_cloud: Optional[str] = None
 
 
-class RohmuGoogleStorageConfig(RohmuModel):
+class RohmuGoogleStorageConfig(RohmuProxyStorage):
     storage_type: Literal[RohmuStorageType.google]
     # rohmu.object_storage.google:GoogleTransfer.__init__ arguments
     project_id: str

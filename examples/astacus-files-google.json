@@ -27,6 +27,38 @@
                 "prefix": "REDACTED",
                 "project_id": "REDACTED",
                 "storage_type": "google"
+            },
+            "x-proxy": {
+                "bucket_name": "REDACTED",
+                "credentials": {
+                    "token_uri": "https://accounts.google.com/o/oauth2/token",
+                    "type": "service_account"
+                },
+                "prefix": "REDACTED",
+                "project_id": "REDACTED",
+                "storage_type": "google",
+                "proxy_info": {
+                    "type": "socks5",
+                    "host": "localhost",
+                    "port": 1080,
+                    "user": "REDACTED",
+                    "pass": "REDACTED"
+                }
+            },
+            "x-proxy-no-userpass": {
+                "bucket_name": "REDACTED",
+                "credentials": {
+                    "token_uri": "https://accounts.google.com/o/oauth2/token",
+                    "type": "service_account"
+                },
+                "prefix": "REDACTED",
+                "project_id": "REDACTED",
+                "storage_type": "google",
+                "proxy_info": {
+                    "type": "socks5",
+                    "host": "localhost",
+                    "port": 1080
+                }
             }
         }
     },
