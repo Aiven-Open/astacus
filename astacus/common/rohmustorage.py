@@ -225,7 +225,7 @@ class RohmuStorage(Storage):
             storage = self.config.default_storage
         self.storage_name = storage
         self.storage_config = self.config.storages[storage]
-        self.storage = rohmu.get_transfer(self.storage_config.dict())
+        self.storage = rohmu.get_transfer(self.storage_config.dict(by_alias=True, exclude_unset=True))
 
     def copy(self):
         return RohmuStorage(config=self.config, storage=self.storage_name)

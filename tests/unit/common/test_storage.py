@@ -10,12 +10,15 @@ TBD: Test with something else than local files?
 
 from astacus.common import exceptions
 from astacus.common.cachingjsonstorage import CachingJsonStorage
-from astacus.common.rohmustorage import RohmuStorage
+from astacus.common.rohmustorage import RohmuConfig, RohmuStorage
 from astacus.common.storage import FileStorage, JsonStorage
 from contextlib import nullcontext as does_not_raise
 from pathlib import Path
+from pghoard.rohmu.object_storage import google
 from tests.utils import create_rohmu_config
+from unittest.mock import patch
 
+import pkg_resources
 import pytest
 
 TEST_HEXDIGEST = "deadbeef"
@@ -112,3 +115,46 @@ def test_caching_storage(tmpdir, mocker):
     assert storage.list_jsons() == [TEST_JSON]
     assert not mockdown.called
     assert not mocklist.called
+
+
+@pytest.mark.skipif(
+    pkg_resources.get_distribution("pghoard").parsed_version <= pkg_resources.parse_version("2.1.0"),
+    reason="requires pghoard > 2.1.0"
+)
+@patch("pghoard.rohmu.object_storage.google.get_credentials")
+@patch.object(google.GoogleTransfer, "_init_google_client")
+def test_proxy_storage(mock_google_client, mock_get_credentials):
+    rs = RohmuStorage(
+        config=RohmuConfig.parse_obj({
+            "temporary_directory": "/tmp/astacus/backup-tmp",
+            "default_storage": "x",
+            "compression": {
+                "algorithm": "zstd"
+            },
+            "storages": {
+                "x-proxy": {
+                    "bucket_name": "REDACTED",
+                    "credentials": {
+                        "token_uri": "https://accounts.google.com/o/oauth2/token",
+                        "type": "service_account"
+                    },
+                    "prefix": "REDACTED",
+                    "project_id": "REDACTED",
+                    "storage_type": "google",
+                    "proxy_info": {
+                        "type": "socks5",
+                        "host": "localhost",
+                        "port": 1080,
+                        "user": "REDACTED",
+                        "pass": "REDACTED"
+                    }
+                }
+            }
+        }),
+        storage="x-proxy"
+    )
+    assert rs.storage.proxy_info["user"] == "REDACTED"
+    assert rs.storage.proxy_info["pass"] == "REDACTED"
+    assert rs.storage.proxy_info["type"] == "socks5"
+    assert rs.storage.proxy_info["host"] == "localhost"
+    assert rs.storage.proxy_info["port"] == 1080
