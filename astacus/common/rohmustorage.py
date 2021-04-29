@@ -74,6 +74,10 @@ class RohmuS3StorageConfig(RohmuModel):
     bucket_name: str
     aws_access_key_id: Optional[str] = None
     aws_secret_access_key: Optional[str] = None
+    host: Optional[str] = None
+    port: Optional[int] = None
+    is_secure: Optional[bool] = False
+    is_verify_tls: Optional[bool] = False
     prefix: Optional[str] = None
     # Some more obscure options with defaults are omitted
 
