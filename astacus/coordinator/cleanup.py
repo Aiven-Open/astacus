@@ -65,9 +65,12 @@ class CleanupOp(CoordinatorOpWithClusterLock):
         if not extra_hexdigests:
             return
         logger.debug("deleting %d hexdigests from object storage", len(extra_hexdigests))
-        for hexdigest in extra_hexdigests:
+        for i, hexdigest in enumerate(extra_hexdigests, 1):
             # Due to rate limiting, it might be better to not do this in parallel
             await self.hexdigest_storage.delete_hexdigest(hexdigest)
+            if i % 100 == 0:
+                self.stats.gauge("astacus_cleanup_hexdigest_progress", i)
+                self.stats.gauge("astacus_cleanup_hexdigest_progress_percent", 100.0 * i / len(extra_hexdigests))
 
     async def determine_kept_backups(self, *, retention, backups):
         if retention.minimum_backups is not None and retention.minimum_backups >= len(backups):
