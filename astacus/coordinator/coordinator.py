@@ -14,6 +14,7 @@ from astacus.common.storage import HexDigestStorage, JsonStorage, MultiFileStora
 from datetime import datetime
 from enum import Enum
 from fastapi import BackgroundTasks, Depends, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
 from typing import List, Optional
 from urllib.parse import urlunsplit
 
@@ -208,7 +209,7 @@ class CoordinatorOp(op.Op):
     async def download_backup_manifest(self, backup_name: str) -> ipc.BackupManifest:
         assert self.json_storage
         d = await self.json_storage.download_json(backup_name)
-        manifest = ipc.BackupManifest.parse_obj(d)
+        manifest = await run_in_threadpool(ipc.BackupManifest.parse_obj, d)
         assert not manifest.filename or manifest.filename == backup_name
         manifest.filename = backup_name
         return manifest
