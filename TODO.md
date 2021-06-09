@@ -12,20 +12,10 @@ these.
     - the design
     - user-visible UI etc
 
-- improve operation reporting; probably astacus.common.progress.Progress
-  information should be also forwarded to coordinator results, and
-  subsequently to REST/CLI. Currently coordinator REST API / CLI reports
-  just binary outcome (success/not) which while technically sufficient in
-  short term, isn't optimal
-
 - measure, improve test code coverage
 
 - more metrics endpoints - think on what is really needed
     - perhaps backup/snapshot/restore sizes and file counts? copy from *hoard?
-
-- plugin
-    - (partial?) cassandra plugin; mostly to validate plugin arch is broad enough
-
 
 ## Eventually
 
