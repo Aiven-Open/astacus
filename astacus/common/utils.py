@@ -216,6 +216,8 @@ class SizeLimitedFile:
         if whence == os.SEEK_END:
             ofs += self._file_size
             whence = os.SEEK_SET
+        if whence == os.SEEK_SET:
+            ofs = max(0, min(self._file_size, ofs))
         return self._f.seek(ofs, whence)
 
 
