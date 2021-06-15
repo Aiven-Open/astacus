@@ -2,8 +2,8 @@
 pre-commit>=2.2.0
 
 # pre-commit tasks in Makefile need these
-mypy==0.782
-pylint==2.6.0
+mypy==0.902
+pylint==2.8.3
 pytest-asyncio==0.14.0
 pytest-mock==3.3.1
 pytest-timeout==1.4.2
@@ -18,3 +18,8 @@ respx==0.11.2
 # convenience things that don't actually matter which version they are
 pip-outdated
 pytest-watch
+
+# types for things that don't seem to have them
+types-PyYAML
+types-requests
+types-tabulate
