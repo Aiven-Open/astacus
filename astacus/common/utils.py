@@ -195,7 +195,7 @@ def exponential_backoff(*, initial, retries=None, multiplier=2, maximum=None, du
 
 class SizeLimitedFile:
     def __init__(self, *, path, file_size):
-        self._f = open(path, "rb")
+        self._f = open(path, "rb")  # pylint: disable=consider-using-with
         self._file_size = file_size
         self.tell = self._f.tell
 
