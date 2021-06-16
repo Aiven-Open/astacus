@@ -45,7 +45,7 @@ copyright:
 .PHONY: unittest
 unittest: $(GENERATED)
 	rm -rf htmlcov
-	python3 -m pytest --cov=./ --cov-report=html -s -vvv tests/
+	python3 -m pytest --cov=./ --cov-report=html -s -vvv -x tests/
 
 .PHONY: test
 test: lint copyright unittest

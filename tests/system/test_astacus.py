@@ -33,6 +33,8 @@ A1_FILES_AND_CONTENTS = [
 ]
 
 
+# This test is the slowest, so rather fail fast in real unittests before getting here
+@pytest.mark.order("last")
 @pytest.mark.asyncio
 async def test_astacus(astacus1, astacus2, astacus3):
     # Idea:
