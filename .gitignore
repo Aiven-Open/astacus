@@ -139,3 +139,6 @@ rpm/
 
 # generated protobufs
 astacus/proto/*_pb2.py
+
+# mypy or something pollutes source tree with these
+**/py.typed

@@ -7,9 +7,17 @@ License:        ASL 2.0
 Source0:        astacus-rpm-src.tar
 BuildArch:      noarch
 
+# These are used when e.g. in podman, creating package from scratch
+# using pre-commit + pip; psycopg2 is indirect dependency of pghoard
+BuildRequires:  git
 BuildRequires:  protobuf-compiler
+BuildRequires:  python3-chardet
 BuildRequires:  python3-devel
+BuildRequires:  python3-pip
+BuildRequires:  python3-psycopg2
+BuildRequires:  python3-wheel
 
+# These are used when actually running the package
 Requires:       pghoard
 Requires:       python3-fastapi
 Requires:       python3-httpx

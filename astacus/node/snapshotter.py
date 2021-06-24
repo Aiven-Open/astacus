@@ -188,30 +188,41 @@ class Snapshotter:
 
         if progress is None:
             progress = Progress()
-        progress.start(3)
 
         src_dirs, src_files = self._list_dirs_and_files(self.src)
-        dst_dirs, dst_files = self._list_dirs_and_files(self.dst)
+        progress.start(1)
+        if self.src == self.dst:
+            # The src=dst mode should be used if and only if it is
+            # known that files will not disappear between snapshot and
+            # upload steps (e.g. Astacus controls the lifecycle of the
+            # files within). In that case, there is little point in
+            # making extra symlinks and we can just use the src
+            # directory contents as-is.
+            dst_dirs, dst_files = src_dirs, src_files
+        else:
+            progress.add_total(3)
+            dst_dirs, dst_files = self._list_dirs_and_files(self.dst)
 
-        # Create missing directories
-        changes = self._snapshot_create_missing_directories(src_dirs=src_dirs, dst_dirs=dst_dirs)
-        progress.add_success()
+            # Create missing directories
+            changes = self._snapshot_create_missing_directories(src_dirs=src_dirs, dst_dirs=dst_dirs)
+            progress.add_success()
 
-        # Remove extra files
-        changes += self._snapshot_remove_extra_files(src_files=src_files, dst_files=dst_files)
-        progress.add_success()
+            # Remove extra files
+            changes += self._snapshot_remove_extra_files(src_files=src_files, dst_files=dst_files)
+            progress.add_success()
 
-        # Add missing files
-        changes += self._snapshot_add_missing_files(src_files=src_files, dst_files=dst_files)
-        progress.add_success()
+            # Add missing files
+            changes += self._snapshot_add_missing_files(src_files=src_files, dst_files=dst_files)
+            progress.add_success()
 
-        # We COULD also remove extra directories, but it is not
-        # probably really worth it and due to ignored files it
-        # actually might not even work.
+            # We COULD also remove extra directories, but it is not
+            # probably really worth it and due to ignored files it
+            # actually might not even work.
 
-        # Then, create/update corresponding snapshotfile objects (old
-        # ones were already removed)
-        dst_dirs, dst_files = self._list_dirs_and_files(self.dst)
+            # Then, create/update corresponding snapshotfile objects (old
+            # ones were already removed)
+            dst_dirs, dst_files = self._list_dirs_and_files(self.dst)
+
         snapshotfiles = list(self._get_snapshot_hash_list(dst_files))
         progress.add_total(len(snapshotfiles))
 
@@ -231,4 +242,8 @@ class Snapshotter:
 
         changes += len(snapshotfiles)
         utils.parallel_map_to(iterable=snapshotfiles, fun=_cb, result_callback=_result_cb, n=self.parallel)
+
+        # We initially started with 1 extra
+        progress.add_success()
+
         return changes

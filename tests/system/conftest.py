@@ -13,7 +13,9 @@ import asyncio
 import httpx
 import json
 import logging
+import os.path
 import pytest
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +39,9 @@ ASTACUS_NODES = [
 
 
 @asynccontextmanager
-async def background_process(program, *args):
+async def background_process(program, *args, **kwargs):
     # pylint: disable=bare-except
-    proc = await asyncio.create_subprocess_exec(program, *args)
+    proc = await asyncio.create_subprocess_exec(program, *args, **kwargs)
     try:
         yield
     finally:
@@ -115,28 +117,42 @@ async def _wait_url_up(url):
             assert False, f"url {url} still not reachable"
 
 
+@pytest.fixture(name="rootdir")
+def fixture_rootdir(pytestconfig):
+    return os.path.join(os.path.dirname(__file__), "..", "..")
+
+
 @asynccontextmanager
-async def _astacus(*, tmpdir, index):
+async def _astacus(*, tmpdir, rootdir, index):
     node = ASTACUS_NODES[index]
     a_conf_path = create_astacus_config(tmpdir=tmpdir, node=node)
-    async with background_process("astacus", "server", "-c", str(a_conf_path)):
+    astacus_source_root = os.path.join(os.path.dirname(__file__), "..", "..")
+
+    # simulate this (for some reason, in podman the 'astacus' command
+    # is not to be found, I suppose the package hasn't been
+    # initialized)
+    #
+    # cmd = ["astacus", "server", "-c", str(a_conf_path)]
+    cmd = [sys.executable, "-m", "astacus.main", "server", "-c", str(a_conf_path)]
+
+    async with background_process(*cmd, env={"PYTHONPATH": astacus_source_root}):
         await _wait_url_up(node.url)
         yield node
 
 
 @pytest.fixture(name="astacus1")
-async def fixture_astacus1(tmpdir):
-    async with _astacus(tmpdir=tmpdir, index=0) as a:
+async def fixture_astacus1(tmpdir, rootdir):
+    async with _astacus(tmpdir=tmpdir, rootdir=rootdir, index=0) as a:
         yield a
 
 
 @pytest.fixture(name="astacus2")
-async def fixture_astacus2(tmpdir):
-    async with _astacus(tmpdir=tmpdir, index=1) as a:
+async def fixture_astacus2(tmpdir, rootdir):
+    async with _astacus(tmpdir=tmpdir, rootdir=rootdir, index=1) as a:
         yield a
 
 
 @pytest.fixture(name="astacus3")
-async def fixture_astacus3(tmpdir):
-    async with _astacus(tmpdir=tmpdir, index=2) as a:
+async def fixture_astacus3(tmpdir, rootdir):
+    async with _astacus(tmpdir=tmpdir, rootdir=rootdir, index=2) as a:
         yield a

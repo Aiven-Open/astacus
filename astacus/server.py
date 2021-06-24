@@ -55,7 +55,7 @@ def init_app():
     gconfig = config.set_global_config_from_path(api, config_path)
     sentry_dsn = os.environ.get("SENTRY_DSN", gconfig.sentry_dsn)
     if sentry_dsn:
-        sentry_sdk.init(dsn=sentry_dsn)
+        sentry_sdk.init(dsn=sentry_dsn)  # pylint: disable=abstract-class-instantiated
         api.add_middleware(SentryAsgiMiddleware)
     return api
 

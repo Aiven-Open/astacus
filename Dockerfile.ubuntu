@@ -5,9 +5,17 @@ MAINTAINER "Markus Stenberg <mstenber@aiven.io>"
 
 RUN apt-get update
 RUN apt-get install -y sudo make
+
 ADD Makefile /build/
 RUN cd /build && make build-dep-ubuntu
-ADD README.md setup.py requirements*.txt /build/
+
+ADD README.md setup.cfg setup.py requirements*.txt /build/
 RUN cd /build && python3 -m pip install -r requirements.txt
+
+# This step depends on pre-commit installed from requirements.txt
+ADD .pre-commit-config.yaml /build/
+# pre-commit install-hooks won't run without git directory
+RUN cd /build && git init && pre-commit install-hooks
+
 # Expect real 'src' to be mounted for CMD to do something useful
 CMD cd /src && make test

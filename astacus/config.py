@@ -55,8 +55,8 @@ def global_config(request: Request) -> GlobalConfig:
 
 
 def set_global_config_from_path(app, path):
-    fh = open(path)
-    config = GlobalConfig.parse_obj(yaml.safe_load(fh))
+    with open(path) as fh:
+        config = GlobalConfig.parse_obj(yaml.safe_load(fh))
     cconfig = config.coordinator
     nconfig = config.node
     setattr(app.state, APP_KEY, config)
