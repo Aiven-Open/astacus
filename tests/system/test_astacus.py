@@ -12,12 +12,9 @@ import logging
 import pytest
 import shutil
 import subprocess
+import sys
 
 logger = logging.getLogger(__name__)
-
-
-def _astacus_run(astacus, *args):
-    subprocess.run(["astacus", "--url", astacus.url, "-w", "10"] + list(args), check=True)
 
 
 def _astacus_ls(astacus):
@@ -36,7 +33,16 @@ A1_FILES_AND_CONTENTS = [
 # This test is the slowest, so rather fail fast in real unittests before getting here
 @pytest.mark.order("last")
 @pytest.mark.asyncio
-async def test_astacus(astacus1, astacus2, astacus3):
+async def test_astacus(astacus1, astacus2, astacus3, rootdir):
+    def astacus_run(astacus, *args):
+        # simulate this (for some reason, in podman the 'astacus' command
+        # is not to be found, I suppose the package hasn't been
+        # initialized)
+        #
+        # cmd = ["astacus", "--url", astacus.url, "-w", "10"]
+        cmd = [sys.executable, "-m", "astacus.main", "--url", astacus.url, "-w", "10"]
+        subprocess.run(cmd + list(args), check=True, env={"PYTHONPATH": rootdir})
+
     # Idea:
     # Store following files
     # a1 - A1_FILES_AND_CONTENTS
@@ -47,7 +53,7 @@ async def test_astacus(astacus1, astacus2, astacus3):
     file1_2_path = astacus2.root_path / "file1"
     file1_2_path.write_text("content1")
 
-    _astacus_run(astacus1, "backup")
+    astacus_run(astacus1, "backup")
 
     # Clear node 1, add file that did not exist at time of backup
     shutil.rmtree(astacus1.root_path)
@@ -56,13 +62,13 @@ async def test_astacus(astacus1, astacus2, astacus3):
     file3_path.write_text("content3")
 
     # Ensure 'list' command does not crash (output validation is bit too painful)
-    _astacus_run(astacus1, "list")
+    astacus_run(astacus1, "list")
 
-    _astacus_run(astacus1, "cleanup", "--minimum-backups", "7", "--maximum-backups", "42", "--keep-days", "15")
-    _astacus_run(astacus1, "delete", "--backups", "nonexistent-is-ok")
+    astacus_run(astacus1, "cleanup", "--minimum-backups", "7", "--maximum-backups", "42", "--keep-days", "15")
+    astacus_run(astacus1, "delete", "--backups", "nonexistent-is-ok")
 
     # Run restore
-    _astacus_run(astacus2, "restore")
+    astacus_run(astacus2, "restore")
 
     # Should have now:
     # a1 - A1_FILES_AND_CONTENTS
