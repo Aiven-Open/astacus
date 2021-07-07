@@ -8,6 +8,7 @@ Test astacus.common.utils
 
 from astacus.common import utils
 from datetime import timedelta
+from pathlib import Path
 
 import asyncio
 import logging
@@ -103,3 +104,29 @@ def test_sizelimitedfile():
         assert not lf.read()
         assert lf.seek(3, 0) == 3
         assert lf.read() == b"bar"
+
+
+def test_open_path_with_atomic_rename(tmpdir):
+    # default is bytes
+    f1_path = f"{tmpdir}/f1"
+    with utils.open_path_with_atomic_rename(f1_path) as f1:
+        f1.write(b"test1")
+    assert Path(f1_path).read_text() == "test1"
+
+    # text mode requires passing mode flag but should work
+    f2_path = f"{tmpdir}/f2"
+    with utils.open_path_with_atomic_rename(f2_path, mode="w") as f2:
+        f2.write("test2")
+    assert Path(f2_path).read_text() == "test2"
+
+    # rewriting should be fine too
+    with utils.open_path_with_atomic_rename(f2_path, mode="w") as f2:
+        f2.write("test2-new")
+    assert Path(f2_path).read_text() == "test2-new"
+
+    # erroneous cases should not produce file at all
+    f3_path = f"{tmpdir}/f3"
+    with pytest.raises(AssertionError):
+        with utils.open_path_with_atomic_rename(f3_path):
+            assert False
+    assert not Path(f3_path).exists()

@@ -43,7 +43,7 @@ class Downloader(ThreadLocalStorage):
         relative_path = snapshotfile.relative_path
         download_path = self.dst / relative_path
         download_path.parent.mkdir(parents=True, exist_ok=True)
-        with download_path.open("wb") as f:
+        with utils.open_path_with_atomic_rename(download_path) as f:
             if snapshotfile.hexdigest:
                 self.local_storage.download_hexdigest_to_file(snapshotfile.hexdigest, f)
             else:
