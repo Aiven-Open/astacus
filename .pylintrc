@@ -15,6 +15,7 @@ disable=
     too-many-instance-attributes,  # give me a break, <= 7
     unused-argument,               # annoying when fullfilling some API
     wrong-import-order,            # we use isort anyway
+    too-many-ancestors,            # <= 7 is pretty bad if using mixins
 
 [FORMAT]
 max-line-length=125
@@ -26,7 +27,8 @@ score=no
 
 [TYPECHECK]
 ignored-classes=responses
-extension-pkg-whitelist=pydantic
+ignored-modules=cassandra
+extension-pkg-whitelist=pydantic,cassandra.cluster,cassandra.metadata,cassandra.query
 
 [SIMILARITIES]
 # Ignore import statements when computing similarities

@@ -18,7 +18,12 @@ def _run():
     setuptools.setup(
         version=version_for_setup_py,
         packages=setuptools.find_packages(exclude=["test"]),
-        extras_require={},
+        extras_require={
+            "azure": ["azure-mgmt-storage"],
+            "aws": ["botocore"],
+            "google": ["google-api-python-client==1.6.7", "oauth2client==4.1.3"],
+            "cassandra": ["cassandra-driver==3.20.0"],
+        },
         dependency_links=[],
         package_data={},
         entry_points={

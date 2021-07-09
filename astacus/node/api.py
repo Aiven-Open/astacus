@@ -3,6 +3,7 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 
+from .cassandra import CassandraOp, CassandraRequest
 from .clear import ClearOp
 from .download import DownloadOp
 from .node import Node
@@ -11,12 +12,14 @@ from .state import node_state, NodeState
 from astacus.common import ipc
 from enum import Enum
 from fastapi import APIRouter, Depends, HTTPException
+from typing import Union
 
 router = APIRouter()
 
 
 class OpName(str, Enum):
     """ (Long-running) operations defined in this API (for node) """
+    cassandra = "cassandra"
     clear = "clear"
     download = "download"
     snapshot = "snapshot"
@@ -103,4 +106,18 @@ def clear(req: ipc.SnapshotClearRequest, n: Node = Depends()):
 @router.get("/clear/{op_id}")
 def clear_result(*, op_id: int, n: Node = Depends()):
     op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.clear)
+    return op.result
+
+
+@router.post("/cassandra/{subop}")
+def cassandra(req: Union[ipc.NodeRequest, ipc.CassandraStartRequest], subop: ipc.CassandraSubOp, n: Node = Depends()):
+    if not n.state.is_locked:
+        raise HTTPException(status_code=409, detail="Not locked")
+    req = CassandraRequest(subop=subop, result_url=req.result_url, tokens=getattr(req, "tokens", None))
+    return CassandraOp(n=n).start(req=req)
+
+
+@router.get("/cassandra/{subop}/{op_id}")
+def cassandra_result(*, subop: ipc.CassandraSubOp, op_id: int, n: Node = Depends()):
+    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.cassandra)
     return op.result

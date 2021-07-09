@@ -136,4 +136,9 @@ class M3DRestoreOp(ETCDRestoreOpBase):
         return await self.restore_etcd_dump(self.result_rewrite_etcd)
 
 
-plugin_info = {"backup": M3DBBackupOp, "manifest": M3DBManifest, "restore": M3DRestoreOp, "config": M3DBConfiguration}
+plugin_info = {
+    "config": M3DBConfiguration,
+    "backup": M3DBBackupOp,
+    "manifest": M3DBManifest,
+    "restore": M3DRestoreOp,
+}

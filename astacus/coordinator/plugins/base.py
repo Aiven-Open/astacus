@@ -224,7 +224,12 @@ class RestoreOpBase(OpBase):
                 # If partial restore, do not clear other nodes
                 continue
             else:
-                req = ipc.SnapshotClearRequest(root_globs=self.result_backup_manifest.snapshot_results[0].state.root_globs)
+                snapshot_results = self.result_backup_manifest.snapshot_results
+                if not snapshot_results:
+                    raise exceptions.MissingSnapshotResultsException(
+                        f"No snapshot results, yet full restore desired; {node_to_backup_index!r} {self.nodes!r}"
+                    )
+                req = ipc.SnapshotClearRequest(root_globs=snapshot_results[0].state.root_globs)
                 op = "clear"
             start_result = await self.request_from_nodes(
                 op, caller="RestoreOpBase.step_restore", method="post", req=req, nodes=[node]

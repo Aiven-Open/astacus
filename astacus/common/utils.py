@@ -158,7 +158,6 @@ def exponential_backoff(*, initial, retries=None, multiplier=2, maximum=None, du
                 if time_left_after_sleep < 0:
                     return None
             logger.debug("exponential_backoff waiting %.2f seconds (retry %d%s)", delay, self.retry, retries_text)
-
             return delay
 
         async def __anext__(self):

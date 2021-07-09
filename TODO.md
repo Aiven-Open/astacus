@@ -17,6 +17,10 @@ these.
 - more metrics endpoints - think on what is really needed
     - perhaps backup/snapshot/restore sizes and file counts? copy from *hoard?
 
+- Cassandra support missing pieces
+    - testing/use of backup
+    - a lot of restore code
+
 ## Eventually
 
 - package (or have someone do it?) this for distros

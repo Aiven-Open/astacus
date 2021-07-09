@@ -27,10 +27,8 @@ logger = logging.getLogger(__name__)
 class SnapshotOp(NodeOp):
     snapshotter: Optional[Snapshotter] = None
 
-    def create_result(self):
-        return ipc.SnapshotResult()
-
     def start(self, *, req: ipc.SnapshotRequest):
+        self.result = ipc.SnapshotResult()
         self.req = req
         logger.debug("start_snapshot %r", req)
         self.snapshotter = self.get_or_create_snapshotter(req.root_globs)
@@ -54,10 +52,8 @@ class SnapshotOp(NodeOp):
 
 
 class UploadOp(NodeOp):
-    def create_result(self):
-        return ipc.SnapshotUploadResult()
-
     def start(self, *, req: ipc.SnapshotUploadRequest):
+        self.result = ipc.SnapshotUploadResult()
         self.req = req
         logger.debug("start_upload %r", req)
         return self.start_op(op_name="upload", op=self, fun=self.upload)

@@ -27,15 +27,13 @@ class NodeOp(op.Op):
         self.config = n.config
         self._still_locked_callback = n.state.still_locked_callback
         self._sent_result_json = None
-        self.result = self.create_result()
-        self.result.az = self.config.az
+        # subclasses can override if they want different result class
+        # with different built-in defaults
+        self.result = ipc.NodeResult(az=self.config.az)
         self.get_or_create_snapshotter = n.get_or_create_snapshotter
         self.get_snapshotter = n.get_snapshotter
         # TBD: Could start some worker thread to send the self.result periodically
         # (or to some local start method )
-
-    def create_result(self):
-        return ipc.NodeResult()
 
     @property
     def storage(self):

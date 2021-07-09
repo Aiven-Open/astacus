@@ -21,6 +21,7 @@ import socket
 # These are the database plugins we support; list is intentionally
 # enum here, as dynamically adding them isn't priority (for now)
 class Plugin(str, Enum):
+    cassandra = "cassandra"
     files = "files"
     m3db = "m3db"
 
@@ -148,6 +149,25 @@ class SnapshotDownloadRequest(NodeRequest):
 class SnapshotClearRequest(NodeRequest):
     # Files not matching this are not deleted
     root_globs: List[str]
+
+
+# node.cassandra
+
+
+class CassandraSubOp(str, Enum):
+    get_schema_hash = "get-schema-hash"
+    remove_snapshot = "remove-snapshot"
+    restore_snapshot = "restore-snapshot"
+    start_cassandra = "start-cassandra"
+    take_snapshot = "take-snapshot"
+
+
+class CassandraStartRequest(NodeRequest):
+    tokens: List[str]
+
+
+class CassandraGetSchemaHashResult(NodeResult):
+    schema_hash: str
 
 
 # coordinator.api

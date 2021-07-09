@@ -39,4 +39,8 @@ class FilesRestoreOp(RestoreOpBase):
     plugin = ipc.Plugin.files
 
 
-plugin_info = {"backup": FilesBackupOp, "restore": FilesRestoreOp, "config": FilesConfiguration}
+plugin_info = {
+    "config": FilesConfiguration,
+    "backup": FilesBackupOp,
+    "restore": FilesRestoreOp,
+}
