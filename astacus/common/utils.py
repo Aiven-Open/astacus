@@ -109,12 +109,12 @@ async def httpx_request(url, *, caller, method="get", timeout=10, json: bool = T
             if ignore_status_code:
                 return r.json() if json else r
             logger.warning("Unexpected response status code from %s to %s: %s %r", url, caller, r.status_code, r.text)
-        except httpcore.ConnectError:
+        except httpcore.NetworkError as ex:
             # Unfortunately at least current httpx leaks this
             # exception without wrapping it. Future versions may
             # address this hopefully. I believe httpx.TransportError
             # replaces it in future versions once we upgrade.
-            pass
+            logger.warning("Network error from %s to %s: %r", url, caller, ex)
         except httpx.HTTPError as ex:
             logger.warning("Unexpected response from %s to %s: %r", url, caller, ex)
         return None
