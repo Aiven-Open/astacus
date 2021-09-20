@@ -7,7 +7,7 @@ Test astacus.common.utils
 """
 
 from astacus.common import utils
-from astacus.common.utils import AsyncSleeper
+from astacus.common.utils import AsyncSleeper, build_netloc
 from datetime import timedelta
 
 import asyncio
@@ -17,6 +17,30 @@ import tempfile
 import time
 
 logger = logging.getLogger(__name__)
+
+
+def test_build_netloc_does_not_change_hostname() -> None:
+    assert build_netloc("example.org") == "example.org"
+
+
+def test_build_netloc_does_not_change_ipv4() -> None:
+    assert build_netloc("127.0.0.1") == "127.0.0.1"
+
+
+def test_build_netloc_escapes_ipv6() -> None:
+    assert build_netloc("::1") == "[::1]"
+
+
+def test_build_netloc_adds_port() -> None:
+    assert build_netloc("example.org", 1234) == "example.org:1234"
+
+
+def test_build_netloc_adds_port_to_ipv4() -> None:
+    assert build_netloc("127.0.0.1", 1234) == "127.0.0.1:1234"
+
+
+def test_build_netloc_adds_port_to_ipv6() -> None:
+    assert build_netloc("::1", 1234) == "[::1]:1234"
 
 
 @pytest.mark.asyncio
