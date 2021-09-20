@@ -93,7 +93,7 @@ def http_request(url, *, caller, method="get", timeout=10, ignore_status_code: b
 
 
 async def httpx_request(
-    url: str,
+    url: Union[str, httpx.URL],
     *,
     caller: str,
     method: str = "get",
@@ -126,6 +126,12 @@ async def httpx_request(
         except httpx.HTTPError as ex:
             logger.warning("Unexpected response from %s to %s: %r", url, caller, ex)
         return None
+
+
+def build_netloc(host: str, port: Optional[int] = None) -> str:
+    """Create a netloc that can be passed to `url.parse.urlunsplit` while safely handling ipv6 addresses."""
+    escaped_host = f"[{host}]" if ":" in host else host
+    return escaped_host if port is None else f"{escaped_host}:{port}"
 
 
 T = TypeVar("T")

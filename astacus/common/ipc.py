@@ -21,6 +21,7 @@ import socket
 # These are the database plugins we support; list is intentionally
 # enum here, as dynamically adding them isn't priority (for now)
 class Plugin(str, Enum):
+    clickhouse = "clickhouse"
     files = "files"
     m3db = "m3db"
 

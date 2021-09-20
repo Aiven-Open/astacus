@@ -140,7 +140,7 @@ class Cluster:
                 logger.info(
                     "wait_successful_results: Incorrect start result for #%d/%d: %r", i, len(start_results), start_result
                 )
-                raise WaitResultError(f"incorrect start result for #{i}/{len(start_results)}")
+                raise WaitResultError(f"incorrect start result for #{i}/{len(start_results)}: {start_result!r}")
             parsed_start_result = op.Op.StartResult.parse_obj(start_result)
             urls.append(parsed_start_result.status_url)
         if required_successes is not None and len(urls) != required_successes:
