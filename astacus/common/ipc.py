@@ -73,8 +73,8 @@ class SnapshotFile(AstacusModel):
 
 
 class SnapshotState(AstacusModel):
-    root_globs: List[str]
-    files: List[SnapshotFile]
+    root_globs: List[str] = []
+    files: List[SnapshotFile] = []
 
 
 class SnapshotRequest(NodeRequest):
@@ -119,7 +119,7 @@ class SnapshotResult(NodeResult):
     end: Optional[datetime]
 
     # should be passed opaquely to restore
-    state: Optional[SnapshotState]
+    state: SnapshotState = Field(default_factory=SnapshotState)
 
     # Summary data for manifest use
     files: int = 0
