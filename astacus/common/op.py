@@ -48,11 +48,12 @@ class Op:
         status_url: str
 
     op_id: int
-    stats: Optional[StatsClient] = None  # set in start_op
+    stats: StatsClient
 
-    def __init__(self, *, info: Info, op_id: int):
+    def __init__(self, *, info: Info, op_id: int, stats: StatsClient):
         self.info = info
         self.op_id = op_id
+        self.stats = stats
 
     def check_op_id(self):
         if self.info.op_id != self.op_id:
@@ -70,9 +71,8 @@ class Op:
         return True
 
     def set_status_fail(self):
-        if self.stats is not None:
-            name = self.__class__.__name__
-            self.stats.increase("astacus_fail", tags={"op": name})
+        name = self.__class__.__name__
+        self.stats.increase("astacus_fail", tags={"op": name})
         self.set_status(self.Status.fail)
 
 
@@ -108,7 +108,6 @@ class OpMixin:
         info.op_name = op_name
         self.state.op = op
         op.set_status(Op.Status.starting)
-        op.stats = self.stats
         url = self.request_url
         status_url = urlunsplit((url.scheme, url.netloc, f"{url.path}/{op.op_id}", "", ""))
 

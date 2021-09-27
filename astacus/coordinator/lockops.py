@@ -10,11 +10,12 @@ about API design testing)
 """
 from .cluster import LockResult
 from .coordinator import Coordinator, CoordinatorOp
+from astacus.common.statsd import StatsClient
 
 
 class LockOps(CoordinatorOp):
-    def __init__(self, *, c: Coordinator, op_id: int, locker: str, ttl: int = 60):
-        super().__init__(c=c, op_id=op_id)
+    def __init__(self, *, c: Coordinator, op_id: int, stats: StatsClient, locker: str, ttl: int = 60):
+        super().__init__(c=c, op_id=op_id, stats=stats)
         self.locker = locker
         self.ttl = ttl
 

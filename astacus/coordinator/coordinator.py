@@ -2,22 +2,27 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
-from astacus.common import asyncstorage, magic, op, statsd, utils
+from .plugins.base import CoordinatorPlugin, OperationContext, Step, StepsContext
+from astacus.common import asyncstorage, exceptions, ipc, op, statsd, utils
 from astacus.common.cachingjsonstorage import MultiCachingJsonStorage
+from astacus.common.dependencies import get_request_url
+from astacus.common.magic import ErrorCode
 from astacus.common.progress import Progress
 from astacus.common.rohmustorage import MultiRohmuStorage
-from astacus.common.storage import MultiFileStorage, MultiStorage
+from astacus.common.statsd import StatsClient
+from astacus.common.storage import JsonStorage, MultiFileStorage, MultiStorage
 from astacus.common.utils import AsyncSleeper
 from astacus.coordinator.cluster import Cluster, LockResult
 from astacus.coordinator.config import coordinator_config, CoordinatorConfig, CoordinatorNode
+from astacus.coordinator.plugins import PLUGINS
 from astacus.coordinator.state import coordinator_state, CoordinatorState
-from datetime import datetime
 from fastapi import BackgroundTasks, Depends, HTTPException, Request
 from starlette.datastructures import URL
-from typing import Awaitable, Callable, List, Optional
+from typing import Any, Awaitable, Callable, Dict, Iterator, List, Optional, Type
 from urllib.parse import urlunsplit
 
 import asyncio
+import contextlib
 import logging
 import socket
 import threading
@@ -26,21 +31,105 @@ import time
 logger = logging.getLogger(__name__)
 
 
-class CoordinatorOp(op.Op):
-    attempt = -1  # try_run iteration number
-    attempt_start: Optional[datetime] = None  # try_run iteration start time
+def coordinator_stats(config: CoordinatorConfig = Depends(coordinator_config)) -> StatsClient:
+    return StatsClient(config=config.statsd)
 
-    def __init__(self, *, c: "Coordinator", op_id: int):
-        super().__init__(info=c.state.op_info, op_id=op_id)
+
+def coordinator_lock(request: Request) -> threading.RLock:
+    return utils.get_or_create_state(state=request.app.state, key="sync_lock", factory=threading.RLock)
+
+
+def coordinator_hexdigest_mstorage(config: CoordinatorConfig = Depends(coordinator_config)) -> MultiStorage:
+    assert config.object_storage
+    return MultiRohmuStorage(config=config.object_storage)
+
+
+def coordinator_json_mstorage(config: CoordinatorConfig = Depends(coordinator_config)) -> MultiStorage:
+    assert config.object_storage
+    mstorage = MultiRohmuStorage(config=config.object_storage)
+    if config.object_storage_cache:
+        file_mstorage = MultiFileStorage(config.object_storage_cache)
+        return MultiCachingJsonStorage(backend_mstorage=mstorage, cache_mstorage=file_mstorage)
+    return mstorage
+
+
+class Coordinator(op.OpMixin):
+    state: CoordinatorState
+    """ Convenience dependency which contains sub-dependencies most API endpoints need """
+    def __init__(
+        self,
+        *,
+        request_url: URL = Depends(get_request_url),
+        background_tasks: BackgroundTasks,
+        config: CoordinatorConfig = Depends(coordinator_config),
+        state: CoordinatorState = Depends(coordinator_state),
+        stats: statsd.StatsClient = Depends(coordinator_stats),
+        sync_lock: threading.RLock = Depends(coordinator_lock),
+        hexdigest_mstorage: MultiStorage = Depends(coordinator_hexdigest_mstorage),
+        json_mstorage: MultiStorage = Depends(coordinator_json_mstorage),
+    ):
+        self.request_url = request_url
+        self.background_tasks = background_tasks
+        self.config = config
+        self.state = state
+        self.stats = stats
+        self.sync_lock = sync_lock
+
+        self.hexdigest_mstorage = hexdigest_mstorage
+        self.json_mstorage = json_mstorage
+
+    def get_operation_context(self, *, requested_storage: str = "") -> OperationContext:
+        storage_name = self.get_storage_name(requested_storage=requested_storage)
+        return OperationContext(
+            storage_name=storage_name,
+            json_storage=self.get_json_storage(storage_name),
+            hexdigest_storage=self.get_hexdigest_storage(storage_name),
+        )
+
+    def get_plugin(self) -> CoordinatorPlugin:
+        return PLUGINS[self.config.plugin].parse_obj(self.config.plugin_config)
+
+    def get_storage_name(self, *, requested_storage: str = ""):
+        return requested_storage if requested_storage else self.json_mstorage.get_default_storage_name()
+
+    def get_hexdigest_storage(self, storage_name: str) -> asyncstorage.AsyncHexDigestStorage:
+        return asyncstorage.AsyncHexDigestStorage(self.hexdigest_mstorage.get_storage(storage_name))
+
+    def get_json_storage(self, storage_name: str) -> asyncstorage.AsyncJsonStorage:
+        storage = CacheClearingJsonStorage(state=self.state, storage=self.json_mstorage.get_storage(storage_name))
+        return asyncstorage.AsyncJsonStorage(storage)
+
+
+class CacheClearingJsonStorage(JsonStorage):
+    def __init__(self, state: CoordinatorState, storage: JsonStorage):
+        self.state = state
+        self.storage = storage
+
+    def delete_json(self, name: str) -> None:
+        try:
+            return self.storage.delete_json(name)
+        finally:
+            self.state.cached_list_response = None
+
+    def download_json(self, name: str) -> Dict[str, Any]:
+        return self.storage.download_json(name)
+
+    def list_jsons(self) -> List[str]:
+        return self.storage.list_jsons()
+
+    def upload_json_str(self, name: str, data: str) -> None:
+        try:
+            return self.storage.upload_json_str(name, data)
+        finally:
+            self.state.cached_list_response = None
+
+
+class CoordinatorOp(op.Op):
+    def __init__(self, *, c: Coordinator, op_id: int, stats: StatsClient):
+        super().__init__(info=c.state.op_info, op_id=op_id, stats=stats)
         self.request_url = c.request_url
         self.nodes = c.config.nodes
         self.poll_config = c.config.poll
-        self.request_url = c.request.url
-        self.config = c.config
-        self.state = c.state
-        self.hexdigest_mstorage = c.hexdigest_mstorage
-        self.json_mstorage = c.json_mstorage
-        self.set_storage_name(self.default_storage_name)
         self.subresult_sleeper = AsyncSleeper()
 
     def get_cluster(self) -> Cluster:
@@ -53,79 +142,15 @@ class CoordinatorOp(op.Op):
             stats=self.stats,
         )
 
-    hexdigest_storage: Optional[asyncstorage.AsyncHexDigestStorage] = None
-    json_storage: Optional[asyncstorage.AsyncJsonStorage] = None
 
-    def set_storage_name(self, storage_name):
-        self.hexdigest_storage = asyncstorage.AsyncHexDigestStorage(self.hexdigest_mstorage.get_storage(storage_name))
-        self.json_storage = asyncstorage.AsyncJsonStorage(self.json_mstorage.get_storage(storage_name))
-
-    @property
-    def default_storage_name(self):
-        return self.json_mstorage.get_default_storage_name()
-
-    async def wait_successful_results(self, start_results, *, result_class, all_nodes=True):
-        urls = []
-
-        for i, result in enumerate(start_results, 1):
-            if not result or isinstance(result, Exception):
-                logger.info("wait_successful_results: Incorrect start result for #%d/%d: %r", i, len(start_results), result)
-                return []
-            parsed_result = op.Op.StartResult.parse_obj(result)
-            urls.append(parsed_result.status_url)
-        if all_nodes and len(urls) != len(self.nodes):
-            return []
-        delay = self.config.poll.delay_start
-        results = [None] * len(urls)
-        # Note that we don't have timeout mechanism here as such,
-        # however, if re-locking times out, we will bail out. TBD if
-        # we need timeout mechanism here anyway.
-        failures = {}
-
-        async for _ in utils.exponential_backoff(
-            initial=delay,
-            multiplier=self.config.poll.delay_multiplier,
-            maximum=self.config.poll.delay_max,
-            duration=self.config.poll.duration,
-            async_sleeper=self.subresult_sleeper,
-        ):
-            for i, (url, result) in enumerate(zip(urls, results)):
-                # TBD: This could be done in parallel too
-                if result is not None and result.progress.final:
-                    continue
-                r = await utils.httpx_request(
-                    url, caller="CoordinatorOp.wait_successful_results", timeout=self.config.poll.result_timeout
-                )
-                if r is None:
-                    failures[i] = failures.get(i, 0) + 1
-                    if failures[i] >= self.config.poll.maximum_failures:
-                        return []
-                    continue
-                # We got something -> decode the result
-                result = result_class.parse_obj(r)
-                results[i] = result
-                failures[i] = 0
-                assert self.current_step
-                self.step_progress[self.current_step] = Progress.merge(r.progress for r in results if r is not None)
-                if result.progress.finished_failed:
-                    return []
-            if not any(True for result in results if result is None or not result.progress.final):
-                break
-        else:
-            logger.debug("wait_successful_results timed out")
-            return []
-        return results
-
-
-class CoordinatorOpWithClusterLock(CoordinatorOp):
+class LockedCoordinatorOp(CoordinatorOp):
     op_started: Optional[float]  # set when op_info.status is set to starting
 
-    def __init__(self, *, c: "Coordinator", op_id: int):
-        super().__init__(c=c, op_id=op_id)
+    def __init__(self, *, c: Coordinator, op_id: int, stats: StatsClient):
+        super().__init__(c=c, op_id=op_id, stats=stats)
         self.ttl = c.config.default_lock_ttl
         self.initial_lock_start = time.monotonic()
         self.locker = self.get_locker()
-        self.relock_tasks: List[asyncio.Task] = []
 
     def get_locker(self):
         return f"{socket.gethostname()}-{id(self)}"
@@ -142,7 +167,7 @@ class CoordinatorOpWithClusterLock(CoordinatorOp):
             await cluster.request_unlock(locker=self.locker)
             raise HTTPException(
                 409, {
-                    "code": magic.ErrorCode.cluster_lock_unavailable,
+                    "code": ErrorCode.cluster_lock_unavailable,
                     "message": "Unable to acquire cluster lock to create operation"
                 }
             )
@@ -206,13 +231,12 @@ class CoordinatorOpWithClusterLock(CoordinatorOp):
         return changed
 
     def _update_running_stats(self) -> None:
-        if self.stats is not None:
-            if self.info.op_status in {op.Op.Status.done, op.Op.Status.fail}:
-                op_running_for = 0
-            else:
-                op_running_for = int(utils.monotonic_time() - self.op_started)
-            logger.debug("Sending op_running_for metric. value=%d", op_running_for)
-            self.stats.gauge("astacus_op_running_for", op_running_for, tags={"op": self.info.op_name, "id": self.info.op_id})
+        if self.info.op_status in {op.Op.Status.done, op.Op.Status.fail}:
+            op_running_for = 0
+        else:
+            op_running_for = int(utils.monotonic_time() - self.op_started)
+        logger.debug("Sending op_running_for metric. value=%d", op_running_for)
+        self.stats.gauge("astacus_op_running_for", op_running_for, tags={"op": self.info.op_name, "id": self.info.op_id})
 
 
 def get_subresult_url(request_url: URL, op_id: int) -> str:
@@ -221,31 +245,77 @@ def get_subresult_url(request_url: URL, op_id: int) -> str:
     return urlunsplit(parts)
 
 
-class Coordinator(op.OpMixin):
-    """ Convenience dependency which contains sub-dependencies most API endpoints need """
-    state: CoordinatorState
+class SteppedCoordinatorOp(LockedCoordinatorOp):
+    attempts: int
+    steps: List[Step]
+    step_progress: Dict[Type[Step], Progress]
 
-    def __init__(
-        self,
-        *,
-        request: Request,
-        background_tasks: BackgroundTasks,
-        config: CoordinatorConfig = Depends(coordinator_config),
-        state: CoordinatorState = Depends(coordinator_state)
-    ):
-        self.request = request
-        self.request_url = request.url
-        self.background_tasks = background_tasks
-        self.config = config
-        self.state = state
-        self.stats = statsd.StatsClient(config=config.statsd)
+    def __init__(self, *, c: Coordinator, op_id: int, stats: StatsClient, attempts: int, steps: List[Step]):
+        super().__init__(c=c, op_id=op_id, stats=stats)
+        self.state = c.state
+        self.attempts = attempts
+        self.steps = steps
+        self.step_progress = {}
 
-        assert self.config.object_storage
-        mstorage = MultiRohmuStorage(config=self.config.object_storage)
-        self.hexdigest_mstorage = mstorage
-        json_mstorage: MultiStorage = mstorage
-        if self.config.object_storage_cache:
-            file_mstorage = MultiFileStorage(self.config.object_storage_cache)
-            json_mstorage = MultiCachingJsonStorage(backend_mstorage=mstorage, cache_mstorage=file_mstorage)
-        self.json_mstorage = json_mstorage
-        self.sync_lock = utils.get_or_create_state(state=request.app.state, key="sync_lock", factory=threading.RLock)
+    @property
+    def progress(self) -> Progress:
+        return Progress.merge(self.step_progress.values())
+
+    async def run_with_lock(self, cluster: Cluster) -> None:
+        name = self.__class__.__name__
+        try:
+            for attempt in range(1, self.attempts + 1):
+                logger.debug("%s - attempt #%d/%d", name, attempt, self.attempts)
+                context = StepsContext(attempt=attempt)
+                stats_tags = {"op": name, "attempt": str(attempt)}
+                async with self.stats.async_timing_manager("astacus_attempt_duration", stats_tags):
+                    try:
+                        if await self.try_run(cluster, context):
+                            return
+                    except exceptions.TransientException as ex:
+                        logger.info("%s - transient failure: %r", name, ex)
+        except exceptions.PermanentException as ex:
+            logger.info("%s - permanent failure: %r", name, ex)
+        self.set_status_fail()
+
+    async def try_run(self, cluster: Cluster, context: StepsContext) -> bool:
+        op_name = self.__class__.__name__
+        for i, step in enumerate(self.steps, 1):
+            step_name = step.__class__.__name__
+            if self.state.shutting_down:
+                logger.info("Step %s not even started due to shutdown", step_name)
+                return False
+            logger.debug("Step %d/%d: %s", i, len(self.steps), step_name)
+            async with self.stats.async_timing_manager("astacus_step_duration", {"op": op_name, "step": step_name}):
+                with self._progress_handler(cluster, step):
+                    r = await step.run_step(cluster, context)
+            if not r:
+                logger.info("Step %s failed", step)
+                return False
+            context.set_result(step.__class__, r)
+        return True
+
+    @contextlib.contextmanager
+    def _progress_handler(self, cluster: Cluster, step: Step) -> Iterator[None]:
+        def progress_handler(progress: Progress):
+            self.step_progress[step.__class__] = progress
+
+        cluster.set_progress_handler(progress_handler)
+        try:
+            yield
+        finally:
+            cluster.set_progress_handler(None)
+
+
+class BackupOp(SteppedCoordinatorOp):
+    def __init__(self, *, c: Coordinator, op_id: int, stats: StatsClient):
+        context = c.get_operation_context()
+        steps = c.get_plugin().get_backup_steps(context=context)
+        super().__init__(c=c, op_id=op_id, stats=stats, attempts=c.config.backup_attempts, steps=steps)
+
+
+class RestoreOp(SteppedCoordinatorOp):
+    def __init__(self, *, c: Coordinator, op_id: int, stats: StatsClient, req: ipc.RestoreRequest):
+        context = c.get_operation_context(requested_storage=req.storage)
+        steps = c.get_plugin().get_restore_steps(context=context, req=req)
+        super().__init__(c=c, op_id=op_id, stats=stats, attempts=1, steps=steps)  # c.config.restore_attempts

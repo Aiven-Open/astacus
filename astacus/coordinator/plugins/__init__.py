@@ -1,23 +1,8 @@
-from .files import plugin_info as _files_plugin_info
-from .m3db import plugin_info as _m3db_plugin_info
+from .files import FilesPlugin
+from .m3db import M3DBPlugin
 from astacus.common.ipc import Plugin
 
-
-def _get_plugin_info(name):
-    return {Plugin.files: _files_plugin_info, Plugin.m3db: _m3db_plugin_info}[name]
-
-
-def get_plugin_backup_class(name):
-    return _get_plugin_info(name)["backup"]
-
-
-def get_plugin_restore_class(name):
-    return _get_plugin_info(name)["restore"]
-
-
-def get_plugin_config_class(name):
-    return _get_plugin_info(name)["config"]
-
-
-def get_plugin_manifest_class(name):
-    return _get_plugin_info(name)["manifest"]
+PLUGINS = {
+    Plugin.files: FilesPlugin,
+    Plugin.m3db: M3DBPlugin,
+}

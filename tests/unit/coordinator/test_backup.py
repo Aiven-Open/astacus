@@ -10,8 +10,7 @@ from astacus.common import ipc, utils
 from astacus.common.ipc import SnapshotHash
 from astacus.common.statsd import StatsClient
 from astacus.coordinator.api import OpName
-from astacus.coordinator.plugins import get_plugin_backup_class
-from astacus.coordinator.plugins.base import NodeIndexData
+from astacus.coordinator.plugins.base import build_node_index_datas, NodeIndexData
 from unittest.mock import patch
 
 import itertools
@@ -109,22 +108,6 @@ def test_backup(fail_at, app, client, storage):
         assert app.state.coordinator_state.op_info.op_id == 1
 
 
-_BackupOp = get_plugin_backup_class("files")
-
-
-class DummyBackupOp(_BackupOp):
-    def __init__(self, hexdigests, snapshot_results):
-        # pylint: disable=super-init-not-called
-        # NOP __init__, we mock whatever we care about
-        self.nodes = [0, 1, 2, 3]
-        self.hexdigests = set(hexdigests)
-        self.result_snapshot = snapshot_results
-
-    def assert_upload_of_snapshot_is(self, upload):
-        got_upload = self._snapshot_results_to_upload_node_index_datas()
-        assert got_upload == upload
-
-
 _progress_done = ipc.Progress(final=True)
 
 
@@ -187,8 +170,7 @@ def _ssresults(*kwarg_list):
     ]
 )
 def test_upload_optimization(hexdigests, snapshot_results, uploads):
-    op = DummyBackupOp(hexdigests, snapshot_results)
-    op.assert_upload_of_snapshot_is(uploads)
+    assert uploads == build_node_index_datas(hexdigests=hexdigests, snapshots=snapshot_results, node_indices=[0, 1, 2, 3])
 
 
 @patch("astacus.common.utils.monotonic_time")

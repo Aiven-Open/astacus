@@ -6,7 +6,7 @@ from .test_restore import BACKUP_MANIFEST
 from astacus.common.rohmustorage import MultiRohmuStorage, RohmuStorage
 from astacus.coordinator.api import router
 from astacus.coordinator.config import CoordinatorConfig, CoordinatorNode
-from astacus.coordinator.coordinator import CoordinatorOpWithClusterLock
+from astacus.coordinator.coordinator import LockedCoordinatorOp
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from tests.utils import create_rohmu_config
@@ -76,5 +76,5 @@ def fixture_app(mocker, sleepless, storage, tmpdir):
         object_storage_cache=f"{tmpdir}/cache/is/somewhere",
     )
     app.state.coordinator_config.nodes = COORDINATOR_NODES[:]
-    mocker.patch.object(CoordinatorOpWithClusterLock, "get_locker", return_value="x")
+    mocker.patch.object(LockedCoordinatorOp, "get_locker", return_value="x")
     yield app

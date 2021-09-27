@@ -6,22 +6,28 @@ See LICENSE for details
 Test that the plugin m3 specific flow (backup + restore) works
 
 """
-from ..conftest import COORDINATOR_NODES
-from abc import ABC
 from astacus.common import ipc
-from astacus.common.asyncstorage import AsyncJsonStorage
-from astacus.common.etcd import b64encode_to_str
-from astacus.common.storage import JsonStorage
-from astacus.coordinator.cluster import Cluster
+from astacus.common.etcd import b64encode_to_str, ETCDClient
+from astacus.common.statsd import StatsClient
+from astacus.common.storage import MultiStorage
 from astacus.coordinator.config import CoordinatorConfig
-from astacus.coordinator.plugins import base, m3db
+from astacus.coordinator.coordinator import Coordinator, SteppedCoordinatorOp
+from astacus.coordinator.plugins import m3db
+from astacus.coordinator.plugins.base import BackupManifestStep, StepsContext
+from astacus.coordinator.plugins.m3db import (
+    CreateM3ManifestStep, get_etcd_prefixes, InitStep, M3DBPlugin, RestoreEtcdStep, RetrieveEtcdAgainStep, RetrieveEtcdStep,
+    RewriteEtcdStep
+)
 from astacus.coordinator.state import CoordinatorState
 from dataclasses import dataclass
+from fastapi import BackgroundTasks
+from starlette.datastructures import URL
 from tests.unit.common.test_m3placement import create_dummy_placement
 from typing import Optional
 
 import pytest
 import respx
+import threading
 
 ENV = "dummyenv"
 
@@ -45,18 +51,12 @@ COORDINATOR_CONFIG = {
         "environment": ENV,
         "placement_nodes": PLACEMENT_NODES,
     },
+    "nodes": [{
+        "url": "http://localhost:12345/asdf"
+    }, {
+        "url": "http://localhost:12346/asdf"
+    }]
 }
-
-
-class DummyM3DBBackupOp(m3db.M3DBBackupOp):
-    nodes = COORDINATOR_NODES
-
-    def __init__(self):
-        # pylint: disable=super-init-not-called
-        self.config = CoordinatorConfig.parse_obj(COORDINATOR_CONFIG)
-        self.steps = [step for step in self.steps if getattr(base.BackupOpBase, f"step_{step}", None) is None]
-        self.state = CoordinatorState()
-
 
 BACKUP_FAILS = [0, 1, None]
 
@@ -77,16 +77,52 @@ PREFIXES = [{
         },
     ],
     "prefix_b64": b64encode_to_str(prefix.format(env=ENV).encode())
-} for prefix in DummyM3DBBackupOp.etcd_prefix_formats]
+} for prefix in m3db.ETCD_PREFIX_FORMATS]
 
 PLUGIN_DATA = {"etcd": {"prefixes": PREFIXES}, "placement_nodes": PLACEMENT_NODES}
 
 
+@pytest.fixture(name="coordinator")
+def fixture_coordinator() -> Coordinator:
+    return Coordinator(
+        request_url=URL("/"),
+        background_tasks=BackgroundTasks(),
+        config=CoordinatorConfig.parse_obj(COORDINATOR_CONFIG),
+        state=CoordinatorState(),
+        stats=StatsClient(config=None),
+        sync_lock=threading.RLock(),
+        hexdigest_mstorage=MultiStorage(),
+        json_mstorage=MultiStorage()
+    )
+
+
+@pytest.fixture(name="plugin")
+def fixture_plugin(coordinator: Coordinator) -> M3DBPlugin:
+    return M3DBPlugin.parse_obj(coordinator.config.plugin_config)
+
+
+@pytest.fixture(name="etcd_client")
+def fixture_etcd_client(plugin: M3DBPlugin) -> ETCDClient:
+    return ETCDClient(plugin.etcd_url)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fail_at", BACKUP_FAILS)
-async def test_m3_backup(fail_at):
-    op = DummyM3DBBackupOp()
-    assert op.steps == ['init', 'retrieve_etcd', 'retrieve_etcd_again', 'create_m3_manifest']
+async def test_m3_backup(coordinator: Coordinator, plugin: M3DBPlugin, etcd_client: ETCDClient, fail_at: Optional[int]):
+    etcd_prefixes = get_etcd_prefixes(plugin.environment)
+    op = SteppedCoordinatorOp(
+        c=coordinator,
+        op_id=1,
+        stats=StatsClient(config=None),
+        attempts=1,
+        steps=[
+            InitStep(placement_nodes=plugin.placement_nodes),
+            RetrieveEtcdStep(etcd_client=etcd_client, etcd_prefixes=etcd_prefixes),
+            RetrieveEtcdAgainStep(etcd_client=etcd_client, etcd_prefixes=etcd_prefixes),
+            CreateM3ManifestStep(placement_nodes=plugin.placement_nodes),
+        ]
+    )
+    context = StepsContext()
     with respx.mock:
         op.state.shutting_down = fail_at == 0
         respx.post(
@@ -103,43 +139,10 @@ async def test_m3_backup(fail_at):
             ]},
             status_code=200 if fail_at != 1 else 500,
         )
-        assert await op.try_run(Cluster(nodes=[])) == (fail_at is None)
+        assert await op.try_run(op.get_cluster(), context) == (fail_at is None)
     if fail_at is not None:
         return
-    assert op.plugin_data == PLUGIN_DATA
-
-
-class DummyJsonStorage(JsonStorage, ABC):
-    def __init__(self, expected_name: str):
-        self.expected_name = expected_name
-
-    def download_json(self, name: str):
-        assert self.expected_name == name
-        return {
-            "plugin": "m3db",
-            "plugin_data": PLUGIN_DATA,
-            "attempt": 1,
-            "snapshot_results": [],
-            "start": "2020-01-01 12:00",
-            "upload_results": [],
-        }
-
-
-class DummyM3DRestoreOp(m3db.M3DRestoreOp):
-    nodes = COORDINATOR_NODES
-    steps = ["init", "backup_manifest", "rewrite_etcd", "restore_etcd"]
-
-    def __init__(self, *, partial):
-        # pylint: disable=super-init-not-called
-        self.config = CoordinatorConfig.parse_obj(COORDINATOR_CONFIG)
-        self.state = CoordinatorState()
-        req = ipc.RestoreRequest()
-        if partial:
-            req.partial_restore_nodes = [ipc.PartialRestoreRequestNode(backup_index=0, node_index=0)]
-        self.req = req
-        self.json_storage = AsyncJsonStorage(DummyJsonStorage(self.result_backup_name))
-
-    result_backup_name = "x"
+    assert context.get_result(CreateM3ManifestStep) == PLUGIN_DATA
 
 
 @dataclass
@@ -150,11 +153,36 @@ class RestoreTest:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("rt", [RestoreTest(fail_at=i) for i in range(3)] + [RestoreTest(), RestoreTest(partial=True)])
-async def test_m3_restore(rt):
+async def test_m3_restore(coordinator: Coordinator, plugin: M3DBPlugin, etcd_client: ETCDClient, rt: RestoreTest):
+    if rt.partial:
+        partial_restore_nodes = [ipc.PartialRestoreRequestNode(backup_index=0, node_index=0)]
+    else:
+        partial_restore_nodes = None
+    op = SteppedCoordinatorOp(
+        c=coordinator,
+        op_id=1,
+        stats=StatsClient(config=None),
+        attempts=1,
+        steps=[
+            RewriteEtcdStep(placement_nodes=plugin.placement_nodes, partial_restore_nodes=partial_restore_nodes),
+            RestoreEtcdStep(etcd_client=etcd_client, partial_restore_nodes=partial_restore_nodes),
+        ]
+    )
+    context = StepsContext()
+    context.set_result(
+        BackupManifestStep,
+        ipc.BackupManifest.parse_obj({
+            "plugin": "m3db",
+            "plugin_data": PLUGIN_DATA,
+            "attempt": 1,
+            "snapshot_results": [],
+            "start": "2020-01-01 12:00",
+            "upload_results": [],
+        })
+    )
     fail_at = rt.fail_at
-    op = DummyM3DRestoreOp(partial=rt.partial)
     with respx.mock:
         op.state.shutting_down = fail_at == 0
         respx.post("http://dummy/etcd/kv/deleterange", content={"ok": True}, status_code=200 if fail_at != 1 else 500)
         respx.post("http://dummy/etcd/kv/put", content={"ok": True}, status_code=200 if fail_at != 2 else 500)
-        assert await op.try_run(Cluster(nodes=[])) == (fail_at is None)
+        assert await op.try_run(op.get_cluster(), context) == (fail_at is None)

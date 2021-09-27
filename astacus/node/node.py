@@ -10,6 +10,7 @@ from .state import node_state, NodeState
 from astacus.common import ipc, magic, op, statsd, utils
 from astacus.common.dependencies import get_request_app_state, get_request_url
 from astacus.common.rohmustorage import RohmuStorage
+from astacus.common.statsd import StatsClient
 from fastapi import BackgroundTasks, Depends
 from starlette.datastructures import URL
 from typing import Optional
@@ -23,8 +24,8 @@ SNAPSHOTTER_KEY = "node_snapshotter"
 class NodeOp(op.Op):
     req: Optional[ipc.NodeRequest] = None  # Provided by subclass
 
-    def __init__(self, *, n: "Node", op_id: int):
-        super().__init__(info=n.state.op_info, op_id=op_id)
+    def __init__(self, *, n: "Node", op_id: int, stats: StatsClient):
+        super().__init__(info=n.state.op_info, op_id=op_id, stats=stats)
         self.start_op = n.start_op
         self.config = n.config
         self._still_locked_callback = n.state.still_locked_callback
