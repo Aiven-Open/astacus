@@ -16,6 +16,7 @@ import pytest
 
 class MockOp:
     status = None
+    op_id = 1
 
     def set_status(self, state, *, from_status=None):
         if from_status and from_status != self.status:

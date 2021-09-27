@@ -172,8 +172,8 @@ class RestoreOpBase(OpBase):
     config_attempts_var_name = "restore_attempts"
     steps = ["backup_name", "backup_manifest", "restore"]
 
-    def __init__(self, *, c: Coordinator, req: ipc.RestoreRequest):
-        super().__init__(c=c)
+    def __init__(self, *, c: Coordinator, op_id: int, req: ipc.RestoreRequest):
+        super().__init__(c=c, op_id=op_id)
         self.req = req
         if req.storage:
             self.set_storage_name(req.storage)

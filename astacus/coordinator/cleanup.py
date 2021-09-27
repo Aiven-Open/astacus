@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 class CleanupOp(CoordinatorOpWithClusterLock):
-    def __init__(self, *, c: Coordinator, req: ipc.CleanupRequest):
-        super().__init__(c=c)
+    def __init__(self, *, c: Coordinator, op_id: int, req: ipc.CleanupRequest):
+        super().__init__(c=c, op_id=op_id)
         self.req = req
 
     async def run_with_lock(self):

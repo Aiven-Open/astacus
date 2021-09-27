@@ -13,8 +13,8 @@ from .coordinator import Coordinator, CoordinatorOp
 
 
 class LockOps(CoordinatorOp):
-    def __init__(self, *, c: Coordinator, locker: str, ttl: int = 60):
-        super().__init__(c=c)
+    def __init__(self, *, c: Coordinator, op_id: int, locker: str, ttl: int = 60):
+        super().__init__(c=c, op_id=op_id)
         self.locker = locker
         self.ttl = ttl
 

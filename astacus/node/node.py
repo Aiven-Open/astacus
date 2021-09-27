@@ -23,8 +23,8 @@ SNAPSHOTTER_KEY = "node_snapshotter"
 class NodeOp(op.Op):
     req: Optional[ipc.NodeRequest] = None  # Provided by subclass
 
-    def __init__(self, *, n: "Node"):
-        super().__init__(info=n.state.op_info)
+    def __init__(self, *, n: "Node", op_id: int):
+        super().__init__(info=n.state.op_info, op_id=op_id)
         self.start_op = n.start_op
         self.config = n.config
         self._still_locked_callback = n.state.still_locked_callback

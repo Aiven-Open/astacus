@@ -2,9 +2,6 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
-
-from .config import coordinator_config, CoordinatorConfig
-from .state import coordinator_state, CoordinatorState
 from astacus.common import asyncstorage, exceptions, ipc, magic, op, statsd, utils
 from astacus.common.cachingjsonstorage import MultiCachingJsonStorage
 from astacus.common.magic import LockCall
@@ -12,6 +9,8 @@ from astacus.common.progress import Progress
 from astacus.common.rohmustorage import MultiRohmuStorage
 from astacus.common.storage import HexDigestStorage, JsonStorage, MultiFileStorage, MultiStorage
 from astacus.common.utils import AsyncSleeper
+from astacus.coordinator.config import coordinator_config, CoordinatorConfig
+from astacus.coordinator.state import coordinator_state, CoordinatorState
 from datetime import datetime
 from enum import Enum
 from fastapi import BackgroundTasks, Depends, HTTPException, Request
@@ -39,8 +38,9 @@ class CoordinatorOp(op.Op):
     attempt = -1  # try_run iteration number
     attempt_start: Optional[datetime] = None  # try_run iteration start time
 
-    def __init__(self, *, c: "Coordinator"):
-        super().__init__(info=c.state.op_info)
+    def __init__(self, *, c: "Coordinator", op_id: int):
+        super().__init__(info=c.state.op_info, op_id=op_id)
+        self.request_url = c.request_url
         self.nodes = c.config.nodes
         self.request_url = c.request.url
         self.config = c.config
@@ -215,9 +215,9 @@ class CoordinatorOp(op.Op):
 class CoordinatorOpWithClusterLock(CoordinatorOp):
     op_started: Optional[float]  # set when op_info.status is set to starting
 
-    def __init__(self, *, c: "Coordinator"):
-        super().__init__(c=c)
-        self.ttl = self.config.default_lock_ttl
+    def __init__(self, *, c: "Coordinator", op_id: int):
+        super().__init__(c=c, op_id=op_id)
+        self.ttl = c.config.default_lock_ttl
         self.initial_lock_start = time.monotonic()
         self.locker = self.get_locker()
         self.relock_tasks: List[asyncio.Task] = []
@@ -305,6 +305,8 @@ class CoordinatorOpWithClusterLock(CoordinatorOp):
 
 class Coordinator(op.OpMixin):
     """ Convenience dependency which contains sub-dependencies most API endpoints need """
+    state: CoordinatorState
+
     def __init__(
         self,
         *,
