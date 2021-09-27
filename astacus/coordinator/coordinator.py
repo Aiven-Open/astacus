@@ -314,6 +314,7 @@ class Coordinator(op.OpMixin):
         state: CoordinatorState = Depends(coordinator_state)
     ):
         self.request = request
+        self.request_url = request.url
         self.background_tasks = background_tasks
         self.config = config
         self.state = state

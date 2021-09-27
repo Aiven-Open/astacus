@@ -6,25 +6,12 @@ See LICENSE for details
 astacus.common.op tests that do not fit elsewhere
 
 """
-
 from astacus.common import op
-from unittest.mock import MagicMock
+from astacus.common.statsd import StatsClient
+from starlette.background import BackgroundTasks
+from starlette.datastructures import URL
 
-import inspect
 import pytest
-
-
-class MockBackgroundTasks(list):
-    def add_task(self, task):
-        self.append(task)
-
-    async def run(self):
-        while self:
-            fun = self.pop()
-            if inspect.iscoroutinefunction(fun):
-                await fun()
-            else:
-                fun()
 
 
 class MockOp:
@@ -54,15 +41,11 @@ class MockOp:
 )
 @pytest.mark.parametrize("is_async", [False, True])
 async def test_opmixin_start_op(is_async, fun_ex, expect_status, expect_ex):
-    bg_tasks = MockBackgroundTasks()
     mixin = op.OpMixin()
-    mixin.state = MagicMock()
-    mixin.stats = MagicMock()
-    mixin.request = MagicMock()
-    mixin.request.url.scheme = "http"
-    mixin.request.url.netloc = "localhost"
-    mixin.request.url.path = ""
-    mixin.background_tasks = bg_tasks
+    mixin.state = op.OpState()
+    mixin.stats = StatsClient(config=None)
+    mixin.request_url = URL()
+    mixin.background_tasks = BackgroundTasks()
     op_obj = MockOp()
 
     def _sync():
@@ -78,7 +61,7 @@ async def test_opmixin_start_op(is_async, fun_ex, expect_status, expect_ex):
             mixin.start_op(op=op_obj, op_name="dummy", fun=_async)
         else:
             mixin.start_op(op=op_obj, op_name="dummy", fun=_sync)
-        await bg_tasks.run()
+        await mixin.background_tasks()
     except Exception as ex:  # pylint: disable=broad-except
         assert expect_ex and isinstance(ex, expect_ex)
     assert op_obj.status == expect_status

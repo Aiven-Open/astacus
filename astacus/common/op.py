@@ -94,7 +94,7 @@ class OpMixin:
         op.op_id = info.op_id
         op.set_status(Op.Status.starting)
         op.stats = self.stats
-        url = self.request.url
+        url = self.request_url
         status_url = urlunsplit((url.scheme, url.netloc, f"{url.path}/{op.op_id}", "", ""))
 
         async def _async_wrapper():
