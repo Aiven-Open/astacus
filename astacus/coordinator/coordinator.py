@@ -330,7 +330,7 @@ class Coordinator(op.OpMixin):
             file_mstorage = MultiFileStorage(self.config.object_storage_cache)
             json_mstorage = MultiCachingJsonStorage(backend_mstorage=mstorage, cache_mstorage=file_mstorage)
         self.json_mstorage = json_mstorage
-        self.sync_lock = utils.get_or_create_state(app=request.app, key="sync_lock", factory=threading.RLock)
+        self.sync_lock = utils.get_or_create_state(state=request.app.state, key="sync_lock", factory=threading.RLock)
 
     async def start_op_async(self, *, op, op_name, fun):  # pylint: disable=redefined-outer-name
         if isinstance(op, CoordinatorOpWithClusterLock):
