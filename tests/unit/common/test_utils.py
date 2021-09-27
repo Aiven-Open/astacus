@@ -7,6 +7,7 @@ Test astacus.common.utils
 """
 
 from astacus.common import utils
+from astacus.common.utils import AsyncSleeper
 from datetime import timedelta
 
 import asyncio
@@ -23,6 +24,23 @@ async def test_httpx_request_connect_failure():
     # Known (most likely) unreachable local IP address
     r = await utils.httpx_request("http://127.0.0.42:12345/foo", caller="test")
     assert r is None
+
+
+@pytest.mark.asyncio
+async def test_async_sleeper():
+    sleeper = AsyncSleeper()
+
+    async def wait_and_wake():
+        await asyncio.sleep(0.1)
+        sleeper.wakeup()
+
+    task = asyncio.create_task(wait_and_wake())
+    try:
+        start_time = time.monotonic()
+        await sleeper.sleep(10)
+        assert time.monotonic() - start_time < 1.0
+    finally:
+        task.done()
 
 
 @pytest.mark.asyncio

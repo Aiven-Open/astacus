@@ -11,6 +11,7 @@ from astacus.common.magic import LockCall
 from astacus.common.progress import Progress
 from astacus.common.rohmustorage import MultiRohmuStorage
 from astacus.common.storage import HexDigestStorage, JsonStorage, MultiFileStorage, MultiStorage
+from astacus.common.utils import AsyncSleeper
 from datetime import datetime
 from enum import Enum
 from fastapi import BackgroundTasks, Depends, HTTPException, Request
@@ -47,7 +48,7 @@ class CoordinatorOp(op.Op):
         self.hexdigest_mstorage = c.hexdigest_mstorage
         self.json_mstorage = c.json_mstorage
         self.set_storage_name(self.default_storage_name)
-        self.subresult_received_event = asyncio.Event()
+        self.subresult_sleeper = AsyncSleeper()
 
     @property
     def subresult_url(self):
@@ -168,17 +169,13 @@ class CoordinatorOp(op.Op):
         # we need timeout mechanism here anyway.
         failures = {}
 
-        def _event_awaitable_factory():
-            return self.subresult_received_event.wait()
-
         async for _ in utils.exponential_backoff(
             initial=delay,
             multiplier=self.config.poll.delay_multiplier,
             maximum=self.config.poll.delay_max,
             duration=self.config.poll.duration,
-            event_awaitable_factory=_event_awaitable_factory,
+            async_sleeper=self.subresult_sleeper,
         ):
-            self.subresult_received_event.clear()
             for i, (url, result) in enumerate(zip(urls, results)):
                 # TBD: This could be done in parallel too
                 if result is not None and result.progress.final:

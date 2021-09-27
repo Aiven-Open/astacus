@@ -109,6 +109,6 @@ async def op_sub_result(*, op_name: OpName, op_id: int, c: Coordinator = Depends
     # of spoofable endpoint though, so just triggering subsequent
     # result fetching faster. In case of terminal results, this
     # results only in one extra fetch per node, so not big deal.
-    if not op.subresult_received_event:
+    if not op.subresult_sleeper:
         return
-    op.subresult_received_event.set()
+    op.subresult_sleeper.wakeup()
