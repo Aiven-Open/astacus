@@ -11,7 +11,7 @@ Shared utilities (between coordinator and node)
 
 from multiprocessing.dummy import Pool  # fastapi + fork = bad idea
 from pydantic import BaseModel
-from typing import Any, Callable
+from typing import Any, Callable, Dict, Optional, Union
 
 import asyncio
 import datetime
@@ -77,7 +77,6 @@ def http_request(url, *, caller, method="get", timeout=10, ignore_status_code: b
     (e.g. fastapi.testclient) still works, but we can mock things to
     our hearts content in test code by doing 'things' here.
     """
-    r = None
     # TBD: may need to redact url in future, if we actually wind up
     # using passwords in urls here.
     logger.debug("request %s %s by %s", method, url, caller)
@@ -93,7 +92,16 @@ def http_request(url, *, caller, method="get", timeout=10, ignore_status_code: b
     return None
 
 
-async def httpx_request(url, *, caller, method="get", timeout=10, json: bool = True, ignore_status_code: bool = False, **kw):
+async def httpx_request(
+    url: str,
+    *,
+    caller: str,
+    method: str = "get",
+    timeout: float = 10.0,
+    json: bool = True,
+    ignore_status_code: bool = False,
+    **kw,
+) -> Optional[Union[httpx.Response, Dict]]:
     """Wrapper for httpx.request which handles timeouts as non-exceptions,
     and returns only valid results that we actually care about.
     """
