@@ -47,4 +47,4 @@ def test_status_fail_stats():
     op = DummyOp()
     with patch.object(StatsClient, "increase") as mock_stats_counter:
         op.set_status_fail()
-    mock_stats_counter.assert_called_with("astacus_fail", {"op": "DummyOp"})
+    mock_stats_counter.assert_called_with("astacus_fail", tags={"op": "DummyOp"})
