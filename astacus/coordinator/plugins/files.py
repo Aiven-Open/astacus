@@ -18,6 +18,7 @@ Configuration:
 from .base import BackupOpBase, RestoreOpBase
 from astacus.common import ipc
 from astacus.common.utils import AstacusModel
+from astacus.coordinator.cluster import Cluster
 from typing import List
 
 
@@ -30,7 +31,7 @@ class FilesBackupOp(BackupOpBase):
     steps = ["init"] + BackupOpBase.steps
     plugin = ipc.Plugin.files
 
-    async def step_init(self):
+    async def step_init(self, cluster: Cluster):
         self.snapshot_root_globs = self.plugin_config.root_globs
         return True
 

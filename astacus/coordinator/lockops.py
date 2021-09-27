@@ -8,7 +8,7 @@ may or may not want them for debug purposes, but this is mostly all
 about API design testing)
 
 """
-
+from .cluster import LockResult
 from .coordinator import Coordinator, CoordinatorOp
 
 
@@ -18,13 +18,15 @@ class LockOps(CoordinatorOp):
         self.locker = locker
         self.ttl = ttl
 
-    async def lock(self):
-        result = await self.request_lock_from_nodes(locker=self.locker, ttl=self.ttl)
-        if not result:
+    async def lock(self) -> None:
+        cluster = self.get_cluster()
+        result = await cluster.request_lock(locker=self.locker, ttl=self.ttl)
+        if result is not LockResult.ok:
             self.set_status_fail()
-            await self.unlock()
+            await cluster.request_unlock(locker=self.locker)
 
-    async def unlock(self):
-        result = await self.request_unlock_from_nodes(locker=self.locker)
-        if not result:
+    async def unlock(self) -> None:
+        cluster = self.get_cluster()
+        result = cluster.request_unlock(locker=self.locker)
+        if result is not LockResult.ok:
             self.set_status_fail()

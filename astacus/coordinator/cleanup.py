@@ -5,7 +5,7 @@ See LICENSE for details
 Database cleanup operation
 
 """
-
+from .cluster import Cluster
 from .coordinator import Coordinator, CoordinatorOpWithClusterLock
 from .manifest import download_backup_manifest
 from astacus.common import ipc, magic, utils
@@ -20,7 +20,7 @@ class CleanupOp(CoordinatorOpWithClusterLock):
         super().__init__(c=c, op_id=op_id)
         self.req = req
 
-    async def run_with_lock(self):
+    async def run_with_lock(self, cluster: Cluster) -> None:
         if self.req.storage:
             self.set_storage_name(self.req.storage)
         retention = self.config.retention.copy()

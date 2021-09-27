@@ -12,6 +12,7 @@ from astacus.common import ipc
 from astacus.common.asyncstorage import AsyncJsonStorage
 from astacus.common.etcd import b64encode_to_str
 from astacus.common.storage import JsonStorage
+from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorConfig
 from astacus.coordinator.plugins import base, m3db
 from astacus.coordinator.state import CoordinatorState
@@ -102,7 +103,7 @@ async def test_m3_backup(fail_at):
             ]},
             status_code=200 if fail_at != 1 else 500,
         )
-        assert await op.try_run() == (fail_at is None)
+        assert await op.try_run(Cluster(nodes=[])) == (fail_at is None)
     if fail_at is not None:
         return
     assert op.plugin_data == PLUGIN_DATA
@@ -156,4 +157,4 @@ async def test_m3_restore(rt):
         op.state.shutting_down = fail_at == 0
         respx.post("http://dummy/etcd/kv/deleterange", content={"ok": True}, status_code=200 if fail_at != 1 else 500)
         respx.post("http://dummy/etcd/kv/put", content={"ok": True}, status_code=200 if fail_at != 2 else 500)
-        assert await op.try_run() == (fail_at is None)
+        assert await op.try_run(Cluster(nodes=[])) == (fail_at is None)

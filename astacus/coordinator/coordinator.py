@@ -2,35 +2,28 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
-from astacus.common import asyncstorage, exceptions, ipc, magic, op, statsd, utils
+from astacus.common import asyncstorage, magic, op, statsd, utils
 from astacus.common.cachingjsonstorage import MultiCachingJsonStorage
-from astacus.common.magic import LockCall
 from astacus.common.progress import Progress
 from astacus.common.rohmustorage import MultiRohmuStorage
 from astacus.common.storage import MultiFileStorage, MultiStorage
 from astacus.common.utils import AsyncSleeper
-from astacus.coordinator.config import coordinator_config, CoordinatorConfig
+from astacus.coordinator.cluster import Cluster, LockResult
+from astacus.coordinator.config import coordinator_config, CoordinatorConfig, CoordinatorNode
 from astacus.coordinator.state import coordinator_state, CoordinatorState
 from datetime import datetime
-from enum import Enum
 from fastapi import BackgroundTasks, Depends, HTTPException, Request
-from typing import List, Optional
+from starlette.datastructures import URL
+from typing import Awaitable, Callable, List, Optional
 from urllib.parse import urlunsplit
 
 import asyncio
-import json
 import logging
 import socket
 import threading
 import time
 
 logger = logging.getLogger(__name__)
-
-
-class LockResult(Enum):
-    ok = "ok"
-    failure = "failure"
-    exception = "exception"
 
 
 class CoordinatorOp(op.Op):
@@ -41,6 +34,7 @@ class CoordinatorOp(op.Op):
         super().__init__(info=c.state.op_info, op_id=op_id)
         self.request_url = c.request_url
         self.nodes = c.config.nodes
+        self.poll_config = c.config.poll
         self.request_url = c.request.url
         self.config = c.config
         self.state = c.state
@@ -49,11 +43,15 @@ class CoordinatorOp(op.Op):
         self.set_storage_name(self.default_storage_name)
         self.subresult_sleeper = AsyncSleeper()
 
-    @property
-    def subresult_url(self):
-        url = self.request_url
-        parts = [url.scheme, url.netloc, f"{url.path}/{self.op_id}/sub-result", "", ""]
-        return urlunsplit(parts)
+    def get_cluster(self) -> Cluster:
+        # The only reason this exists is because op_id and stats are added after the op is created
+        return Cluster(
+            nodes=self.nodes,
+            poll_config=self.poll_config,
+            subresult_url=get_subresult_url(self.request_url, self.op_id),
+            subresult_sleeper=self.subresult_sleeper,
+            stats=self.stats,
+        )
 
     hexdigest_storage: Optional[asyncstorage.AsyncHexDigestStorage] = None
     json_storage: Optional[asyncstorage.AsyncJsonStorage] = None
@@ -65,90 +63,6 @@ class CoordinatorOp(op.Op):
     @property
     def default_storage_name(self):
         return self.json_mstorage.get_default_storage_name()
-
-    async def request_from_nodes(self, url, *, caller, req=None, nodes=None, **kw):
-        if nodes is None:
-            nodes = self.nodes
-        if req is not None:
-            assert isinstance(req, ipc.NodeRequest)
-            req.result_url = self.subresult_url
-            kw["data"] = req.json()
-        urls = [f"{node.url}/{url}" for node in nodes]
-        aws = [utils.httpx_request(url, caller=caller, **kw) for url in urls]
-        results = await asyncio.gather(*aws, return_exceptions=True)
-        logger.info("request_from_nodes %r => %r", urls, results)
-        return results
-
-    async def request_lock_call_from_nodes(self, *, call: LockCall, locker: str, ttl: int = 0, nodes=None) -> LockResult:
-        if nodes is None:
-            nodes = self.nodes
-        results = await self.request_from_nodes(
-            f"{call}?locker={locker}&ttl={ttl}",
-            method="post",
-            ignore_status_code=True,
-            json=False,
-            nodes=nodes,
-            caller="CoordinatorOp.request_lock_op_from_nodes"
-        )
-        logger.debug("%s results: %r", call, results)
-        if call in [LockCall.lock, LockCall.relock]:
-            expected_result = {"locked": True}
-        elif call in [LockCall.unlock]:
-            expected_result = {"locked": False}
-        else:
-            raise NotImplementedError(f"Unknown lock call: {call!r}")
-        rv = LockResult.ok
-        for node, result in zip(nodes, results):
-            if result is None or isinstance(result, Exception):
-                logger.info("Exception occurred when talking with node %r: %r", node, result)
-                if rv != LockResult.failure:
-                    # failures mean that we're done, so don't override them
-                    rv = LockResult.exception
-            elif result.is_error:
-                logger.info("%s of %s failed - unexpected result %r %r", call, node, result.status_code, result)
-                rv = LockResult.failure
-            else:
-                try:
-                    decoded_result = result.json()
-                except json.JSONDecodeError:
-                    decoded_result = None
-                if decoded_result != expected_result:
-                    logger.info("%s of %s failed - unexpected result %r", call, node, decoded_result)
-                    rv = LockResult.failure
-        if rv == LockResult.failure and self.stats is not None:
-            self.stats.increase("astacus_lock_call_failure", tags={
-                "call": call,
-                "locker": locker,
-            })
-        return rv
-
-    async def request_lock_from_nodes(self, *, locker: str, ttl: int) -> bool:
-        return await self.request_lock_call_from_nodes(call=LockCall.lock, locker=locker, ttl=ttl) == LockResult.ok
-
-    async def request_unlock_from_nodes(self, *, locker: str) -> bool:
-        return await self.request_lock_call_from_nodes(call=LockCall.unlock, locker=locker) == LockResult.ok
-
-    async def run_attempts(self, attempts):
-        name = self.__class__.__name__
-        try:
-            for attempt in range(1, attempts + 1):
-                logger.debug("%s - attempt #%d/%d", name, attempt, attempts)
-                self.attempt = attempt
-                self.attempt_start = utils.now()
-                async with self.stats.async_timing_manager(
-                    "astacus_attempt_duration", {
-                        "op": name,
-                        "attempt": str(attempt)
-                    }
-                ):
-                    try:
-                        if await self.try_run():
-                            return
-                    except exceptions.TransientException as ex:
-                        logger.info("%s - trasient failure: %r", name, ex)
-        except exceptions.PermanentException as ex:
-            logger.info("%s - permanent failure: %r", name, ex)
-        self.set_status_fail()
 
     async def wait_successful_results(self, start_results, *, result_class, all_nodes=True):
         urls = []
@@ -216,51 +130,44 @@ class CoordinatorOpWithClusterLock(CoordinatorOp):
     def get_locker(self):
         return f"{socket.gethostname()}-{id(self)}"
 
-    async def acquire_cluster_lock(self):
+    async def run_with_lock(self, cluster: Cluster) -> None:
+        raise NotImplementedError
+
+    async def acquire_cluster_lock(self) -> Callable[[], Awaitable]:
         # Acquire initial locks
-        r = await self.request_lock_from_nodes(locker=self.locker, ttl=self.ttl)
-        if not r:
+        cluster = self.get_cluster()
+        result = await cluster.request_lock(locker=self.locker, ttl=self.ttl)
+        if result is not LockResult.ok:
             # Ensure we don't wind up holding partial lock on the cluster
-            await self.request_unlock_from_nodes(locker=self.locker)
+            await cluster.request_unlock(locker=self.locker)
             raise HTTPException(
                 409, {
                     "code": magic.ErrorCode.cluster_lock_unavailable,
                     "message": "Unable to acquire cluster lock to create operation"
                 }
             )
-        self.relock_tasks = await self._create_relock_tasks()
 
-    async def run(self):
-        assert self.relock_tasks
-        try:
-            await self.run_with_lock()
-        finally:
-            for task in self.relock_tasks:
-                task.cancel()
-            await asyncio.gather(*self.relock_tasks, return_exceptions=True)
-            await self.request_unlock_from_nodes(locker=self.locker)
+        async def run():
+            relock_tasks = await self._create_relock_tasks(cluster)
+            try:
+                await self.run_with_lock(cluster)
+            finally:
+                for relock_task in relock_tasks:
+                    relock_task.cancel()
+                await asyncio.gather(*relock_tasks, return_exceptions=True)
+                await cluster.request_unlock(locker=self.locker)
 
-    def set_status(self, status: op.Op.Status, *, from_status: Optional[op.Op.Status] = None) -> bool:
-        changed = super().set_status(status=status, from_status=from_status)
-        if status == op.Op.Status.starting and changed:
-            self.op_started = utils.monotonic_time()
-        self._update_running_stats()
-        return changed
+        return run
 
-    def _update_running_stats(self):
-        if self.stats is not None:
-            if self.info.op_status in {op.Op.Status.done, op.Op.Status.fail}:
-                op_running_for = 0
-            else:
-                op_running_for = int(utils.monotonic_time() - self.op_started)
-            logger.debug("Sending op_running_for metric. value=%d", op_running_for)
-            self.stats.gauge("astacus_op_running_for", op_running_for, tags={"op": self.info.op_name, "id": self.info.op_id})
-
-    async def _create_relock_tasks(self):
+    async def _create_relock_tasks(self, cluster: Cluster) -> List[asyncio.Task]:
         current_task = asyncio.current_task()
-        return [asyncio.create_task(self._node_relock_loop(current_task, node)) for node in self.nodes]
+        assert current_task is not None
+        return [
+            asyncio.create_task(self._node_relock_loop(main_task=current_task, cluster=cluster, node=node))
+            for node in cluster.nodes
+        ]
 
-    async def _node_relock_loop(self, main_task, node):
+    async def _node_relock_loop(self, *, main_task: asyncio.Task, cluster: Cluster, node: CoordinatorNode) -> None:
         lock_eol = self.initial_lock_start + self.ttl
         next_lock = self.initial_lock_start + self.ttl / 2
         while True:
@@ -277,9 +184,7 @@ class CoordinatorOpWithClusterLock(CoordinatorOp):
                 t = time.monotonic()
 
             # Attempt to reacquire lock
-            r = await self.request_lock_call_from_nodes(
-                call=magic.LockCall.relock, locker=self.locker, ttl=self.ttl, nodes=[node]
-            )
+            r = await cluster.request_relock(node=node, locker=self.locker, ttl=self.ttl)
             if r == LockResult.ok:
                 lock_eol = t + self.ttl
                 next_lock = t + self.ttl / 2
@@ -292,6 +197,28 @@ class CoordinatorOpWithClusterLock(CoordinatorOp):
                 await asyncio.sleep(self.ttl / 10)
             else:
                 raise NotImplementedError(f"Unknown result from request_lock_call_from_nodes:{r!r}")
+
+    def set_status(self, status: op.Op.Status, *, from_status: Optional[op.Op.Status] = None) -> bool:
+        changed = super().set_status(status=status, from_status=from_status)
+        if status == op.Op.Status.starting and changed:
+            self.op_started = utils.monotonic_time()
+        self._update_running_stats()
+        return changed
+
+    def _update_running_stats(self) -> None:
+        if self.stats is not None:
+            if self.info.op_status in {op.Op.Status.done, op.Op.Status.fail}:
+                op_running_for = 0
+            else:
+                op_running_for = int(utils.monotonic_time() - self.op_started)
+            logger.debug("Sending op_running_for metric. value=%d", op_running_for)
+            self.stats.gauge("astacus_op_running_for", op_running_for, tags={"op": self.info.op_name, "id": self.info.op_id})
+
+
+def get_subresult_url(request_url: URL, op_id: int) -> str:
+    url = request_url
+    parts = [url.scheme, url.netloc, f"{url.path}/{op_id}/sub-result", "", ""]
+    return urlunsplit(parts)
 
 
 class Coordinator(op.OpMixin):
@@ -322,8 +249,3 @@ class Coordinator(op.OpMixin):
             json_mstorage = MultiCachingJsonStorage(backend_mstorage=mstorage, cache_mstorage=file_mstorage)
         self.json_mstorage = json_mstorage
         self.sync_lock = utils.get_or_create_state(state=request.app.state, key="sync_lock", factory=threading.RLock)
-
-    async def start_op_async(self, *, op, op_name, fun):  # pylint: disable=redefined-outer-name
-        if isinstance(op, CoordinatorOpWithClusterLock):
-            await op.acquire_cluster_lock()
-        return super().start_op(op=op, op_name=op_name, fun=fun)

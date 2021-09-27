@@ -13,6 +13,7 @@ from .etcd import ETCDConfiguration, ETCDDump, get_etcd_dump, restore_etcd_dump
 from astacus.common import exceptions, ipc, m3placement
 from astacus.common.etcd import ETCDClient
 from astacus.common.utils import AstacusModel
+from astacus.coordinator.cluster import Cluster
 from typing import List, Optional
 
 import logging
@@ -69,20 +70,20 @@ class M3DBBackupOp(BackupOpBase):
 
     etcd_prefixes: List[bytes] = []
 
-    async def step_init(self):
+    async def step_init(self, cluster: Cluster):
         env = self.plugin_config.environment
         self.etcd_prefixes = [p.format(env=env).encode() for p in self.etcd_prefix_formats]
         _validate_m3_config(self)
         return True
 
-    async def step_retrieve_etcd(self):
+    async def step_retrieve_etcd(self, cluster: Cluster):
         return await get_etcd_dump(ETCDClient(self.plugin_config.etcd_url), self.etcd_prefixes)
 
-    async def step_retrieve_etcd_again(self):
+    async def step_retrieve_etcd_again(self, cluster: Cluster):
         etcd_now = await get_etcd_dump(ETCDClient(self.plugin_config.etcd_url), self.etcd_prefixes)
         return etcd_now == self.result_retrieve_etcd
 
-    async def step_create_m3_manifest(self):
+    async def step_create_m3_manifest(self, cluster: Cluster):
         m3manifest = M3DBManifest(etcd=self.result_retrieve_etcd, placement_nodes=self.plugin_config.placement_nodes)
         self.plugin_data = m3manifest.dict()
         return m3manifest
@@ -99,7 +100,9 @@ class M3DRestoreOp(RestoreOpBase):
         "restore",  # base
     ]
 
-    async def step_init(self):
+    result_rewrite_etcd: Optional[ETCDDump] = None
+
+    async def step_init(self, cluster: Cluster):
         _validate_m3_config(self)
         return True
 
@@ -117,7 +120,7 @@ class M3DRestoreOp(RestoreOpBase):
         value = m3placement.rewrite_m3_placement_bytes(value, replacements)
         key.set_value_bytes(value)
 
-    async def step_rewrite_etcd(self):
+    async def step_rewrite_etcd(self, cluster: Cluster):
         if self.req.partial_restore_nodes:
             logger.debug("Skipping etcd rewrite due to partial backup restoration")
             return True
@@ -129,10 +132,11 @@ class M3DRestoreOp(RestoreOpBase):
                     self._rewrite_m3db_placement(key)
         return etcd
 
-    async def step_restore_etcd(self):
+    async def step_restore_etcd(self, cluster: Cluster):
         if self.req.partial_restore_nodes:
             logger.debug("Skipping etcd restoration due to partial backup restoration")
             return True
+        assert self.result_rewrite_etcd is not None
         return await restore_etcd_dump(ETCDClient(self.plugin_config.etcd_url), self.result_rewrite_etcd)
 
 

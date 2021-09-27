@@ -5,14 +5,15 @@ See LICENSE for details
 Common base classes for the plugins
 
 """
-
-from astacus.common import exceptions, ipc, magic
+from astacus.common import exceptions, ipc, magic, utils
 from astacus.common.progress import Progress
 from astacus.coordinator import plugins
+from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.coordinator import Coordinator, CoordinatorOpWithClusterLock
 from astacus.coordinator.manifest import download_backup_manifest
 from collections import Counter
-from typing import Dict, List, Optional, Set, Union
+from httpx import Response
+from typing import Any, Dict, List, Optional, Set, Union
 
 import logging
 
@@ -45,7 +46,7 @@ class OpBase(CoordinatorOpWithClusterLock):
         plugin_config_class = plugins.get_plugin_config_class(self.plugin)
         return plugin_config_class.parse_obj(self.config.plugin_config)
 
-    async def try_run(self) -> bool:
+    async def try_run(self, cluster: Cluster) -> bool:
         for i, step in enumerate(self.steps, 1):
             if self.state.shutting_down:
                 logger.info("Step %s not even started due to shutdown", step)
@@ -58,9 +59,9 @@ class OpBase(CoordinatorOpWithClusterLock):
             if self.stats is not None:
                 name = self.__class__.__name__
                 async with self.stats.async_timing_manager("astacus_step_duration", {"op": name, "step": step_name}):
-                    r = await step_callable()
+                    r = await step_callable(cluster)
             else:
-                r = await step_callable()
+                r = await step_callable(cluster)
             self.current_step = None
             if not r:
                 logger.info("Step %s failed", step)
@@ -70,8 +71,31 @@ class OpBase(CoordinatorOpWithClusterLock):
 
     config_attempts_var_name = "XXX"
 
-    async def run_with_lock(self):
-        await self.run_attempts(getattr(self.config, self.config_attempts_var_name))
+    async def run_with_lock(self, cluster: Cluster):
+        await self.run_attempts(cluster, getattr(self.config, self.config_attempts_var_name))
+
+    async def run_attempts(self, cluster: Cluster, attempts):
+        name = self.__class__.__name__
+        try:
+            for attempt in range(1, attempts + 1):
+                logger.debug("%s - attempt #%d/%d", name, attempt, attempts)
+                self.attempt = attempt
+                self.attempt_start = utils.now()
+                assert self.stats is not None
+                async with self.stats.async_timing_manager(
+                    "astacus_attempt_duration", {
+                        "op": name,
+                        "attempt": str(attempt)
+                    }
+                ):
+                    try:
+                        if await self.try_run(cluster):
+                            return
+                    except exceptions.TransientException as ex:
+                        logger.info("%s - trasient failure: %r", name, ex)
+        except exceptions.PermanentException as ex:
+            logger.info("%s - permanent failure: %r", name, ex)
+        self.set_status_fail()
 
 
 class BackupOpBase(OpBase):
@@ -80,11 +104,11 @@ class BackupOpBase(OpBase):
 
     snapshot_root_globs: List[str] = []
 
-    async def step_snapshot(self) -> List[ipc.SnapshotResult]:
+    async def step_snapshot(self, cluster: Cluster) -> List[ipc.SnapshotResult]:
         """ Snapshot step. Has to be parametrized with the root_globs to use """
         logger.debug("BackupOp._snapshot")
         req = ipc.SnapshotRequest(root_globs=self.snapshot_root_globs)
-        start_results = await self.request_from_nodes(
+        start_results = await cluster.request_from_nodes(
             "snapshot", method="post", caller="BackupOpBase.step_snapshot", req=req
         )
         if not start_results:
@@ -93,7 +117,7 @@ class BackupOpBase(OpBase):
 
     result_snapshot: List[ipc.SnapshotResult] = []
 
-    async def step_list_hexdigests(self) -> bool:
+    async def step_list_hexdigests(self, cluster: Cluster) -> bool:
         assert self.hexdigest_storage
         self.hexdigests = set(await self.hexdigest_storage.list_hexdigests())
         return True
@@ -125,13 +149,13 @@ class BackupOpBase(OpBase):
             node_index_datas[node_index].append_sshash(sshash)
         return [data for data in node_index_datas if data.sshashes]
 
-    async def _upload(self, node_index_datas: List[NodeIndexData]):
+    async def _upload(self, cluster: Cluster, node_index_datas: List[NodeIndexData]):
         logger.debug("BackupOp._upload")
-        start_results = []
+        start_results: List[Union[None, Response, BaseException, Dict[str, Any]]] = []
         for data in node_index_datas:
             node = self.nodes[data.node_index]
             req = ipc.SnapshotUploadRequest(hashes=data.sshashes, storage=self.default_storage_name)
-            start_result = await self.request_from_nodes(
+            start_result = await cluster.request_from_nodes(
                 "upload", caller="BackupOpBase._upload", method="post", req=req, nodes=[node]
             )
             if len(start_result) != 1:
@@ -141,16 +165,16 @@ class BackupOpBase(OpBase):
 
     result_upload_blocks: Union[bool, List[ipc.SnapshotUploadResult]]
 
-    async def step_upload_blocks(self):
+    async def step_upload_blocks(self, cluster: Cluster):
         node_index_datas = self._snapshot_results_to_upload_node_index_datas()
         if node_index_datas:
-            upload_results = await self._upload(node_index_datas)
+            upload_results = await self._upload(cluster, node_index_datas)
             return upload_results
         return True
 
     plugin_data: dict = {}
 
-    async def step_upload_manifest(self):
+    async def step_upload_manifest(self, cluster: Cluster):
         """ Final backup manifest upload. It has to be parametrized with the plugin, and plugin_data """
         assert self.attempt_start
         iso = self.attempt_start.isoformat(timespec="seconds")
@@ -164,6 +188,7 @@ class BackupOpBase(OpBase):
             plugin_data=self.plugin_data
         )
         logger.debug("Storing backup manifest %s", filename)
+        assert self.json_storage is not None
         await self.json_storage.upload_json(filename, manifest)
         self.state.cached_list_response = None  # Invalidate cache
         return True
@@ -183,7 +208,7 @@ class RestoreOpBase(OpBase):
     def restore_storage_name(self):
         return self.req.storage if self.req.storage else self.default_storage_name
 
-    async def step_backup_name(self) -> str:
+    async def step_backup_name(self, cluster: Cluster) -> str:
         assert self.json_storage
         name = self.req.name
         if not name:
@@ -194,13 +219,14 @@ class RestoreOpBase(OpBase):
 
     result_backup_name: str = ""
 
-    async def step_backup_manifest(self):
+    async def step_backup_manifest(self, cluster: Cluster):
         assert self.result_backup_name
+        assert self.json_storage is not None
         return await download_backup_manifest(self.json_storage, self.result_backup_name)
 
     result_backup_manifest: Optional[ipc.BackupManifest] = None
 
-    async def step_restore(self):
+    async def step_restore(self, cluster: Cluster):
         # AZ distribution should in theory be forced to match, but in
         # practise it doesn't really matter. So we restore nodes 'as
         # well as we can' and hope that is well enough (or whoever
@@ -208,13 +234,14 @@ class RestoreOpBase(OpBase):
         # the nodes anyway).
 
         node_to_backup_index = self._get_node_to_backup_index()
-        start_results = []
+        start_results: List[Union[None, Response, BaseException, Dict[str, Any]]] = []
 
         for idx, node in zip(node_to_backup_index, self.nodes):
             if idx is not None:
                 # Restore whatever was backed up
+                assert self.result_backup_manifest is not None
                 root_globs = self.result_backup_manifest.snapshot_results[idx].state.root_globs
-                req = ipc.SnapshotDownloadRequest(
+                req: ipc.NodeRequest = ipc.SnapshotDownloadRequest(
                     storage=self.restore_storage_name,
                     backup_name=self.result_backup_name,
                     snapshot_index=idx,
@@ -225,9 +252,10 @@ class RestoreOpBase(OpBase):
                 # If partial restore, do not clear other nodes
                 continue
             else:
+                assert self.result_backup_manifest is not None
                 req = ipc.SnapshotClearRequest(root_globs=self.result_backup_manifest.snapshot_results[0].state.root_globs)
                 op = "clear"
-            start_result = await self.request_from_nodes(
+            start_result = await cluster.request_from_nodes(
                 op, caller="RestoreOpBase.step_restore", method="post", req=req, nodes=[node]
             )
             if len(start_result) != 1:

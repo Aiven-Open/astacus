@@ -8,6 +8,7 @@ Test stats sending.
 """
 from astacus.common.op import Op
 from astacus.common.statsd import StatsClient
+from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import OpBase
 from astacus.coordinator.state import CoordinatorState
 from unittest.mock import patch
@@ -24,13 +25,13 @@ class DummyOp(OpBase):
         self.info = Op.Info(op_id=1)
         self.state = CoordinatorState()
 
-    async def step_one(self):
+    async def step_one(self, cluster: Cluster):
         return True
 
-    async def step_two(self):
+    async def step_two(self, cluster: Cluster):
         return True
 
-    async def step_three(self):
+    async def step_three(self, cluster: Cluster):
         return True
 
 
@@ -38,7 +39,7 @@ class DummyOp(OpBase):
 async def test_op_stats():
     op = DummyOp()
     with patch.object(StatsClient, "timing") as mock_stats_timing:
-        await op.try_run()
+        await op.try_run(Cluster(nodes=[]))
     assert mock_stats_timing.call_count == 3
 
 

@@ -68,14 +68,16 @@ def unlock(*, locker: str, c: Coordinator = Depends()):
 async def backup(*, c: Coordinator = Depends()):
     op_class = get_plugin_backup_class(c.config.plugin)
     op = op_class(c=c, op_id=c.allocate_op_id())
-    return await c.start_op_async(op_name=OpName.backup, op=op, fun=op.run)
+    runner = await op.acquire_cluster_lock()
+    return c.start_op(op_name=OpName.backup, op=op, fun=runner)
 
 
 @router.post("/restore")
 async def restore(*, req: ipc.RestoreRequest = ipc.RestoreRequest(), c: Coordinator = Depends()):
     op_class = get_plugin_restore_class(c.config.plugin)
     op = op_class(c=c, op_id=c.allocate_op_id(), req=req)
-    return await c.start_op_async(op_name=OpName.restore, op=op, fun=op.run)
+    runner = await op.acquire_cluster_lock()
+    return c.start_op(op_name=OpName.restore, op=op, fun=runner)
 
 
 @router.get("/list")
@@ -99,7 +101,8 @@ def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordinator = 
 @router.post("/cleanup")
 async def cleanup(*, req: ipc.CleanupRequest = ipc.CleanupRequest(), c: Coordinator = Depends()):
     op = CleanupOp(c=c, op_id=c.allocate_op_id(), req=req)
-    return await c.start_op_async(op_name=OpName.cleanup, op=op, fun=op.run)
+    runner = await op.acquire_cluster_lock()
+    return c.start_op(op_name=OpName.cleanup, op=op, fun=runner)
 
 
 @router.put("/{op_name}/{op_id}/sub-result")
