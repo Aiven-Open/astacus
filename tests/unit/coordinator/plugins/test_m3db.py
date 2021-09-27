@@ -6,11 +6,12 @@ See LICENSE for details
 Test that the plugin m3 specific flow (backup + restore) works
 
 """
-# pylint: disable=too-many-ancestors
-
 from ..conftest import COORDINATOR_NODES
+from abc import ABC
 from astacus.common import ipc
+from astacus.common.asyncstorage import AsyncJsonStorage
 from astacus.common.etcd import b64encode_to_str
+from astacus.common.storage import JsonStorage
 from astacus.coordinator.config import CoordinatorConfig
 from astacus.coordinator.plugins import base, m3db
 from astacus.coordinator.state import CoordinatorState
@@ -107,6 +108,22 @@ async def test_m3_backup(fail_at):
     assert op.plugin_data == PLUGIN_DATA
 
 
+class DummyJsonStorage(JsonStorage, ABC):
+    def __init__(self, expected_name: str):
+        self.expected_name = expected_name
+
+    def download_json(self, name: str):
+        assert self.expected_name == name
+        return {
+            "plugin": "m3db",
+            "plugin_data": PLUGIN_DATA,
+            "attempt": 1,
+            "snapshot_results": [],
+            "start": "2020-01-01 12:00",
+            "upload_results": [],
+        }
+
+
 class DummyM3DRestoreOp(m3db.M3DRestoreOp):
     nodes = COORDINATOR_NODES
     steps = ["init", "backup_manifest", "rewrite_etcd", "restore_etcd"]
@@ -119,19 +136,9 @@ class DummyM3DRestoreOp(m3db.M3DRestoreOp):
         if partial:
             req.partial_restore_nodes = [ipc.PartialRestoreRequestNode(backup_index=0, node_index=0)]
         self.req = req
+        self.json_storage = AsyncJsonStorage(DummyJsonStorage(self.result_backup_name))
 
     result_backup_name = "x"
-
-    async def download_backup_manifest(self, backup_name):
-        assert backup_name == self.result_backup_name
-        return ipc.BackupManifest.parse_obj({
-            "plugin": "m3db",
-            "plugin_data": PLUGIN_DATA,
-            "attempt": 1,
-            "snapshot_results": [],
-            "start": "2020-01-01 12:00",
-            "upload_results": [],
-        })
 
 
 @dataclass

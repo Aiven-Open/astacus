@@ -7,6 +7,7 @@ Database cleanup operation
 """
 
 from .coordinator import Coordinator, CoordinatorOpWithClusterLock
+from .manifest import download_backup_manifest
 from astacus.common import ipc, magic, utils
 
 import logging
@@ -37,7 +38,7 @@ class CleanupOp(CoordinatorOpWithClusterLock):
 
     async def _download_backup_manifests(self, backups):
         # Due to rate limiting, it might be better to not do this in parallel
-        return [await self.download_backup_manifest(backup) for backup in backups]
+        return [await download_backup_manifest(self.json_storage, backup) for backup in backups]
 
     async def delete_backups(self, backups):
         if not backups:

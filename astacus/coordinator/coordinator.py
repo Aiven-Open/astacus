@@ -7,14 +7,13 @@ from astacus.common.cachingjsonstorage import MultiCachingJsonStorage
 from astacus.common.magic import LockCall
 from astacus.common.progress import Progress
 from astacus.common.rohmustorage import MultiRohmuStorage
-from astacus.common.storage import HexDigestStorage, JsonStorage, MultiFileStorage, MultiStorage
+from astacus.common.storage import MultiFileStorage, MultiStorage
 from astacus.common.utils import AsyncSleeper
 from astacus.coordinator.config import coordinator_config, CoordinatorConfig
 from astacus.coordinator.state import coordinator_state, CoordinatorState
 from datetime import datetime
 from enum import Enum
 from fastapi import BackgroundTasks, Depends, HTTPException, Request
-from starlette.concurrency import run_in_threadpool
 from typing import List, Optional
 from urllib.parse import urlunsplit
 
@@ -56,8 +55,8 @@ class CoordinatorOp(op.Op):
         parts = [url.scheme, url.netloc, f"{url.path}/{self.op_id}/sub-result", "", ""]
         return urlunsplit(parts)
 
-    hexdigest_storage: Optional[HexDigestStorage] = None
-    json_storage: Optional[JsonStorage] = None
+    hexdigest_storage: Optional[asyncstorage.AsyncHexDigestStorage] = None
+    json_storage: Optional[asyncstorage.AsyncJsonStorage] = None
 
     def set_storage_name(self, storage_name):
         self.hexdigest_storage = asyncstorage.AsyncHexDigestStorage(self.hexdigest_mstorage.get_storage(storage_name))
@@ -202,14 +201,6 @@ class CoordinatorOp(op.Op):
             logger.debug("wait_successful_results timed out")
             return []
         return results
-
-    async def download_backup_manifest(self, backup_name: str) -> ipc.BackupManifest:
-        assert self.json_storage
-        d = await self.json_storage.download_json(backup_name)
-        manifest = await run_in_threadpool(ipc.BackupManifest.parse_obj, d)
-        assert not manifest.filename or manifest.filename == backup_name
-        manifest.filename = backup_name
-        return manifest
 
 
 class CoordinatorOpWithClusterLock(CoordinatorOp):

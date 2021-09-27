@@ -10,6 +10,7 @@ from astacus.common import exceptions, ipc, magic
 from astacus.common.progress import Progress
 from astacus.coordinator import plugins
 from astacus.coordinator.coordinator import Coordinator, CoordinatorOpWithClusterLock
+from astacus.coordinator.manifest import download_backup_manifest
 from collections import Counter
 from typing import Dict, List, Optional, Set, Union
 
@@ -195,7 +196,7 @@ class RestoreOpBase(OpBase):
 
     async def step_backup_manifest(self):
         assert self.result_backup_name
-        return await self.download_backup_manifest(self.result_backup_name)
+        return await download_backup_manifest(self.json_storage, self.result_backup_name)
 
     result_backup_manifest: Optional[ipc.BackupManifest] = None
 
