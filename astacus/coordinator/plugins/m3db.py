@@ -8,9 +8,10 @@ snapshot/restore functionality. m3db plugin will simply ensure etcd
 state is consistent.
 
 """
-
-from .etcd import ETCDBackupOpBase, ETCDConfiguration, ETCDDump, ETCDRestoreOpBase
+from .base import BackupOpBase, RestoreOpBase
+from .etcd import ETCDConfiguration, ETCDDump, get_etcd_dump, restore_etcd_dump
 from astacus.common import exceptions, ipc, m3placement
+from astacus.common.etcd import ETCDClient
 from astacus.common.utils import AstacusModel
 from typing import List, Optional
 
@@ -44,7 +45,7 @@ def _validate_m3_config(o):
     return True
 
 
-class M3DBBackupOp(ETCDBackupOpBase):
+class M3DBBackupOp(BackupOpBase):
     # upload backup manifest only after we've retrieved again etcd
     # contents and found it consistent
     steps = [
@@ -75,10 +76,10 @@ class M3DBBackupOp(ETCDBackupOpBase):
         return True
 
     async def step_retrieve_etcd(self):
-        return await self.get_etcd_dump(self.etcd_prefixes)
+        return await get_etcd_dump(ETCDClient(self.plugin_config.etcd_url), self.etcd_prefixes)
 
     async def step_retrieve_etcd_again(self):
-        etcd_now = await self.get_etcd_dump(self.etcd_prefixes)
+        etcd_now = await get_etcd_dump(ETCDClient(self.plugin_config.etcd_url), self.etcd_prefixes)
         return etcd_now == self.result_retrieve_etcd
 
     async def step_create_m3_manifest(self):
@@ -87,7 +88,7 @@ class M3DBBackupOp(ETCDBackupOpBase):
         return m3manifest
 
 
-class M3DRestoreOp(ETCDRestoreOpBase):
+class M3DRestoreOp(RestoreOpBase):
     plugin = ipc.Plugin.m3db
     steps = [
         "init",  # local
@@ -97,7 +98,6 @@ class M3DRestoreOp(ETCDRestoreOpBase):
         "restore_etcd",
         "restore",  # base
     ]
-    plugin = ipc.Plugin.m3db
 
     async def step_init(self):
         _validate_m3_config(self)
@@ -133,7 +133,7 @@ class M3DRestoreOp(ETCDRestoreOpBase):
         if self.req.partial_restore_nodes:
             logger.debug("Skipping etcd restoration due to partial backup restoration")
             return True
-        return await self.restore_etcd_dump(self.result_rewrite_etcd)
+        return await restore_etcd_dump(ETCDClient(self.plugin_config.etcd_url), self.result_rewrite_etcd)
 
 
 plugin_info = {"backup": M3DBBackupOp, "manifest": M3DBManifest, "restore": M3DRestoreOp, "config": M3DBConfiguration}
