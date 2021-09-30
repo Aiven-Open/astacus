@@ -2,7 +2,7 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
-from .plugins.base import CoordinatorPlugin, OperationContext, Step, StepsContext
+from .plugins.base import CoordinatorPlugin, OperationContext, Step, StepFailedError, StepsContext
 from astacus.common import asyncstorage, exceptions, ipc, op, statsd, utils
 from astacus.common.cachingjsonstorage import MultiCachingJsonStorage
 from astacus.common.dependencies import get_request_url
@@ -288,10 +288,11 @@ class SteppedCoordinatorOp(LockedCoordinatorOp):
             logger.debug("Step %d/%d: %s", i, len(self.steps), step_name)
             async with self.stats.async_timing_manager("astacus_step_duration", {"op": op_name, "step": step_name}):
                 with self._progress_handler(cluster, step):
-                    r = await step.run_step(cluster, context)
-            if not r:
-                logger.info("Step %s failed", step)
-                return False
+                    try:
+                        r = await step.run_step(cluster, context)
+                    except StepFailedError:
+                        logger.info("Step %s failed", step)
+                        return False
             context.set_result(step.__class__, r)
         return True
 

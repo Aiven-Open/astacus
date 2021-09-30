@@ -9,11 +9,11 @@ from __future__ import annotations
 from astacus.common import exceptions, ipc, magic, utils
 from astacus.common.asyncstorage import AsyncHexDigestStorage, AsyncJsonStorage
 from astacus.common.utils import AstacusModel
-from astacus.coordinator.cluster import Cluster, Result
+from astacus.coordinator.cluster import Cluster, Result, WaitResultError
 from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.manifest import download_backup_manifest
 from collections import Counter
-from typing import Any, cast, Counter as TCounter, Dict, Generic, List, Optional, Set, Type, TypeVar, Union
+from typing import Any, Counter as TCounter, Dict, Generic, List, Optional, Set, Type, TypeVar
 
 import dataclasses
 import datetime
@@ -43,6 +43,10 @@ class OperationContext:
 class Step(Generic[StepResult]):
     async def run_step(self, cluster: Cluster, context: StepsContext) -> StepResult:
         raise NotImplementedError
+
+
+class StepFailedError(Exception):
+    pass
 
 
 class StepsContext:
@@ -78,27 +82,27 @@ class SnapshotStep(Step[List[ipc.SnapshotResult]]):
     async def run_step(self, cluster: Cluster, context: StepsContext) -> List[ipc.SnapshotResult]:
         req = ipc.SnapshotRequest(root_globs=self.snapshot_root_globs)
         start_results = await cluster.request_from_nodes("snapshot", method="post", caller="SnapshotStep", req=req)
-        if not start_results:
-            return []
-        return await cluster.wait_successful_results(
-            start_results=start_results, result_class=ipc.SnapshotResult, required_successes=len(start_results)
-        )
+        try:
+            return await cluster.wait_successful_results(
+                start_results=start_results, result_class=ipc.SnapshotResult, required_successes=len(start_results)
+            )
+        except WaitResultError as ex:
+            raise StepFailedError(str(ex)) from ex
 
 
 @dataclasses.dataclass
-class ListHexdigestsStep(Step[Union[bool, Set[str]]]):
+class ListHexdigestsStep(Step[Set[str]]):
     """
     Fetch the list of all files already present in object storage, identified by their hexdigest.
     """
     hexdigest_storage: AsyncHexDigestStorage
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> Union[bool, Set[str]]:
-        hexdigests = set(await self.hexdigest_storage.list_hexdigests())
-        return hexdigests if hexdigests else True
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> Set[str]:
+        return set(await self.hexdigest_storage.list_hexdigests())
 
 
 @dataclasses.dataclass
-class UploadBlocksStep(Step[Union[bool, List[ipc.SnapshotUploadResult]]]):
+class UploadBlocksStep(Step[List[ipc.SnapshotUploadResult]]):
     """
     Upload to object storage all files that are not yet in that storage.
 
@@ -114,20 +118,17 @@ class UploadBlocksStep(Step[Union[bool, List[ipc.SnapshotUploadResult]]]):
     """
     storage_name: str
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> Union[bool, List[ipc.SnapshotUploadResult]]:
-        hexdigests = context.get_result(ListHexdigestsStep)
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> List[ipc.SnapshotUploadResult]:
         node_index_datas = build_node_index_datas(
-            hexdigests=set() if hexdigests is True else hexdigests,
+            hexdigests=context.get_result(ListHexdigestsStep),
             snapshots=context.get_result(SnapshotStep),
-            node_indices=list(range(len(cluster.nodes)))
+            node_indices=list(range(len(cluster.nodes))),
         )
-        if node_index_datas:
-            return await upload_node_index_datas(cluster, self.storage_name, node_index_datas)
-        return True
+        return await upload_node_index_datas(cluster, self.storage_name, node_index_datas)
 
 
 @dataclasses.dataclass
-class UploadManifestStep(Step[bool]):
+class UploadManifestStep(Step[None]):
     """
     Store the backup manifest in the object storage.
 
@@ -138,8 +139,7 @@ class UploadManifestStep(Step[bool]):
     plugin: ipc.Plugin
     plugin_manifest_step: Optional[Type[Step[AstacusModel]]] = None
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> bool:
-        upload_blocks = context.get_result(UploadBlocksStep)
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         if self.plugin_manifest_step is None:
             plugin_data = {}
         else:
@@ -149,13 +149,12 @@ class UploadManifestStep(Step[bool]):
             attempt=context.attempt,
             start=context.attempt_start,
             snapshot_results=context.get_result(SnapshotStep),
-            upload_results=[] if upload_blocks is True else cast(List[ipc.SnapshotUploadResult], upload_blocks),
+            upload_results=context.get_result(UploadBlocksStep),
             plugin=self.plugin,
             plugin_data=plugin_data,
         )
         logger.debug("Storing backup manifest %s", context.backup_name)
         await self.json_storage.upload_json(context.backup_name, manifest)
-        return True
 
 
 @dataclasses.dataclass
@@ -237,7 +236,10 @@ class RestoreStep(Step[List[ipc.NodeResult]]):
             if len(start_result) != 1:
                 return []
             start_results.extend(start_result)
-        return await cluster.wait_successful_results(start_results=start_results, result_class=ipc.NodeResult)
+        try:
+            return await cluster.wait_successful_results(start_results=start_results, result_class=ipc.NodeResult)
+        except WaitResultError as ex:
+            raise StepFailedError(str(ex)) from ex
 
 
 def get_node_to_backup_index(
@@ -387,6 +389,9 @@ async def upload_node_index_datas(cluster: Cluster, storage_name: str, node_inde
             "upload", caller="upload_node_index_datas", method="post", req=req, nodes=[cluster.nodes[data.node_index]]
         )
         if len(start_result) != 1:
-            return []
+            raise StepFailedError("upload failed")
         start_results.extend(start_result)
-    return await cluster.wait_successful_results(start_results=start_results, result_class=ipc.SnapshotUploadResult)
+    try:
+        return await cluster.wait_successful_results(start_results=start_results, result_class=ipc.SnapshotUploadResult)
+    except WaitResultError as ex:
+        raise StepFailedError(str(ex)) from ex
