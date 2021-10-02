@@ -435,22 +435,45 @@ async def test_creates_all_replicated_databases_and_tables_in_manifest() -> None
     context = StepsContext()
     context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
     await step.run_step(cluster, context)
-    assert clients[0].mock_calls == [
-        mock.call.
-        execute("CREATE DATABASE `db-one` ENGINE = Replicated('/clickhouse/databases/db%2Done', '{shard}', '{replica}')"),
-        mock.call.
-        execute("CREATE DATABASE `db-two` ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{shard}', '{replica}')"),
-        mock.call.execute("CREATE TABLE db-one.table-uno ..."),
-        mock.call.execute("CREATE TABLE db-one.table-dos ..."),
-        mock.call.execute("CREATE TABLE db-two.table-eins ..."),
+    first_client_queries = [
+        "DROP DATABASE IF EXISTS `db-one` SYNC",
+        "CREATE DATABASE `db-one` ENGINE = Replicated('/clickhouse/databases/db%2Done', '{shard}', '{replica}')",
+        "DROP DATABASE IF EXISTS `db-two` SYNC",
+        "CREATE DATABASE `db-two` ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{shard}', '{replica}')",
+        "CREATE TABLE db-one.table-uno ...", "CREATE TABLE db-one.table-dos ...", "CREATE TABLE db-two.table-eins ..."
     ]
     # CREATE TABLE is replicated, that why we only create the table on the first client
-    assert clients[1].mock_calls == [
-        mock.call.
-        execute("CREATE DATABASE `db-one` ENGINE = Replicated('/clickhouse/databases/db%2Done', '{shard}', '{replica}')"),
-        mock.call.
-        execute("CREATE DATABASE `db-two` ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{shard}', '{replica}')"),
+    second_client_queries = [
+        "DROP DATABASE IF EXISTS `db-one` SYNC",
+        "CREATE DATABASE `db-one` ENGINE = Replicated('/clickhouse/databases/db%2Done', '{shard}', '{replica}')",
+        "DROP DATABASE IF EXISTS `db-two` SYNC",
+        "CREATE DATABASE `db-two` ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{shard}', '{replica}')",
     ]
+    assert clients[0].mock_calls == list(map(mock.call.execute, first_client_queries))
+    assert clients[1].mock_calls == list(map(mock.call.execute, second_client_queries))
+
+
+@pytest.mark.asyncio
+async def test_drops_each_database_on_all_servers_before_recreating_it():
+    # We use the same client twice to record the global sequence of queries across all servers
+    client = mock_clickhouse_client()
+    step = RestoreReplicatedDatabasesStep(
+        clients=[client, client], replicated_databases_zookeeper_path="/clickhouse/databases"
+    )
+    cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
+    context = StepsContext()
+    context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
+    await step.run_step(cluster, context)
+    first_client_queries = [
+        "DROP DATABASE IF EXISTS `db-one` SYNC", "DROP DATABASE IF EXISTS `db-one` SYNC",
+        "CREATE DATABASE `db-one` ENGINE = Replicated('/clickhouse/databases/db%2Done', '{shard}', '{replica}')",
+        "CREATE DATABASE `db-one` ENGINE = Replicated('/clickhouse/databases/db%2Done', '{shard}', '{replica}')",
+        "DROP DATABASE IF EXISTS `db-two` SYNC", "DROP DATABASE IF EXISTS `db-two` SYNC",
+        "CREATE DATABASE `db-two` ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{shard}', '{replica}')",
+        "CREATE DATABASE `db-two` ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{shard}', '{replica}')",
+        "CREATE TABLE db-one.table-uno ...", "CREATE TABLE db-one.table-dos ...", "CREATE TABLE db-two.table-eins ..."
+    ]
+    assert client.mock_calls == list(map(mock.call.execute, first_client_queries))
 
 
 @pytest.mark.asyncio
@@ -460,6 +483,26 @@ async def test_creates_all_access_entities_in_manifest() -> None:
     context = StepsContext()
     context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
     await step.run_step(Cluster(nodes=[]), context)
+    await check_restored_entities(client)
+
+
+@pytest.mark.asyncio
+async def test_creating_all_access_entities_can_be_retried():
+    client = FakeZooKeeperClient()
+    step = RestoreAccessEntitiesStep(zookeeper_client=client, access_entities_path="/clickhouse/access")
+    context = StepsContext()
+    context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
+    async with client.connect() as connection:
+        # Simulate a first partial restoration
+        await connection.create("/clickhouse/access/P/a_policy", str(uuid.UUID(int=1)).encode())
+        await connection.create(f"/clickhouse/access/uuid/{str(uuid.UUID(int=1))}", b"ATTACH ROW POLICY ...")
+        await connection.create("/clickhouse/access/Q/a_quota", str(uuid.UUID(int=2)).encode())
+        await connection.create(f"/clickhouse/access/uuid/{str(uuid.UUID(int=3))}", b"ATTACH ROLE ...")
+    await step.run_step(Cluster(nodes=[]), context)
+    await check_restored_entities(client)
+
+
+async def check_restored_entities(client: ZooKeeperClient):
     async with client.connect() as connection:
         assert await connection.get_children("/clickhouse/access") == ["P", "Q", "R", "S", "U", "uuid"]
         assert await connection.get_children("/clickhouse/access/uuid") == [str(uuid.UUID(int=i)) for i in range(1, 6)]

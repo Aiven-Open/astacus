@@ -184,6 +184,7 @@ class RestoreRequest(AstacusModel):
     storage: str = ""
     name: str = ""
     partial_restore_nodes: Optional[List[PartialRestoreRequestNode]]
+    stop_after_step: Optional[str] = None
 
 
 # coordinator.plugins backup/restore

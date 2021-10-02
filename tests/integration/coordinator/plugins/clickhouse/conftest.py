@@ -342,6 +342,8 @@ def create_astacus_configs(
             coordinator=CoordinatorConfig(
                 nodes=[CoordinatorNode(url=f"http://localhost:{node_port}/node") for node_port in node_ports],
                 plugin=Plugin.clickhouse,
+                backup_attempts=1,
+                restore_attempts=1,
                 plugin_config=ClickHousePlugin(
                     zookeeper=ZooKeeperConfiguration(nodes=[ZooKeeperNode(host=zookeeper.host, port=zookeeper.port)]),
                     clickhouse=ClickHouseConfiguration(

@@ -2,11 +2,16 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+from astacus.common.ipc import RestoreRequest
+from astacus.coordinator.plugins import ClickHousePlugin
+from astacus.coordinator.plugins.base import OperationContext
 from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, HttpClickHouseClient
+from pathlib import Path
 from tests.integration.coordinator.plugins.clickhouse.conftest import (
     create_astacus_cluster, create_clickhouse_cluster, create_zookeeper, get_clickhouse_client, Ports, run_astacus_command
 )
 from typing import AsyncIterable, List
+from unittest import mock
 
 import pytest
 import tempfile
@@ -17,8 +22,17 @@ pytestmark = [
 ]
 
 
-@pytest.fixture(scope="module", name="restored_cluster")
-async def fixture_restored_cluster(ports: Ports) -> AsyncIterable[List[ClickHouseClient]]:
+def get_restore_steps_names() -> List[str]:
+    plugin = ClickHousePlugin()
+    steps = plugin.get_restore_steps(
+        context=OperationContext(storage_name="", json_storage=mock.Mock(), hexdigest_storage=mock.Mock()),
+        req=RestoreRequest(storage="", name="")
+    )
+    return [step.__class__.__name__ for step in steps]
+
+
+@pytest.fixture(scope="module", name="restorable_cluster")
+async def fixture_restorable_cluster(ports: Ports) -> Path:
     with tempfile.TemporaryDirectory(prefix="storage_") as storage_path:
         async with create_zookeeper(ports) as zookeeper:
             async with create_clickhouse_cluster(zookeeper, ports) as clickhouse_cluster:
@@ -27,15 +41,27 @@ async def fixture_restored_cluster(ports: Ports) -> AsyncIterable[List[ClickHous
                     await setup_cluster_content(clients)
                     await setup_cluster_users(clients)
                     run_astacus_command(astacus_cluster, "backup")
-        # We've destroying everything except the backup storage dir, now we restore
-        async with create_zookeeper(ports) as zookeeper:
-            async with create_clickhouse_cluster(zookeeper, ports) as clickhouse_cluster:
-                clients = [get_clickhouse_client(service) for service in clickhouse_cluster.services]
-                for client in clients:
-                    await client.execute("DROP DATABASE default")
-                async with create_astacus_cluster(storage_path, zookeeper, clickhouse_cluster, ports) as astacus_cluster:
-                    run_astacus_command(astacus_cluster, "restore")
-                    yield clients
+        # We have destroyed everything except the backup storage dir
+        yield storage_path
+
+
+@pytest.fixture(scope="module", name="restored_cluster", params=[*get_restore_steps_names(), None])
+async def fixture_restored_cluster(restorable_cluster: Path, ports: Ports, request) -> AsyncIterable[List[ClickHouseClient]]:
+    stop_after_step: str = request.param
+    async with create_zookeeper(ports) as zookeeper:
+        async with create_clickhouse_cluster(zookeeper, ports) as clickhouse_cluster:
+            clients = [get_clickhouse_client(service) for service in clickhouse_cluster.services]
+            async with create_astacus_cluster(restorable_cluster, zookeeper, clickhouse_cluster, ports) as astacus_cluster:
+                # To test if we can survive transient failures during an entire restore operation,
+                # we first run a partial restore that stops after one of the restore steps,
+                # then we run the full restore, on the same ClickHouse cluster,
+                # then we check if the final restored data is as expected.
+                # This sequence is repeated with a different partial restore each time, stopping at a different step.
+                # We also need to test failure in the middle of a step, this is covered in the unit tests of each step.
+                if stop_after_step is not None:
+                    run_astacus_command(astacus_cluster, "restore", "--stop-after-step", str(stop_after_step))
+                run_astacus_command(astacus_cluster, "restore")
+                yield clients
 
 
 async def setup_cluster_content(clients: List[HttpClickHouseClient]):

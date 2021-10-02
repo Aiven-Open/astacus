@@ -319,4 +319,8 @@ class RestoreOp(SteppedCoordinatorOp):
     def __init__(self, *, c: Coordinator, op_id: int, stats: StatsClient, req: ipc.RestoreRequest):
         context = c.get_operation_context(requested_storage=req.storage)
         steps = c.get_plugin().get_restore_steps(context=context, req=req)
+        if req.stop_after_step is not None:
+            step_names = [step.__class__.__name__ for step in steps]
+            step_index = step_names.index(req.stop_after_step)
+            steps = steps[:step_index + 1]
         super().__init__(c=c, op_id=op_id, stats=stats, attempts=1, steps=steps)  # c.config.restore_attempts

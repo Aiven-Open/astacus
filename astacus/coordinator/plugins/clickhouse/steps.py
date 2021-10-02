@@ -8,7 +8,7 @@ from .dependencies import access_entities_sorted_by_dependencies, tables_sorted_
 from .escaping import escape_for_file_name, unescape_from_file_name
 from .manifest import AccessEntity, ClickHouseManifest, ReplicatedDatabase, Table
 from .parts import check_parts_replication, distribute_parts_to_servers, get_frozen_parts_pattern, group_files_into_parts
-from .zookeeper import ChangeWatch, ZooKeeperClient
+from .zookeeper import ChangeWatch, NodeExistsError, ZooKeeperClient
 from astacus.common import ipc
 from astacus.common.exceptions import TransientException
 from astacus.coordinator.cluster import Cluster, WaitResultError
@@ -341,18 +341,19 @@ class RestoreReplicatedDatabasesStep(Step[None]):
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         manifest = context.get_result(ClickHouseManifestStep)
-        tasks = []
         for database in manifest.replicated_databases:
+            database_znode_name = escape_for_file_name(database.name)
+            database_path = f"{self.replicated_databases_zookeeper_path}/{database_znode_name}"
+            # The database must be dropped on *every* node before attempting to recreate it.
+            # If we don't do that, then the recreated database on one node will recover data from
+            # a node where the database wasn't recreated yet.
             for client in self.clients:
-                database_znode_name = escape_for_file_name(database.name)
-                database_path = f"{self.replicated_databases_zookeeper_path}/{database_znode_name}"
-                tasks.append(
-                    client.execute(
-                        f"CREATE DATABASE {escape_sql_identifier(database.name)} "
-                        f"ENGINE = Replicated({escape_sql_string(database_path)}, '{{shard}}', '{{replica}}')"
-                    )
+                await client.execute(f"DROP DATABASE IF EXISTS {escape_sql_identifier(database.name)} SYNC")
+            for client in self.clients:
+                await client.execute(
+                    f"CREATE DATABASE {escape_sql_identifier(database.name)} "
+                    f"ENGINE = Replicated({escape_sql_string(database_path)}, '{{shard}}', '{{replica}}')"
                 )
-        await asyncio.gather(*tasks)
         # If any known table depends on an unknown table that was inside a non-replicated
         # database engine, then this will crash. See comment in `RetrieveReplicatedDatabasesStep`.
         for table in tables_sorted_by_dependencies(manifest.tables):
@@ -394,8 +395,14 @@ class RestoreAccessEntitiesStep(Step[None]):
                 # Nobody else should be touching ZooKeeper during the restore operation,
                 # and we know that ClickHouse only reacts to creation of the node at `entity_path`.
                 # Theses conditions make it safe to create this pair of nodes without a transaction.
-                await connection.create(entity_name_path, str(access_entity.uuid).encode())
-                await connection.create(entity_path, attach_query_bytes)
+                try:
+                    await connection.create(entity_name_path, str(access_entity.uuid).encode())
+                except NodeExistsError:
+                    pass
+                try:
+                    await connection.create(entity_path, attach_query_bytes)
+                except NodeExistsError:
+                    pass
 
 
 @dataclasses.dataclass
