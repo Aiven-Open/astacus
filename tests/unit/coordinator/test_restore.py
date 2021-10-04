@@ -6,9 +6,10 @@ Test that the coordinator restore endpoint works.
 
 """
 
-from astacus.common import exceptions, ipc, utils
+from astacus.common import exceptions, ipc
+from astacus.common.ipc import Plugin
 from astacus.coordinator.config import CoordinatorNode
-from astacus.coordinator.plugins import get_plugin_restore_class
+from astacus.coordinator.plugins.base import get_node_to_backup_index
 from contextlib import nullcontext as does_not_raise
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,7 +40,7 @@ BACKUP_MANIFEST = ipc.BackupManifest(
     upload_results=[
         ipc.SnapshotUploadResult(total_size=6, total_stored_size=10),
     ],
-    plugin="files",
+    plugin=Plugin.files,
 )
 
 
@@ -61,7 +62,7 @@ class RestoreTest:
         RestoreTest(storage_name="y"),
         # partial
         RestoreTest(partial=True)
-    ]
+    ],
 )
 def test_restore(rt, app, client, mstorage):
     # pylint: disable=too-many-statements
@@ -165,21 +166,6 @@ def test_restore(rt, app, client, mstorage):
         assert app.state.coordinator_state.op_info.op_id == 1
 
 
-_RestoreOp = get_plugin_restore_class("files")
-
-
-class DummyRestoreOp(_RestoreOp):
-    def __init__(self, nodes, manifest):
-        # pylint: disable=super-init-not-called
-        # NOP __init__, we mock whatever we care about
-        self.nodes = nodes
-        self.result_backup_manifest = manifest
-        self.req = ipc.RestoreRequest()
-
-    def assert_node_to_backup_index_is(self, expected):
-        assert self._get_node_to_backup_index() == expected
-
-
 @pytest.mark.parametrize(
     "node_azlist,backup_azlist,expected_index,exception",
     [
@@ -196,18 +182,12 @@ class DummyRestoreOp(_RestoreOp):
     ]
 )
 def test_node_to_backup_index(node_azlist, backup_azlist, expected_index, exception):
+    snapshot_results = [ipc.SnapshotResult(az=az) for az in backup_azlist]
     nodes = [CoordinatorNode(url="unused", az=az) for az in node_azlist]
-    manifest = ipc.BackupManifest(
-        start=utils.now(),
-        attempt=1,
-        snapshot_results=[ipc.SnapshotResult(az=az) for az in backup_azlist],
-        upload_results=[],
-        plugin="files"
-    )
-
-    op = DummyRestoreOp(nodes, manifest)
     with exception:
-        op.assert_node_to_backup_index_is(expected_index)
+        assert expected_index == get_node_to_backup_index(
+            partial_restore_nodes=None, snapshot_results=snapshot_results, nodes=nodes
+        )
 
 
 @pytest.mark.parametrize(
@@ -274,15 +254,10 @@ def test_node_to_backup_index(node_azlist, backup_azlist, expected_index, except
 )
 def test_partial_node_to_backup_index(partial_node_spec, expected_index, exception):
     num_nodes = 3
+    snapshot_results = [ipc.SnapshotResult(hostname=f"host{i}") for i in range(num_nodes)]
     nodes = [CoordinatorNode(url=f"url{i}") for i in range(num_nodes)]
-    manifest = ipc.BackupManifest(
-        start=utils.now(),
-        attempt=1,
-        snapshot_results=[ipc.SnapshotResult(hostname=f"host{i}") for i in range(num_nodes)],
-        upload_results=[],
-        plugin="files"
-    )
-    op = DummyRestoreOp(nodes, manifest)
     with exception:
-        op.req.partial_restore_nodes = [ipc.PartialRestoreRequestNode.parse_obj(partial_node_spec)]
-        op.assert_node_to_backup_index_is(expected_index)
+        partial_restore_nodes = [ipc.PartialRestoreRequestNode.parse_obj(partial_node_spec)]
+        assert expected_index == get_node_to_backup_index(
+            partial_restore_nodes=partial_restore_nodes, snapshot_results=snapshot_results, nodes=nodes
+        )

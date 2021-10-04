@@ -42,7 +42,7 @@ class CoordinatorState(OpState):
 
 
 async def app_coordinator_state(app: FastAPI) -> CoordinatorState:
-    return utils.get_or_create_state(app=app, key=APP_KEY, factory=CoordinatorState)
+    return utils.get_or_create_state(state=app.state, key=APP_KEY, factory=CoordinatorState)
 
 
 async def coordinator_state(request: Request) -> CoordinatorState:

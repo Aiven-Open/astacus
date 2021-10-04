@@ -63,21 +63,21 @@ class StatsClient:
             yield
         except:  # noqa pylint: disable=broad-except,bare-except
             tags["success"] = "0"
-            self.timing(metric, time.monotonic() - start_time, tags)
+            self.timing(metric, time.monotonic() - start_time, tags=tags)
             raise
         tags["success"] = "1"
-        self.timing(metric, time.monotonic() - start_time, tags)
+        self.timing(metric, time.monotonic() - start_time, tags=tags)
 
-    def gauge(self, metric: str, value, tags: Optional[Tags] = None):
+    def gauge(self, metric: str, value: Union[int, float], *, tags: Optional[Tags] = None) -> None:
         self._send(metric, b"g", value, tags)
 
-    def increase(self, metric: str, inc_value=1, tags: Optional[Tags] = None):
+    def increase(self, metric: str, *, inc_value: int = 1, tags: Optional[Tags] = None) -> None:
         self._send(metric, b"c", inc_value, tags)
 
-    def timing(self, metric: str, value, tags: Optional[Tags] = None):
+    def timing(self, metric: str, value: Union[int, float], *, tags: Optional[Tags] = None) -> None:
         self._send(metric, b"ms", value, tags)
 
-    def unexpected_exception(self, ex, where, tags: Optional[Tags] = None):
+    def unexpected_exception(self, ex, where, *, tags: Optional[Tags] = None) -> None:
         all_tags = {
             "exception": ex.__class__.__name__,
             "where": where,
@@ -85,7 +85,7 @@ class StatsClient:
         all_tags.update(tags or {})
         self.increase("exception", tags=all_tags)
 
-    def _send(self, metric: str, metric_type, value, tags: Optional[Tags]):
+    def _send(self, metric: str, metric_type: bytes, value: Union[int, float], tags: Optional[Tags]) -> None:
         if not self._enabled:
             # stats sending is disabled
             return

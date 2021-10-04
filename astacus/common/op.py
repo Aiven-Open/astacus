@@ -11,13 +11,16 @@ Notable things:
 
 """
 
+from . import magic
 from .exceptions import ExpiredOperationException
+from .statsd import StatsClient
 from .utils import AstacusModel
-from astacus.common import magic, statsd
 from dataclasses import dataclass, field
 from enum import Enum
 from fastapi import HTTPException
-from typing import Optional
+from starlette.background import BackgroundTasks
+from starlette.datastructures import URL
+from typing import Any, Callable, Optional
 from urllib.parse import urlunsplit
 
 import asyncio
@@ -44,11 +47,13 @@ class Op:
         op_id: int
         status_url: str
 
-    op_id = -1  # set in start_op
-    stats: Optional[statsd.StatsClient] = None  # set in start_op
+    op_id: int
+    stats: StatsClient
 
-    def __init__(self, *, info: Info):
+    def __init__(self, *, info: Info, op_id: int, stats: StatsClient):
         self.info = info
+        self.op_id = op_id
+        self.stats = stats
 
     def check_op_id(self):
         if self.info.op_id != self.op_id:
@@ -61,14 +66,13 @@ class Op:
             return False
         if self.info.op_status == status:
             return False
-        logger.debug("%r status %s -> %s", self, self.info.op_status, status)
+        logger.debug("%s.%d status %s -> %s", self.info.op_name, self.info.op_id, self.info.op_status, status)
         self.info.op_status = status
         return True
 
     def set_status_fail(self):
-        if self.stats is not None:
-            name = self.__class__.__name__
-            self.stats.increase("astacus_fail", {"op": name})
+        name = self.__class__.__name__
+        self.stats.increase("astacus_fail", tags={"op": name})
         self.set_status(self.Status.fail)
 
 
@@ -79,6 +83,7 @@ Op.Info.update_forward_refs()
 class OpState:
     op_info: Op.Info = field(default_factory=Op.Info)
     op: Optional[Op] = None
+    next_op_id: int = 1
 
 
 class OpMixin:
@@ -86,15 +91,24 @@ class OpMixin:
     Convenience mixin which provides for both asynchronous as well as
     synchronous op starting functionality, and active job querying
     """
-    def start_op(self, *, op, op_name, fun):
+    state: OpState
+    stats: StatsClient
+    request_url: URL
+    background_tasks: BackgroundTasks
+
+    def allocate_op_id(self) -> int:
+        try:
+            return self.state.next_op_id
+        finally:
+            self.state.next_op_id += 1
+
+    def start_op(self, *, op: Op, op_name: str, fun: Callable[[], Any]) -> Op.StartResult:
         info = self.state.op_info
-        info.op_id += 1
+        info.op_id = op.op_id
         info.op_name = op_name
         self.state.op = op
-        op.op_id = info.op_id
         op.set_status(Op.Status.starting)
-        op.stats = self.stats
-        url = self.request.url
+        url = self.request_url
         status_url = urlunsplit((url.scheme, url.netloc, f"{url.path}/{op.op_id}", "", ""))
 
         async def _async_wrapper():

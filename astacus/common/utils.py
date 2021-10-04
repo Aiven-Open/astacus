@@ -8,10 +8,10 @@ See LICENSE for details
 Shared utilities (between coordinator and node)
 
 """
-
-from fastapi import FastAPI
+from abc import ABC
 from multiprocessing.dummy import Pool  # fastapi + fork = bad idea
 from pydantic import BaseModel
+from typing import Any, AsyncIterable, Callable, Dict, Iterable, Optional, TypeVar, Union
 
 import asyncio
 import datetime
@@ -60,12 +60,12 @@ class AstacusModel(BaseModel):
         return _json.loads(self.json(**kw))
 
 
-def get_or_create_state(*, app: FastAPI, key: str, factory):
+def get_or_create_state(*, state: object, key: str, factory: Callable[[], Any]) -> Any:
     """ Get or create sub-state entry (using factory callback) """
-    value = getattr(app.state, key, None)
+    value = getattr(state, key, None)
     if value is None:
         value = factory()
-        setattr(app.state, key, value)
+        setattr(state, key, value)
     return value
 
 
@@ -77,7 +77,6 @@ def http_request(url, *, caller, method="get", timeout=10, ignore_status_code: b
     (e.g. fastapi.testclient) still works, but we can mock things to
     our hearts content in test code by doing 'things' here.
     """
-    r = None
     # TBD: may need to redact url in future, if we actually wind up
     # using passwords in urls here.
     logger.debug("request %s %s by %s", method, url, caller)
@@ -93,7 +92,16 @@ def http_request(url, *, caller, method="get", timeout=10, ignore_status_code: b
     return None
 
 
-async def httpx_request(url, *, caller, method="get", timeout=10, json: bool = True, ignore_status_code: bool = False, **kw):
+async def httpx_request(
+    url: str,
+    *,
+    caller: str,
+    method: str = "get",
+    timeout: float = 10.0,
+    json: bool = True,
+    ignore_status_code: bool = False,
+    **kw,
+) -> Optional[Union[httpx.Response, Dict]]:
     """Wrapper for httpx.request which handles timeouts as non-exceptions,
     and returns only valid results that we actually care about.
     """
@@ -109,18 +117,51 @@ async def httpx_request(url, *, caller, method="get", timeout=10, json: bool = T
             if ignore_status_code:
                 return r.json() if json else r
             logger.warning("Unexpected response status code from %s to %s: %s %r", url, caller, r.status_code, r.text)
-        except httpcore.ConnectError:
+        except httpcore.NetworkError as ex:
             # Unfortunately at least current httpx leaks this
             # exception without wrapping it. Future versions may
             # address this hopefully. I believe httpx.TransportError
             # replaces it in future versions once we upgrade.
-            pass
+            logger.warning("Network error from %s to %s: %r", url, caller, ex)
         except httpx.HTTPError as ex:
             logger.warning("Unexpected response from %s to %s: %r", url, caller, ex)
         return None
 
 
-def exponential_backoff(*, initial, retries=None, multiplier=2, maximum=None, duration=None, event_awaitable_factory=None):
+T = TypeVar("T")
+
+
+class AnyIterable(Iterable[T], AsyncIterable[T], ABC):
+    pass
+
+
+class AsyncSleeper:
+    def __init__(self):
+        self.wakeup_event = asyncio.Event()
+
+    def wakeup(self) -> None:
+        """Wake up another coroutine waiting using `sleep`."""
+        self.wakeup_event.set()
+
+    async def sleep(self, seconds: float) -> None:
+        """Wait for `seconds` unless interrupted by `wakeup`."""
+        coros = [asyncio.sleep(seconds), self.wakeup_event.wait()]
+        tasks = [asyncio.create_task(coro) for coro in coros]
+        _, pending_tasks = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for pending_task in pending_tasks:
+            pending_task.cancel()
+        self.wakeup_event.clear()
+
+
+def exponential_backoff(
+    *,
+    initial: float,
+    retries: Optional[int] = None,
+    multiplier: float = 2,
+    maximum: Optional[float] = None,
+    duration: Optional[float] = None,
+    async_sleeper: Optional[AsyncSleeper] = None,
+) -> AnyIterable[int]:
     """Exponential backoff iterator which works with both 'for' and 'async for'
 
     First attempt is never delayed. The delays are only for retries.
@@ -164,16 +205,14 @@ def exponential_backoff(*, initial, retries=None, multiplier=2, maximum=None, du
             if delay is None:
                 raise StopAsyncIteration
             if delay:
-                coros = [asyncio.sleep(delay)]
-                if event_awaitable_factory is not None:
-                    event_awaitable = event_awaitable_factory()
-                    coros.append(event_awaitable)
-                aws = [asyncio.create_task(coro) for coro in coros]
-                await asyncio.wait(aws, return_when=asyncio.FIRST_COMPLETED)
+                nonlocal async_sleeper
+                if async_sleeper is None:
+                    async_sleeper = AsyncSleeper()
+                await async_sleeper.sleep(delay)
             return self.retry
 
         def __next__(self):
-            assert event_awaitable_factory is None
+            assert async_sleeper is None
             self.retry += 1
             delay = self._delay
             if delay is None:
@@ -182,7 +221,7 @@ def exponential_backoff(*, initial, retries=None, multiplier=2, maximum=None, du
                 time.sleep(delay)
             return self.retry
 
-    class _Iterable:
+    class _Iterable(AnyIterable[int]):
         def __aiter__(self):
             return _Iter()
 

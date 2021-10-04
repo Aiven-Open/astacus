@@ -58,7 +58,7 @@ def unlock(locker: str, state: NodeState = Depends(node_state)):
 def snapshot(req: ipc.SnapshotRequest, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
-    return SnapshotOp(n=n).start(req=req)
+    return SnapshotOp(n=n, op_id=n.allocate_op_id(), stats=n.stats).start(req=req)
 
 
 @router.get("/snapshot/{op_id}")
@@ -71,7 +71,7 @@ def snapshot_result(*, op_id: int, n: Node = Depends()):
 def upload(req: ipc.SnapshotUploadRequest, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
-    return UploadOp(n=n).start(req=req)
+    return UploadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats).start(req=req)
 
 
 @router.get("/upload/{op_id}")
@@ -84,7 +84,7 @@ def upload_result(*, op_id: int, n: Node = Depends()):
 def download(req: ipc.SnapshotDownloadRequest, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
-    return DownloadOp(n=n).start(req=req)
+    return DownloadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats).start(req=req)
 
 
 @router.get("/download/{op_id}")
@@ -97,7 +97,7 @@ def download_result(*, op_id: int, n: Node = Depends()):
 def clear(req: ipc.SnapshotClearRequest, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
-    return ClearOp(n=n).start(req=req)
+    return ClearOp(n=n, op_id=n.allocate_op_id(), stats=n.stats).start(req=req)
 
 
 @router.get("/clear/{op_id}")

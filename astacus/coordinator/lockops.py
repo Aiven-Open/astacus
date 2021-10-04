@@ -8,23 +8,26 @@ may or may not want them for debug purposes, but this is mostly all
 about API design testing)
 
 """
-
+from .cluster import LockResult
 from .coordinator import Coordinator, CoordinatorOp
+from astacus.common.statsd import StatsClient
 
 
 class LockOps(CoordinatorOp):
-    def __init__(self, *, c: Coordinator, locker: str, ttl: int = 60):
-        super().__init__(c=c)
+    def __init__(self, *, c: Coordinator, op_id: int, stats: StatsClient, locker: str, ttl: int = 60):
+        super().__init__(c=c, op_id=op_id, stats=stats)
         self.locker = locker
         self.ttl = ttl
 
-    async def lock(self):
-        result = await self.request_lock_from_nodes(locker=self.locker, ttl=self.ttl)
-        if not result:
+    async def lock(self) -> None:
+        cluster = self.get_cluster()
+        result = await cluster.request_lock(locker=self.locker, ttl=self.ttl)
+        if result is not LockResult.ok:
             self.set_status_fail()
-            await self.unlock()
+            await cluster.request_unlock(locker=self.locker)
 
-    async def unlock(self):
-        result = await self.request_unlock_from_nodes(locker=self.locker)
-        if not result:
+    async def unlock(self) -> None:
+        cluster = self.get_cluster()
+        result = cluster.request_unlock(locker=self.locker)
+        if result is not LockResult.ok:
             self.set_status_fail()

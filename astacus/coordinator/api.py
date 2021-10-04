@@ -4,10 +4,9 @@ See LICENSE for details
 """
 
 from .cleanup import CleanupOp
-from .coordinator import Coordinator
+from .coordinator import BackupOp, Coordinator, RestoreOp
 from .list import list_backups
 from .lockops import LockOps
-from .plugins import base, get_plugin_backup_class, get_plugin_restore_class
 from .state import CachedListResponse
 from astacus.common import ipc
 from astacus.common.op import Op
@@ -36,7 +35,7 @@ class OpName(str, Enum):
 def op_status(*, op_name: OpName, op_id: int, c: Coordinator = Depends()):
     op, op_info = c.get_op_and_op_info(op_id=op_id, op_name=op_name)
     result = {"state": op_info.op_status}
-    if isinstance(op, (base.RestoreOpBase, base.BackupOpBase)):
+    if isinstance(op, (BackupOp, RestoreOp)):
         result["progress"] = op.progress
     return result
 
@@ -53,29 +52,29 @@ def root():
 
 @router.post("/lock")
 async def lock(*, locker: str, ttl: int = 60, c: Coordinator = Depends()):
-    op = LockOps(c=c, ttl=ttl, locker=locker)
+    op = LockOps(c=c, op_id=c.allocate_op_id(), stats=c.stats, ttl=ttl, locker=locker)
     result = c.start_op(op_name=OpName.lock, op=op, fun=op.lock)
-    return LockStartResult(unlock_url=urljoin(str(c.request.url), f"../unlock?locker={locker}"), **result.dict())
+    return LockStartResult(unlock_url=urljoin(str(c.request_url), f"../unlock?locker={locker}"), **result.dict())
 
 
 @router.post("/unlock")
 def unlock(*, locker: str, c: Coordinator = Depends()):
-    op = LockOps(c=c, locker=locker)
+    op = LockOps(c=c, op_id=c.allocate_op_id(), stats=c.stats, locker=locker)
     return c.start_op(op_name=OpName.unlock, op=op, fun=op.unlock)
 
 
 @router.post("/backup")
 async def backup(*, c: Coordinator = Depends()):
-    op_class = get_plugin_backup_class(c.config.plugin)
-    op = op_class(c=c)
-    return await c.start_op_async(op_name=OpName.backup, op=op, fun=op.run)
+    op = BackupOp(c=c, op_id=c.allocate_op_id(), stats=c.stats)
+    runner = await op.acquire_cluster_lock()
+    return c.start_op(op_name=OpName.backup, op=op, fun=runner)
 
 
 @router.post("/restore")
 async def restore(*, req: ipc.RestoreRequest = ipc.RestoreRequest(), c: Coordinator = Depends()):
-    op_class = get_plugin_restore_class(c.config.plugin)
-    op = op_class(c=c, req=req)
-    return await c.start_op_async(op_name=OpName.restore, op=op, fun=op.run)
+    op = RestoreOp(c=c, op_id=c.allocate_op_id(), stats=c.stats, req=req)
+    runner = await op.acquire_cluster_lock()
+    return c.start_op(op_name=OpName.restore, op=op, fun=runner)
 
 
 @router.get("/list")
@@ -98,8 +97,9 @@ def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordinator = 
 
 @router.post("/cleanup")
 async def cleanup(*, req: ipc.CleanupRequest = ipc.CleanupRequest(), c: Coordinator = Depends()):
-    op = CleanupOp(c=c, req=req)
-    return await c.start_op_async(op_name=OpName.cleanup, op=op, fun=op.run)
+    op = CleanupOp(c=c, op_id=c.allocate_op_id(), stats=c.stats, req=req)
+    runner = await op.acquire_cluster_lock()
+    return c.start_op(op_name=OpName.cleanup, op=op, fun=runner)
 
 
 @router.put("/{op_name}/{op_id}/sub-result")
@@ -109,6 +109,6 @@ async def op_sub_result(*, op_name: OpName, op_id: int, c: Coordinator = Depends
     # of spoofable endpoint though, so just triggering subsequent
     # result fetching faster. In case of terminal results, this
     # results only in one extra fetch per node, so not big deal.
-    if not op.subresult_received_event:
+    if not op.subresult_sleeper:
         return
-    op.subresult_received_event.set()
+    op.subresult_sleeper.wakeup()

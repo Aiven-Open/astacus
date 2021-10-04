@@ -6,23 +6,26 @@ Database cleanup operation
 
 """
 
-from .coordinator import Coordinator, CoordinatorOpWithClusterLock
 from astacus.common import ipc, magic, utils
+from astacus.common.statsd import StatsClient
+from astacus.coordinator.cluster import Cluster
+from astacus.coordinator.coordinator import Coordinator, LockedCoordinatorOp
+from astacus.coordinator.manifest import download_backup_manifest
 
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-class CleanupOp(CoordinatorOpWithClusterLock):
-    def __init__(self, *, c: Coordinator, req: ipc.CleanupRequest):
-        super().__init__(c=c)
+class CleanupOp(LockedCoordinatorOp):
+    def __init__(self, *, c: Coordinator, op_id: int, stats: StatsClient, req: ipc.CleanupRequest):
+        super().__init__(c=c, op_id=op_id, stats=stats)
         self.req = req
+        self.retention = c.config.retention
+        self.context = c.get_operation_context(requested_storage=req.storage)
 
-    async def run_with_lock(self):
-        if self.req.storage:
-            self.set_storage_name(self.req.storage)
-        retention = self.config.retention.copy()
+    async def run_with_lock(self, cluster: Cluster) -> None:
+        retention = self.retention.copy()
         if self.req.retention is not None:
             # This returns only non-defaults -> non-Nones
             for k, v in self.req.retention.dict().items():
@@ -33,11 +36,11 @@ class CleanupOp(CoordinatorOpWithClusterLock):
         await self.delete_backups(all_backups.difference(kept_backups))
 
     async def _list_backups(self):
-        return set(b for b in await self.json_storage.list_jsons() if b.startswith(magic.JSON_BACKUP_PREFIX))
+        return set(b for b in await self.context.json_storage.list_jsons() if b.startswith(magic.JSON_BACKUP_PREFIX))
 
     async def _download_backup_manifests(self, backups):
         # Due to rate limiting, it might be better to not do this in parallel
-        return [await self.download_backup_manifest(backup) for backup in backups]
+        return [await download_backup_manifest(self.context.json_storage, backup) for backup in backups]
 
     async def delete_backups(self, backups):
         if not backups:
@@ -45,8 +48,7 @@ class CleanupOp(CoordinatorOpWithClusterLock):
             return
         for backup in backups:
             logger.info("deleting backup %r", backup)
-            await self.json_storage.delete_json(backup)
-            self.state.cached_list_response = None
+            await self.context.json_storage.delete_json(backup)
         await self.delete_dangling_hexdigests()
 
     async def delete_dangling_hexdigests(self):
@@ -60,14 +62,14 @@ class CleanupOp(CoordinatorOpWithClusterLock):
                 assert result.hashes is not None
                 kept_hexdigests = kept_hexdigests | set(h.hexdigest for h in result.hashes if h.hexdigest)
 
-        all_hexdigests = await self.hexdigest_storage.list_hexdigests()
+        all_hexdigests = await self.context.hexdigest_storage.list_hexdigests()
         extra_hexdigests = set(all_hexdigests).difference(kept_hexdigests)
         if not extra_hexdigests:
             return
         logger.debug("deleting %d hexdigests from object storage", len(extra_hexdigests))
         for i, hexdigest in enumerate(extra_hexdigests, 1):
             # Due to rate limiting, it might be better to not do this in parallel
-            await self.hexdigest_storage.delete_hexdigest(hexdigest)
+            await self.context.hexdigest_storage.delete_hexdigest(hexdigest)
             if i % 100 == 0:
                 self.stats.gauge("astacus_cleanup_hexdigest_progress", i)
                 self.stats.gauge("astacus_cleanup_hexdigest_progress_percent", 100.0 * i / len(extra_hexdigests))

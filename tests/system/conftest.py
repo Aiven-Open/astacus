@@ -2,12 +2,12 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
-
 from astacus.common.utils import AstacusModel, exponential_backoff
 from contextlib import asynccontextmanager
 from pathlib import Path
+from starlette.datastructures import URL
 from tests.utils import create_rohmu_config
-from typing import Optional
+from typing import Optional, Union
 
 import asyncio
 import httpx
@@ -39,11 +39,11 @@ ASTACUS_NODES = [
 
 
 @asynccontextmanager
-async def background_process(program, *args, **kwargs):
+async def background_process(program: Union[str, Path], *args: Union[str, Path], **kwargs) -> asyncio.subprocess.Process:
     # pylint: disable=bare-except
     proc = await asyncio.create_subprocess_exec(program, *args, **kwargs)
     try:
-        yield
+        yield proc
     finally:
         try:
             await asyncio.wait_for(proc.wait(), 0.1)
@@ -103,9 +103,9 @@ def create_astacus_config(*, tmpdir, node):
     return a_conf_path
 
 
-async def _wait_url_up(url):
+async def wait_url_up(url: Union[URL, str]) -> None:
     async with httpx.AsyncClient() as client:
-        async for _ in exponential_backoff(initial=0.1, multiplier=1.3, retries=10):
+        async for _ in exponential_backoff(initial=0.1, multiplier=1.3, retries=20):
             try:
                 r = await client.get(url)
                 if not r.is_error:
@@ -136,7 +136,7 @@ async def _astacus(*, tmpdir, rootdir, index):
     cmd = [sys.executable, "-m", "astacus.main", "server", "-c", str(a_conf_path)]
 
     async with background_process(*cmd, env={"PYTHONPATH": astacus_source_root}):
-        await _wait_url_up(node.url)
+        await wait_url_up(node.url)
         yield node
 
 

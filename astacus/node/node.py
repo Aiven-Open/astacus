@@ -8,8 +8,11 @@ from .config import node_config, NodeConfig
 from .snapshotter import Snapshotter
 from .state import node_state, NodeState
 from astacus.common import ipc, magic, op, statsd, utils
+from astacus.common.dependencies import get_request_app_state, get_request_url
 from astacus.common.rohmustorage import RohmuStorage
-from fastapi import BackgroundTasks, Depends, Request
+from astacus.common.statsd import StatsClient
+from fastapi import BackgroundTasks, Depends
+from starlette.datastructures import URL
 from typing import Optional
 
 import logging
@@ -21,8 +24,8 @@ SNAPSHOTTER_KEY = "node_snapshotter"
 class NodeOp(op.Op):
     req: Optional[ipc.NodeRequest] = None  # Provided by subclass
 
-    def __init__(self, *, n: "Node"):
-        super().__init__(info=n.state.op_info)
+    def __init__(self, *, n: "Node", op_id: int, stats: StatsClient):
+        super().__init__(info=n.state.op_info, op_id=op_id, stats=stats)
         self.start_op = n.start_op
         self.config = n.config
         self._still_locked_callback = n.state.still_locked_callback
@@ -76,21 +79,29 @@ class NodeOp(op.Op):
         return True
 
 
+def node_stats(config: NodeConfig = Depends(node_config)) -> statsd.StatsClient:
+    return statsd.StatsClient(config=config.statsd)
+
+
 class Node(op.OpMixin):
+    state: NodeState
     """ Convenience dependency which contains sub-dependencies most API endpoints need """
     def __init__(
         self,
         *,
-        request: Request,
+        app_state: object = Depends(get_request_app_state),
+        request_url: URL = Depends(get_request_url),
         background_tasks: BackgroundTasks,
         config: NodeConfig = Depends(node_config),
-        state: NodeState = Depends(node_state)
+        state: NodeState = Depends(node_state),
+        stats: statsd.StatsClient = Depends(node_stats)
     ):
-        self.request = request
+        self.app_state = app_state
+        self.request_url = request_url
         self.background_tasks = background_tasks
         self.config = config
         self.state = state
-        self.stats = statsd.StatsClient(config=config.statsd)
+        self.stats = stats
 
     def get_or_create_snapshotter(self, root_globs):
         root_link = self.config.root_link
@@ -101,7 +112,7 @@ class Node(op.OpMixin):
         def _create_snapshotter():
             return Snapshotter(src=self.config.root, dst=root_link, globs=root_globs, parallel=self.config.parallel.hashes)
 
-        return utils.get_or_create_state(app=self.request.app, key=SNAPSHOTTER_KEY, factory=_create_snapshotter)
+        return utils.get_or_create_state(state=self.app_state, key=SNAPSHOTTER_KEY, factory=_create_snapshotter)
 
     def get_snapshotter(self):
-        return getattr(self.request.app.state, SNAPSHOTTER_KEY)
+        return getattr(self.app_state, SNAPSHOTTER_KEY)
