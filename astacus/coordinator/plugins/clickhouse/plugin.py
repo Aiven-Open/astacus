@@ -7,8 +7,7 @@ from .parts import get_frozen_parts_pattern
 from .steps import (
     AttachMergeTreePartsStep, ClickHouseManifestStep, CreateClickHouseManifestStep, DistributeReplicatedPartsStep,
     FreezeTablesStep, MoveFrozenPartsStep, RemoveFrozenTablesStep, RestoreAccessEntitiesStep, RestoreReplicatedDatabasesStep,
-    RetrieveAccessEntitiesStep, RetrieveReplicatedDatabasesStep, RetrieveTablesStep, SyncReplicasStep, UnfreezeTablesStep,
-    ValidateConfigStep
+    RetrieveAccessEntitiesStep, RetrieveDatabasesAndTablesStep, SyncReplicasStep, UnfreezeTablesStep, ValidateConfigStep
 )
 from astacus.common.ipc import Plugin, RestoreRequest
 from astacus.coordinator.plugins.base import (
@@ -38,8 +37,7 @@ class ClickHousePlugin(CoordinatorPlugin):
                 zookeeper_client=zookeeper_client,
                 access_entities_path=self.replicated_access_zookeeper_path,
             ),
-            RetrieveReplicatedDatabasesStep(clients=clickhouse_clients),
-            RetrieveTablesStep(clients=clickhouse_clients),
+            RetrieveDatabasesAndTablesStep(clients=clickhouse_clients),
             # Then freeze all tables
             FreezeTablesStep(clients=clickhouse_clients, freeze_name=self.freeze_name),
             # Then snapshot and backup all frozen table parts

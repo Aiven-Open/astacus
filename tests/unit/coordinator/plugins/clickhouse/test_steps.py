@@ -15,7 +15,7 @@ from astacus.coordinator.plugins.clickhouse.manifest import AccessEntity, ClickH
 from astacus.coordinator.plugins.clickhouse.steps import (
     AttachMergeTreePartsStep, ClickHouseManifestStep, CreateClickHouseManifestStep, DistributeReplicatedPartsStep,
     FreezeTablesStep, RemoveFrozenTablesStep, RestoreAccessEntitiesStep, RestoreReplicatedDatabasesStep,
-    RetrieveAccessEntitiesStep, RetrieveReplicatedDatabasesStep, RetrieveTablesStep, SyncReplicasStep, UnfreezeTablesStep,
+    RetrieveAccessEntitiesStep, RetrieveDatabasesAndTablesStep, SyncReplicasStep, TABLES_LIST_QUERY, UnfreezeTablesStep,
     ValidateConfigStep
 )
 from astacus.coordinator.plugins.clickhouse.zookeeper import FakeZooKeeperClient, ZooKeeperClient
@@ -181,15 +181,10 @@ async def test_retrieve_access_entities_fails_from_concurrent_updates() -> None:
 async def test_retrieve_tables() -> None:
     clients = [StubClickHouseClient(), StubClickHouseClient()]
     clients[0].set_response(
-        "SELECT system.databases.name,"
-        "system.tables.name,system.tables.engine,system.tables.uuid,system.tables.create_table_query,"
-        "arrayZip(system.tables.dependencies_database,system.tables.dependencies_table) "
-        "FROM system.tables LEFT JOIN system.databases ON system.tables.database == system.databases.name "
-        "WHERE system.databases.name IN ('db-one','db-two') "
-        "AND system.databases.engine == 'Replicated' "
-        "AND NOT system.tables.is_temporary "
-        "ORDER BY (system.databases.name,system.tables.name) "
-        "SETTINGS show_table_uuid_in_table_create_query_if_not_nil=true", [
+        TABLES_LIST_QUERY,
+        [
+            # This special row is what we get for a database without tables
+            ["db-empty", "", "", "00000000-0000-0000-0000-000000000000", "", []],
             [
                 "db-one",
                 "table-uno",
@@ -216,19 +211,33 @@ async def test_retrieve_tables() -> None:
             ],
         ]
     )
-    step = RetrieveTablesStep(clients=clients)
+    step = RetrieveDatabasesAndTablesStep(clients=clients)
     context = StepsContext()
-    context.set_result(RetrieveReplicatedDatabasesStep, SAMPLE_DATABASES)
-    assert await step.run_step(Cluster(nodes=[]), context) == SAMPLE_TABLES
+    databases, tables = await step.run_step(Cluster(nodes=[]), context)
+    assert databases == [ReplicatedDatabase(name="db-empty")] + SAMPLE_DATABASES
+    assert tables == SAMPLE_TABLES
 
 
 @pytest.mark.asyncio
-async def test_retrieve_tables_without_databases() -> None:
+async def test_retrieve_tables_without_any_database_or_table() -> None:
     clients = [StubClickHouseClient(), StubClickHouseClient()]
-    step = RetrieveTablesStep(clients=clients)
+    clients[0].set_response(TABLES_LIST_QUERY, [])
+    step = RetrieveDatabasesAndTablesStep(clients=clients)
     context = StepsContext()
-    context.set_result(RetrieveReplicatedDatabasesStep, [])
-    assert await step.run_step(Cluster(nodes=[]), context) == []
+    assert await step.run_step(Cluster(nodes=[]), context) == ([], [])
+
+
+@pytest.mark.asyncio
+async def test_retrieve_tables_without_any_table() -> None:
+    clients = [StubClickHouseClient(), StubClickHouseClient()]
+    clients[0].set_response(TABLES_LIST_QUERY, [
+        ["db-empty", "", "", "00000000-0000-0000-0000-000000000000", "", []],
+    ])
+    step = RetrieveDatabasesAndTablesStep(clients=clients)
+    context = StepsContext()
+    databases, tables = await step.run_step(Cluster(nodes=[]), context)
+    assert databases == [ReplicatedDatabase(name="db-empty")]
+    assert tables == []
 
 
 @pytest.mark.asyncio
@@ -236,8 +245,7 @@ async def test_create_clickhouse_manifest() -> None:
     step = CreateClickHouseManifestStep()
     context = StepsContext()
     context.set_result(RetrieveAccessEntitiesStep, SAMPLE_ENTITIES)
-    context.set_result(RetrieveReplicatedDatabasesStep, SAMPLE_DATABASES)
-    context.set_result(RetrieveTablesStep, SAMPLE_TABLES)
+    context.set_result(RetrieveDatabasesAndTablesStep, (SAMPLE_DATABASES, SAMPLE_TABLES))
     assert await step.run_step(Cluster(nodes=[]), context) == SAMPLE_MANIFEST
 
 
@@ -281,7 +289,7 @@ async def _test_freeze_unfreezes_all_mergetree_tables_listed_in_manifest(
 
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
-    context.set_result(RetrieveTablesStep, SAMPLE_TABLES)
+    context.set_result(RetrieveDatabasesAndTablesStep, (SAMPLE_DATABASES, SAMPLE_TABLES))
     await step.run_step(cluster, context)
     assert first_client.mock_calls == [
         mock.call.execute(f"ALTER TABLE `db-one`.`table-uno` {operation} WITH NAME 'Äs`t:/.././@c\\'_\\'s'"),
@@ -350,7 +358,7 @@ async def test_distribute_parts_of_replicated_tables() -> None:
             ),
         ]
     )
-    context.set_result(RetrieveTablesStep, SAMPLE_TABLES)
+    context.set_result(RetrieveDatabasesAndTablesStep, (SAMPLE_DATABASES, SAMPLE_TABLES))
     await step.run_step(Cluster(nodes=[]), context)
     snapshot_results = context.get_result(SnapshotStep)
     # On the ReplicatedMergeTree table (uuid ending in 0001), each server has only half the parts now

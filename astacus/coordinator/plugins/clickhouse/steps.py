@@ -14,7 +14,7 @@ from astacus.common.exceptions import TransientException
 from astacus.coordinator.cluster import Cluster, WaitResultError
 from astacus.coordinator.plugins.base import BackupManifestStep, SnapshotStep, Step, StepFailedError, StepsContext
 from pathlib import Path
-from typing import cast, List, Set, Tuple
+from typing import cast, Dict, List, Set, Tuple
 
 import asyncio
 import dataclasses
@@ -22,6 +22,20 @@ import logging
 import uuid
 
 logger = logging.getLogger(__name__)
+
+DatabasesAndTables = Tuple[List[ReplicatedDatabase], List[Table]]
+
+TABLES_LIST_QUERY = """SELECT
+    system.databases.name,
+    system.tables.name, system.tables.engine, system.tables.uuid, system.tables.create_table_query,
+    arrayZip(system.tables.dependencies_database, system.tables.dependencies_table)
+FROM system.databases LEFT JOIN system.tables ON system.tables.database == system.databases.name
+WHERE
+    system.databases.engine == 'Replicated'
+    AND NOT system.tables.is_temporary
+ORDER BY (system.databases.name,system.tables.name)
+SETTINGS show_table_uuid_in_table_create_query_if_not_nil=true
+"""
 
 
 @dataclasses.dataclass
@@ -86,36 +100,16 @@ class RetrieveAccessEntitiesStep(Step[List[AccessEntity]]):
 
 
 @dataclasses.dataclass
-class RetrieveReplicatedDatabasesStep(Step[List[ReplicatedDatabase]]):
+class RetrieveDatabasesAndTablesStep(Step[DatabasesAndTables]):
     """
-    Retrieves the list of all databases that use the replicated database engine.
+    Retrieves the list of all databases that use the replicated database engine and their tables.
 
-    This assumes that all servers of the cluster have created the same replicated
-    databases (with the same database name pointing on the same ZooKeeper
-    node), and relies on that to query only the first server of the cluster.
+    The table names, uuids and schemas of all tables are collected but the databases
+    uuids are not collected.
 
     The shard and replica options of the replicated database engine are also not
     collected, the restore operation uses the `{shard}` and `{replica}` macro and assumes
     that each server of the cluster has values for them.
-    """
-    clients: List[ClickHouseClient]
-
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> List[ReplicatedDatabase]:
-        # To fix the issue of tables in Replicated database depending on table in other engines
-        # (and restoring the original uuid of each database), we can download all the dbname.sql
-        # files inside the `metadata/` directory. But we need a way to download from an Astacus
-        # Node to an Astacus Coordinator (or improve the system.databases table).
-        return [
-            ReplicatedDatabase(name=database_name) for database_name, in await
-            self.clients[0].execute("SELECT name FROM system.databases WHERE engine == 'Replicated' ORDER BY (name) ")
-        ]
-
-
-@dataclasses.dataclass
-class RetrieveTablesStep(Step[List[Table]]):
-    """
-    Retrieves the name, uuid and schema of all tables inside the previously
-    collected Replicated databases.
 
     This assumes that all servers of the cluster have created the same replicated
     databases (with the same database name pointing on the same ZooKeeper
@@ -123,36 +117,35 @@ class RetrieveTablesStep(Step[List[Table]]):
     """
     clients: List[ClickHouseClient]
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> List[Table]:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> DatabasesAndTables:
         clickhouse_client = self.clients[0]
-        databases = context.get_result(RetrieveReplicatedDatabasesStep)
-        if not databases:
-            # The following query won't work if there are no database
-            return []
-        database_names = ",".join([escape_sql_string(database.name) for database in databases])
         # We fetch everything in a single query, we don't have to care about consistency within that step.
         # However, the schema could be modified between now and the freeze step.
-        return [
-            Table(
-                database=db_name,
-                name=table_name,
-                engine=table_engine,
-                uuid=uuid.UUID(cast(str, table_uuid)),
-                create_query=table_query,
-                dependencies=dependencies
-            )
-            for db_name, table_name, table_engine, table_uuid, table_query, dependencies in await clickhouse_client.execute(
-                "SELECT system.databases.name,"
-                "system.tables.name,system.tables.engine,system.tables.uuid,system.tables.create_table_query,"
-                "arrayZip(system.tables.dependencies_database,system.tables.dependencies_table) "
-                "FROM system.tables LEFT JOIN system.databases ON system.tables.database == system.databases.name "
-                f"WHERE system.databases.name IN ({database_names}) "
-                "AND system.databases.engine == 'Replicated' "
-                "AND NOT system.tables.is_temporary "
-                "ORDER BY (system.databases.name,system.tables.name) "
-                "SETTINGS show_table_uuid_in_table_create_query_if_not_nil=true"
-            )
-        ]
+        databases: Dict[str, ReplicatedDatabase] = {}
+        tables: List[Table] = []
+        rows = await clickhouse_client.execute(TABLES_LIST_QUERY)
+        for db_name, table_name, table_engine, table_uuid, table_query, dependencies in rows:
+            if db_name not in databases:
+                assert isinstance(db_name, str)
+                databases[db_name] = ReplicatedDatabase(name=db_name)
+            # Thanks to the LEFT JOIN, an empty database without table will still return a row.
+            # Unlike standard SQL, the table properties will have a default value instead of NULL,
+            # that's why we skip tables with an empty name.
+            # We need these rows and the LEFT JOIN that makes them: we want to list all
+            # Replicated databases, including those without any table.
+            if table_name != "":
+                tables.append(
+                    Table(
+                        database=db_name,
+                        name=table_name,
+                        engine=table_engine,
+                        uuid=uuid.UUID(cast(str, table_uuid)),
+                        create_query=table_query,
+                        dependencies=dependencies,
+                    )
+                )
+        databases_list = sorted(databases.values(), key=lambda d: d.name)
+        return databases_list, tables
 
 
 @dataclasses.dataclass
@@ -161,10 +154,11 @@ class CreateClickHouseManifestStep(Step[ClickHouseManifest]):
     Collects access entities, databases and tables from previous steps into a `ClickHouseManifest`.
     """
     async def run_step(self, cluster: Cluster, context: StepsContext) -> ClickHouseManifest:
+        databases, tables = context.get_result(RetrieveDatabasesAndTablesStep)
         return ClickHouseManifest(
             access_entities=context.get_result(RetrieveAccessEntitiesStep),
-            replicated_databases=context.get_result(RetrieveReplicatedDatabasesStep),
-            tables=context.get_result(RetrieveTablesStep),
+            replicated_databases=databases,
+            tables=tables,
         )
 
 
@@ -198,7 +192,7 @@ class FreezeUnfreezeTablesStepBase(Step[None]):
         raise NotImplementedError
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
-        tables = context.get_result(RetrieveTablesStep)
+        _, tables = context.get_result(RetrieveDatabasesAndTablesStep)
         for table in tables:
             if table.requires_freezing:
                 # We only run it on the first client because the `ALTER TABLE (UN)FREEZE` is replicated
@@ -310,7 +304,7 @@ class DistributeReplicatedPartsStep(Step[None]):
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         snapshot_results = context.get_result(SnapshotStep)
         snapshot_files = [snapshot_result.state.files for snapshot_result in snapshot_results]
-        tables = context.get_result(RetrieveTablesStep)
+        _, tables = context.get_result(RetrieveDatabasesAndTablesStep)
         table_uuids = {table.uuid for table in tables if table.is_replicated}
         parts, server_files = group_files_into_parts(snapshot_files, table_uuids)
         check_parts_replication(parts)
