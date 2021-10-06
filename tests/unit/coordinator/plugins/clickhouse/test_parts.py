@@ -8,7 +8,7 @@ from astacus.coordinator.plugins.clickhouse.parts import (
     group_files_into_parts, Part, PartFile, PartKey
 )
 from pathlib import Path
-from typing import List
+from typing import Dict, List
 from uuid import UUID
 
 import copy
@@ -92,7 +92,7 @@ def test_group_files_into_parts_ignores_unknown_files() -> None:
 )
 def test_add_file_to_parts_ignores_unknown_files(file_path: Path) -> None:
     snapshot_file = SnapshotFile(relative_path=file_path, file_size=100, mtime_ns=0)
-    parts = {}
+    parts: Dict[PartKey, Part] = {}
     added = add_file_to_parts(snapshot_file=snapshot_file, server_index=0, table_uuids={T1_UUID}, parts=parts)
     assert added is False
     assert len(parts) == 0

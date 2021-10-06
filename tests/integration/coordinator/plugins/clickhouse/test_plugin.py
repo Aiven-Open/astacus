@@ -10,7 +10,7 @@ from pathlib import Path
 from tests.integration.coordinator.plugins.clickhouse.conftest import (
     create_astacus_cluster, create_clickhouse_cluster, create_zookeeper, get_clickhouse_client, Ports, run_astacus_command
 )
-from typing import AsyncIterable, List
+from typing import AsyncIterable, AsyncIterator, List, Sequence
 from unittest import mock
 
 import pytest
@@ -32,8 +32,9 @@ def get_restore_steps_names() -> List[str]:
 
 
 @pytest.fixture(scope="module", name="restorable_cluster")
-async def fixture_restorable_cluster(ports: Ports) -> Path:
-    with tempfile.TemporaryDirectory(prefix="storage_") as storage_path:
+async def fixture_restorable_cluster(ports: Ports) -> AsyncIterator[Path]:
+    with tempfile.TemporaryDirectory(prefix="storage_") as storage_path_str:
+        storage_path = Path(storage_path_str)
         async with create_zookeeper(ports) as zookeeper:
             async with create_clickhouse_cluster(zookeeper, ports) as clickhouse_cluster:
                 async with create_astacus_cluster(storage_path, zookeeper, clickhouse_cluster, ports) as astacus_cluster:
@@ -46,7 +47,8 @@ async def fixture_restorable_cluster(ports: Ports) -> Path:
 
 
 @pytest.fixture(scope="module", name="restored_cluster", params=[*get_restore_steps_names(), None])
-async def fixture_restored_cluster(restorable_cluster: Path, ports: Ports, request) -> AsyncIterable[List[ClickHouseClient]]:
+async def fixture_restored_cluster(restorable_cluster: Path, ports: Ports,
+                                   request) -> AsyncIterable[Sequence[ClickHouseClient]]:
     stop_after_step: str = request.param
     async with create_zookeeper(ports) as zookeeper:
         async with create_clickhouse_cluster(zookeeper, ports) as clickhouse_cluster:

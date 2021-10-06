@@ -18,7 +18,7 @@ from astacus.node.config import NodeConfig
 from pathlib import Path
 from tests.system.conftest import background_process, wait_url_up
 from tests.utils import CONSTANT_TEST_RSA_PRIVATE_KEY, CONSTANT_TEST_RSA_PUBLIC_KEY
-from typing import List, Optional, Union
+from typing import AsyncIterator, Awaitable, Dict, Iterator, List, Optional, Union
 
 import argparse
 import asyncio
@@ -52,7 +52,7 @@ USER_CONFIG = """
 
 
 @pytest.fixture(scope="module", name="event_loop")
-def fixture_event_loop() -> asyncio.AbstractEventLoop:
+def fixture_event_loop() -> Iterator[asyncio.AbstractEventLoop]:
     # This is the same as the original `event_loop` fixture from `pytest_asyncio`
     # but with a module scope, re-declaring this fixture is their suggested way
     # of locally increasing the scope of this fixture.
@@ -92,7 +92,13 @@ def fixture_ports() -> Ports:
 
 
 @pytest.fixture(scope="module", name="clickhouse")
-async def fixture_clickhouse(ports: Ports) -> Service:
+async def fixture_clickhouse(ports: Ports) -> AsyncIterator[Service]:
+    async with create_clickhouse_service(ports) as service:
+        yield service
+
+
+@contextlib.asynccontextmanager
+async def create_clickhouse_service(ports: Ports) -> AsyncIterator[Service]:
     command = await get_clickhouse_command()
     if command is None:
         pytest.skip("clickhouse installation not found")
@@ -105,13 +111,13 @@ async def fixture_clickhouse(ports: Ports) -> Service:
 
 
 @pytest.fixture(scope="module", name="zookeeper")
-async def fixture_zookeeper(ports: Ports) -> Service:
+async def fixture_zookeeper(ports: Ports) -> AsyncIterator[Service]:
     async with create_zookeeper(ports) as zookeeper:
         yield zookeeper
 
 
 @contextlib.asynccontextmanager
-async def create_zookeeper(ports: Ports) -> Service:
+async def create_zookeeper(ports: Ports) -> AsyncIterator[Service]:
     java_path = await get_command_path("java")
     if java_path is None:
         pytest.skip("java installation not found")
@@ -138,7 +144,9 @@ log4j.appender.default.layout.ConversionPattern=[%-5p] %m%n
 
 
 @contextlib.asynccontextmanager
-async def create_clickhouse_cluster(zookeeper: Service, ports: Ports, cluster_size: int = 2) -> ServiceCluster:
+async def create_clickhouse_cluster(zookeeper: Service,
+                                    ports: Ports,
+                                    cluster_size: int = 2) -> AsyncIterator[ServiceCluster]:
     command = await get_clickhouse_command()
     if command is None:
         pytest.skip("clickhouse installation not found")
@@ -168,12 +176,11 @@ async def create_clickhouse_cluster(zookeeper: Service, ports: Ports, cluster_si
 
 
 @contextlib.asynccontextmanager
-async def create_astacus_cluster(
-    storage_path: Path, zookeeper: Service, clickhouse_cluster: ServiceCluster, ports: Ports
-) -> ServiceCluster:
+async def create_astacus_cluster(storage_path: Path, zookeeper: Service, clickhouse_cluster: ServiceCluster,
+                                 ports: Ports) -> AsyncIterator[ServiceCluster]:
     configs = create_astacus_configs(zookeeper, clickhouse_cluster, ports, Path(storage_path))
     async with contextlib.AsyncExitStack() as stack:
-        astacus_services_coro = [stack.enter_async_context(_astacus(config=config)) for config in configs]
+        astacus_services_coro: List[Awaitable] = [stack.enter_async_context(_astacus(config=config)) for config in configs]
         astacus_services = list(await asyncio.gather(*astacus_services_coro))
         yield ServiceCluster(services=astacus_services)
 
@@ -268,16 +275,20 @@ async def get_command_path(name: str) -> Optional[Path]:
 
 
 @contextlib.asynccontextmanager
-async def run_process_and_wait_for_pattern(
-    *, args: List[Union[str, Path]], cwd: Path, pattern: str, timeout: float = 10.0
-) -> None:
+async def run_process_and_wait_for_pattern(*,
+                                           args: List[Union[str, Path]],
+                                           cwd: Path,
+                                           pattern: str,
+                                           timeout: float = 10.0) -> AsyncIterator[asyncio.subprocess.Process]:
     # This stringification is a workaround for a bug in pydev (pydev_monkey.py:111)
     str_args = [str(arg) for arg in args]
-    process = await asyncio.create_subprocess_exec(*str_args, cwd=cwd, env={}, stderr=asyncio.subprocess.PIPE)
+    env: Dict[str, str] = {}
+    process = await asyncio.create_subprocess_exec(*str_args, cwd=cwd, env=env, stderr=asyncio.subprocess.PIPE)
     try:
         pattern_found = asyncio.Event()
 
         async def read_logs() -> None:
+            assert process.stderr is not None
             while process.returncode is None and not process.stderr.at_eof():
                 line = await process.stderr.readline()
                 decoded_line = line.rstrip(b"\n").decode(encoding="utf-8", errors="replace")
@@ -302,18 +313,21 @@ async def run_process_and_wait_for_pattern(
                 pass
         await process.wait()
         # https://bugs.python.org/issue41320
-        process.stderr._transport.close()  # pylint: disable=protected-access
+        process.stderr._transport.close()  # type: ignore[union-attr] # pylint: disable=protected-access
 
 
 @contextlib.asynccontextmanager
-async def _astacus(*, config: GlobalConfig) -> Service:
+async def _astacus(*, config: GlobalConfig) -> AsyncIterator[Service]:
     astacus_source_root = Path(__file__).parent.parent.parent
+    assert config.object_storage is not None
     config_path = Path(config.object_storage.temporary_directory) / f"astacus_{config.uvicorn.port}.json"
     config_path.write_text(config.json())
     cmd = [sys.executable, "-m", "astacus.main", "server", "-c", str(config_path)]
     async with background_process(*cmd, env={"PYTHONPATH": astacus_source_root}) as process:
         await wait_url_up(f"http://localhost:{config.uvicorn.port}")
-        data_dir = config.object_storage.storages[config.object_storage.default_storage].directory
+        storage = config.object_storage.storages[config.object_storage.default_storage]
+        assert isinstance(storage, RohmuLocalStorageConfig)
+        data_dir = storage.directory
         yield Service(process=process, port=config.uvicorn.port, data_dir=data_dir)
 
 
