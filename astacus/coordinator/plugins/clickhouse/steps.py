@@ -441,11 +441,12 @@ class SyncReplicasStep(Step[None]):
     are all exchanged between all nodes.
     """
     clients: List[ClickHouseClient]
+    sync_timeout: float
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         manifest = context.get_result(ClickHouseManifestStep)
         tasks = [
-            client.execute(f"SYSTEM SYNC REPLICA {table.escaped_sql_identifier}")
+            client.execute(f"SYSTEM SYNC REPLICA {table.escaped_sql_identifier}", timeout=self.sync_timeout)
             for table in manifest.tables
             for client in self.clients
             if table.is_replicated

@@ -44,7 +44,8 @@
   },
   "replicated_access_zookeeper_path": "/clickhouse/access",
   "replicated_databases_zookeeper_path": "/clickhouse/databases",
-  "freeze_name": "astacus"
+  "freeze_name": "astacus",
+  "sync_timeout": 3600
 }
 ```
 
@@ -95,6 +96,9 @@ CREATE DATABASE ` db_name ` ENGINE = Replicated('/clickhouse/databases/db_name',
 ```
 
 ## Restoration behavior
+
+The synchronization step exchanges replicated data between all servers of the cluster.
+If you have large volumes of data, adjust the `sync_timeout` (in seconds) accordingly.
 
 ### Databases
 

@@ -596,13 +596,13 @@ async def test_attaches_all_mergetree_parts_in_manifest() -> None:
 @pytest.mark.asyncio
 async def test_sync_replicas_for_replicated_mergetree_tables() -> None:
     clients = [mock_clickhouse_client(), mock_clickhouse_client()]
-    step = SyncReplicasStep(clients)
+    step = SyncReplicasStep(clients, sync_timeout=180)
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
     context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
     await step.run_step(cluster, context)
     for client_index, client in enumerate(clients):
         assert client.mock_calls == [
-            mock.call.execute("SYSTEM SYNC REPLICA `db-one`.`table-uno`"),
-            mock.call.execute("SYSTEM SYNC REPLICA `db-two`.`table-eins`")
+            mock.call.execute("SYSTEM SYNC REPLICA `db-one`.`table-uno`", timeout=180),
+            mock.call.execute("SYSTEM SYNC REPLICA `db-two`.`table-eins`", timeout=180)
         ], f"Wrong list of queries for client {client_index} of {len(clients)}"

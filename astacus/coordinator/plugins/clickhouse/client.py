@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class ClickHouseClient:
-    async def execute(self, query: str) -> Iterable[Row]:
+    async def execute(self, query: str, timeout: Optional[float] = None) -> Iterable[Row]:
         raise NotImplementedError
 
 
@@ -48,7 +48,7 @@ class HttpClickHouseClient(ClickHouseClient):
         self.password = password
         self.timeout = timeout
 
-    async def execute(self, query: str) -> Iterable[Row]:
+    async def execute(self, query: str, timeout: Optional[float] = None) -> Iterable[Row]:
         # Output format: https://clickhouse.tech/docs/en/interfaces/formats/#jsoncompact
         headers = [("X-ClickHouse-Database", "system"), ("X-ClickHouse-Format", "JSONCompact")]
         if self.username is not None:
@@ -64,7 +64,7 @@ class HttpClickHouseClient(ClickHouseClient):
             json=False,
             caller="ClickHouseClient",
             headers=headers,
-            timeout=self.timeout,
+            timeout=self.timeout if timeout is None else timeout,
         )
         assert not isinstance(response, dict)
         if response is None:
@@ -84,7 +84,7 @@ class StubClickHouseClient(ClickHouseClient):
     def set_response(self, query: str, rows: List[Row]) -> None:
         self.responses[query] = copy.deepcopy(rows)
 
-    async def execute(self, query: str) -> Iterable[Row]:
+    async def execute(self, query: str, timeout: Optional[float] = None) -> Iterable[Row]:
         return copy.deepcopy(self.responses[query])
 
 

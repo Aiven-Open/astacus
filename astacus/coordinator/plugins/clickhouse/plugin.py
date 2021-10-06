@@ -24,6 +24,7 @@ class ClickHousePlugin(CoordinatorPlugin):
     replicated_access_zookeeper_path: str = "/clickhouse/access"
     replicated_databases_zookeeper_path: str = "/clickhouse/databases"
     freeze_name: str = "astacus"
+    sync_timeout: float = 3600.0
 
     def get_backup_steps(self, *, context: OperationContext) -> List[Step]:
         zookeeper_client = get_zookeeper_client(self.zookeeper)
@@ -82,7 +83,7 @@ class ClickHousePlugin(CoordinatorPlugin):
             # backup storage and then let ClickHouse replicate between all servers.
             RestoreStep(storage_name=context.storage_name, partial_restore_nodes=req.partial_restore_nodes),
             AttachMergeTreePartsStep(clients=clients),
-            SyncReplicasStep(clients=clients),
+            SyncReplicasStep(clients=clients, sync_timeout=self.sync_timeout),
             # Keeping this step last avoids access from non-admin users while we are still restoring
             RestoreAccessEntitiesStep(
                 zookeeper_client=zookeeper_client, access_entities_path=self.replicated_access_zookeeper_path

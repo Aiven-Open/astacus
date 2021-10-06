@@ -369,7 +369,8 @@ def create_astacus_configs(
                                 port=service.port,
                             ) for service in clickhouse_cluster.services
                         ]
-                    )
+                    ),
+                    sync_timeout=30.0,
                 ).jsondict()
             ),
             node=NodeConfig(root=clickhouse_service.data_dir, ),
