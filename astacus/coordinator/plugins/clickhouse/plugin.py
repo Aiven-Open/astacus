@@ -31,15 +31,15 @@ class ClickHousePlugin(CoordinatorPlugin):
         clickhouse_clients = get_clickhouse_clients(self.clickhouse)
         return [
             ValidateConfigStep(clickhouse=self.clickhouse),
-            # First collect the users, database and tables
+            # Cleanup old frozen parts from failed backup attempts
+            RemoveFrozenTablesStep(freeze_name=self.freeze_name),
+            # Collect the users, database and tables
             RetrieveAccessEntitiesStep(
                 zookeeper_client=zookeeper_client,
                 access_entities_path=self.replicated_access_zookeeper_path,
             ),
             RetrieveReplicatedDatabasesStep(clients=clickhouse_clients),
             RetrieveTablesStep(clients=clickhouse_clients),
-            # Cleanup previously forgotten frozen parts (this won't remove frozen parts from deleted tables)
-            RemoveFrozenTablesStep(freeze_name=self.freeze_name),
             # Then freeze all tables
             FreezeTablesStep(clients=clickhouse_clients, freeze_name=self.freeze_name),
             # Then snapshot and backup all frozen table parts
