@@ -20,6 +20,10 @@ class ClickHouseClient:
         raise NotImplementedError
 
 
+class ClickHouseClientQueryError(Exception):
+    pass
+
+
 class HttpClickHouseClient(ClickHouseClient):
     """
     ClickHouse client using the HTTP(S) protocol, the port provided
@@ -65,7 +69,7 @@ class HttpClickHouseClient(ClickHouseClient):
         assert not isinstance(response, dict)
         if response is None:
             # We should find a better way to handler failure than the None from httpx_request
-            raise Exception(f"Query failed: {query!r} on {self.host}:{self.port}")
+            raise ClickHouseClientQueryError(f"Query failed: {query!r} on {self.host}:{self.port}")
         if response.content:
             # Beware: large ints (Int64, UInt64, and larger) will be returned as strings
             decoded_response = response.json()

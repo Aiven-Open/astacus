@@ -2,7 +2,8 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
-from .conftest import get_clickhouse_client, Service
+from .conftest import create_clickhouse_service, get_clickhouse_client, Ports, Service
+from astacus.coordinator.plugins.clickhouse.client import ClickHouseClientQueryError
 
 import pytest
 import time
@@ -38,13 +39,22 @@ async def test_client_execute_with_empty_response(clickhouse: Service):
 
 
 @pytest.mark.asyncio
-async def test_client_execute_bounded_failure_time(clickhouse: Service):
+async def test_client_execute_bounded_connection_failure_time(ports: Ports):
+    async with create_clickhouse_service(ports) as clickhouse:
+        client = get_clickhouse_client(clickhouse, timeout=1.0)
+        clickhouse.process.kill()
+        start_time = time.monotonic()
+        with pytest.raises(ClickHouseClientQueryError):
+            await client.execute("SHOW DATABASES")
+        elapsed_time = time.monotonic() - start_time
+        assert elapsed_time < 10.0
+
+
+@pytest.mark.asyncio
+async def test_client_execute_bounded_query_time(clickhouse: Service):
     client = get_clickhouse_client(clickhouse, timeout=1.0)
-    client.timeout = 1
-    clickhouse.process.kill()
     start_time = time.monotonic()
-    with pytest.raises(Exception):
-        ret = await client.execute("SHOW DATABASES")
-        print(ret)
+    with pytest.raises(ClickHouseClientQueryError):
+        await client.execute("SELECT 1,sleepEachRow(3)")
     elapsed_time = time.monotonic() - start_time
-    assert elapsed_time < 10.0
+    assert 1.0 <= elapsed_time < 3.0
