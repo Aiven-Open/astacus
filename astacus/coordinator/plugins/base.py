@@ -9,7 +9,7 @@ from __future__ import annotations
 from astacus.common import exceptions, ipc, magic, utils
 from astacus.common.asyncstorage import AsyncHexDigestStorage, AsyncJsonStorage
 from astacus.common.utils import AstacusModel
-from astacus.coordinator.cluster import Cluster, Result, WaitResultError
+from astacus.coordinator.cluster import Cluster, Result
 from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.manifest import download_backup_manifest
 from collections import Counter
@@ -82,12 +82,9 @@ class SnapshotStep(Step[List[ipc.SnapshotResult]]):
     async def run_step(self, cluster: Cluster, context: StepsContext) -> List[ipc.SnapshotResult]:
         req = ipc.SnapshotRequest(root_globs=self.snapshot_root_globs)
         start_results = await cluster.request_from_nodes("snapshot", method="post", caller="SnapshotStep", req=req)
-        try:
-            return await cluster.wait_successful_results(
-                start_results=start_results, result_class=ipc.SnapshotResult, required_successes=len(start_results)
-            )
-        except WaitResultError as ex:
-            raise StepFailedError(str(ex)) from ex
+        return await cluster.wait_successful_results(
+            start_results=start_results, result_class=ipc.SnapshotResult, required_successes=len(start_results)
+        )
 
 
 @dataclasses.dataclass
@@ -236,10 +233,7 @@ class RestoreStep(Step[List[ipc.NodeResult]]):
             if len(start_result) != 1:
                 return []
             start_results.extend(start_result)
-        try:
-            return await cluster.wait_successful_results(start_results=start_results, result_class=ipc.NodeResult)
-        except WaitResultError as ex:
-            raise StepFailedError(str(ex)) from ex
+        return await cluster.wait_successful_results(start_results=start_results, result_class=ipc.NodeResult)
 
 
 def get_node_to_backup_index(
@@ -391,7 +385,4 @@ async def upload_node_index_datas(cluster: Cluster, storage_name: str, node_inde
         if len(start_result) != 1:
             raise StepFailedError("upload failed")
         start_results.extend(start_result)
-    try:
-        return await cluster.wait_successful_results(start_results=start_results, result_class=ipc.SnapshotUploadResult)
-    except WaitResultError as ex:
-        raise StepFailedError(str(ex)) from ex
+    return await cluster.wait_successful_results(start_results=start_results, result_class=ipc.SnapshotUploadResult)

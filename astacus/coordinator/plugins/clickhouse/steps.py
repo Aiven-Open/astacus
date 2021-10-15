@@ -11,7 +11,7 @@ from .parts import check_parts_replication, distribute_parts_to_servers, get_fro
 from .zookeeper import ChangeWatch, NodeExistsError, ZooKeeperClient
 from astacus.common import ipc
 from astacus.common.exceptions import TransientException
-from astacus.coordinator.cluster import Cluster, WaitResultError
+from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import BackupManifestStep, SnapshotStep, Step, StepFailedError, StepsContext
 from pathlib import Path
 from typing import cast, Dict, List, Set, Tuple
@@ -175,10 +175,7 @@ class RemoveFrozenTablesStep(Step[None]):
         start_results = await cluster.request_from_nodes(
             "clear", caller="RemoveFrozenTablesStep", method="post", req=node_request
         )
-        try:
-            await cluster.wait_successful_results(start_results=start_results, result_class=ipc.NodeResult)
-        except WaitResultError as ex:
-            raise StepFailedError(str(ex)) from ex
+        await cluster.wait_successful_results(start_results=start_results, result_class=ipc.NodeResult)
 
 
 @dataclasses.dataclass

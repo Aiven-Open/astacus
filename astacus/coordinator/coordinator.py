@@ -12,7 +12,7 @@ from astacus.common.rohmustorage import MultiRohmuStorage
 from astacus.common.statsd import StatsClient
 from astacus.common.storage import JsonStorage, MultiFileStorage, MultiStorage
 from astacus.common.utils import AsyncSleeper
-from astacus.coordinator.cluster import Cluster, LockResult
+from astacus.coordinator.cluster import Cluster, LockResult, WaitResultError
 from astacus.coordinator.config import coordinator_config, CoordinatorConfig, CoordinatorNode
 from astacus.coordinator.plugins import PLUGINS
 from astacus.coordinator.state import coordinator_state, CoordinatorState
@@ -290,8 +290,8 @@ class SteppedCoordinatorOp(LockedCoordinatorOp):
                 with self._progress_handler(cluster, step):
                     try:
                         r = await step.run_step(cluster, context)
-                    except StepFailedError:
-                        logger.info("Step %s failed", step)
+                    except (StepFailedError, WaitResultError) as e:
+                        logger.info("Step %s failed: %s", step, str(e))
                         return False
             context.set_result(step.__class__, r)
         return True
