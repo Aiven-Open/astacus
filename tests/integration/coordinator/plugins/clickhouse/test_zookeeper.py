@@ -52,34 +52,34 @@ async def test_kazoo_zookeeper_client_get(zookeeper_client: KazooZooKeeperClient
 
 
 @pytest.mark.asyncio
-async def test_kazoo_zookeeper_client_get_missing_node_fails(zookeeper_client: KazooZooKeeperClient):
+async def test_kazoo_zookeeper_client_get_missing_node_fails(zookeeper_client: KazooZooKeeperClient) -> None:
     async with zookeeper_client.connect() as connection:
         with pytest.raises(NoNodeError):
             assert await connection.get("/does/not/exist")
 
 
 @pytest.mark.asyncio
-async def test_kazoo_zookeeper_client_get_children(zookeeper_client):
+async def test_kazoo_zookeeper_client_get_children(zookeeper_client: KazooZooKeeperClient) -> None:
     async with zookeeper_client.connect() as connection:
         assert await connection.get_children("/zookeeper") == ["config", "quota"]
 
 
 @pytest.mark.asyncio
-async def test_kazoo_zookeeper_client_get_children_of_missing_node_fails(zookeeper_client):
+async def test_kazoo_zookeeper_client_get_children_of_missing_node_fails(zookeeper_client: KazooZooKeeperClient) -> None:
     async with zookeeper_client.connect() as connection:
         with pytest.raises(NoNodeError):
             assert await connection.get_children("/does/not/exists")
 
 
 @pytest.mark.asyncio
-async def test_kazoo_zookeeper_client_create(zookeeper_client):
+async def test_kazoo_zookeeper_client_create(zookeeper_client: KazooZooKeeperClient) -> None:
     async with zookeeper_client.connect() as connection:
         assert await connection.create("/new/node", b"content")
         assert await connection.get("/new/node") == b"content"
 
 
 @pytest.mark.asyncio
-async def test_kazoo_zookeeper_client_create_existing_node_fails(zookeeper_client):
+async def test_kazoo_zookeeper_client_create_existing_node_fails(zookeeper_client: KazooZooKeeperClient) -> None:
     async with zookeeper_client.connect() as connection:
         with pytest.raises(NodeExistsError):
             await connection.create("/zookeeper", b"content")
@@ -88,7 +88,7 @@ async def test_kazoo_zookeeper_client_create_existing_node_fails(zookeeper_clien
 @pytest.mark.asyncio
 async def test_kazoo_zookeeper_client_bounded_failure_time(
     zookeeper_client: KazooZooKeeperClient, zookeeper: Service, znode: ZNode
-):
+) -> None:
     async with zookeeper_client.connect() as connection:
         zookeeper.process.kill()
         start_time = time.monotonic()

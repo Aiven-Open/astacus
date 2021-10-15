@@ -61,12 +61,12 @@ async def fixture_restored_cluster(restorable_cluster: Path, ports: Ports,
                 # This sequence is repeated with a different partial restore each time, stopping at a different step.
                 # We also need to test failure in the middle of a step, this is covered in the unit tests of each step.
                 if stop_after_step is not None:
-                    run_astacus_command(astacus_cluster, "restore", "--stop-after-step", str(stop_after_step))
+                    run_astacus_command(astacus_cluster, "restore", "--stop-after-step", stop_after_step)
                 run_astacus_command(astacus_cluster, "restore")
                 yield clients
 
 
-async def setup_cluster_content(clients: List[HttpClickHouseClient]):
+async def setup_cluster_content(clients: List[HttpClickHouseClient]) -> None:
     for client in clients:
         await client.execute("DROP DATABASE default")
         await client.execute(
@@ -100,7 +100,7 @@ async def setup_cluster_content(clients: List[HttpClickHouseClient]):
     await clients[0].execute("INSERT INTO default.log VALUES (123, 'foo')")
 
 
-async def setup_cluster_users(clients: List[HttpClickHouseClient]):
+async def setup_cluster_users(clients: List[HttpClickHouseClient]) -> None:
     await clients[0].execute("CREATE USER alice")
     await clients[0].execute("GRANT SELECT on default.* TO alice")
     await clients[0].execute("CREATE ROLE bob")
@@ -113,7 +113,7 @@ async def setup_cluster_users(clients: List[HttpClickHouseClient]):
 
 
 @pytest.mark.asyncio
-async def test_restores_access_entities(restored_cluster: List[ClickHouseClient]):
+async def test_restores_access_entities(restored_cluster: List[ClickHouseClient]) -> None:
     for client in restored_cluster:
         assert await client.execute("SELECT name FROM system.users WHERE storage = 'replicated' ORDER BY name") == [[
             "alice"
@@ -131,7 +131,7 @@ async def test_restores_access_entities(restored_cluster: List[ClickHouseClient]
 
 
 @pytest.mark.asyncio
-async def test_restores_replicated_merge_tree_tables_data(restored_cluster: List[ClickHouseClient]):
+async def test_restores_replicated_merge_tree_tables_data(restored_cluster: List[ClickHouseClient]) -> None:
     # In replicated table, all servers of the cluster have the same data
     for client in restored_cluster:
         assert await client.execute("SELECT thekey, thedata FROM default.replicated_merge_tree ORDER BY thekey") == [
@@ -141,7 +141,7 @@ async def test_restores_replicated_merge_tree_tables_data(restored_cluster: List
 
 
 @pytest.mark.asyncio
-async def test_restores_unreplicated_merge_tree_tables_data(restored_cluster: List[ClickHouseClient]):
+async def test_restores_unreplicated_merge_tree_tables_data(restored_cluster: List[ClickHouseClient]) -> None:
     # In an unreplicated table, each server of the cluster has different data
     first_client, second_client = restored_cluster
     assert await first_client.execute("SELECT thekey, thedata FROM default.merge_tree ") == [
@@ -153,7 +153,7 @@ async def test_restores_unreplicated_merge_tree_tables_data(restored_cluster: Li
 
 
 @pytest.mark.asyncio
-async def test_restores_unreplicated_simple_view(restored_cluster: List[ClickHouseClient]):
+async def test_restores_unreplicated_simple_view(restored_cluster: List[ClickHouseClient]) -> None:
     first_client, second_client = restored_cluster
     assert await first_client.execute("SELECT thekey2 FROM default.simple_view ") == [
         [123 * 2],
@@ -164,7 +164,7 @@ async def test_restores_unreplicated_simple_view(restored_cluster: List[ClickHou
 
 
 @pytest.mark.asyncio
-async def test_restores_unreplicated_materialized_view_data(restored_cluster: List[ClickHouseClient]):
+async def test_restores_unreplicated_materialized_view_data(restored_cluster: List[ClickHouseClient]) -> None:
     first_client, second_client = restored_cluster
     assert await first_client.execute("SELECT thekey3 FROM default.materialized_view ") == [
         [123 * 3],
@@ -175,7 +175,7 @@ async def test_restores_unreplicated_materialized_view_data(restored_cluster: Li
 
 
 @pytest.mark.asyncio
-async def test_does_not_restore_log_tables_data(restored_cluster: List[ClickHouseClient]):
+async def test_does_not_restore_log_tables_data(restored_cluster: List[ClickHouseClient]) -> None:
     # We restored the table structure but not the data
     for client in restored_cluster:
         assert await client.execute("SELECT thekey, thedata FROM default.log") == []

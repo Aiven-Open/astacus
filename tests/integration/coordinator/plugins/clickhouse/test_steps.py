@@ -18,7 +18,7 @@ pytestmark = [
 
 
 @pytest.mark.asyncio
-async def test_retrieve_tables(ports: Ports):
+async def test_retrieve_tables(ports: Ports) -> None:
     async with create_zookeeper(ports) as zookeeper:
         # We need a "real" cluster to be able to use Replicated databases
         async with create_clickhouse_cluster(zookeeper, ports, cluster_size=1) as clickhouse_cluster:

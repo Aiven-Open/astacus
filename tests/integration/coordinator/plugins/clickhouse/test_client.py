@@ -15,21 +15,21 @@ pytestmark = [
 
 
 @pytest.mark.asyncio
-async def test_client_execute(clickhouse: Service):
+async def test_client_execute(clickhouse: Service) -> None:
     client = get_clickhouse_client(clickhouse)
     response = await client.execute("SHOW DATABASES")
     assert response == [["default"], ["system"]]
 
 
 @pytest.mark.asyncio
-async def test_client_execute_on_system_database(clickhouse: Service):
+async def test_client_execute_on_system_database(clickhouse: Service) -> None:
     client = get_clickhouse_client(clickhouse)
     response = await client.execute("SELECT currentDatabase()")
     assert response == [["system"]]
 
 
 @pytest.mark.asyncio
-async def test_client_execute_with_empty_response(clickhouse: Service):
+async def test_client_execute_with_empty_response(clickhouse: Service) -> None:
     # In that case, ClickHouse http protocol doesn't bother with replying with
     # an empty json dict and instead replies with an empty string.
     client = get_clickhouse_client(clickhouse)
@@ -39,7 +39,7 @@ async def test_client_execute_with_empty_response(clickhouse: Service):
 
 
 @pytest.mark.asyncio
-async def test_client_execute_bounded_connection_failure_time(ports: Ports):
+async def test_client_execute_bounded_connection_failure_time(ports: Ports) -> None:
     async with create_clickhouse_service(ports) as clickhouse:
         client = get_clickhouse_client(clickhouse, timeout=1.0)
         clickhouse.process.kill()
@@ -51,7 +51,7 @@ async def test_client_execute_bounded_connection_failure_time(ports: Ports):
 
 
 @pytest.mark.asyncio
-async def test_client_execute_bounded_query_time(clickhouse: Service):
+async def test_client_execute_bounded_query_time(clickhouse: Service) -> None:
     client = get_clickhouse_client(clickhouse, timeout=1.0)
     start_time = time.monotonic()
     with pytest.raises(ClickHouseClientQueryError):
@@ -61,7 +61,7 @@ async def test_client_execute_bounded_query_time(clickhouse: Service):
 
 
 @pytest.mark.asyncio
-async def test_client_execute_timeout_can_be_customized_per_query(clickhouse: Service):
+async def test_client_execute_timeout_can_be_customized_per_query(clickhouse: Service) -> None:
     client = get_clickhouse_client(clickhouse, timeout=10.0)
     start_time = time.monotonic()
     # The maximum sleep time in ClickHouse is 3 seconds
