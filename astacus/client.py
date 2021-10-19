@@ -60,6 +60,8 @@ def _run_restore(args) -> bool:
         json["storage"] = args.storage
     if args.backup:
         json["name"] = args.backup
+    if args.stop_after_step:
+        json["stop_after_step"] = args.stop_after_step
     return _run_op("restore", args, json=json)
 
 
@@ -175,6 +177,7 @@ def create_client_parsers(parser, subparsers):
     p_restore = subparsers.add_parser("restore", help="Request backup restoration")
     p_restore.add_argument("--storage", help="Storage to use (default: configured)")
     p_restore.add_argument("--backup", help="Name of backup to restore (default: most recent)")
+    p_restore.add_argument("--stop-after-step", type=str, help="Stop restore operation after the specified step")
     p_restore.set_defaults(func=_run_restore)
 
     p_list = subparsers.add_parser("list", help="List backups")

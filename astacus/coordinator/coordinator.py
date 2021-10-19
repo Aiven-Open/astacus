@@ -2,7 +2,7 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
-from .plugins.base import CoordinatorPlugin, OperationContext, Step, StepsContext
+from .plugins.base import CoordinatorPlugin, OperationContext, Step, StepFailedError, StepsContext
 from astacus.common import asyncstorage, exceptions, ipc, op, statsd, utils
 from astacus.common.cachingjsonstorage import MultiCachingJsonStorage
 from astacus.common.dependencies import get_request_url
@@ -12,7 +12,7 @@ from astacus.common.rohmustorage import MultiRohmuStorage
 from astacus.common.statsd import StatsClient
 from astacus.common.storage import JsonStorage, MultiFileStorage, MultiStorage
 from astacus.common.utils import AsyncSleeper
-from astacus.coordinator.cluster import Cluster, LockResult
+from astacus.coordinator.cluster import Cluster, LockResult, WaitResultError
 from astacus.coordinator.config import coordinator_config, CoordinatorConfig, CoordinatorNode
 from astacus.coordinator.plugins import PLUGINS
 from astacus.coordinator.state import coordinator_state, CoordinatorState
@@ -288,10 +288,11 @@ class SteppedCoordinatorOp(LockedCoordinatorOp):
             logger.debug("Step %d/%d: %s", i, len(self.steps), step_name)
             async with self.stats.async_timing_manager("astacus_step_duration", {"op": op_name, "step": step_name}):
                 with self._progress_handler(cluster, step):
-                    r = await step.run_step(cluster, context)
-            if not r:
-                logger.info("Step %s failed", step)
-                return False
+                    try:
+                        r = await step.run_step(cluster, context)
+                    except (StepFailedError, WaitResultError) as e:
+                        logger.info("Step %s failed: %s", step, str(e))
+                        return False
             context.set_result(step.__class__, r)
         return True
 
@@ -318,4 +319,8 @@ class RestoreOp(SteppedCoordinatorOp):
     def __init__(self, *, c: Coordinator, op_id: int, stats: StatsClient, req: ipc.RestoreRequest):
         context = c.get_operation_context(requested_storage=req.storage)
         steps = c.get_plugin().get_restore_steps(context=context, req=req)
+        if req.stop_after_step is not None:
+            step_names = [step.__class__.__name__ for step in steps]
+            step_index = step_names.index(req.stop_after_step)
+            steps = steps[:step_index + 1]
         super().__init__(c=c, op_id=op_id, stats=stats, attempts=1, steps=steps)  # c.config.restore_attempts

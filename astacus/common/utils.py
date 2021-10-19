@@ -93,7 +93,7 @@ def http_request(url, *, caller, method="get", timeout=10, ignore_status_code: b
 
 
 async def httpx_request(
-    url: str,
+    url: Union[str, httpx.URL],
     *,
     caller: str,
     method: str = "get",
@@ -117,15 +117,21 @@ async def httpx_request(
             if ignore_status_code:
                 return r.json() if json else r
             logger.warning("Unexpected response status code from %s to %s: %s %r", url, caller, r.status_code, r.text)
-        except httpcore.NetworkError as ex:
-            # Unfortunately at least current httpx leaks this
-            # exception without wrapping it. Future versions may
+        except (httpcore.NetworkError, httpcore.TimeoutException) as ex:
+            # Unfortunately at least current httpx leaks these
+            # exceptions without wrapping them. Future versions may
             # address this hopefully. I believe httpx.TransportError
             # replaces it in future versions once we upgrade.
             logger.warning("Network error from %s to %s: %r", url, caller, ex)
         except httpx.HTTPError as ex:
             logger.warning("Unexpected response from %s to %s: %r", url, caller, ex)
         return None
+
+
+def build_netloc(host: str, port: Optional[int] = None) -> str:
+    """Create a netloc that can be passed to `url.parse.urlunsplit` while safely handling ipv6 addresses."""
+    escaped_host = f"[{host}]" if ":" in host else host
+    return escaped_host if port is None else f"{escaped_host}:{port}"
 
 
 T = TypeVar("T")

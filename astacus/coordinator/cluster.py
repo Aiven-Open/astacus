@@ -140,11 +140,11 @@ class Cluster:
                 logger.info(
                     "wait_successful_results: Incorrect start result for #%d/%d: %r", i, len(start_results), start_result
                 )
-                return []
+                raise WaitResultError(f"incorrect start result for #{i}/{len(start_results)}: {start_result!r}")
             parsed_start_result = op.Op.StartResult.parse_obj(start_result)
             urls.append(parsed_start_result.status_url)
         if required_successes is not None and len(urls) != required_successes:
-            return []
+            raise WaitResultError(f"incorrect number of results: {len(urls)} vs {required_successes}")
         results: List[Optional[NR]] = [None] * len(urls)
         # Note that we don't have timeout mechanism here as such,
         # however, if re-locking times out, we will bail out. TBD if
@@ -168,7 +168,7 @@ class Cluster:
                 if r is None:
                     failures[i] += 1
                     if failures[i] >= self.poll_config.maximum_failures:
-                        return []
+                        raise WaitResultError("too many failures")
                     continue
                 # We got something -> decode the result
                 result = result_class.parse_obj(r)
@@ -177,11 +177,15 @@ class Cluster:
                 if self.progress_handler is not None:
                     self.progress_handler(Progress.merge(r.progress for r in results if r is not None))
                 if result.progress.finished_failed:
-                    return []
+                    raise WaitResultError
             if not any(True for result in results if result is None or not result.progress.final):
                 break
         else:
             logger.debug("wait_successful_results timed out")
-            return []
+            raise WaitResultError("timed out")
         # The case is valid because we get there when all results are not None
         return cast(List[NR], results)
+
+
+class WaitResultError(Exception):
+    pass

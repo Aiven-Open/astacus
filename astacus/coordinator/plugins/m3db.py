@@ -10,7 +10,7 @@ state is consistent.
 """
 from .base import (
     BackupManifestStep, BackupNameStep, CoordinatorPlugin, get_node_to_backup_index, ListHexdigestsStep, OperationContext,
-    RestoreStep, SnapshotStep, Step, StepsContext, UploadBlocksStep, UploadManifestStep
+    RestoreStep, SnapshotStep, Step, StepFailedError, StepsContext, UploadBlocksStep, UploadManifestStep
 )
 from .etcd import ETCDDump, ETCDKey, get_etcd_dump, restore_etcd_dump
 from astacus.common import exceptions, ipc, m3placement
@@ -19,7 +19,7 @@ from astacus.common.ipc import Plugin
 from astacus.common.utils import AstacusModel
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
-from typing import List, Optional, Union
+from typing import List, Optional
 
 import dataclasses
 import logging
@@ -74,12 +74,11 @@ def get_etcd_prefixes(environment: str) -> List[bytes]:
 
 
 @dataclasses.dataclass
-class InitStep(Step[bool]):
+class InitStep(Step[None]):
     placement_nodes: List[m3placement.M3PlacementNode]
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> bool:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         validate_m3_config(self.placement_nodes, cluster.nodes)
-        return True
 
 
 @dataclasses.dataclass
@@ -88,18 +87,24 @@ class RetrieveEtcdStep(Step[Optional[ETCDDump]]):
     etcd_prefixes: List[bytes]
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> Optional[ETCDDump]:
-        return await get_etcd_dump(self.etcd_client, self.etcd_prefixes)
+        etcd_dump = await get_etcd_dump(self.etcd_client, self.etcd_prefixes)
+        if etcd_dump is None:
+            raise StepFailedError("etcd dump failed")
+        return etcd_dump
 
 
 @dataclasses.dataclass
-class RetrieveEtcdAgainStep(Step[bool]):
+class RetrieveEtcdAgainStep(Step[None]):
     etcd_client: ETCDClient
     etcd_prefixes: List[bytes]
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> bool:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         etcd_before = context.get_result(RetrieveEtcdStep)
         etcd_now = await get_etcd_dump(self.etcd_client, self.etcd_prefixes)
-        return etcd_before == etcd_now
+        if etcd_now is None:
+            raise StepFailedError("second etcd dump failed")
+        if etcd_before != etcd_now:
+            raise StepFailedError("etcd state changed during backup")
 
 
 @dataclasses.dataclass
@@ -112,14 +117,14 @@ class CreateM3ManifestStep(Step[M3DBManifest]):
 
 
 @dataclasses.dataclass
-class RewriteEtcdStep(Step[Union[bool, ETCDDump]]):
+class RewriteEtcdStep(Step[Optional[ETCDDump]]):
     placement_nodes: List[m3placement.M3PlacementNode]
     partial_restore_nodes: Optional[List[ipc.PartialRestoreRequestNode]]
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> Union[bool, ETCDDump]:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> Optional[ETCDDump]:
         if self.partial_restore_nodes:
             logger.debug("Skipping etcd rewrite due to partial backup restoration")
-            return True
+            return None
         backup_manifest = context.get_result(BackupManifestStep)
         node_to_backup_index = get_node_to_backup_index(
             partial_restore_nodes=None,
@@ -143,25 +148,24 @@ class RewriteEtcdStep(Step[Union[bool, ETCDDump]]):
 
 
 @dataclasses.dataclass
-class RestoreEtcdStep(Step[bool]):
+class RestoreEtcdStep(Step[None]):
     etcd_client: ETCDClient
     partial_restore_nodes: Optional[List[ipc.PartialRestoreRequestNode]]
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> bool:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         if self.partial_restore_nodes:
             logger.debug("Skipping etcd rewrite due to partial backup restoration")
-            return True
         dump = context.get_result(RewriteEtcdStep)
-        # make mypy happy with the Union type of RewriteEtcdStep
-        assert not isinstance(dump, bool)
-        return await restore_etcd_dump(client=self.etcd_client, dump=dump)
+        if dump is not None:
+            if not await restore_etcd_dump(client=self.etcd_client, dump=dump):
+                raise StepFailedError("etcd dump restoration failed")
 
 
 class M3IncorrectPlacementNodesLengthException(exceptions.PermanentException):
     pass
 
 
-def validate_m3_config(placement_nodes: List[m3placement.M3PlacementNode], nodes: List[CoordinatorNode]) -> bool:
+def validate_m3_config(placement_nodes: List[m3placement.M3PlacementNode], nodes: List[CoordinatorNode]) -> None:
     pnode_count = len(placement_nodes)
     node_count = len(nodes)
     if pnode_count != node_count:
@@ -169,7 +173,6 @@ def validate_m3_config(placement_nodes: List[m3placement.M3PlacementNode], nodes
         raise M3IncorrectPlacementNodesLengthException(
             f"{node_count} nodes, yet {pnode_count} nodes in the m3 placement_nodes; difference of {diff}"
         )
-    return True
 
 
 def rewrite_m3db_placement(

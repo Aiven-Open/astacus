@@ -4,10 +4,10 @@ See LICENSE for details
 """
 from astacus.common.utils import AstacusModel, exponential_backoff
 from contextlib import asynccontextmanager
+from httpx import URL
 from pathlib import Path
-from starlette.datastructures import URL
 from tests.utils import create_rohmu_config
-from typing import Optional, Union
+from typing import AsyncIterator, Optional, Union
 
 import asyncio
 import httpx
@@ -39,7 +39,8 @@ ASTACUS_NODES = [
 
 
 @asynccontextmanager
-async def background_process(program: Union[str, Path], *args: Union[str, Path], **kwargs) -> asyncio.subprocess.Process:
+async def background_process(program: Union[str, Path], *args: Union[str, Path],
+                             **kwargs) -> AsyncIterator[asyncio.subprocess.Process]:
     # pylint: disable=bare-except
     proc = await asyncio.create_subprocess_exec(program, *args, **kwargs)
     try:

@@ -21,6 +21,7 @@ import socket
 # These are the database plugins we support; list is intentionally
 # enum here, as dynamically adding them isn't priority (for now)
 class Plugin(str, Enum):
+    clickhouse = "clickhouse"
     files = "files"
     m3db = "m3db"
 
@@ -183,6 +184,7 @@ class RestoreRequest(AstacusModel):
     storage: str = ""
     name: str = ""
     partial_restore_nodes: Optional[List[PartialRestoreRequestNode]]
+    stop_after_step: Optional[str] = None
 
 
 # coordinator.plugins backup/restore
