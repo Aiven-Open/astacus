@@ -3,11 +3,10 @@ Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
 from astacus.coordinator.plugins.clickhouse.client import HttpClickHouseClient
-from astacus.coordinator.plugins.clickhouse.config import (
-    ClickHouseConfiguration, ClickHouseNode, ZooKeeperConfiguration, ZooKeeperNode
-)
+from astacus.coordinator.plugins.clickhouse.config import ClickHouseConfiguration, ClickHouseNode, ZooKeeperConfiguration
 from astacus.coordinator.plugins.clickhouse.plugin import get_clickhouse_clients, get_zookeeper_client
-from astacus.coordinator.plugins.clickhouse.zookeeper import KazooZooKeeperClient
+from astacus.coordinator.plugins.zookeeper import KazooZooKeeperClient
+from astacus.coordinator.plugins.zookeeper_config import ZooKeeperNode
 from typing import cast, List
 
 import pytest

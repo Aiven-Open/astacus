@@ -11,12 +11,12 @@ from .parts import (
     check_parts_replication, distribute_parts_to_servers, get_frozen_parts_pattern, group_files_into_parts,
     list_parts_to_attach
 )
-from .zookeeper import ChangeWatch, NodeExistsError, ZooKeeperClient
 from astacus.common import ipc
 from astacus.common.exceptions import TransientException
 from astacus.common.limiter import Limiter
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import BackupManifestStep, SnapshotStep, Step, StepFailedError, StepsContext
+from astacus.coordinator.plugins.zookeeper import ChangeWatch, NodeExistsError, ZooKeeperClient
 from pathlib import Path
 from typing import cast, Dict, List, Tuple
 

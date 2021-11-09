@@ -4,6 +4,7 @@ See LICENSE for details
 """
 from astacus.common.exceptions import TransientException
 from kazoo.client import EventType, KazooClient, KeeperState, WatchedEvent
+from kazoo.protocol.states import ZnodeStat
 from kazoo.retry import KazooRetry
 from typing import Any, AsyncIterator, Callable, cast, Dict, List, Optional, Tuple, TypeVar
 
@@ -71,6 +72,12 @@ class ZooKeeperConnection:
         Auto-creates all parent nodes if they don't exist.
 
         Raises `NodeExistsError` if the node already exists.
+        """
+        raise NotImplementedError
+
+    async def exists(self, path: str) -> Optional[ZnodeStat]:
+        """
+        Check if specified node exists.
         """
         raise NotImplementedError
 
@@ -144,6 +151,9 @@ class KazooZooKeeperConnection(ZooKeeperConnection):
             return await to_thread(self.client.retry, self.client.create, path, value, makepath=True)
         except kazoo.exceptions.NodeExistsError as e:
             raise NodeExistsError(path) from e
+
+    async def exists(self, path) -> Optional[ZnodeStat]:
+        return await to_thread(self.client.retry, self.client.exists, path)
 
 
 class FakeZooKeeperClient(ZooKeeperClient):
@@ -228,6 +238,9 @@ class FakeZooKeeperConnection(ZooKeeperConnection):
                 parent_parts = parent_parts[:-1]
             event = WatchedEvent(type=EventType.CREATED, state=KeeperState.CONNECTED, path="/".join(parent_parts))
         await self.client.trigger(parent_parts, event)
+
+    async def exists(self, path: str) -> Optional[ZnodeStat]:
+        pass
 
 
 class ChangeWatch:

@@ -18,7 +18,7 @@ from astacus.coordinator.plugins.clickhouse.steps import (
     RetrieveAccessEntitiesStep, RetrieveDatabasesAndTablesStep, SyncReplicasStep, TABLES_LIST_QUERY, UnfreezeTablesStep,
     ValidateConfigStep
 )
-from astacus.coordinator.plugins.clickhouse.zookeeper import FakeZooKeeperClient, ZooKeeperClient
+from astacus.coordinator.plugins.zookeeper import FakeZooKeeperClient, ZooKeeperClient
 from pathlib import Path
 from typing import Optional, Sequence, Type, Union
 from unittest import mock

@@ -4,7 +4,7 @@ See LICENSE for details
 """
 from .conftest import Service
 from astacus.common.utils import build_netloc
-from astacus.coordinator.plugins.clickhouse.zookeeper import KazooZooKeeperClient, NodeExistsError, NoNodeError
+from astacus.coordinator.plugins.zookeeper import KazooZooKeeperClient, NodeExistsError, NoNodeError
 
 import dataclasses
 import kazoo.client

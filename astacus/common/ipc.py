@@ -24,6 +24,7 @@ class Plugin(str, Enum):
     clickhouse = "clickhouse"
     files = "files"
     m3db = "m3db"
+    flink = "flink"
 
 
 class Retention(AstacusModel):
