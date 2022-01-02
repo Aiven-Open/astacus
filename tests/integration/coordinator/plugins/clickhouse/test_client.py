@@ -18,7 +18,7 @@ pytestmark = [
 async def test_client_execute(clickhouse: Service) -> None:
     client = get_clickhouse_client(clickhouse)
     response = await client.execute("SHOW DATABASES")
-    assert response == [["default"], ["system"]]
+    assert sorted(list(response)) == [["INFORMATION_SCHEMA"], ["default"], ["information_schema"], ["system"]]
 
 
 @pytest.mark.asyncio
