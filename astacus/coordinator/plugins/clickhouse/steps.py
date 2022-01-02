@@ -3,7 +3,7 @@ Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
 from .client import ClickHouseClient, escape_sql_identifier, escape_sql_string
-from .config import ClickHouseConfiguration
+from .config import ClickHouseConfiguration, ReplicatedDatabaseSettings
 from .dependencies import access_entities_sorted_by_dependencies, tables_sorted_by_dependencies
 from .escaping import escape_for_file_name, unescape_from_file_name
 from .manifest import AccessEntity, ClickHouseManifest, ReplicatedDatabase, Table
@@ -329,9 +329,17 @@ class RestoreReplicatedDatabasesStep(Step[None]):
     """
     clients: List[ClickHouseClient]
     replicated_databases_zookeeper_path: str
+    replicated_database_settings: ReplicatedDatabaseSettings
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         manifest = context.get_result(ClickHouseManifestStep)
+        settings = [
+            "{}={}".format(
+                setting_name,
+                escape_sql_string(value) if isinstance(value, str) else value,
+            ) for setting_name, value in self.replicated_database_settings.dict().items() if value is not None
+        ]
+        settings_clause = " SETTINGS {}".format(", ".join(settings)) if settings else ""
         for database in manifest.replicated_databases:
             database_znode_name = escape_for_file_name(database.name)
             database_path = f"{self.replicated_databases_zookeeper_path}/{database_znode_name}"
@@ -343,7 +351,7 @@ class RestoreReplicatedDatabasesStep(Step[None]):
             for client in self.clients:
                 await client.execute(
                     f"CREATE DATABASE {escape_sql_identifier(database.name)} "
-                    f"ENGINE = Replicated({escape_sql_string(database_path)}, '{{shard}}', '{{replica}}')"
+                    f"ENGINE = Replicated({escape_sql_string(database_path)}, '{{shard}}', '{{replica}}'){settings_clause}"
                 )
         # If any known table depends on an unknown table that was inside a non-replicated
         # database engine, then this will crash. See comment in `RetrieveReplicatedDatabasesStep`.

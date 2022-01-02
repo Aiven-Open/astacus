@@ -12,7 +12,7 @@ from astacus.coordinator.config import CoordinatorConfig, CoordinatorNode
 from astacus.coordinator.plugins import ClickHousePlugin
 from astacus.coordinator.plugins.clickhouse.client import HttpClickHouseClient
 from astacus.coordinator.plugins.clickhouse.config import (
-    ClickHouseConfiguration, ClickHouseNode, ZooKeeperConfiguration, ZooKeeperNode
+    ClickHouseConfiguration, ClickHouseNode, ReplicatedDatabaseSettings, ZooKeeperConfiguration, ZooKeeperNode
 )
 from astacus.node.config import NodeConfig
 from pathlib import Path
@@ -367,6 +367,10 @@ def create_astacus_configs(
                                 port=service.port,
                             ) for service in clickhouse_cluster.services
                         ]
+                    ),
+                    replicated_databases_settings=ReplicatedDatabaseSettings(
+                        cluster_username=clickhouse_cluster.services[0].username,
+                        cluster_password=clickhouse_cluster.services[0].password,
                     ),
                     sync_timeout=30.0,
                 ).jsondict()
