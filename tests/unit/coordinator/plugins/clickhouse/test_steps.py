@@ -283,7 +283,7 @@ async def test_unfreezes_all_mergetree_tables_listed_in_manifest() -> None:
 
 async def _test_freeze_unfreezes_all_mergetree_tables_listed_in_manifest(
     *, step_class: Union[Type[FreezeTablesStep], Type[UnfreezeTablesStep]], operation: str
-):
+) -> None:
     first_client, second_client = mock_clickhouse_client(), mock_clickhouse_client()
     step = step_class(clients=[first_client, second_client], freeze_name="Äs`t:/.././@c'_'s")
 
@@ -487,7 +487,9 @@ async def test_creates_all_replicated_databases_and_tables_in_manifest_with_cust
         "DROP DATABASE IF EXISTS `db-two` SYNC",
         "CREATE DATABASE `db-two` ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{shard}', '{replica}') "
         "SETTINGS cluster_username='alice', cluster_password='alice_secret'",
-        "CREATE TABLE db-one.table-uno ...", "CREATE TABLE db-one.table-dos ...", "CREATE TABLE db-two.table-eins ..."
+        "CREATE TABLE db-one.table-uno ...",
+        "CREATE TABLE db-one.table-dos ...",
+        "CREATE TABLE db-two.table-eins ...",
     ]
     assert client.mock_calls == list(map(mock.call.execute, first_client_queries))
 
@@ -528,7 +530,7 @@ async def test_creates_all_access_entities_in_manifest() -> None:
 
 
 @pytest.mark.asyncio
-async def test_creating_all_access_entities_can_be_retried():
+async def test_creating_all_access_entities_can_be_retried() -> None:
     client = FakeZooKeeperClient()
     step = RestoreAccessEntitiesStep(zookeeper_client=client, access_entities_path="/clickhouse/access")
     context = StepsContext()
@@ -543,7 +545,7 @@ async def test_creating_all_access_entities_can_be_retried():
     await check_restored_entities(client)
 
 
-async def check_restored_entities(client: ZooKeeperClient):
+async def check_restored_entities(client: ZooKeeperClient) -> None:
     async with client.connect() as connection:
         assert await connection.get_children("/clickhouse/access") == ["P", "Q", "R", "S", "U", "uuid"]
         assert await connection.get_children("/clickhouse/access/uuid") == [str(uuid.UUID(int=i)) for i in range(1, 6)]

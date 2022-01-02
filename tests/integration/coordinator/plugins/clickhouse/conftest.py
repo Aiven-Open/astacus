@@ -146,9 +146,11 @@ log4j.appender.default.layout.ConversionPattern=[%-5p] %m%n
 
 
 @contextlib.asynccontextmanager
-async def create_clickhouse_cluster(zookeeper: Service,
-                                    ports: Ports,
-                                    cluster_size: int = 2) -> AsyncIterator[ServiceCluster]:
+async def create_clickhouse_cluster(
+    zookeeper: Service,
+    ports: Ports,
+    cluster_size: int = 2,
+) -> AsyncIterator[ServiceCluster]:
     command = await get_clickhouse_command()
     if command is None:
         pytest.skip("clickhouse installation not found")

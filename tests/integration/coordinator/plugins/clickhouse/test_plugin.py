@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+from _pytest.fixtures import SubRequest
 from astacus.common.ipc import RestoreRequest
 from astacus.coordinator.plugins import ClickHousePlugin
 from astacus.coordinator.plugins.base import OperationContext
@@ -47,8 +48,11 @@ async def fixture_restorable_cluster(ports: Ports) -> AsyncIterator[Path]:
 
 
 @pytest.fixture(scope="module", name="restored_cluster", params=[*get_restore_steps_names(), None])
-async def fixture_restored_cluster(restorable_cluster: Path, ports: Ports,
-                                   request) -> AsyncIterable[Sequence[ClickHouseClient]]:
+async def fixture_restored_cluster(
+    restorable_cluster: Path,
+    ports: Ports,
+    request: SubRequest,
+) -> AsyncIterable[Sequence[ClickHouseClient]]:
     stop_after_step: str = request.param
     async with create_zookeeper(ports) as zookeeper:
         async with create_clickhouse_cluster(zookeeper, ports) as clickhouse_cluster:
