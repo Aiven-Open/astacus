@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+from _pytest.fixtures import SubRequest
 from astacus.common.ipc import RestoreRequest
 from astacus.coordinator.plugins import ClickHousePlugin
 from astacus.coordinator.plugins.base import OperationContext
@@ -47,8 +48,11 @@ async def fixture_restorable_cluster(ports: Ports) -> AsyncIterator[Path]:
 
 
 @pytest.fixture(scope="module", name="restored_cluster", params=[*get_restore_steps_names(), None])
-async def fixture_restored_cluster(restorable_cluster: Path, ports: Ports,
-                                   request) -> AsyncIterable[Sequence[ClickHouseClient]]:
+async def fixture_restored_cluster(
+    restorable_cluster: Path,
+    ports: Ports,
+    request: SubRequest,
+) -> AsyncIterable[Sequence[ClickHouseClient]]:
     stop_after_step: str = request.param
     async with create_zookeeper(ports) as zookeeper:
         async with create_clickhouse_cluster(zookeeper, ports) as clickhouse_cluster:
@@ -68,9 +72,10 @@ async def fixture_restored_cluster(restorable_cluster: Path, ports: Ports,
 
 async def setup_cluster_content(clients: List[HttpClickHouseClient]) -> None:
     for client in clients:
-        await client.execute("DROP DATABASE default")
+        await client.execute("DROP DATABASE default SYNC")
         await client.execute(
-            "CREATE DATABASE default ENGINE = Replicated('/clickhouse/databases/thebase', '{shard}', '{replica}')"
+            "CREATE DATABASE default ENGINE = Replicated('/clickhouse/databases/thebase', '{shard}', '{replica}') "
+            "SETTINGS cluster_username='default', cluster_password='secret'"
         )
     # table creation is auto-replicated so we only do it once :
     await clients[0].execute(
@@ -172,6 +177,13 @@ async def test_restores_unreplicated_materialized_view_data(restored_cluster: Li
     assert await second_client.execute("SELECT thekey3 FROM default.materialized_view ") == [
         [456 * 3],
     ]
+
+
+@pytest.mark.asyncio
+async def test_restores_connectivity_between_distributed_servers(restored_cluster: List[ClickHouseClient]) -> None:
+    # This only works if each node can connect to all nodes of the cluster named after the Distributed database
+    for client in restored_cluster:
+        assert await client.execute("SELECT * FROM clusterAllReplicas('default', system.one) ") == [[0], [0]]
 
 
 @pytest.mark.asyncio

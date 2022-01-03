@@ -6,6 +6,7 @@ Common base classes for the plugins
 
 """
 from __future__ import annotations
+
 from astacus.common import exceptions, ipc, magic, utils
 from astacus.common.asyncstorage import AsyncHexDigestStorage, AsyncJsonStorage
 from astacus.common.utils import AstacusModel

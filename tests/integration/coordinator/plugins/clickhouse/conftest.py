@@ -12,7 +12,7 @@ from astacus.coordinator.config import CoordinatorConfig, CoordinatorNode
 from astacus.coordinator.plugins import ClickHousePlugin
 from astacus.coordinator.plugins.clickhouse.client import HttpClickHouseClient
 from astacus.coordinator.plugins.clickhouse.config import (
-    ClickHouseConfiguration, ClickHouseNode, ZooKeeperConfiguration, ZooKeeperNode
+    ClickHouseConfiguration, ClickHouseNode, ReplicatedDatabaseSettings, ZooKeeperConfiguration, ZooKeeperNode
 )
 from astacus.node.config import NodeConfig
 from pathlib import Path
@@ -26,8 +26,10 @@ import contextlib
 import dataclasses
 import logging
 import pytest
+import subprocess
 import sys
 import tempfile
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -144,9 +146,11 @@ log4j.appender.default.layout.ConversionPattern=[%-5p] %m%n
 
 
 @contextlib.asynccontextmanager
-async def create_clickhouse_cluster(zookeeper: Service,
-                                    ports: Ports,
-                                    cluster_size: int = 2) -> AsyncIterator[ServiceCluster]:
+async def create_clickhouse_cluster(
+    zookeeper: Service,
+    ports: Ports,
+    cluster_size: int = 2,
+) -> AsyncIterator[ServiceCluster]:
     command = await get_clickhouse_command()
     if command is None:
         pytest.skip("clickhouse installation not found")
@@ -275,28 +279,32 @@ async def get_command_path(name: str) -> Optional[Path]:
 
 
 @contextlib.asynccontextmanager
-async def run_process_and_wait_for_pattern(*,
-                                           args: List[Union[str, Path]],
-                                           cwd: Path,
-                                           pattern: str,
-                                           timeout: float = 10.0) -> AsyncIterator[asyncio.subprocess.Process]:
+async def run_process_and_wait_for_pattern(
+    *,
+    args: List[Union[str, Path]],
+    cwd: Path,
+    pattern: str,
+    timeout: float = 10.0,
+) -> AsyncIterator[asyncio.subprocess.Process]:
     # This stringification is a workaround for a bug in pydev (pydev_monkey.py:111)
     str_args = [str(arg) for arg in args]
     env: Dict[str, str] = {}
-    process = await asyncio.create_subprocess_exec(*str_args, cwd=cwd, env=env, stderr=asyncio.subprocess.PIPE)
-    try:
-        pattern_found = asyncio.Event()
+    pattern_found = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    with subprocess.Popen(str_args, cwd=cwd, env=env, stderr=subprocess.PIPE) as process:
 
-        async def read_logs() -> None:
+        def read_logs() -> None:
             assert process.stderr is not None
-            while process.returncode is None and not process.stderr.at_eof():
-                line = await process.stderr.readline()
-                decoded_line = line.rstrip(b"\n").decode(encoding="utf-8", errors="replace")
-                logger.debug("%d: %s", process.pid, decoded_line)
-                if pattern in decoded_line:
-                    pattern_found.set()
+            while process.poll() is None:
+                for line in process.stderr:
+                    line = line.rstrip(b"\n")
+                    decoded_line = line.rstrip(b"\n").decode(encoding="utf-8", errors="replace")
+                    logger.debug("%d: %s", process.pid, decoded_line)
+                    if pattern in decoded_line:
+                        loop.call_soon_threadsafe(pattern_found.set)
 
-        read_logs_task = asyncio.create_task(read_logs())
+        thread = threading.Thread(target=read_logs)
+        thread.start()
         try:
             try:
                 await asyncio.wait_for(pattern_found.wait(), timeout=timeout)
@@ -304,16 +312,8 @@ async def run_process_and_wait_for_pattern(*,
                 raise Exception(f"Pattern {pattern!r} not found after {timeout:.3f}s in output of {str_args}") from e
             yield process
         finally:
-            read_logs_task.cancel()
-    finally:
-        if process.returncode is None:
-            try:
-                process.kill()
-            except ProcessLookupError:
-                pass
-        await process.wait()
-        # https://bugs.python.org/issue41320
-        process.stderr._transport.close()  # type: ignore[union-attr] # pylint: disable=protected-access
+            process.kill()
+            thread.join()
 
 
 @contextlib.asynccontextmanager
@@ -369,6 +369,10 @@ def create_astacus_configs(
                                 port=service.port,
                             ) for service in clickhouse_cluster.services
                         ]
+                    ),
+                    replicated_databases_settings=ReplicatedDatabaseSettings(
+                        cluster_username=clickhouse_cluster.services[0].username,
+                        cluster_password=clickhouse_cluster.services[0].password,
                     ),
                     sync_timeout=30.0,
                 ).jsondict()

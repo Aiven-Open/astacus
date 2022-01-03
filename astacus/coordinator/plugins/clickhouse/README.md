@@ -1,7 +1,6 @@
 # Astacus for ClickHouse
 
-- Requires [ClickHouse >= 21.9](https://clickhouse.tech/docs/en/whats-new/changelog/#clickhouse-release-v21-9-2021-09-09)
-  with (for now) [a custom patch](https://github.com/ClickHouse/ClickHouse/pull/29202)
+- Requires [ClickHouse >= 21.11](https://clickhouse.com/docs/en/whats-new/changelog/#clickhouse-release-v21-11-2021-11-09)
 - Backup of databases using
   the [Replicated database engine](https://clickhouse.tech/docs/en/engines/database-engines/replicated/)
 - Backup of content of tables using
@@ -44,6 +43,14 @@
   },
   "replicated_access_zookeeper_path": "/clickhouse/access",
   "replicated_databases_zookeeper_path": "/clickhouse/databases",
+  "replicated_databases_settings": {
+    "max_broken_tables_ratio": 0.5,
+    "max_replication_lag_to_enqueue": 10,
+    "wait_entry_commited_timeout_sec": 3600,
+    "cluster_username": "distributed_user",
+    "cluster_password": "distributed_user_password",
+    "cluster_secret": "the secret"
+  },
   "freeze_name": "astacus",
   "sync_timeout": 3600
 }
@@ -57,7 +64,7 @@ This should be part of your main ClickHouse configuration file :
 
 ```xml
 
-<yandex>
+<clickhouse>
     <user_directories>
         <users_xml>
             <path>users.xml</path>
@@ -66,7 +73,7 @@ This should be part of your main ClickHouse configuration file :
             <zookeeper_path>/clickhouse/access/</zookeeper_path>
         </replicated>
     </user_directories>
-</yandex>
+</clickhouse>
 ```
 
 The `<users_xml>` section before the `<replicated>` section is useful to configure your admin user, which can be then used to
@@ -80,13 +87,13 @@ Then enable the Replicated database engine in your `users.xml` file:
 
 ```xml
 
-<yandex>
+<clickhouse>
     <profiles>
         <default>
             <allow_experimental_database_replicated>true</allow_experimental_database_replicated>
         </default>
     </profiles>
-</yandex>
+</clickhouse>
 ```
 
 You can now create databases on all servers of the cluster using:
@@ -103,6 +110,8 @@ If you have large volumes of data, adjust the `sync_timeout` (in seconds) accord
 ### Databases
 
 Replicated database are restored with their original name. However, they are not restored with the same UUID.
+
+The replicated databases will be restored with the settings from the configuration files, not their original settings.
 
 Their restored ZooKeeper path is constructed from `replicated_databases_zookeeper_path` and the escaped name of the
 database (escaped by replaced all characters which are not alphanumerical or `_` with their percent-encoded equivalent):

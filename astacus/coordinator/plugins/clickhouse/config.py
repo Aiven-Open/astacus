@@ -28,6 +28,15 @@ class ClickHouseConfiguration(AstacusModel):
     nodes: List[ClickHouseNode] = []
 
 
+class ReplicatedDatabaseSettings(AstacusModel):
+    max_broken_tables_ratio: Optional[float]
+    max_replication_lag_to_enqueue: Optional[int]
+    wait_entry_commited_timeout_sec: Optional[int]
+    cluster_username: Optional[str]
+    cluster_password: Optional[str]
+    cluster_secret: Optional[str]
+
+
 def get_zookeeper_client(configuration: ZooKeeperConfiguration) -> ZooKeeperClient:
     return KazooZooKeeperClient(hosts=[build_netloc(node.host, node.port) for node in configuration.nodes])
 

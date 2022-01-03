@@ -40,7 +40,7 @@ class HttpClickHouseClient(ClickHouseClient):
         port: int,
         username: Optional[str] = None,
         password: Optional[str] = None,
-        timeout: float = 10.0
+        timeout: float = 10.0,
     ):
         self.host = host
         self.port = port
@@ -58,7 +58,10 @@ class HttpClickHouseClient(ClickHouseClient):
         netloc = build_netloc(self.host, self.port)
         response = await httpx_request(
             url=urllib.parse.urlunsplit(("http", netloc, "", None, None)),
-            params={"query": query},
+            params={
+                "query": query,
+                "wait_end_of_query": "1"
+            },
             method="post",
             # The response can be empty so we can't use httpx_request builtin decoding
             json=False,

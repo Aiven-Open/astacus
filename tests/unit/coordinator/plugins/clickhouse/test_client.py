@@ -2,7 +2,9 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
-from astacus.coordinator.plugins.clickhouse.client import escape_sql_identifier, HttpClickHouseClient
+from astacus.coordinator.plugins.clickhouse.client import (
+    ClickHouseClientQueryError, escape_sql_identifier, HttpClickHouseClient
+)
 
 import json
 import pytest
@@ -26,7 +28,9 @@ async def test_successful_execute_returns_rows() -> None:
             "rows_before_limit_at_least": 2
         }
         respx.post(
-            "http://example.org:9000?query=SHOW+DATABASES", content=json.dumps(content), content_type="application/json"
+            "http://example.org:9000?query=SHOW+DATABASES&wait_end_of_query=1",
+            content=json.dumps(content),
+            content_type="application/json"
         )
         response = await client.execute("SHOW DATABASES")
     assert response == [["system"], ["defaultdb"]]
@@ -36,8 +40,8 @@ async def test_successful_execute_returns_rows() -> None:
 async def test_failing_execute_raises_an_exception() -> None:
     client = HttpClickHouseClient(host="example.org", port=9000)
     with respx.mock:
-        respx.post("http://example.org:9000?query=SHOW+DATABASES", status_code=400)
-        with pytest.raises(Exception):
+        respx.post("http://example.org:9000?query=SHOW+DATABASES&wait_end_of_query=1", status_code=400)
+        with pytest.raises(ClickHouseClientQueryError):
             await client.execute("SHOW DATABASES")
 
 
@@ -45,7 +49,7 @@ async def test_failing_execute_raises_an_exception() -> None:
 async def test_sends_authentication_headers() -> None:
     client = HttpClickHouseClient(host="example.org", port=9000, username="user", password="password")
     with respx.mock:
-        respx.post("http://example.org:9000?query=SELECT+1+LIMIT+0", content="")
+        respx.post("http://example.org:9000?query=SELECT+1+LIMIT+0&wait_end_of_query=1", content="")
         await client.execute("SELECT 1 LIMIT 0")
         request = respx.calls[0][0]
         assert request.headers["x-clickhouse-user"] == "user"

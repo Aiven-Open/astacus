@@ -2,7 +2,9 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
-from .config import ClickHouseConfiguration, get_clickhouse_clients, get_zookeeper_client, ZooKeeperConfiguration
+from .config import (
+    ClickHouseConfiguration, get_clickhouse_clients, get_zookeeper_client, ReplicatedDatabaseSettings, ZooKeeperConfiguration
+)
 from .parts import get_frozen_parts_pattern
 from .steps import (
     AttachMergeTreePartsStep, ClickHouseManifestStep, CreateClickHouseManifestStep, DistributeReplicatedPartsStep,
@@ -22,6 +24,7 @@ class ClickHousePlugin(CoordinatorPlugin):
     clickhouse: ClickHouseConfiguration = ClickHouseConfiguration()
     replicated_access_zookeeper_path: str = "/clickhouse/access"
     replicated_databases_zookeeper_path: str = "/clickhouse/databases"
+    replicated_databases_settings: ReplicatedDatabaseSettings = ReplicatedDatabaseSettings()
     freeze_name: str = "astacus"
     sync_timeout: float = 3600.0
 
@@ -76,6 +79,7 @@ class ClickHousePlugin(CoordinatorPlugin):
             RestoreReplicatedDatabasesStep(
                 clients=clients,
                 replicated_databases_zookeeper_path=self.replicated_databases_zookeeper_path,
+                replicated_database_settings=self.replicated_databases_settings,
             ),
             # We should deduplicate parts of ReplicatedMergeTree tables to only download once from
             # backup storage and then let ClickHouse replicate between all servers.

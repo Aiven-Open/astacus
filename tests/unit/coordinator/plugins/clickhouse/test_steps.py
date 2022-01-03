@@ -10,7 +10,7 @@ from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins.base import BackupManifestStep, SnapshotStep, StepFailedError, StepsContext
 from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, StubClickHouseClient
-from astacus.coordinator.plugins.clickhouse.config import ClickHouseConfiguration, ClickHouseNode
+from astacus.coordinator.plugins.clickhouse.config import ClickHouseConfiguration, ClickHouseNode, ReplicatedDatabaseSettings
 from astacus.coordinator.plugins.clickhouse.manifest import AccessEntity, ClickHouseManifest, ReplicatedDatabase, Table
 from astacus.coordinator.plugins.clickhouse.steps import (
     AttachMergeTreePartsStep, ClickHouseManifestStep, CreateClickHouseManifestStep, DistributeReplicatedPartsStep,
@@ -283,7 +283,7 @@ async def test_unfreezes_all_mergetree_tables_listed_in_manifest() -> None:
 
 async def _test_freeze_unfreezes_all_mergetree_tables_listed_in_manifest(
     *, step_class: Union[Type[FreezeTablesStep], Type[UnfreezeTablesStep]], operation: str
-):
+) -> None:
     first_client, second_client = mock_clickhouse_client(), mock_clickhouse_client()
     step = step_class(clients=[first_client, second_client], freeze_name="Äs`t:/.././@c'_'s")
 
@@ -437,7 +437,11 @@ async def test_parse_clickhouse_manifest() -> None:
 @pytest.mark.asyncio
 async def test_creates_all_replicated_databases_and_tables_in_manifest() -> None:
     clients = [mock_clickhouse_client(), mock_clickhouse_client()]
-    step = RestoreReplicatedDatabasesStep(clients=clients, replicated_databases_zookeeper_path="/clickhouse/databases")
+    step = RestoreReplicatedDatabasesStep(
+        clients=clients,
+        replicated_databases_zookeeper_path="/clickhouse/databases",
+        replicated_database_settings=ReplicatedDatabaseSettings(),
+    )
 
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
@@ -462,11 +466,42 @@ async def test_creates_all_replicated_databases_and_tables_in_manifest() -> None
 
 
 @pytest.mark.asyncio
-async def test_drops_each_database_on_all_servers_before_recreating_it():
+async def test_creates_all_replicated_databases_and_tables_in_manifest_with_custom_settings() -> None:
+    client = mock_clickhouse_client()
+    step = RestoreReplicatedDatabasesStep(
+        clients=[client],
+        replicated_databases_zookeeper_path="/clickhouse/databases",
+        replicated_database_settings=ReplicatedDatabaseSettings(
+            cluster_username="alice",
+            cluster_password="alice_secret",
+        ),
+    )
+    cluster = Cluster(nodes=[CoordinatorNode(url="node1")])
+    context = StepsContext()
+    context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
+    await step.run_step(cluster, context)
+    first_client_queries = [
+        "DROP DATABASE IF EXISTS `db-one` SYNC",
+        "CREATE DATABASE `db-one` ENGINE = Replicated('/clickhouse/databases/db%2Done', '{shard}', '{replica}') "
+        "SETTINGS cluster_username='alice', cluster_password='alice_secret'",
+        "DROP DATABASE IF EXISTS `db-two` SYNC",
+        "CREATE DATABASE `db-two` ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{shard}', '{replica}') "
+        "SETTINGS cluster_username='alice', cluster_password='alice_secret'",
+        "CREATE TABLE db-one.table-uno ...",
+        "CREATE TABLE db-one.table-dos ...",
+        "CREATE TABLE db-two.table-eins ...",
+    ]
+    assert client.mock_calls == list(map(mock.call.execute, first_client_queries))
+
+
+@pytest.mark.asyncio
+async def test_drops_each_database_on_all_servers_before_recreating_it() -> None:
     # We use the same client twice to record the global sequence of queries across all servers
     client = mock_clickhouse_client()
     step = RestoreReplicatedDatabasesStep(
-        clients=[client, client], replicated_databases_zookeeper_path="/clickhouse/databases"
+        clients=[client, client],
+        replicated_databases_zookeeper_path="/clickhouse/databases",
+        replicated_database_settings=ReplicatedDatabaseSettings(),
     )
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
@@ -495,7 +530,7 @@ async def test_creates_all_access_entities_in_manifest() -> None:
 
 
 @pytest.mark.asyncio
-async def test_creating_all_access_entities_can_be_retried():
+async def test_creating_all_access_entities_can_be_retried() -> None:
     client = FakeZooKeeperClient()
     step = RestoreAccessEntitiesStep(zookeeper_client=client, access_entities_path="/clickhouse/access")
     context = StepsContext()
@@ -510,7 +545,7 @@ async def test_creating_all_access_entities_can_be_retried():
     await check_restored_entities(client)
 
 
-async def check_restored_entities(client: ZooKeeperClient):
+async def check_restored_entities(client: ZooKeeperClient) -> None:
     async with client.connect() as connection:
         assert await connection.get_children("/clickhouse/access") == ["P", "Q", "R", "S", "U", "uuid"]
         assert await connection.get_children("/clickhouse/access/uuid") == [str(uuid.UUID(int=i)) for i in range(1, 6)]
