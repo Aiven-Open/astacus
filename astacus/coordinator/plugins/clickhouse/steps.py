@@ -23,6 +23,7 @@ from typing import cast, Dict, List, Tuple
 import asyncio
 import dataclasses
 import logging
+import secrets
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -431,9 +432,10 @@ class AttachMergeTreePartsStep(Step[None]):
             for table_identifier, part_name in list_parts_to_attach(snapshot_result, tables_by_uuid):
                 tasks.append(
                     limiter.run(
-                        client.execute(
+                        execute_with_timeout(
+                            client,
+                            self.attach_timeout,
                             f"ALTER TABLE {table_identifier} ATTACH PART {escape_sql_string(part_name)}",
-                            timeout=self.attach_timeout,
                         )
                     )
                 )
@@ -454,9 +456,15 @@ class SyncReplicasStep(Step[None]):
         manifest = context.get_result(ClickHouseManifestStep)
         limiter = Limiter(self.max_concurrent_sync)
         tasks = [
-            limiter.run(client.execute(f"SYSTEM SYNC REPLICA {table.escaped_sql_identifier}", timeout=self.sync_timeout))
-            for table in manifest.tables
-            for client in self.clients
-            if table.is_replicated
+            limiter.run(
+                execute_with_timeout(client, self.sync_timeout, f"SYSTEM SYNC REPLICA {table.escaped_sql_identifier}")
+            ) for table in manifest.tables for client in self.clients if table.is_replicated
         ]
         await asyncio.gather(*tasks)
+
+
+async def execute_with_timeout(client: ClickHouseClient, timeout: float, query: str) -> None:
+    # we use a session because we can't use the SETTINGS clause with all types of queries
+    session_id = secrets.token_hex()
+    await client.execute(f"SET receive_timeout={timeout}", session_id=session_id)
+    await client.execute(query, session_id=session_id, timeout=timeout)
