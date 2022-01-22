@@ -2,10 +2,11 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
-from astacus.common.ipc import SnapshotFile
+from astacus.common.ipc import SnapshotFile, SnapshotResult, SnapshotState
+from astacus.coordinator.plugins.clickhouse.manifest import Table
 from astacus.coordinator.plugins.clickhouse.parts import (
     add_file_to_parts, check_parts_replication, distribute_parts_to_servers, get_frozen_parts_pattern,
-    group_files_into_parts, Part, PartFile, PartKey
+    group_files_into_parts, list_parts_to_attach, Part, PartFile, PartKey
 )
 from pathlib import Path
 from typing import Dict, List
@@ -230,3 +231,28 @@ def test_distribute_parts_to_servers_balances_part_sizes() -> None:
 
 def test_get_frozen_parts_pattern_escapes_backup_name() -> None:
     assert get_frozen_parts_pattern("something+stra/../nge") == "shadow/something%2Bstra%2F%2E%2E%2Fnge/store/**/*"
+
+
+def test_list_parts_to_attach() -> None:
+    parts_to_attach = list_parts_to_attach(
+        SnapshotResult(state=SnapshotState(files=TABLE_1_PART_1 + TABLE_1_PART_2)), {
+            T1_UUID: Table(
+                database="default",
+                name="table_1",
+                engine="ReplicatedMergeTree",
+                uuid=T1_UUID,
+                create_query="CREATE TABLE ..."
+            ),
+            T2_UUID: Table(
+                database="default",
+                name="table_2",
+                engine="ReplicatedMergeTree",
+                uuid=T2_UUID,
+                create_query="CREATE TABLE ..."
+            )
+        }
+    )
+    assert parts_to_attach == [
+        ('`default`.`table_1`', 'all_0_0_0'),
+        ('`default`.`table_1`', 'all_1_1_0'),
+    ]

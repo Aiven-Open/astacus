@@ -26,7 +26,10 @@ class ClickHousePlugin(CoordinatorPlugin):
     replicated_databases_zookeeper_path: str = "/clickhouse/databases"
     replicated_databases_settings: ReplicatedDatabaseSettings = ReplicatedDatabaseSettings()
     freeze_name: str = "astacus"
+    attach_timeout: float = 300.0
+    max_concurrent_attach: int = 100
     sync_timeout: float = 3600.0
+    max_concurrent_sync: int = 100
 
     def get_backup_steps(self, *, context: OperationContext) -> List[Step]:
         zookeeper_client = get_zookeeper_client(self.zookeeper)
@@ -84,8 +87,16 @@ class ClickHousePlugin(CoordinatorPlugin):
             # We should deduplicate parts of ReplicatedMergeTree tables to only download once from
             # backup storage and then let ClickHouse replicate between all servers.
             RestoreStep(storage_name=context.storage_name, partial_restore_nodes=req.partial_restore_nodes),
-            AttachMergeTreePartsStep(clients=clients),
-            SyncReplicasStep(clients=clients, sync_timeout=self.sync_timeout),
+            AttachMergeTreePartsStep(
+                clients=clients,
+                attach_timeout=self.attach_timeout,
+                max_concurrent_attach=self.max_concurrent_attach,
+            ),
+            SyncReplicasStep(
+                clients=clients,
+                sync_timeout=self.sync_timeout,
+                max_concurrent_sync=self.max_concurrent_sync,
+            ),
             # Keeping this step last avoids access from non-admin users while we are still restoring
             RestoreAccessEntitiesStep(
                 zookeeper_client=zookeeper_client, access_entities_path=self.replicated_access_zookeeper_path

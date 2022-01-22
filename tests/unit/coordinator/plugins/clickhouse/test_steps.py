@@ -571,7 +571,7 @@ async def test_attaches_all_mergetree_parts_in_manifest() -> None:
     client_1 = mock_clickhouse_client()
     client_2 = mock_clickhouse_client()
     clients = [client_1, client_2]
-    step = AttachMergeTreePartsStep(clients)
+    step = AttachMergeTreePartsStep(clients, attach_timeout=60, max_concurrent_attach=10)
 
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
@@ -627,19 +627,19 @@ async def test_attaches_all_mergetree_parts_in_manifest() -> None:
     # Note: parts list is different for each client
     # however, we can have identically named parts which are not the same file
     assert client_1.mock_calls == [
-        mock.call.execute("ALTER TABLE `db-one`.`table-dos` ATTACH PART 'all_1_1_0'"),
-        mock.call.execute("ALTER TABLE `db-one`.`table-uno` ATTACH PART 'all_0_0_0'"),
+        mock.call.execute("ALTER TABLE `db-one`.`table-dos` ATTACH PART 'all_1_1_0'", timeout=60),
+        mock.call.execute("ALTER TABLE `db-one`.`table-uno` ATTACH PART 'all_0_0_0'", timeout=60),
     ]
     assert client_2.mock_calls == [
-        mock.call.execute("ALTER TABLE `db-one`.`table-dos` ATTACH PART 'all_1_1_1'"),
-        mock.call.execute("ALTER TABLE `db-one`.`table-uno` ATTACH PART 'all_0_0_0'"),
+        mock.call.execute("ALTER TABLE `db-one`.`table-dos` ATTACH PART 'all_1_1_1'", timeout=60),
+        mock.call.execute("ALTER TABLE `db-one`.`table-uno` ATTACH PART 'all_0_0_0'", timeout=60),
     ]
 
 
 @pytest.mark.asyncio
 async def test_sync_replicas_for_replicated_mergetree_tables() -> None:
     clients = [mock_clickhouse_client(), mock_clickhouse_client()]
-    step = SyncReplicasStep(clients, sync_timeout=180)
+    step = SyncReplicasStep(clients, sync_timeout=180, max_concurrent_sync=10)
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
     context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
