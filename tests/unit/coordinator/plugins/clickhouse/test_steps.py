@@ -20,8 +20,9 @@ from astacus.coordinator.plugins.clickhouse.steps import (
 )
 from astacus.coordinator.plugins.clickhouse.zookeeper import FakeZooKeeperClient, ZooKeeperClient
 from pathlib import Path
-from typing import Optional, Type, Union
+from typing import Optional, Sequence, Type, Union
 from unittest import mock
+from unittest.mock import _Call as MockCall  # pylint: disable=protected-access
 
 import asyncio
 import datetime
@@ -571,7 +572,7 @@ async def test_attaches_all_mergetree_parts_in_manifest() -> None:
     client_1 = mock_clickhouse_client()
     client_2 = mock_clickhouse_client()
     clients = [client_1, client_2]
-    step = AttachMergeTreePartsStep(clients)
+    step = AttachMergeTreePartsStep(clients, attach_timeout=60, max_concurrent_attach=10)
 
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
@@ -627,25 +628,42 @@ async def test_attaches_all_mergetree_parts_in_manifest() -> None:
     # Note: parts list is different for each client
     # however, we can have identically named parts which are not the same file
     assert client_1.mock_calls == [
-        mock.call.execute("ALTER TABLE `db-one`.`table-dos` ATTACH PART 'all_1_1_0'"),
-        mock.call.execute("ALTER TABLE `db-one`.`table-uno` ATTACH PART 'all_0_0_0'"),
+        mock.call.execute("SET receive_timeout=60", session_id=mock.ANY),
+        mock.call.execute("ALTER TABLE `db-one`.`table-dos` ATTACH PART 'all_1_1_0'", session_id=mock.ANY, timeout=60),
+        mock.call.execute("SET receive_timeout=60", session_id=mock.ANY),
+        mock.call.execute("ALTER TABLE `db-one`.`table-uno` ATTACH PART 'all_0_0_0'", session_id=mock.ANY, timeout=60),
     ]
+    check_each_pair_of_calls_has_the_same_session_id(client_1.mock_calls)
     assert client_2.mock_calls == [
-        mock.call.execute("ALTER TABLE `db-one`.`table-dos` ATTACH PART 'all_1_1_1'"),
-        mock.call.execute("ALTER TABLE `db-one`.`table-uno` ATTACH PART 'all_0_0_0'"),
+        mock.call.execute("SET receive_timeout=60", session_id=mock.ANY),
+        mock.call.execute("ALTER TABLE `db-one`.`table-dos` ATTACH PART 'all_1_1_1'", session_id=mock.ANY, timeout=60),
+        mock.call.execute("SET receive_timeout=60", session_id=mock.ANY),
+        mock.call.execute("ALTER TABLE `db-one`.`table-uno` ATTACH PART 'all_0_0_0'", session_id=mock.ANY, timeout=60),
     ]
+    check_each_pair_of_calls_has_the_same_session_id(client_2.mock_calls)
 
 
 @pytest.mark.asyncio
 async def test_sync_replicas_for_replicated_mergetree_tables() -> None:
     clients = [mock_clickhouse_client(), mock_clickhouse_client()]
-    step = SyncReplicasStep(clients, sync_timeout=180)
+    step = SyncReplicasStep(clients, sync_timeout=180, max_concurrent_sync=10)
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
     context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
     await step.run_step(cluster, context)
     for client_index, client in enumerate(clients):
         assert client.mock_calls == [
-            mock.call.execute("SYSTEM SYNC REPLICA `db-one`.`table-uno`", timeout=180),
-            mock.call.execute("SYSTEM SYNC REPLICA `db-two`.`table-eins`", timeout=180)
+            mock.call.execute("SET receive_timeout=180", session_id=mock.ANY),
+            mock.call.execute("SYSTEM SYNC REPLICA `db-one`.`table-uno`", session_id=mock.ANY, timeout=180),
+            mock.call.execute("SET receive_timeout=180", session_id=mock.ANY),
+            mock.call.execute("SYSTEM SYNC REPLICA `db-two`.`table-eins`", session_id=mock.ANY, timeout=180)
         ], f"Wrong list of queries for client {client_index} of {len(clients)}"
+        check_each_pair_of_calls_has_the_same_session_id(client.mock_calls)
+
+
+def check_each_pair_of_calls_has_the_same_session_id(mock_calls: Sequence[MockCall]) -> None:
+    session_ids = [mock_call[2]["session_id"] for mock_call in mock_calls]
+    assert len(session_ids) % 2 == 0
+    assert None not in session_ids
+    for start_index in range(0, len(session_ids), 2):
+        assert session_ids[start_index] == session_ids[start_index + 1]

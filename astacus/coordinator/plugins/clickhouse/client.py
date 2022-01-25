@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class ClickHouseClient:
-    async def execute(self, query: str, timeout: Optional[float] = None) -> Iterable[Row]:
+    async def execute(self, query: str, timeout: Optional[float] = None, session_id: Optional[str] = None) -> Iterable[Row]:
         raise NotImplementedError
 
 
@@ -48,7 +48,7 @@ class HttpClickHouseClient(ClickHouseClient):
         self.password = password
         self.timeout = timeout
 
-    async def execute(self, query: str, timeout: Optional[float] = None) -> Iterable[Row]:
+    async def execute(self, query: str, timeout: Optional[float] = None, session_id: Optional[str] = None) -> Iterable[Row]:
         # Output format: https://clickhouse.tech/docs/en/interfaces/formats/#jsoncompact
         headers = [("X-ClickHouse-Database", "system"), ("X-ClickHouse-Format", "JSONCompact")]
         if self.username is not None:
@@ -56,12 +56,12 @@ class HttpClickHouseClient(ClickHouseClient):
         if self.password is not None:
             headers.append(("X-ClickHouse-Key", self.password))
         netloc = build_netloc(self.host, self.port)
+        params = {"query": query, "wait_end_of_query": "1"}
+        if session_id is not None:
+            params["session_id"] = session_id
         response = await httpx_request(
             url=urllib.parse.urlunsplit(("http", netloc, "", None, None)),
-            params={
-                "query": query,
-                "wait_end_of_query": "1"
-            },
+            params=params,
             method="post",
             # The response can be empty so we can't use httpx_request builtin decoding
             json=False,
@@ -87,7 +87,7 @@ class StubClickHouseClient(ClickHouseClient):
     def set_response(self, query: str, rows: List[Row]) -> None:
         self.responses[query] = copy.deepcopy(rows)
 
-    async def execute(self, query: str, timeout: Optional[float] = None) -> Iterable[Row]:
+    async def execute(self, query: str, timeout: Optional[float] = None, session_id: Optional[str] = None) -> Iterable[Row]:
         return copy.deepcopy(self.responses[query])
 
 

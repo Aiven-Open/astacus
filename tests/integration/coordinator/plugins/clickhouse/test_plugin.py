@@ -94,7 +94,7 @@ async def setup_cluster_content(clients: List[HttpClickHouseClient]) -> None:
         "ENGINE = MergeTree ORDER BY (thekey3) "
         "AS SELECT toInt32(thekey * 3) as thekey3 FROM default.merge_tree"
     )
-    await clients[0].execute("CREATE TABLE default.log  (thekey UInt32, thedata String)  ENGINE = Log")
+    await clients[0].execute("CREATE TABLE default.memory  (thekey UInt32, thedata String)  ENGINE = Memory")
     # This will be replicated between nodes
     await clients[0].execute("INSERT INTO default.replicated_merge_tree VALUES (123, 'foo')")
     await clients[1].execute("INSERT INTO default.replicated_merge_tree VALUES (456, 'bar')")
@@ -102,7 +102,7 @@ async def setup_cluster_content(clients: List[HttpClickHouseClient]) -> None:
     await clients[0].execute("INSERT INTO default.merge_tree VALUES (123, 'foo')")
     await clients[1].execute("INSERT INTO default.merge_tree VALUES (456, 'bar')")
     # This won't be backed up
-    await clients[0].execute("INSERT INTO default.log VALUES (123, 'foo')")
+    await clients[0].execute("INSERT INTO default.memory VALUES (123, 'foo')")
 
 
 async def setup_cluster_users(clients: List[HttpClickHouseClient]) -> None:
@@ -190,4 +190,4 @@ async def test_restores_connectivity_between_distributed_servers(restored_cluste
 async def test_does_not_restore_log_tables_data(restored_cluster: List[ClickHouseClient]) -> None:
     # We restored the table structure but not the data
     for client in restored_cluster:
-        assert await client.execute("SELECT thekey, thedata FROM default.log") == []
+        assert await client.execute("SELECT thekey, thedata FROM default.memory") == []

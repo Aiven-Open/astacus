@@ -7,10 +7,11 @@ Replicated family of table engines.
 
 This does not support shards, but this is the right place to add support for them.
 """
-from astacus.common.ipc import SnapshotFile
-from astacus.coordinator.plugins.clickhouse.escaping import escape_for_file_name
+from astacus.common.ipc import SnapshotFile, SnapshotResult
+from astacus.coordinator.plugins.clickhouse.escaping import escape_for_file_name, unescape_from_file_name
+from astacus.coordinator.plugins.clickhouse.manifest import Table
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 import dataclasses
 import re
@@ -145,3 +146,20 @@ def get_frozen_parts_pattern(freeze_name: str) -> str:
     """
     escaped_freeze_name = escape_for_file_name(freeze_name)
     return f"shadow/{escaped_freeze_name}/store/**/*"
+
+
+def list_parts_to_attach(
+    snapshot_result: SnapshotResult,
+    tables_by_uuid: Mapping[uuid.UUID, Table],
+) -> Sequence[Tuple[str, str]]:
+    """
+    Returns a list of table identifiers and part names to attach from the snapshot.
+    """
+    parts_to_attach: Set[Tuple[str, str]] = set()
+    for snapshot_file in snapshot_result.state.files:
+        table_uuid = uuid.UUID(snapshot_file.relative_path.parts[2])
+        table = tables_by_uuid.get(table_uuid)
+        if table is not None:
+            part_name = unescape_from_file_name(snapshot_file.relative_path.parts[4])
+            parts_to_attach.add((table.escaped_sql_identifier, part_name))
+    return sorted(parts_to_attach)

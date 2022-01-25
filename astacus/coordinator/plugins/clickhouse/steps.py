@@ -7,18 +7,23 @@ from .config import ClickHouseConfiguration, ReplicatedDatabaseSettings
 from .dependencies import access_entities_sorted_by_dependencies, tables_sorted_by_dependencies
 from .escaping import escape_for_file_name, unescape_from_file_name
 from .manifest import AccessEntity, ClickHouseManifest, ReplicatedDatabase, Table
-from .parts import check_parts_replication, distribute_parts_to_servers, get_frozen_parts_pattern, group_files_into_parts
+from .parts import (
+    check_parts_replication, distribute_parts_to_servers, get_frozen_parts_pattern, group_files_into_parts,
+    list_parts_to_attach
+)
 from .zookeeper import ChangeWatch, NodeExistsError, ZooKeeperClient
 from astacus.common import ipc
 from astacus.common.exceptions import TransientException
+from astacus.common.limiter import Limiter
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import BackupManifestStep, SnapshotStep, Step, StepFailedError, StepsContext
 from pathlib import Path
-from typing import cast, Dict, List, Set, Tuple
+from typing import cast, Dict, List, Tuple
 
 import asyncio
 import dataclasses
 import logging
+import secrets
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -414,22 +419,26 @@ class AttachMergeTreePartsStep(Step[None]):
     details.
     """
     clients: List[ClickHouseClient]
+    attach_timeout: float
+    max_concurrent_attach: int
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         backup_manifest = context.get_result(BackupManifestStep)
         clickhouse_manifest = context.get_result(ClickHouseManifestStep)
         tasks = []
         tables_by_uuid = {table.uuid: table for table in clickhouse_manifest.tables}
+        limiter = Limiter(self.max_concurrent_attach)
         for client, snapshot_result in zip(self.clients, backup_manifest.snapshot_results):
-            parts_to_attach: Set[Tuple[str, str]] = set()
-            for snapshot_file in snapshot_result.state.files:
-                table_uuid = uuid.UUID(snapshot_file.relative_path.parts[2])
-                table = tables_by_uuid.get(table_uuid)
-                if table is not None:
-                    part_name = unescape_from_file_name(snapshot_file.relative_path.parts[4])
-                    parts_to_attach.add((table.escaped_sql_identifier, part_name))
-            for table_identifier, part_name in sorted(parts_to_attach):
-                tasks.append(client.execute(f"ALTER TABLE {table_identifier} ATTACH PART {escape_sql_string(part_name)}"))
+            for table_identifier, part_name in list_parts_to_attach(snapshot_result, tables_by_uuid):
+                tasks.append(
+                    limiter.run(
+                        execute_with_timeout(
+                            client,
+                            self.attach_timeout,
+                            f"ALTER TABLE {table_identifier} ATTACH PART {escape_sql_string(part_name)}",
+                        )
+                    )
+                )
         await asyncio.gather(*tasks)
 
 
@@ -441,13 +450,21 @@ class SyncReplicasStep(Step[None]):
     """
     clients: List[ClickHouseClient]
     sync_timeout: float
+    max_concurrent_sync: int
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         manifest = context.get_result(ClickHouseManifestStep)
+        limiter = Limiter(self.max_concurrent_sync)
         tasks = [
-            client.execute(f"SYSTEM SYNC REPLICA {table.escaped_sql_identifier}", timeout=self.sync_timeout)
-            for table in manifest.tables
-            for client in self.clients
-            if table.is_replicated
+            limiter.run(
+                execute_with_timeout(client, self.sync_timeout, f"SYSTEM SYNC REPLICA {table.escaped_sql_identifier}")
+            ) for table in manifest.tables for client in self.clients if table.is_replicated
         ]
         await asyncio.gather(*tasks)
+
+
+async def execute_with_timeout(client: ClickHouseClient, timeout: float, query: str) -> None:
+    # we use a session because we can't use the SETTINGS clause with all types of queries
+    session_id = secrets.token_hex()
+    await client.execute(f"SET receive_timeout={timeout}", session_id=session_id)
+    await client.execute(query, session_id=session_id, timeout=timeout)
