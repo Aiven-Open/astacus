@@ -47,10 +47,10 @@ def access_entities_sorted_by_dependencies(access_entities: List[AccessEntity]) 
     # This means we need to parse the `attach_query` of the entity to find the uuid of
     # other entities. This is unpleasant, but the quoting format of entity names and entity
     # uuids is different enough to not risk false matches.
-    clickhouse_id = re.compile(r"ID\('([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'\)")
+    clickhouse_id = re.compile(rb"ID\('([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'\)")
     for entity in access_entities:
         sorter.add(entity.uuid)
-        for uuid_str in clickhouse_id.findall(entity.attach_query):
-            sorter.add(entity.uuid, uuid.UUID(uuid_str))
+        for uuid_bytes in clickhouse_id.findall(entity.attach_query):
+            sorter.add(entity.uuid, uuid.UUID(uuid_bytes.decode()))
     sort_order = list(sorter.static_order())
     return sorted(access_entities, key=lambda e: sort_order.index(e.uuid))

@@ -35,13 +35,24 @@ import uuid
 
 pytestmark = [pytest.mark.clickhouse]
 
+
+# NB: not recursive, since we don't need it to be
+def stringify_bytes(d: Dict) -> Dict:
+    for key, value in d.items():
+        if isinstance(value, bytes):
+            d[key] = base64.b64encode(value).decode()
+    return d
+
+
 SAMPLE_ENTITIES = [
-    AccessEntity(type="P", uuid=uuid.UUID(int=1), name="a_policy", attach_query="ATTACH ROW POLICY ..."),
-    AccessEntity(type="Q", uuid=uuid.UUID(int=2), name="a_quota", attach_query="ATTACH QUOTA ..."),
-    AccessEntity(type="R", uuid=uuid.UUID(int=3), name="a_role", attach_query="ATTACH ROLE ..."),
-    AccessEntity(type="S", uuid=uuid.UUID(int=4), name="a_settings_profile", attach_query="ATTACH SETTINGS PROFILE ..."),
-    AccessEntity(type="U", uuid=uuid.UUID(int=5), name="josé", attach_query="ATTACH USER ..."),
+    AccessEntity(type="P", uuid=uuid.UUID(int=1), name=b"a_policy", attach_query=b"ATTACH ROW POLICY ..."),
+    AccessEntity(type="Q", uuid=uuid.UUID(int=2), name=b"a_quota", attach_query=b"ATTACH QUOTA ..."),
+    AccessEntity(type="R", uuid=uuid.UUID(int=3), name=b"a_role", attach_query=b"ATTACH ROLE ..."),
+    AccessEntity(type="S", uuid=uuid.UUID(int=4), name=b"a_settings_profile", attach_query=b"ATTACH SETTINGS PROFILE ..."),
+    AccessEntity(type="U", uuid=uuid.UUID(int=5), name="josé".encode(), attach_query=b"ATTACH USER ..."),
+    AccessEntity(type="U", uuid=uuid.UUID(int=6), name=b"z\x80enjoyer", attach_query=b"ATTACH USER \x80 ..."),
 ]
+SAMPLE_ENTITIES_ENCODED = [stringify_bytes(e.dict()) for e in SAMPLE_ENTITIES]
 SAMPLE_DATABASES = [
     ReplicatedDatabase(name="db-one"),
     ReplicatedDatabase(name="db-two"),
@@ -70,11 +81,18 @@ SAMPLE_TABLES = [
         create_query="CREATE TABLE db-two.table-eins ...",
     )
 ]
+
 SAMPLE_MANIFEST = ClickHouseManifest(
     access_entities=SAMPLE_ENTITIES,
     replicated_databases=SAMPLE_DATABASES,
     tables=SAMPLE_TABLES,
 )
+
+SAMPLE_MANIFEST_ENCODED = {
+    "access_entities": SAMPLE_ENTITIES_ENCODED,
+    "replicated_databases": SAMPLE_DATABASES,
+    "tables": SAMPLE_TABLES,
+}
 
 
 def mock_clickhouse_client() -> mock.Mock:
@@ -130,6 +148,9 @@ async def create_zookeper_access_entities(zookeeper_client: ZooKeeperClient) -> 
             connection.create("/clickhouse/access/U/jos%C3%A9",
                               str(uuid.UUID(int=5)).encode()),
             connection.create(f"/clickhouse/access/uuid/{str(uuid.UUID(int=5))}", b"ATTACH USER ..."),
+            connection.create("/clickhouse/access/U/z%80enjoyer",
+                              str(uuid.UUID(int=6)).encode()),
+            connection.create(f"/clickhouse/access/uuid/{str(uuid.UUID(int=6))}", b"ATTACH USER \x80 ..."),
         )
 
 
@@ -146,6 +167,7 @@ class TrappedZooKeeperClient(FakeZooKeeperClient):
     """
     A fake ZooKeeper client with a trap: it will inject a concurrent write after a few reads.
     """
+
     def __init__(self) -> None:
         super().__init__()
         self.calls_until_failure: Optional[int] = None
@@ -247,7 +269,7 @@ async def test_create_clickhouse_manifest() -> None:
     context = StepsContext()
     context.set_result(RetrieveAccessEntitiesStep, SAMPLE_ENTITIES)
     context.set_result(RetrieveDatabasesAndTablesStep, (SAMPLE_DATABASES, SAMPLE_TABLES))
-    assert await step.run_step(Cluster(nodes=[]), context) == SAMPLE_MANIFEST
+    assert await step.run_step(Cluster(nodes=[]), context) == SAMPLE_MANIFEST_ENCODED
 
 
 @pytest.mark.asyncio
@@ -394,6 +416,10 @@ async def test_distribute_parts_of_replicated_tables() -> None:
     ]
 
 
+def _b64_str(b: bytes) -> str:
+    return base64.b64encode(b).decode()
+
+
 @pytest.mark.asyncio
 async def test_parse_clickhouse_manifest() -> None:
     step = ClickHouseManifestStep()
@@ -409,10 +435,10 @@ async def test_parse_clickhouse_manifest() -> None:
             plugin=Plugin.clickhouse,
             plugin_data={
                 "access_entities": [{
-                    "name": "default",
+                    "name": _b64_str(b"default_\x80"),
                     "uuid": "00000000-0000-0000-0000-000000000002",
                     "type": "U",
-                    "attach_query": "ATTACH USER ..."
+                    "attach_query": _b64_str(b"ATTACH USER \x80 ...")
                 }],
                 "replicated_databases": [{
                     "name": "db-one"
@@ -429,7 +455,9 @@ async def test_parse_clickhouse_manifest() -> None:
     )
     clickhouse_manifest = await step.run_step(Cluster(nodes=[]), context)
     assert clickhouse_manifest == ClickHouseManifest(
-        access_entities=[AccessEntity(type="U", uuid=uuid.UUID(int=2), name="default", attach_query="ATTACH USER ...")],
+        access_entities=[
+            AccessEntity(type="U", uuid=uuid.UUID(int=2), name=b"default_\x80", attach_query=b"ATTACH USER \x80 ...")
+        ],
         replicated_databases=[ReplicatedDatabase(name="db-one")],
         tables=[Table(database="db-one", name="t1", engine="MergeTree", uuid=uuid.UUID(int=4), create_query="CREATE ...")],
     )
@@ -549,12 +577,12 @@ async def test_creating_all_access_entities_can_be_retried() -> None:
 async def check_restored_entities(client: ZooKeeperClient) -> None:
     async with client.connect() as connection:
         assert await connection.get_children("/clickhouse/access") == ["P", "Q", "R", "S", "U", "uuid"]
-        assert await connection.get_children("/clickhouse/access/uuid") == [str(uuid.UUID(int=i)) for i in range(1, 6)]
+        assert await connection.get_children("/clickhouse/access/uuid") == [str(uuid.UUID(int=i)) for i in range(1, 7)]
         assert await connection.get_children("/clickhouse/access/P") == ["a_policy"]
         assert await connection.get_children("/clickhouse/access/Q") == ["a_quota"]
         assert await connection.get_children("/clickhouse/access/R") == ["a_role"]
         assert await connection.get_children("/clickhouse/access/S") == ["a_settings_profile"]
-        assert await connection.get_children("/clickhouse/access/U") == ["jos%C3%A9"]
+        assert await connection.get_children("/clickhouse/access/U") == ["jos%C3%A9", "z%80enjoyer"]
         assert await connection.get("/clickhouse/access/P/a_policy") == str(uuid.UUID(int=1)).encode()
         assert await connection.get(f"/clickhouse/access/uuid/{str(uuid.UUID(int=1))}") == b"ATTACH ROW POLICY ..."
         assert await connection.get("/clickhouse/access/Q/a_quota") == str(uuid.UUID(int=2)).encode()
@@ -565,6 +593,8 @@ async def check_restored_entities(client: ZooKeeperClient) -> None:
         assert await connection.get(f"/clickhouse/access/uuid/{str(uuid.UUID(int=4))}") == b"ATTACH SETTINGS PROFILE ..."
         assert await connection.get("/clickhouse/access/U/jos%C3%A9") == str(uuid.UUID(int=5)).encode()
         assert await connection.get(f"/clickhouse/access/uuid/{str(uuid.UUID(int=5))}") == b"ATTACH USER ..."
+        assert await connection.get("/clickhouse/access/U/z%80enjoyer") == str(uuid.UUID(int=6)).encode()
+        assert await connection.get(f"/clickhouse/access/uuid/{str(uuid.UUID(int=6))}") == b"ATTACH USER \x80 ..."
 
 
 @pytest.mark.asyncio

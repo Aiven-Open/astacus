@@ -2,10 +2,11 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+import base64
 from .client import ClickHouseClient, escape_sql_identifier, escape_sql_string
 from .config import ClickHouseConfiguration, ReplicatedDatabaseSettings
 from .dependencies import access_entities_sorted_by_dependencies, tables_sorted_by_dependencies
-from .escaping import escape_for_file_name, unescape_from_file_name
+from .escaping import escape_bytes_for_file_name, escape_for_file_name, unescape_from_file_name_to_bytes
 from .manifest import AccessEntity, ClickHouseManifest, ReplicatedDatabase, Table
 from .parts import (
     check_parts_replication, distribute_parts_to_servers, get_frozen_parts_pattern, group_files_into_parts,
@@ -94,8 +95,8 @@ class RetrieveAccessEntitiesStep(Step[List[AccessEntity]]):
                             AccessEntity(
                                 type=entity_type,
                                 uuid=entity_uuid,
-                                name=unescape_from_file_name(node_name),
-                                attach_query=attach_query_bytes.decode(),
+                                name=unescape_from_file_name_to_bytes(node_name),
+                                attach_query=attach_query_bytes,
                             )
                         )
             if change_watch.has_changed:
@@ -160,11 +161,21 @@ class PrepareClickHouseManifestStep(Step[Dict[str, Any]]):
     """
     async def run_step(self, cluster: Cluster, context: StepsContext) -> Dict[str, Any]:
         databases, tables = context.get_result(RetrieveDatabasesAndTablesStep)
-        return ClickHouseManifest(
+        manifest = ClickHouseManifest(
             access_entities=context.get_result(RetrieveAccessEntitiesStep),
             replicated_databases=databases,
             tables=tables,
-        ).dict()
+        )
+        self._encode_manifest(manifest)
+        return manifest.dict()
+
+    def _encode_manifest(self, manifest: ClickHouseManifest) -> None:
+        for access_entity in manifest.access_entities:
+            self._encode_access_entity(access_entity)
+
+    def _encode_access_entity(self, access_entity: AccessEntity) -> AccessEntity:
+        access_entity.name = base64.b64encode(access_entity.name).decode()
+        access_entity.attach_query = base64.b64encode(access_entity.attach_query).decode()
 
 
 @dataclasses.dataclass
@@ -322,7 +333,17 @@ class ClickHouseManifestStep(Step[ClickHouseManifest]):
     """
     async def run_step(self, cluster: Cluster, context: StepsContext) -> ClickHouseManifest:
         backup_manifest = context.get_result(BackupManifestStep)
-        return ClickHouseManifest.parse_obj(backup_manifest.plugin_data)
+        clickhouse_manifest = ClickHouseManifest.parse_obj(backup_manifest.plugin_data)
+        self._decode_manifest(clickhouse_manifest)
+        return clickhouse_manifest
+
+    def _decode_manifest(self, manifest: ClickHouseManifest) -> None:
+        for access_entity in manifest.access_entities:
+            self._decode_access_entity(access_entity)
+
+    def _decode_access_entity(self, access_entity: AccessEntity) -> AccessEntity:
+        access_entity.name = base64.b64decode(access_entity.name)
+        access_entity.attach_query = base64.b64decode(access_entity.attach_query)
 
 
 @dataclasses.dataclass
@@ -392,10 +413,10 @@ class RestoreAccessEntitiesStep(Step[None]):
         clickhouse_manifest = context.get_result(ClickHouseManifestStep)
         async with self.zookeeper_client.connect() as connection:
             for access_entity in access_entities_sorted_by_dependencies(clickhouse_manifest.access_entities):
-                escaped_entity_name = escape_for_file_name(access_entity.name)
+                escaped_entity_name = escape_bytes_for_file_name(access_entity.name)
                 entity_name_path = f"{self.access_entities_path}/{access_entity.type}/{escaped_entity_name}"
                 entity_path = f"{self.access_entities_path}/uuid/{access_entity.uuid}"
-                attach_query_bytes = access_entity.attach_query.encode()
+                attach_query_bytes = access_entity.attach_query
                 # Nobody else should be touching ZooKeeper during the restore operation,
                 # and we know that ClickHouse only reacts to creation of the node at `entity_path`.
                 # Theses conditions make it safe to create this pair of nodes without a transaction.

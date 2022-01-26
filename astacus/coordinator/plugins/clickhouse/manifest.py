@@ -7,6 +7,8 @@ from astacus.coordinator.plugins.clickhouse.client import escape_sql_identifier
 from typing import List, Tuple
 from uuid import UUID
 
+import base64
+
 
 class AccessEntity(AstacusModel):
     """
@@ -15,8 +17,8 @@ class AccessEntity(AstacusModel):
     """
     type: str
     uuid: UUID
-    name: str
-    attach_query: str
+    name: bytes
+    attach_query: bytes
 
 
 class ReplicatedDatabase(AstacusModel):

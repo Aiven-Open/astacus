@@ -14,6 +14,7 @@ from tests.integration.coordinator.plugins.clickhouse.conftest import (
 from typing import AsyncIterable, AsyncIterator, List, Sequence
 from unittest import mock
 
+import base64
 import pytest
 import tempfile
 
@@ -21,6 +22,10 @@ pytestmark = [
     pytest.mark.clickhouse,
     pytest.mark.order("last"),
 ]
+
+
+def _b64_str(b: bytes) -> str:
+    return base64.b64encode(b).decode()
 
 
 def get_restore_steps_names() -> List[str]:
@@ -108,14 +113,15 @@ async def setup_cluster_users(clients: List[HttpClickHouseClient]) -> None:
     # These use special characters to check our escaping roundtrip (yes, dash is special)
     await clients[0].execute("CREATE QUOTA `dan-dave-david` TO alice, bob")
     await clients[0].execute("CREATE SETTINGS PROFILE `érin` TO alice, bob")
+    await clients[0].execute("CREATE USER `z_\\x80_enjoyer`")
 
 
 @pytest.mark.asyncio
 async def test_restores_access_entities(restored_cluster: List[ClickHouseClient]) -> None:
     for client in restored_cluster:
-        assert await client.execute("SELECT name FROM system.users WHERE storage = 'replicated' ORDER BY name") == [[
-            "alice"
-        ]]
+        assert await client.execute(
+            "SELECT base64Encode(name) FROM system.users WHERE storage = 'replicated' ORDER BY name"
+        ) == [[_b64_str(b"alice")], [_b64_str(b"z_\x80_enjoyer")]]
         assert await client.execute("SELECT name FROM system.roles WHERE storage = 'replicated' ORDER BY name") == [["bob"]]
         assert await client.execute("SELECT user_name,role_name FROM system.grants ORDER BY user_name,role_name") == [[
             "alice", None
