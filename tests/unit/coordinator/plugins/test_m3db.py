@@ -15,7 +15,7 @@ from astacus.coordinator.coordinator import Coordinator, SteppedCoordinatorOp
 from astacus.coordinator.plugins import m3db
 from astacus.coordinator.plugins.base import BackupManifestStep, StepsContext
 from astacus.coordinator.plugins.m3db import (
-    CreateM3ManifestStep, get_etcd_prefixes, InitStep, M3DBPlugin, RestoreEtcdStep, RetrieveEtcdAgainStep, RetrieveEtcdStep,
+    get_etcd_prefixes, InitStep, M3DBPlugin, PrepareM3ManifestStep, RestoreEtcdStep, RetrieveEtcdAgainStep, RetrieveEtcdStep,
     RewriteEtcdStep
 )
 from astacus.coordinator.state import CoordinatorState
@@ -119,7 +119,7 @@ async def test_m3_backup(coordinator: Coordinator, plugin: M3DBPlugin, etcd_clie
             InitStep(placement_nodes=plugin.placement_nodes),
             RetrieveEtcdStep(etcd_client=etcd_client, etcd_prefixes=etcd_prefixes),
             RetrieveEtcdAgainStep(etcd_client=etcd_client, etcd_prefixes=etcd_prefixes),
-            CreateM3ManifestStep(placement_nodes=plugin.placement_nodes),
+            PrepareM3ManifestStep(placement_nodes=plugin.placement_nodes),
         ]
     )
     context = StepsContext()
@@ -142,7 +142,7 @@ async def test_m3_backup(coordinator: Coordinator, plugin: M3DBPlugin, etcd_clie
         assert await op.try_run(op.get_cluster(), context) == (fail_at is None)
     if fail_at is not None:
         return
-    assert context.get_result(CreateM3ManifestStep) == PLUGIN_DATA
+    assert context.get_result(PrepareM3ManifestStep) == PLUGIN_DATA
 
 
 @dataclass

@@ -18,7 +18,7 @@ from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import BackupManifestStep, SnapshotStep, Step, StepFailedError, StepsContext
 from astacus.coordinator.plugins.zookeeper import ChangeWatch, NodeExistsError, ZooKeeperClient
 from pathlib import Path
-from typing import cast, Dict, List, Tuple
+from typing import Any, cast, Dict, List, Tuple
 
 import asyncio
 import dataclasses
@@ -154,17 +154,17 @@ class RetrieveDatabasesAndTablesStep(Step[DatabasesAndTables]):
 
 
 @dataclasses.dataclass
-class CreateClickHouseManifestStep(Step[ClickHouseManifest]):
+class PrepareClickHouseManifestStep(Step[Dict[str, Any]]):
     """
-    Collects access entities, databases and tables from previous steps into a `ClickHouseManifest`.
+    Collects access entities, databases and tables from previous steps into an uploadable manifest.
     """
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> ClickHouseManifest:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> Dict[str, Any]:
         databases, tables = context.get_result(RetrieveDatabasesAndTablesStep)
         return ClickHouseManifest(
             access_entities=context.get_result(RetrieveAccessEntitiesStep),
             replicated_databases=databases,
             tables=tables,
-        )
+        ).dict()
 
 
 @dataclasses.dataclass

@@ -60,12 +60,12 @@ class RetrieveDataStep(Step[Dict[str, Any]]):
 
 
 @dataclasses.dataclass
-class CreateFlinkManifestStep(Step[FlinkManifest]):
+class PrepareFlinkManifestStep(Step[Dict[str, Any]]):
     """
-    Collects data from previous steps into a `FlinkManifest`.
+    Collects data from previous steps into an uploadable manifest.
     """
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> FlinkManifest:
-        return FlinkManifest(data=context.get_result(RetrieveDataStep))
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> Dict[str, Any]:
+        return FlinkManifest(data=context.get_result(RetrieveDataStep)).dict()
 
 
 @dataclasses.dataclass

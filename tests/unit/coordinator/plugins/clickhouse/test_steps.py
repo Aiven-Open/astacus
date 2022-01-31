@@ -13,8 +13,8 @@ from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, Stub
 from astacus.coordinator.plugins.clickhouse.config import ClickHouseConfiguration, ClickHouseNode, ReplicatedDatabaseSettings
 from astacus.coordinator.plugins.clickhouse.manifest import AccessEntity, ClickHouseManifest, ReplicatedDatabase, Table
 from astacus.coordinator.plugins.clickhouse.steps import (
-    AttachMergeTreePartsStep, ClickHouseManifestStep, CreateClickHouseManifestStep, DistributeReplicatedPartsStep,
-    FreezeTablesStep, RemoveFrozenTablesStep, RestoreAccessEntitiesStep, RestoreReplicatedDatabasesStep,
+    AttachMergeTreePartsStep, ClickHouseManifestStep, DistributeReplicatedPartsStep, FreezeTablesStep,
+    PrepareClickHouseManifestStep, RemoveFrozenTablesStep, RestoreAccessEntitiesStep, RestoreReplicatedDatabasesStep,
     RetrieveAccessEntitiesStep, RetrieveDatabasesAndTablesStep, SyncReplicasStep, TABLES_LIST_QUERY, UnfreezeTablesStep,
     ValidateConfigStep
 )
@@ -243,7 +243,7 @@ async def test_retrieve_tables_without_any_table() -> None:
 
 @pytest.mark.asyncio
 async def test_create_clickhouse_manifest() -> None:
-    step = CreateClickHouseManifestStep()
+    step = PrepareClickHouseManifestStep()
     context = StepsContext()
     context.set_result(RetrieveAccessEntitiesStep, SAMPLE_ENTITIES)
     context.set_result(RetrieveDatabasesAndTablesStep, (SAMPLE_DATABASES, SAMPLE_TABLES))

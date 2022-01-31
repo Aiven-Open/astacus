@@ -7,8 +7,8 @@ from .config import (
 )
 from .parts import get_frozen_parts_pattern
 from .steps import (
-    AttachMergeTreePartsStep, ClickHouseManifestStep, CreateClickHouseManifestStep, DistributeReplicatedPartsStep,
-    FreezeTablesStep, MoveFrozenPartsStep, RemoveFrozenTablesStep, RestoreAccessEntitiesStep, RestoreReplicatedDatabasesStep,
+    AttachMergeTreePartsStep, ClickHouseManifestStep, DistributeReplicatedPartsStep, FreezeTablesStep, MoveFrozenPartsStep,
+    PrepareClickHouseManifestStep, RemoveFrozenTablesStep, RestoreAccessEntitiesStep, RestoreReplicatedDatabasesStep,
     RetrieveAccessEntitiesStep, RetrieveDatabasesAndTablesStep, SyncReplicasStep, UnfreezeTablesStep, ValidateConfigStep
 )
 from astacus.common.ipc import Plugin, RestoreRequest
@@ -55,11 +55,11 @@ class ClickHousePlugin(CoordinatorPlugin):
             # Prepare the manifest for restore
             MoveFrozenPartsStep(freeze_name=self.freeze_name),
             DistributeReplicatedPartsStep(),
-            CreateClickHouseManifestStep(),
+            PrepareClickHouseManifestStep(),
             UploadManifestStep(
                 json_storage=context.json_storage,
                 plugin=Plugin.clickhouse,
-                plugin_manifest_step=CreateClickHouseManifestStep,
+                plugin_manifest_step=PrepareClickHouseManifestStep,
             ),
         ]
 
