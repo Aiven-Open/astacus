@@ -83,24 +83,17 @@ async def setup_cluster_content(clients: List[HttpClickHouseClient]) -> None:
         "ENGINE = ReplicatedMergeTree ORDER BY (thekey)"
     )
     await clients[0].execute(
-        "CREATE TABLE default.merge_tree  (thekey UInt32, thedata String)  "
-        "ENGINE = MergeTree ORDER BY (thekey)"
-    )
-    await clients[0].execute(
-        "CREATE VIEW default.simple_view AS SELECT toInt32(thekey * 2) as thekey2 FROM default.merge_tree"
+        "CREATE VIEW default.simple_view AS SELECT toInt32(thekey * 2) as thekey2 FROM default.replicated_merge_tree"
     )
     await clients[0].execute(
         "CREATE MATERIALIZED VIEW default.materialized_view "
         "ENGINE = MergeTree ORDER BY (thekey3) "
-        "AS SELECT toInt32(thekey * 3) as thekey3 FROM default.merge_tree"
+        "AS SELECT toInt32(thekey * 3) as thekey3 FROM default.replicated_merge_tree"
     )
     await clients[0].execute("CREATE TABLE default.memory  (thekey UInt32, thedata String)  ENGINE = Memory")
     # This will be replicated between nodes
     await clients[0].execute("INSERT INTO default.replicated_merge_tree VALUES (123, 'foo')")
     await clients[1].execute("INSERT INTO default.replicated_merge_tree VALUES (456, 'bar')")
-    # The won't be replicated but can still be backed up
-    await clients[0].execute("INSERT INTO default.merge_tree VALUES (123, 'foo')")
-    await clients[1].execute("INSERT INTO default.merge_tree VALUES (456, 'bar')")
     # This won't be backed up
     await clients[0].execute("INSERT INTO default.memory VALUES (123, 'foo')")
 
@@ -137,7 +130,6 @@ async def test_restores_access_entities(restored_cluster: List[ClickHouseClient]
 
 @pytest.mark.asyncio
 async def test_restores_replicated_merge_tree_tables_data(restored_cluster: List[ClickHouseClient]) -> None:
-    # In replicated table, all servers of the cluster have the same data
     for client in restored_cluster:
         assert await client.execute("SELECT thekey, thedata FROM default.replicated_merge_tree ORDER BY thekey") == [
             [123, "foo"],
@@ -146,35 +138,27 @@ async def test_restores_replicated_merge_tree_tables_data(restored_cluster: List
 
 
 @pytest.mark.asyncio
-async def test_restores_unreplicated_merge_tree_tables_data(restored_cluster: List[ClickHouseClient]) -> None:
-    # In an unreplicated table, each server of the cluster has different data
+async def test_restores_simple_view(restored_cluster: List[ClickHouseClient]) -> None:
     first_client, second_client = restored_cluster
-    assert await first_client.execute("SELECT thekey, thedata FROM default.merge_tree ") == [
-        [123, "foo"],
-    ]
-    assert await second_client.execute("SELECT thekey, thedata FROM default.merge_tree ") == [
-        [456, "bar"],
-    ]
-
-
-@pytest.mark.asyncio
-async def test_restores_unreplicated_simple_view(restored_cluster: List[ClickHouseClient]) -> None:
-    first_client, second_client = restored_cluster
-    assert await first_client.execute("SELECT thekey2 FROM default.simple_view ") == [
+    assert await first_client.execute("SELECT thekey2 FROM default.simple_view ORDER BY thekey2") == [
         [123 * 2],
+        [456 * 2],
     ]
-    assert await second_client.execute("SELECT thekey2 FROM default.simple_view ") == [
+    assert await second_client.execute("SELECT thekey2 FROM default.simple_view ORDER BY thekey2") == [
+        [123 * 2],
         [456 * 2],
     ]
 
 
 @pytest.mark.asyncio
-async def test_restores_unreplicated_materialized_view_data(restored_cluster: List[ClickHouseClient]) -> None:
+async def test_restores_materialized_view_data(restored_cluster: List[ClickHouseClient]) -> None:
     first_client, second_client = restored_cluster
-    assert await first_client.execute("SELECT thekey3 FROM default.materialized_view ") == [
+    assert await first_client.execute("SELECT thekey3 FROM default.materialized_view ORDER BY thekey3") == [
         [123 * 3],
+        [456 * 3],
     ]
-    assert await second_client.execute("SELECT thekey3 FROM default.materialized_view ") == [
+    assert await second_client.execute("SELECT thekey3 FROM default.materialized_view ORDER BY thekey3") == [
+        [123 * 3],
         [456 * 3],
     ]
 
