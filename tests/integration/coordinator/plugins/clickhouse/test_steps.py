@@ -30,9 +30,9 @@ async def test_retrieve_tables(ports: Ports) -> None:
             await client.execute(
                 "CREATE DATABASE no_tables ENGINE = Replicated('/clickhouse/databases/no_tables', '{shard}', '{replica}')"
             )
-            await client.execute("CREATE DATABASE not_replicated ENGINE = Atomic")
-            await client.execute("CREATE TABLE has_tables.table_1 (thekey UInt32) ENGINE = MergeTree ORDER BY (thekey)")
-            await client.execute("CREATE TABLE not_replicated.table_2 (thekey UInt32) ENGINE = MergeTree ORDER BY (thekey)")
+            await client.execute(
+                "CREATE TABLE has_tables.table_1 (thekey UInt32) ENGINE = ReplicatedMergeTree ORDER BY (thekey)"
+            )
             step = RetrieveDatabasesAndTablesStep(clients=[client])
             context = StepsContext()
             databases, tables = await step.run_step(Cluster(nodes=[]), context=context)
@@ -43,10 +43,11 @@ async def test_retrieve_tables(ports: Ports) -> None:
                 Table(
                     database="has_tables",
                     name="table_1",
-                    engine="MergeTree",
+                    engine="ReplicatedMergeTree",
                     uuid=table_uuid,
                     create_query=f"CREATE TABLE has_tables.table_1 UUID '{str(table_uuid)}' (`thekey` UInt32) "
-                    "ENGINE = MergeTree ORDER BY thekey SETTINGS index_granularity = 8192",
+                    f"ENGINE = ReplicatedMergeTree('/clickhouse/tables/{str(table_uuid)}/{{shard}}', '{{replica}}') "
+                    f"ORDER BY thekey SETTINGS index_granularity = 8192",
                     dependencies=[]
                 )
             ]
