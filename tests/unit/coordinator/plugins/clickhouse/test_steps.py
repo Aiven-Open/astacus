@@ -167,7 +167,6 @@ class TrappedZooKeeperClient(FakeZooKeeperClient):
     """
     A fake ZooKeeper client with a trap: it will inject a concurrent write after a few reads.
     """
-
     def __init__(self) -> None:
         super().__init__()
         self.calls_until_failure: Optional[int] = None
@@ -448,7 +447,8 @@ async def test_parse_clickhouse_manifest() -> None:
                     "name": "t1",
                     "engine": "MergeTree",
                     "uuid": "00000000-0000-0000-0000-000000000004",
-                    "create_query": "CREATE ..."
+                    "create_query": "CREATE ...",
+                    "dependencies": [],
                 }]
             }
         )

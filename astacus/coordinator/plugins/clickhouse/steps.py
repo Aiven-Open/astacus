@@ -2,7 +2,6 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
-import base64
 from .client import ClickHouseClient, escape_sql_identifier, escape_sql_string
 from .config import ClickHouseConfiguration, ReplicatedDatabaseSettings
 from .dependencies import access_entities_sorted_by_dependencies, tables_sorted_by_dependencies
@@ -166,16 +165,7 @@ class PrepareClickHouseManifestStep(Step[Dict[str, Any]]):
             replicated_databases=databases,
             tables=tables,
         )
-        self._encode_manifest(manifest)
-        return manifest.dict()
-
-    def _encode_manifest(self, manifest: ClickHouseManifest) -> None:
-        for access_entity in manifest.access_entities:
-            self._encode_access_entity(access_entity)
-
-    def _encode_access_entity(self, access_entity: AccessEntity) -> AccessEntity:
-        access_entity.name = base64.b64encode(access_entity.name).decode()
-        access_entity.attach_query = base64.b64encode(access_entity.attach_query).decode()
+        return manifest.to_plugin_data()
 
 
 @dataclasses.dataclass
@@ -333,17 +323,7 @@ class ClickHouseManifestStep(Step[ClickHouseManifest]):
     """
     async def run_step(self, cluster: Cluster, context: StepsContext) -> ClickHouseManifest:
         backup_manifest = context.get_result(BackupManifestStep)
-        clickhouse_manifest = ClickHouseManifest.parse_obj(backup_manifest.plugin_data)
-        self._decode_manifest(clickhouse_manifest)
-        return clickhouse_manifest
-
-    def _decode_manifest(self, manifest: ClickHouseManifest) -> None:
-        for access_entity in manifest.access_entities:
-            self._decode_access_entity(access_entity)
-
-    def _decode_access_entity(self, access_entity: AccessEntity) -> AccessEntity:
-        access_entity.name = base64.b64decode(access_entity.name)
-        access_entity.attach_query = base64.b64decode(access_entity.attach_query)
+        return ClickHouseManifest.from_plugin_data(backup_manifest.plugin_data)
 
 
 @dataclasses.dataclass
