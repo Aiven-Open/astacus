@@ -16,7 +16,7 @@ docker==5.0.3
 # fastapi testclient needs this yet does not depend on it, gnn
 requests
 
-respx==0.11.2
+respx==0.16.3
 
 # convenience things that don't actually matter which version they are
 pip-outdated

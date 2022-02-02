@@ -39,7 +39,7 @@ def test_lock_ok(app, client):
     nodes = app.state.coordinator_config.nodes
     with respx.mock:
         for node in nodes:
-            respx.post(f"{node.url}/lock?locker=z&ttl=60", content={"locked": True})
+            respx.post(f"{node.url}/lock?locker=z&ttl=60").respond(json={"locked": True})
         response = client.post("/lock?locker=z")
         assert response.status_code == 200, response.json()
 
@@ -54,8 +54,8 @@ def test_lock_onefail(app, client):
     nodes = app.state.coordinator_config.nodes
     with respx.mock:
         for i, node in enumerate(nodes):
-            respx.post(f"{node.url}/lock?locker=z&ttl=60", content={"locked": i == 0})
-            respx.post(f"{node.url}/unlock?locker=z", content=None)
+            respx.post(f"{node.url}/lock?locker=z&ttl=60").respond(json={"locked": i == 0})
+            respx.post(f"{node.url}/unlock?locker=z").respond(content=None)
         with patch.object(StatsClient, "increase", return_value=None) as mock_stats_increase:
             response = client.post("/lock?locker=z")
             assert response.status_code == 200, response.json()

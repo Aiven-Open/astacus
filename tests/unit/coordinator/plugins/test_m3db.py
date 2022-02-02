@@ -125,9 +125,8 @@ async def test_m3_backup(coordinator: Coordinator, plugin: M3DBPlugin, etcd_clie
     context = StepsContext()
     with respx.mock:
         op.state.shutting_down = fail_at == 0
-        respx.post(
-            "http://dummy/etcd/kv/range",
-            content={"kvs": [
+        respx.post("http://dummy/etcd/kv/range").respond(
+            json={"kvs": [
                 {
                     "key": KEY1_B64,
                     "value": VALUE1_B64
@@ -183,6 +182,6 @@ async def test_m3_restore(coordinator: Coordinator, plugin: M3DBPlugin, etcd_cli
     fail_at = rt.fail_at
     with respx.mock:
         op.state.shutting_down = fail_at == 0
-        respx.post("http://dummy/etcd/kv/deleterange", content={"ok": True}, status_code=200 if fail_at != 1 else 500)
-        respx.post("http://dummy/etcd/kv/put", content={"ok": True}, status_code=200 if fail_at != 2 else 500)
+        respx.post("http://dummy/etcd/kv/deleterange").respond(json={"ok": True}, status_code=200 if fail_at != 1 else 500)
+        respx.post("http://dummy/etcd/kv/put").respond(json={"ok": True}, status_code=200 if fail_at != 2 else 500)
         assert await op.try_run(op.get_cluster(), context) == (fail_at is None)

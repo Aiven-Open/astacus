@@ -21,9 +21,9 @@ def _run(*, client, populated_mstorage, app, fail_at=None, retention, exp_jsons,
     nodes = app.state.coordinator_config.nodes
     with respx.mock:
         for node in nodes:
-            respx.post(f"{node.url}/unlock?locker=x&ttl=0", content={"locked": False})
+            respx.post(f"{node.url}/unlock?locker=x&ttl=0").respond(json={"locked": False})
             # Failure point 1: Lock fails
-            respx.post(f"{node.url}/lock?locker=x&ttl=60", content={"locked": fail_at != 1})
+            respx.post(f"{node.url}/lock?locker=x&ttl=60").respond(json={"locked": fail_at != 1})
         response = client.post("/cleanup")
         if fail_at == 1:
             # Cluster lock failure is immediate

@@ -27,11 +27,7 @@ async def test_successful_execute_returns_rows() -> None:
             "rows": 2,
             "rows_before_limit_at_least": 2
         }
-        respx.post(
-            "http://example.org:9000?query=SHOW+DATABASES&wait_end_of_query=1",
-            content=json.dumps(content),
-            content_type="application/json"
-        )
+        respx.post("http://example.org:9000?query=SHOW+DATABASES&wait_end_of_query=1").respond(json=content)
         response = await client.execute("SHOW DATABASES")
     assert response == [["system"], ["defaultdb"]]
 
@@ -40,7 +36,7 @@ async def test_successful_execute_returns_rows() -> None:
 async def test_failing_execute_raises_an_exception() -> None:
     client = HttpClickHouseClient(host="example.org", port=9000)
     with respx.mock:
-        respx.post("http://example.org:9000?query=SHOW+DATABASES&wait_end_of_query=1", status_code=400)
+        respx.post("http://example.org:9000?query=SHOW+DATABASES&wait_end_of_query=1").respond(status_code=400)
         with pytest.raises(ClickHouseClientQueryError):
             await client.execute("SHOW DATABASES")
 
@@ -49,7 +45,7 @@ async def test_failing_execute_raises_an_exception() -> None:
 async def test_sends_authentication_headers() -> None:
     client = HttpClickHouseClient(host="example.org", port=9000, username="user", password="password")
     with respx.mock:
-        respx.post("http://example.org:9000?query=SELECT+1+LIMIT+0&wait_end_of_query=1", content="")
+        respx.post("http://example.org:9000?query=SHOW+DATABASES&wait_end_of_query=1").respond(content="")
         await client.execute("SELECT 1 LIMIT 0")
         request = respx.calls[0][0]
         assert request.headers["x-clickhouse-user"] == "user"

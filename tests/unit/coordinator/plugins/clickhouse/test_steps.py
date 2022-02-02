@@ -276,14 +276,14 @@ async def test_remove_frozen_tables_step() -> None:
     step = RemoveFrozenTablesStep(freeze_name="some-thing+special")
     cluster = Cluster(nodes=[CoordinatorNode(url="http://node1/node"), CoordinatorNode(url="http://node2/node")])
     with respx.mock:
-        respx.post(
-            "http://node1/node/clear", content=Op.StartResult(op_id=123, status_url="http://node1/clear/123").jsondict()
+        respx.post("http://node1/node/clear").respond(
+            json=Op.StartResult(op_id=123, status_url="http://node1/clear/123").jsondict()
         )
-        respx.post(
-            "http://node2/node/clear", content=Op.StartResult(op_id=456, status_url="http://node2/clear/456").jsondict()
+        respx.post("http://node2/node/clear").respond(
+            json=Op.StartResult(op_id=456, status_url="http://node2/clear/456").jsondict()
         )
-        respx.get("http://node1/clear/123", content=NodeResult(progress=Progress(final=True)).jsondict())
-        respx.get("http://node2/clear/456", content=NodeResult(progress=Progress(final=True)).jsondict())
+        respx.get("http://node1/clear/123").respond(json=NodeResult(progress=Progress(final=True)).jsondict())
+        respx.get("http://node2/clear/456").respond(json=NodeResult(progress=Progress(final=True)).jsondict())
         try:
             await step.run_step(cluster, StepsContext())
         finally:

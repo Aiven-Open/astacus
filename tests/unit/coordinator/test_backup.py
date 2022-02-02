@@ -25,24 +25,21 @@ def test_backup(fail_at, app, client, storage):
     nodes = app.state.coordinator_config.nodes
     with respx.mock:
         for node in nodes:
-            respx.post(f"{node.url}/unlock?locker=x&ttl=0", content={"locked": False})
+            respx.post(f"{node.url}/unlock?locker=x&ttl=0").respond(json={"locked": False})
             # Failure point 1: Lock fails
-            respx.post(f"{node.url}/lock?locker=x&ttl=60", content={"locked": fail_at != 1})
+            respx.post(f"{node.url}/lock?locker=x&ttl=60").respond(json={"locked": fail_at != 1})
 
             # Failure point 2: snapshot call fails
-            respx.post(
-                f"{node.url}/snapshot",
-                content={
+            respx.post(f"{node.url}/snapshot").respond(
+                json={
                     "op_id": 42,
                     "status_url": f"{node.url}/snapshot/result"
-                },
-                status_code=200 if fail_at != 2 else 500
+                }, status_code=200 if fail_at != 2 else 500
             )
 
             # Failure point 3: snapshot result call fails
-            respx.get(
-                f"{node.url}/snapshot/result",
-                content={
+            respx.get(f"{node.url}/snapshot/result").respond(
+                json={
                     "progress": {
                         "final": True
                     },
@@ -55,19 +52,16 @@ def test_backup(fail_at, app, client, storage):
             )
 
             # Failure point 4: upload call fails
-            respx.post(
-                f"{node.url}/upload",
-                content={
+            respx.post(f"{node.url}/upload").respond(
+                json={
                     "op_id": 43,
                     "status_url": f"{node.url}/upload/result"
-                },
-                status_code=200 if fail_at != 4 else 500
+                }, status_code=200 if fail_at != 4 else 500
             )
 
             # Failure point 5: upload result call fails
-            respx.get(
-                f"{node.url}/upload/result",
-                content={"progress": {
+            respx.get(f"{node.url}/upload/result").respond(
+                json={"progress": {
                     "final": True,
                     "handled": 10,
                     "failed": 0,
@@ -179,12 +173,11 @@ def test_backup_stats(mock_time, app, client):
     nodes = app.state.coordinator_config.nodes
     with respx.mock:
         for node in nodes:
-            respx.post(f"{node.url}/unlock?locker=x&ttl=0", content={"locked": False})
-            respx.post(f"{node.url}/lock?locker=x&ttl=60", content={"locked": True})
-            respx.post(f"{node.url}/snapshot", content={"op_id": 42, "status_url": f"{node.url}/snapshot/result"})
-            respx.get(
-                f"{node.url}/snapshot/result",
-                content={
+            respx.post(f"{node.url}/unlock?locker=x&ttl=0").respond(json={"locked": False})
+            respx.post(f"{node.url}/lock?locker=x&ttl=60").respond(json={"locked": True})
+            respx.post(f"{node.url}/snapshot").respond(json={"op_id": 42, "status_url": f"{node.url}/snapshot/result"})
+            respx.get(f"{node.url}/snapshot/result").respond(
+                json={
                     "progress": {
                         "final": True
                     },
@@ -194,8 +187,8 @@ def test_backup_stats(mock_time, app, client):
                     }]
                 }
             )
-            respx.post(f"{node.url}/upload", content={"op_id": 43, "status_url": f"{node.url}/upload/result"})
-            respx.get(f"{node.url}/upload/result", content={"progress": {"final": True}})
+            respx.post(f"{node.url}/upload").respond(json={"op_id": 43, "status_url": f"{node.url}/upload/result"})
+            respx.get(f"{node.url}/upload/result").respond(json={"progress": {"final": True}})
 
         with patch.object(StatsClient, "gauge") as mock_stats_gauge:
             response = client.post("/backup")
