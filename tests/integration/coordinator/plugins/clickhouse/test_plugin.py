@@ -77,67 +77,67 @@ async def fixture_restored_cluster(
 
 async def setup_cluster_content(clients: List[HttpClickHouseClient]) -> None:
     for client in clients:
-        await client.execute("DROP DATABASE default SYNC")
+        await client.execute(b"DROP DATABASE default SYNC")
         await client.execute(
-            "CREATE DATABASE default ENGINE = Replicated('/clickhouse/databases/thebase', '{shard}', '{replica}') "
-            "SETTINGS cluster_username='default', cluster_password='secret'"
+            b"CREATE DATABASE default ENGINE = Replicated('/clickhouse/databases/thebase', '{shard}', '{replica}') "
+            b"SETTINGS cluster_username='default', cluster_password='secret'"
         )
     # table creation is auto-replicated so we only do it once :
     await clients[0].execute(
-        "CREATE TABLE default.replicated_merge_tree  (thekey UInt32, thedata String)  "
-        "ENGINE = ReplicatedMergeTree ORDER BY (thekey)"
+        b"CREATE TABLE default.replicated_merge_tree  (thekey UInt32, thedata String)  "
+        b"ENGINE = ReplicatedMergeTree ORDER BY (thekey)"
     )
     await clients[0].execute(
-        "CREATE VIEW default.simple_view AS SELECT toInt32(thekey * 2) as thekey2 FROM default.replicated_merge_tree"
+        b"CREATE VIEW default.simple_view AS SELECT toInt32(thekey * 2) as thekey2 FROM default.replicated_merge_tree"
     )
     await clients[0].execute(
-        "CREATE MATERIALIZED VIEW default.materialized_view "
-        "ENGINE = MergeTree ORDER BY (thekey3) "
-        "AS SELECT toInt32(thekey * 3) as thekey3 FROM default.replicated_merge_tree"
+        b"CREATE MATERIALIZED VIEW default.materialized_view "
+        b"ENGINE = MergeTree ORDER BY (thekey3) "
+        b"AS SELECT toInt32(thekey * 3) as thekey3 FROM default.replicated_merge_tree"
     )
-    await clients[0].execute("CREATE TABLE default.memory  (thekey UInt32, thedata String)  ENGINE = Memory")
+    await clients[0].execute(b"CREATE TABLE default.memory  (thekey UInt32, thedata String)  ENGINE = Memory")
     # This will be replicated between nodes
-    await clients[0].execute("INSERT INTO default.replicated_merge_tree VALUES (123, 'foo')")
-    await clients[1].execute("INSERT INTO default.replicated_merge_tree VALUES (456, 'bar')")
+    await clients[0].execute(b"INSERT INTO default.replicated_merge_tree VALUES (123, 'foo')")
+    await clients[1].execute(b"INSERT INTO default.replicated_merge_tree VALUES (456, 'bar')")
     # This won't be backed up
-    await clients[0].execute("INSERT INTO default.memory VALUES (123, 'foo')")
+    await clients[0].execute(b"INSERT INTO default.memory VALUES (123, 'foo')")
 
 
 async def setup_cluster_users(clients: List[HttpClickHouseClient]) -> None:
-    await clients[0].execute("CREATE USER alice")
-    await clients[0].execute("GRANT SELECT on default.* TO alice")
-    await clients[0].execute("CREATE ROLE bob")
-    await clients[0].execute("GRANT INSERT on default.* TO bob")
-    await clients[0].execute("GRANT bob TO alice")
-    await clients[0].execute("CREATE ROW POLICY charlie ON the_table TO alice, bob")
+    await clients[0].execute(b"CREATE USER alice")
+    await clients[0].execute(b"GRANT SELECT on default.* TO alice")
+    await clients[0].execute(b"CREATE ROLE bob")
+    await clients[0].execute(b"GRANT INSERT on default.* TO bob")
+    await clients[0].execute(b"GRANT bob TO alice")
+    await clients[0].execute(b"CREATE ROW POLICY charlie ON the_table TO alice, bob")
     # These use special characters to check our escaping roundtrip (yes, dash is special)
-    await clients[0].execute("CREATE QUOTA `dan-dave-david` TO alice, bob")
-    await clients[0].execute("CREATE SETTINGS PROFILE `érin` TO alice, bob")
-    await clients[0].execute("CREATE USER `z_\\x80_enjoyer`")
+    await clients[0].execute(b"CREATE QUOTA `dan-dave-david` TO alice, bob")
+    await clients[0].execute("CREATE SETTINGS PROFILE `érin` TO alice, bob".encode())
+    await clients[0].execute(b"CREATE USER `z_\\x80_enjoyer`")
 
 
 @pytest.mark.asyncio
 async def test_restores_access_entities(restored_cluster: List[ClickHouseClient]) -> None:
     for client in restored_cluster:
         assert await client.execute(
-            "SELECT base64Encode(name) FROM system.users WHERE storage = 'replicated' ORDER BY name"
+            b"SELECT base64Encode(name) FROM system.users WHERE storage = 'replicated' ORDER BY name"
         ) == [[_b64_str(b"alice")], [_b64_str(b"z_\x80_enjoyer")]]
-        assert await client.execute("SELECT name FROM system.roles WHERE storage = 'replicated' ORDER BY name") == [["bob"]]
-        assert await client.execute("SELECT user_name,role_name FROM system.grants ORDER BY user_name,role_name") == [[
+        assert await client.execute(b"SELECT name FROM system.roles WHERE storage = 'replicated' ORDER BY name") == [["bob"]]
+        assert await client.execute(b"SELECT user_name,role_name FROM system.grants ORDER BY user_name,role_name") == [[
             "alice", None
         ], ["default", None], [None, "bob"]]
         assert await client.execute(
-            "SELECT user_name,granted_role_name FROM system.role_grants ORDER BY user_name,granted_role_name"
+            b"SELECT user_name,granted_role_name FROM system.role_grants ORDER BY user_name,granted_role_name"
         ) == [["alice", "bob"]]
-        assert await client.execute("SELECT short_name FROM system.row_policies") == [["charlie"]]
-        assert await client.execute("SELECT name FROM system.quotas WHERE storage = 'replicated'") == [["dan-dave-david"]]
-        assert await client.execute("SELECT name FROM system.settings_profiles WHERE storage = 'replicated'") == [["érin"]]
+        assert await client.execute(b"SELECT short_name FROM system.row_policies") == [["charlie"]]
+        assert await client.execute(b"SELECT name FROM system.quotas WHERE storage = 'replicated'") == [["dan-dave-david"]]
+        assert await client.execute(b"SELECT name FROM system.settings_profiles WHERE storage = 'replicated'") == [["érin"]]
 
 
 @pytest.mark.asyncio
 async def test_restores_replicated_merge_tree_tables_data(restored_cluster: List[ClickHouseClient]) -> None:
     for client in restored_cluster:
-        assert await client.execute("SELECT thekey, thedata FROM default.replicated_merge_tree ORDER BY thekey") == [
+        assert await client.execute(b"SELECT thekey, thedata FROM default.replicated_merge_tree ORDER BY thekey") == [
             [123, "foo"],
             [456, "bar"],
         ]
@@ -146,11 +146,11 @@ async def test_restores_replicated_merge_tree_tables_data(restored_cluster: List
 @pytest.mark.asyncio
 async def test_restores_simple_view(restored_cluster: List[ClickHouseClient]) -> None:
     first_client, second_client = restored_cluster
-    assert await first_client.execute("SELECT thekey2 FROM default.simple_view ORDER BY thekey2") == [
+    assert await first_client.execute(b"SELECT thekey2 FROM default.simple_view ORDER BY thekey2") == [
         [123 * 2],
         [456 * 2],
     ]
-    assert await second_client.execute("SELECT thekey2 FROM default.simple_view ORDER BY thekey2") == [
+    assert await second_client.execute(b"SELECT thekey2 FROM default.simple_view ORDER BY thekey2") == [
         [123 * 2],
         [456 * 2],
     ]
@@ -159,11 +159,11 @@ async def test_restores_simple_view(restored_cluster: List[ClickHouseClient]) ->
 @pytest.mark.asyncio
 async def test_restores_materialized_view_data(restored_cluster: List[ClickHouseClient]) -> None:
     first_client, second_client = restored_cluster
-    assert await first_client.execute("SELECT thekey3 FROM default.materialized_view ORDER BY thekey3") == [
+    assert await first_client.execute(b"SELECT thekey3 FROM default.materialized_view ORDER BY thekey3") == [
         [123 * 3],
         [456 * 3],
     ]
-    assert await second_client.execute("SELECT thekey3 FROM default.materialized_view ORDER BY thekey3") == [
+    assert await second_client.execute(b"SELECT thekey3 FROM default.materialized_view ORDER BY thekey3") == [
         [123 * 3],
         [456 * 3],
     ]
@@ -173,11 +173,11 @@ async def test_restores_materialized_view_data(restored_cluster: List[ClickHouse
 async def test_restores_connectivity_between_distributed_servers(restored_cluster: List[ClickHouseClient]) -> None:
     # This only works if each node can connect to all nodes of the cluster named after the Distributed database
     for client in restored_cluster:
-        assert await client.execute("SELECT * FROM clusterAllReplicas('default', system.one) ") == [[0], [0]]
+        assert await client.execute(b"SELECT * FROM clusterAllReplicas('default', system.one) ") == [[0], [0]]
 
 
 @pytest.mark.asyncio
 async def test_does_not_restore_log_tables_data(restored_cluster: List[ClickHouseClient]) -> None:
     # We restored the table structure but not the data
     for client in restored_cluster:
-        assert await client.execute("SELECT thekey, thedata FROM default.memory") == []
+        assert await client.execute(b"SELECT thekey, thedata FROM default.memory") == []

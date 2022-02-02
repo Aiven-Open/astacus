@@ -4,10 +4,9 @@ See LICENSE for details
 """
 from astacus.common.utils import AstacusModel
 from astacus.coordinator.plugins.clickhouse.client import escape_sql_identifier
+from base64 import b64decode, b64encode
 from typing import Any, Dict, List, Tuple
 from uuid import UUID
-
-import base64
 
 
 class AccessEntity(AstacusModel):
@@ -25,28 +24,28 @@ class AccessEntity(AstacusModel):
         return AccessEntity(
             type=data["type"],
             uuid=UUID(hex=data["uuid"]),
-            name=base64.b64decode(data["name"]),
-            attach_query=base64.b64decode(data["attach_query"]),
+            name=b64decode(data["name"]),
+            attach_query=b64decode(data["attach_query"]),
         )
 
 
 class ReplicatedDatabase(AstacusModel):
-    name: str
+    name: bytes
 
     @classmethod
     def from_plugin_data(cls, data: Dict[str, Any]) -> "ReplicatedDatabase":
-        return ReplicatedDatabase(name=data["name"])
+        return ReplicatedDatabase(name=b64decode(data["name"]))
 
 
 class Table(AstacusModel):
-    database: str
-    name: str
+    database: bytes
+    name: bytes
     engine: str
     uuid: UUID
-    create_query: str
+    create_query: bytes
     # This is a list (database_name, table_name) that depends on this table,
     # *not* the list of tables that this table depends on.
-    dependencies: List[Tuple[str, str]] = []
+    dependencies: List[Tuple[bytes, bytes]] = []
 
     @property
     def is_replicated(self) -> bool:
@@ -62,13 +61,15 @@ class Table(AstacusModel):
 
     @classmethod
     def from_plugin_data(cls, data: Dict[str, Any]) -> "Table":
+        dependencies = [(b64decode(database_name), b64decode(table_name))
+                        for database_name, table_name in data["dependencies"]]
         return Table(
-            database=data["database"],
-            name=data["name"],
+            database=b64decode(data["database"]),
+            name=b64decode(data["name"]),
             engine=data["engine"],
             uuid=UUID(hex=data["uuid"]),
-            create_query=data["create_query"],
-            dependencies=[(database_name, table_name) for database_name, table_name in data["dependencies"]],
+            create_query=b64decode(data["create_query"]),
+            dependencies=dependencies,
         )
 
 
@@ -78,7 +79,7 @@ class ClickHouseManifest(AstacusModel):
     tables: List[Table] = []
 
     def to_plugin_data(self) -> Dict[str, Any]:
-        return encode_bytes(self.dict())
+        return encode_manifest_data(self.dict())
 
     @classmethod
     def from_plugin_data(cls, data: Dict[str, Any]) -> "ClickHouseManifest":
@@ -89,11 +90,13 @@ class ClickHouseManifest(AstacusModel):
         )
 
 
-def encode_bytes(data: Any) -> Any:
+def encode_manifest_data(data: Any) -> Any:
     if isinstance(data, dict):
-        return {key: encode_bytes(value) for key, value in data.items()}
-    if isinstance(data, list):
-        return [encode_bytes(item) for item in data]
+        return {key: encode_manifest_data(value) for key, value in data.items()}
+    if isinstance(data, (list, tuple)):
+        return [encode_manifest_data(item) for item in data]
     if isinstance(data, bytes):
-        return base64.b64encode(data).decode()
+        return b64encode(data).decode()
+    if isinstance(data, UUID):
+        return str(data)
     return data

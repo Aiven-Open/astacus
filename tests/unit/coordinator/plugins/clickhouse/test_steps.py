@@ -19,6 +19,7 @@ from astacus.coordinator.plugins.clickhouse.steps import (
     ValidateConfigStep
 )
 from astacus.coordinator.plugins.zookeeper import FakeZooKeeperClient, ZooKeeperClient
+from base64 import b64encode
 from pathlib import Path
 from typing import Optional, Sequence, Type, Union
 from unittest import mock
@@ -35,15 +36,6 @@ import uuid
 
 pytestmark = [pytest.mark.clickhouse]
 
-
-# NB: not recursive, since we don't need it to be
-def stringify_bytes(d: Dict) -> Dict:
-    for key, value in d.items():
-        if isinstance(value, bytes):
-            d[key] = base64.b64encode(value).decode()
-    return d
-
-
 SAMPLE_ENTITIES = [
     AccessEntity(type="P", uuid=uuid.UUID(int=1), name=b"a_policy", attach_query=b"ATTACH ROW POLICY ..."),
     AccessEntity(type="Q", uuid=uuid.UUID(int=2), name=b"a_quota", attach_query=b"ATTACH QUOTA ..."),
@@ -52,33 +44,32 @@ SAMPLE_ENTITIES = [
     AccessEntity(type="U", uuid=uuid.UUID(int=5), name="josé".encode(), attach_query=b"ATTACH USER ..."),
     AccessEntity(type="U", uuid=uuid.UUID(int=6), name=b"z\x80enjoyer", attach_query=b"ATTACH USER \x80 ..."),
 ]
-SAMPLE_ENTITIES_ENCODED = [stringify_bytes(e.dict()) for e in SAMPLE_ENTITIES]
 SAMPLE_DATABASES = [
-    ReplicatedDatabase(name="db-one"),
-    ReplicatedDatabase(name="db-two"),
+    ReplicatedDatabase(name=b"db-one"),
+    ReplicatedDatabase(name=b"db-two"),
 ]
 SAMPLE_TABLES = [
     Table(
-        database="db-one",
-        name="table-uno",
+        database=b"db-one",
+        name=b"table-uno",
         uuid=uuid.UUID("00000000-0000-0000-0000-100000000001"),
         engine="ReplicatedMergeTree",
-        create_query="CREATE TABLE db-one.table-uno ...",
-        dependencies=[("db-one", "table-dos"), ("db-two", "table-eins")]
+        create_query=b"CREATE TABLE db-one.table-uno ...",
+        dependencies=[(b"db-one", b"table-dos"), (b"db-two", b"table-eins")]
     ),
     Table(
-        database="db-one",
-        name="table-dos",
+        database=b"db-one",
+        name=b"table-dos",
         uuid=uuid.UUID("00000000-0000-0000-0000-100000000002"),
         engine="MergeTree",
-        create_query="CREATE TABLE db-one.table-dos ...",
+        create_query=b"CREATE TABLE db-one.table-dos ...",
     ),
     Table(
-        database="db-two",
-        name="table-eins",
+        database=b"db-two",
+        name=b"table-eins",
         uuid=uuid.UUID("00000000-0000-0000-0000-200000000001"),
         engine="ReplicatedMergeTree",
-        create_query="CREATE TABLE db-two.table-eins ...",
+        create_query=b"CREATE TABLE db-two.table-eins ...",
     )
 ]
 
@@ -88,11 +79,7 @@ SAMPLE_MANIFEST = ClickHouseManifest(
     tables=SAMPLE_TABLES,
 )
 
-SAMPLE_MANIFEST_ENCODED = {
-    "access_entities": SAMPLE_ENTITIES_ENCODED,
-    "replicated_databases": SAMPLE_DATABASES,
-    "tables": SAMPLE_TABLES,
-}
+SAMPLE_MANIFEST_ENCODED = SAMPLE_MANIFEST.to_plugin_data()
 
 
 def mock_clickhouse_client() -> mock.Mock:
@@ -206,29 +193,39 @@ async def test_retrieve_tables() -> None:
         TABLES_LIST_QUERY,
         [
             # This special row is what we get for a database without tables
-            ["db-empty", "", "", "00000000-0000-0000-0000-000000000000", "", []],
             [
-                "db-one",
-                "table-uno",
-                "ReplicatedMergeTree",
-                "00000000-0000-0000-0000-100000000001",
-                "CREATE TABLE db-one.table-uno ...",
-                [("db-one", "table-dos"), ("db-two", "table-eins")],
-            ],
-            [
-                "db-one",
-                "table-dos",
-                "MergeTree",
-                "00000000-0000-0000-0000-100000000002",
-                "CREATE TABLE db-one.table-dos ...",
+                b64_str(b"db-empty"),
+                b64_str(b""),
+                "",
+                "00000000-0000-0000-0000-000000000000",
+                b64_str(b""),
                 [],
             ],
             [
-                "db-two",
-                "table-eins",
+                b64_str(b"db-one"),
+                b64_str(b"table-uno"),
+                "ReplicatedMergeTree",
+                "00000000-0000-0000-0000-100000000001",
+                b64_str(b"CREATE TABLE db-one.table-uno ..."),
+                [
+                    (b64_str(b"db-one"), b64_str(b"table-dos")),
+                    (b64_str(b"db-two"), b64_str(b"table-eins")),
+                ],
+            ],
+            [
+                b64_str(b"db-one"),
+                b64_str(b"table-dos"),
+                "MergeTree",
+                "00000000-0000-0000-0000-100000000002",
+                b64_str(b"CREATE TABLE db-one.table-dos ..."),
+                [],
+            ],
+            [
+                b64_str(b"db-two"),
+                b64_str(b"table-eins"),
                 "ReplicatedMergeTree",
                 "00000000-0000-0000-0000-200000000001",
-                "CREATE TABLE db-two.table-eins ...",
+                b64_str(b"CREATE TABLE db-two.table-eins ..."),
                 [],
             ],
         ]
@@ -236,7 +233,7 @@ async def test_retrieve_tables() -> None:
     step = RetrieveDatabasesAndTablesStep(clients=clients)
     context = StepsContext()
     databases, tables = await step.run_step(Cluster(nodes=[]), context)
-    assert databases == [ReplicatedDatabase(name="db-empty")] + SAMPLE_DATABASES
+    assert databases == [ReplicatedDatabase(name=b"db-empty")] + SAMPLE_DATABASES
     assert tables == SAMPLE_TABLES
 
 
@@ -252,13 +249,17 @@ async def test_retrieve_tables_without_any_database_or_table() -> None:
 @pytest.mark.asyncio
 async def test_retrieve_tables_without_any_table() -> None:
     clients = [StubClickHouseClient(), StubClickHouseClient()]
-    clients[0].set_response(TABLES_LIST_QUERY, [
-        ["db-empty", "", "", "00000000-0000-0000-0000-000000000000", "", []],
-    ])
+    clients[0].set_response(
+        TABLES_LIST_QUERY, [
+            [b64_str(b"db-empty"),
+             b64_str(b""), "", "00000000-0000-0000-0000-000000000000",
+             b64_str(b""), []],
+        ]
+    )
     step = RetrieveDatabasesAndTablesStep(clients=clients)
     context = StepsContext()
     databases, tables = await step.run_step(Cluster(nodes=[]), context)
-    assert databases == [ReplicatedDatabase(name="db-empty")]
+    assert databases == [ReplicatedDatabase(name=b"db-empty")]
     assert tables == []
 
 
@@ -313,11 +314,18 @@ async def _test_freeze_unfreezes_all_mergetree_tables_listed_in_manifest(
     context = StepsContext()
     context.set_result(RetrieveDatabasesAndTablesStep, (SAMPLE_DATABASES, SAMPLE_TABLES))
     await step.run_step(cluster, context)
-    assert first_client.mock_calls == [
-        mock.call.execute(f"ALTER TABLE `db-one`.`table-uno` {operation} WITH NAME 'Äs`t:/.././@c\\'_\\'s'"),
-        mock.call.execute(f"ALTER TABLE `db-one`.`table-dos` {operation} WITH NAME 'Äs`t:/.././@c\\'_\\'s'"),
-        mock.call.execute(f"ALTER TABLE `db-two`.`table-eins` {operation} WITH NAME 'Äs`t:/.././@c\\'_\\'s'"),
-    ]
+    if operation == "FREEZE":
+        assert first_client.mock_calls == [
+            mock.call.execute(b"ALTER TABLE `db-one`.`table-uno` FREEZE WITH NAME '\\xc3\\x84s`t:/.././@c\\'_\\'s'"),
+            mock.call.execute(b"ALTER TABLE `db-one`.`table-dos` FREEZE WITH NAME '\\xc3\\x84s`t:/.././@c\\'_\\'s'"),
+            mock.call.execute(b"ALTER TABLE `db-two`.`table-eins` FREEZE WITH NAME '\\xc3\\x84s`t:/.././@c\\'_\\'s'"),
+        ]
+    else:
+        assert first_client.mock_calls == [
+            mock.call.execute(b"ALTER TABLE `db-one`.`table-uno` UNFREEZE WITH NAME '\\xc3\\x84s`t:/.././@c\\'_\\'s'"),
+            mock.call.execute(b"ALTER TABLE `db-one`.`table-dos` UNFREEZE WITH NAME '\\xc3\\x84s`t:/.././@c\\'_\\'s'"),
+            mock.call.execute(b"ALTER TABLE `db-two`.`table-eins` UNFREEZE WITH NAME '\\xc3\\x84s`t:/.././@c\\'_\\'s'"),
+        ]
     # The operation is replicated, so we'll only do it on the first client
     assert second_client.mock_calls == []
 
@@ -415,8 +423,8 @@ async def test_distribute_parts_of_replicated_tables() -> None:
     ]
 
 
-def _b64_str(b: bytes) -> str:
-    return base64.b64encode(b).decode()
+def b64_str(b: bytes) -> str:
+    return b64encode(b).decode()
 
 
 @pytest.mark.asyncio
@@ -434,20 +442,20 @@ async def test_parse_clickhouse_manifest() -> None:
             plugin=Plugin.clickhouse,
             plugin_data={
                 "access_entities": [{
-                    "name": _b64_str(b"default_\x80"),
+                    "name": b64_str(b"default_\x80"),
                     "uuid": "00000000-0000-0000-0000-000000000002",
                     "type": "U",
-                    "attach_query": _b64_str(b"ATTACH USER \x80 ...")
+                    "attach_query": b64_str(b"ATTACH USER \x80 ...")
                 }],
                 "replicated_databases": [{
-                    "name": "db-one"
+                    "name": b64_str(b"db-one")
                 }],
                 "tables": [{
-                    "database": "db-one",
-                    "name": "t1",
+                    "database": b64_str(b"db-one"),
+                    "name": b64_str(b"t1"),
                     "engine": "MergeTree",
                     "uuid": "00000000-0000-0000-0000-000000000004",
-                    "create_query": "CREATE ...",
+                    "create_query": b64_str(b"CREATE ..."),
                     "dependencies": [],
                 }]
             }
@@ -458,8 +466,10 @@ async def test_parse_clickhouse_manifest() -> None:
         access_entities=[
             AccessEntity(type="U", uuid=uuid.UUID(int=2), name=b"default_\x80", attach_query=b"ATTACH USER \x80 ...")
         ],
-        replicated_databases=[ReplicatedDatabase(name="db-one")],
-        tables=[Table(database="db-one", name="t1", engine="MergeTree", uuid=uuid.UUID(int=4), create_query="CREATE ...")],
+        replicated_databases=[ReplicatedDatabase(name=b"db-one")],
+        tables=[
+            Table(database=b"db-one", name=b"t1", engine="MergeTree", uuid=uuid.UUID(int=4), create_query=b"CREATE ...")
+        ],
     )
 
 
@@ -477,18 +487,20 @@ async def test_creates_all_replicated_databases_and_tables_in_manifest() -> None
     context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
     await step.run_step(cluster, context)
     first_client_queries = [
-        "DROP DATABASE IF EXISTS `db-one` SYNC",
-        "CREATE DATABASE `db-one` ENGINE = Replicated('/clickhouse/databases/db%2Done', '{shard}', '{replica}')",
-        "DROP DATABASE IF EXISTS `db-two` SYNC",
-        "CREATE DATABASE `db-two` ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{shard}', '{replica}')",
-        "CREATE TABLE db-one.table-uno ...", "CREATE TABLE db-one.table-dos ...", "CREATE TABLE db-two.table-eins ..."
+        b"DROP DATABASE IF EXISTS `db-one` SYNC",
+        b"CREATE DATABASE `db-one` ENGINE = Replicated('/clickhouse/databases/db%2Done', '{shard}', '{replica}')",
+        b"DROP DATABASE IF EXISTS `db-two` SYNC",
+        b"CREATE DATABASE `db-two` ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{shard}', '{replica}')",
+        b"CREATE TABLE db-one.table-uno ...",
+        b"CREATE TABLE db-one.table-dos ...",
+        b"CREATE TABLE db-two.table-eins ...",
     ]
     # CREATE TABLE is replicated, that why we only create the table on the first client
     second_client_queries = [
-        "DROP DATABASE IF EXISTS `db-one` SYNC",
-        "CREATE DATABASE `db-one` ENGINE = Replicated('/clickhouse/databases/db%2Done', '{shard}', '{replica}')",
-        "DROP DATABASE IF EXISTS `db-two` SYNC",
-        "CREATE DATABASE `db-two` ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{shard}', '{replica}')",
+        b"DROP DATABASE IF EXISTS `db-one` SYNC",
+        b"CREATE DATABASE `db-one` ENGINE = Replicated('/clickhouse/databases/db%2Done', '{shard}', '{replica}')",
+        b"DROP DATABASE IF EXISTS `db-two` SYNC",
+        b"CREATE DATABASE `db-two` ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{shard}', '{replica}')",
     ]
     assert clients[0].mock_calls == list(map(mock.call.execute, first_client_queries))
     assert clients[1].mock_calls == list(map(mock.call.execute, second_client_queries))
@@ -510,15 +522,15 @@ async def test_creates_all_replicated_databases_and_tables_in_manifest_with_cust
     context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
     await step.run_step(cluster, context)
     first_client_queries = [
-        "DROP DATABASE IF EXISTS `db-one` SYNC",
-        "CREATE DATABASE `db-one` ENGINE = Replicated('/clickhouse/databases/db%2Done', '{shard}', '{replica}') "
-        "SETTINGS cluster_username='alice', cluster_password='alice_secret'",
-        "DROP DATABASE IF EXISTS `db-two` SYNC",
-        "CREATE DATABASE `db-two` ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{shard}', '{replica}') "
-        "SETTINGS cluster_username='alice', cluster_password='alice_secret'",
-        "CREATE TABLE db-one.table-uno ...",
-        "CREATE TABLE db-one.table-dos ...",
-        "CREATE TABLE db-two.table-eins ...",
+        b"DROP DATABASE IF EXISTS `db-one` SYNC",
+        b"CREATE DATABASE `db-one` ENGINE = Replicated('/clickhouse/databases/db%2Done', '{shard}', '{replica}') "
+        b"SETTINGS cluster_username='alice', cluster_password='alice_secret'",
+        b"DROP DATABASE IF EXISTS `db-two` SYNC",
+        b"CREATE DATABASE `db-two` ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{shard}', '{replica}') "
+        b"SETTINGS cluster_username='alice', cluster_password='alice_secret'",
+        b"CREATE TABLE db-one.table-uno ...",
+        b"CREATE TABLE db-one.table-dos ...",
+        b"CREATE TABLE db-two.table-eins ...",
     ]
     assert client.mock_calls == list(map(mock.call.execute, first_client_queries))
 
@@ -537,13 +549,17 @@ async def test_drops_each_database_on_all_servers_before_recreating_it() -> None
     context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
     await step.run_step(cluster, context)
     first_client_queries = [
-        "DROP DATABASE IF EXISTS `db-one` SYNC", "DROP DATABASE IF EXISTS `db-one` SYNC",
-        "CREATE DATABASE `db-one` ENGINE = Replicated('/clickhouse/databases/db%2Done', '{shard}', '{replica}')",
-        "CREATE DATABASE `db-one` ENGINE = Replicated('/clickhouse/databases/db%2Done', '{shard}', '{replica}')",
-        "DROP DATABASE IF EXISTS `db-two` SYNC", "DROP DATABASE IF EXISTS `db-two` SYNC",
-        "CREATE DATABASE `db-two` ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{shard}', '{replica}')",
-        "CREATE DATABASE `db-two` ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{shard}', '{replica}')",
-        "CREATE TABLE db-one.table-uno ...", "CREATE TABLE db-one.table-dos ...", "CREATE TABLE db-two.table-eins ..."
+        b"DROP DATABASE IF EXISTS `db-one` SYNC",
+        b"DROP DATABASE IF EXISTS `db-one` SYNC",
+        b"CREATE DATABASE `db-one` ENGINE = Replicated('/clickhouse/databases/db%2Done', '{shard}', '{replica}')",
+        b"CREATE DATABASE `db-one` ENGINE = Replicated('/clickhouse/databases/db%2Done', '{shard}', '{replica}')",
+        b"DROP DATABASE IF EXISTS `db-two` SYNC",
+        b"DROP DATABASE IF EXISTS `db-two` SYNC",
+        b"CREATE DATABASE `db-two` ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{shard}', '{replica}')",
+        b"CREATE DATABASE `db-two` ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{shard}', '{replica}')",
+        b"CREATE TABLE db-one.table-uno ...",
+        b"CREATE TABLE db-one.table-dos ...",
+        b"CREATE TABLE db-two.table-eins ...",
     ]
     assert client.mock_calls == list(map(mock.call.execute, first_client_queries))
 
@@ -658,17 +674,17 @@ async def test_attaches_all_mergetree_parts_in_manifest() -> None:
     # Note: parts list is different for each client
     # however, we can have identically named parts which are not the same file
     assert client_1.mock_calls == [
-        mock.call.execute("SET receive_timeout=60", session_id=mock.ANY),
-        mock.call.execute("ALTER TABLE `db-one`.`table-dos` ATTACH PART 'all_1_1_0'", session_id=mock.ANY, timeout=60),
-        mock.call.execute("SET receive_timeout=60", session_id=mock.ANY),
-        mock.call.execute("ALTER TABLE `db-one`.`table-uno` ATTACH PART 'all_0_0_0'", session_id=mock.ANY, timeout=60),
+        mock.call.execute(b"SET receive_timeout=60", session_id=mock.ANY),
+        mock.call.execute(b"ALTER TABLE `db-one`.`table-dos` ATTACH PART 'all_1_1_0'", session_id=mock.ANY, timeout=60),
+        mock.call.execute(b"SET receive_timeout=60", session_id=mock.ANY),
+        mock.call.execute(b"ALTER TABLE `db-one`.`table-uno` ATTACH PART 'all_0_0_0'", session_id=mock.ANY, timeout=60),
     ]
     check_each_pair_of_calls_has_the_same_session_id(client_1.mock_calls)
     assert client_2.mock_calls == [
-        mock.call.execute("SET receive_timeout=60", session_id=mock.ANY),
-        mock.call.execute("ALTER TABLE `db-one`.`table-dos` ATTACH PART 'all_1_1_1'", session_id=mock.ANY, timeout=60),
-        mock.call.execute("SET receive_timeout=60", session_id=mock.ANY),
-        mock.call.execute("ALTER TABLE `db-one`.`table-uno` ATTACH PART 'all_0_0_0'", session_id=mock.ANY, timeout=60),
+        mock.call.execute(b"SET receive_timeout=60", session_id=mock.ANY),
+        mock.call.execute(b"ALTER TABLE `db-one`.`table-dos` ATTACH PART 'all_1_1_1'", session_id=mock.ANY, timeout=60),
+        mock.call.execute(b"SET receive_timeout=60", session_id=mock.ANY),
+        mock.call.execute(b"ALTER TABLE `db-one`.`table-uno` ATTACH PART 'all_0_0_0'", session_id=mock.ANY, timeout=60),
     ]
     check_each_pair_of_calls_has_the_same_session_id(client_2.mock_calls)
 
@@ -683,10 +699,10 @@ async def test_sync_replicas_for_replicated_mergetree_tables() -> None:
     await step.run_step(cluster, context)
     for client_index, client in enumerate(clients):
         assert client.mock_calls == [
-            mock.call.execute("SET receive_timeout=180", session_id=mock.ANY),
-            mock.call.execute("SYSTEM SYNC REPLICA `db-one`.`table-uno`", session_id=mock.ANY, timeout=180),
-            mock.call.execute("SET receive_timeout=180", session_id=mock.ANY),
-            mock.call.execute("SYSTEM SYNC REPLICA `db-two`.`table-eins`", session_id=mock.ANY, timeout=180)
+            mock.call.execute(b"SET receive_timeout=180", session_id=mock.ANY),
+            mock.call.execute(b"SYSTEM SYNC REPLICA `db-one`.`table-uno`", session_id=mock.ANY, timeout=180),
+            mock.call.execute(b"SET receive_timeout=180", session_id=mock.ANY),
+            mock.call.execute(b"SYSTEM SYNC REPLICA `db-two`.`table-eins`", session_id=mock.ANY, timeout=180)
         ], f"Wrong list of queries for client {client_index} of {len(clients)}"
         check_each_pair_of_calls_has_the_same_session_id(client.mock_calls)
 

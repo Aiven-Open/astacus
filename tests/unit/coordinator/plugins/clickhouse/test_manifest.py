@@ -2,12 +2,39 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
-from astacus.coordinator.plugins.clickhouse.manifest import Table
+from astacus.coordinator.plugins.clickhouse.manifest import AccessEntity, ClickHouseManifest, ReplicatedDatabase, Table
+from base64 import b64encode
 
 import pytest
 import uuid
 
 pytestmark = [pytest.mark.clickhouse]
+
+SAMPLE_ACCESS_ENTITY = AccessEntity(type="U", uuid=uuid.UUID(int=0), name=b"bad\x80user", attach_query=b"ATTACH USER ...")
+SERIALIZED_ACCESS_ENTITY = {
+    "type": "U",
+    "uuid": "00000000-0000-0000-0000-000000000000",
+    "name": b64encode(b"bad\x80user").decode(),
+    "attach_query": b64encode(b"ATTACH USER ...").decode()
+}
+SAMPLE_DATABASE = ReplicatedDatabase(name=b"bad\x80db")
+SERIALIZED_DATABASE = {"name": b64encode(b"bad\x80db").decode()}
+SAMPLE_TABLE = Table(
+    database=b"d\x80b",
+    name=b"tab\x80e",
+    uuid=uuid.UUID(int=0),
+    engine="ReplicatedMergeTree",
+    create_query=b"CREATE TABLE ...",
+    dependencies=[(b"db", b"othertable")]
+)
+SERIALIZED_TABLE = {
+    "database": b64encode(b"d\x80b").decode(),
+    "name": b64encode(b"tab\x80e").decode(),
+    "uuid": "00000000-0000-0000-0000-000000000000",
+    "engine": "ReplicatedMergeTree",
+    "create_query": b64encode(b"CREATE TABLE ...").decode(),
+    "dependencies": [[b64encode(b"db").decode(), b64encode(b"othertable").decode()]]
+}
 
 
 @pytest.mark.parametrize(
@@ -58,11 +85,51 @@ pytestmark = [pytest.mark.clickhouse]
     ]
 )
 def test_clickhouse_table_attributes(engine: str, is_replicated: bool, requires_freezing: bool) -> None:
-    table = Table(database="db", name="name", uuid=uuid.UUID(int=0), engine=engine, create_query="")
+    table = Table(database=b"db", name=b"name", uuid=uuid.UUID(int=0), engine=engine, create_query=b"")
     assert table.is_replicated is is_replicated
     assert table.requires_freezing is requires_freezing
 
 
 def test_table_escaped_identifier() -> None:
-    table = Table(database="débé", name="na`me", uuid=uuid.UUID(int=0), engine="DontCare", create_query="")
-    assert table.escaped_sql_identifier == "`débé`.`na\\`me`"
+    table = Table(
+        database="débé".encode(), name="na`me".encode(), uuid=uuid.UUID(int=0), engine="DontCare", create_query=b""
+    )
+    assert table.escaped_sql_identifier == "`d\\xc3\\xa9b\\xc3\\xa9`.`na\\`me`"
+
+
+def test_access_entity_from_plugin_data() -> None:
+    assert AccessEntity.from_plugin_data(SERIALIZED_ACCESS_ENTITY) == SAMPLE_ACCESS_ENTITY
+
+
+def test_replicated_database_from_plugin_data() -> None:
+    assert ReplicatedDatabase.from_plugin_data(SERIALIZED_DATABASE) == SAMPLE_DATABASE
+
+
+def test_table_from_plugin_data() -> None:
+    assert Table.from_plugin_data(SERIALIZED_TABLE) == SAMPLE_TABLE
+
+
+def test_clickhouse_manifest_from_plugin_data() -> None:
+    manifest = ClickHouseManifest.from_plugin_data({
+        "access_entities": [SERIALIZED_ACCESS_ENTITY],
+        "replicated_databases": [SERIALIZED_DATABASE],
+        "tables": [SERIALIZED_TABLE]
+    })
+    assert manifest == ClickHouseManifest(
+        access_entities=[SAMPLE_ACCESS_ENTITY],
+        replicated_databases=[SAMPLE_DATABASE],
+        tables=[SAMPLE_TABLE],
+    )
+
+
+def test_clickhouse_manifest_to_plugin_data() -> None:
+    serialized_manifest = ClickHouseManifest(
+        access_entities=[SAMPLE_ACCESS_ENTITY],
+        replicated_databases=[SAMPLE_DATABASE],
+        tables=[SAMPLE_TABLE],
+    ).to_plugin_data()
+    assert serialized_manifest == {
+        "access_entities": [SERIALIZED_ACCESS_ENTITY],
+        "replicated_databases": [SERIALIZED_DATABASE],
+        "tables": [SERIALIZED_TABLE]
+    }

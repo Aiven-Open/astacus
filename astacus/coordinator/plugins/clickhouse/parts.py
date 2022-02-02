@@ -144,18 +144,18 @@ def get_frozen_parts_pattern(freeze_name: str) -> str:
     """
     Returns the glob pattern inside ClickHouse data dir where frozen table parts are stored.
     """
-    escaped_freeze_name = escape_for_file_name(freeze_name)
+    escaped_freeze_name = escape_for_file_name(freeze_name.encode())
     return f"shadow/{escaped_freeze_name}/store/**/*"
 
 
 def list_parts_to_attach(
     snapshot_result: SnapshotResult,
     tables_by_uuid: Mapping[uuid.UUID, Table],
-) -> Sequence[Tuple[str, str]]:
+) -> Sequence[Tuple[str, bytes]]:
     """
     Returns a list of table identifiers and part names to attach from the snapshot.
     """
-    parts_to_attach: Set[Tuple[str, str]] = set()
+    parts_to_attach: Set[Tuple[str, bytes]] = set()
     for snapshot_file in snapshot_result.state.files:
         table_uuid = uuid.UUID(snapshot_file.relative_path.parts[2])
         table = tables_by_uuid.get(table_uuid)
