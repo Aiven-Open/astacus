@@ -3,18 +3,10 @@ Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
 from .client import ClickHouseClient, HttpClickHouseClient
-from .zookeeper import KazooZooKeeperClient, ZooKeeperClient
 from astacus.common.utils import AstacusModel, build_netloc
+from astacus.coordinator.plugins.zookeeper import KazooZooKeeperClient, ZooKeeperClient
+from astacus.coordinator.plugins.zookeeper_config import ZooKeeperConfiguration
 from typing import List, Optional
-
-
-class ZooKeeperNode(AstacusModel):
-    host: str
-    port: int
-
-
-class ZooKeeperConfiguration(AstacusModel):
-    nodes: List[ZooKeeperNode] = []
 
 
 class ClickHouseNode(AstacusModel):

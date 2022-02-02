@@ -11,9 +11,8 @@ from astacus.config import GlobalConfig, UvicornConfig
 from astacus.coordinator.config import CoordinatorConfig, CoordinatorNode
 from astacus.coordinator.plugins import ClickHousePlugin
 from astacus.coordinator.plugins.clickhouse.client import HttpClickHouseClient
-from astacus.coordinator.plugins.clickhouse.config import (
-    ClickHouseConfiguration, ClickHouseNode, ReplicatedDatabaseSettings, ZooKeeperConfiguration, ZooKeeperNode
-)
+from astacus.coordinator.plugins.clickhouse.config import ClickHouseConfiguration, ClickHouseNode, ReplicatedDatabaseSettings
+from astacus.coordinator.plugins.zookeeper_config import ZooKeeperConfiguration, ZooKeeperNode
 from astacus.node.config import NodeConfig
 from pathlib import Path
 from tests.system.conftest import background_process, wait_url_up

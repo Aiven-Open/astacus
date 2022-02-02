@@ -2,7 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
-from astacus.coordinator.plugins.clickhouse.zookeeper import ChangeWatch, FakeZooKeeperClient, NodeExistsError, NoNodeError
+from astacus.coordinator.plugins.zookeeper import ChangeWatch, FakeZooKeeperClient, NodeExistsError, NoNodeError
 
 import pytest
 

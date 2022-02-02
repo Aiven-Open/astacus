@@ -136,6 +136,8 @@ class UploadManifestStep(Step[None]):
     json_storage: AsyncJsonStorage
     plugin: ipc.Plugin
     plugin_manifest_step: Optional[Type[Step[AstacusModel]]] = None
+    snapshot_step: Optional[Type[Step[List[ipc.SnapshotResult]]]] = SnapshotStep
+    upload_step: Optional[Type[Step[List[ipc.SnapshotUploadResult]]]] = UploadBlocksStep
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         if self.plugin_manifest_step is None:
@@ -146,8 +148,8 @@ class UploadManifestStep(Step[None]):
         manifest = ipc.BackupManifest(
             attempt=context.attempt,
             start=context.attempt_start,
-            snapshot_results=context.get_result(SnapshotStep),
-            upload_results=context.get_result(UploadBlocksStep),
+            snapshot_results=context.get_result(self.snapshot_step) if self.snapshot_step else [],
+            upload_results=context.get_result(self.upload_step) if self.upload_step else [],
             plugin=self.plugin,
             plugin_data=plugin_data,
         )

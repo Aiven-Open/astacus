@@ -10,6 +10,8 @@ pytest-mock==3.3.1
 pytest-order==1.0.0
 pytest-timeout==1.4.2
 pytest==6.0.1
+testcontainers==3.4.2
+docker==5.0.3
 
 # fastapi testclient needs this yet does not depend on it, gnn
 requests
