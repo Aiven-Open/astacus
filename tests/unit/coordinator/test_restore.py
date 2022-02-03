@@ -5,7 +5,6 @@ See LICENSE for details
 Test that the coordinator restore endpoint works.
 
 """
-
 from astacus.common import exceptions, ipc
 from astacus.common.ipc import Plugin
 from astacus.coordinator.config import CoordinatorNode
@@ -13,8 +12,9 @@ from astacus.coordinator.plugins.base import get_node_to_backup_index
 from contextlib import nullcontext as does_not_raise
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
+import httpx
 import json
 import pydantic
 import pytest
@@ -72,33 +72,33 @@ def test_restore(rt, app, client, mstorage):
     nodes = app.state.coordinator_config.nodes
     with respx.mock:
         for i, node in enumerate(nodes):
-            respx.post(f"{node.url}/unlock?locker=x&ttl=0", content={"locked": False})
+            respx.post(f"{node.url}/unlock?locker=x&ttl=0").respond(json={"locked": False})
             # Failure point 1: Lock fails
-            respx.post(f"{node.url}/lock?locker=x&ttl=60", content={"locked": rt.fail_at != 1})
-
+            respx.post(f"{node.url}/lock?locker=x&ttl=60").respond(json={"locked": rt.fail_at != 1})
             if i == 0:
                 # Failure point 2: download call fails
-                url = f"{node.url}/download"
+                def get_match_download(node_url: str) -> Callable[[httpx.Request], httpx.Response]:
+                    def match_download(request: httpx.Request) -> Optional[httpx.Response]:
+                        if rt.fail_at == 2:
+                            return None
+                        if json.loads(request.read())["storage"] != storage.storage_name:
+                            return None
+                        if json.loads(request.read())["root_globs"] != ["*"]:
+                            return None
+                        return httpx.Response(
+                            status_code=200, json={
+                                "op_id": 42,
+                                "status_url": f"{node_url}/download/result"
+                            }
+                        )
 
-                def match_download(request, response, *, _url=url):
-                    if request.method != "POST" or _url != str(request.url):
-                        return None
-                    if rt.fail_at == 2:
-                        return None
-                    if json.loads(request.read())["storage"] != storage.storage_name:
-                        return None
-                    if json.loads(request.read())["root_globs"] != ["*"]:
-                        return None
-                    return response
+                    return match_download
 
-                result_url = f"{node.url}/download/result"
-
-                respx.add(match_download, content={"op_id": 42, "status_url": result_url})
+                respx.post(url=f"{node.url}/download").mock(side_effect=get_match_download(node.url))
 
                 # Failure point 3: download result call fails
-                respx.get(
-                    result_url,
-                    content={
+                respx.get(f"{node.url}/download/result").respond(
+                    json={
                         "progress": {
                             "handled": 10,
                             "failed": 0,
@@ -109,27 +109,26 @@ def test_restore(rt, app, client, mstorage):
                     status_code=200 if rt.fail_at != 3 else 500
                 )
             else:
-                url = f"{node.url}/clear"
 
-                def match_clear(request, response, *, _url=url):
-                    if request.method != "POST" or _url != str(request.url):
-                        return None
-                    if rt.fail_at == 4:
-                        return None
-                    if json.loads(request.read())["root_globs"] != ["*"]:
-                        return None
-                    return response
+                def get_match_clear(node_url: str) -> Callable[[httpx.Request], httpx.Response]:
+                    def match_clear(request: httpx.Request) -> Optional[httpx.Response]:
+                        if rt.fail_at == 4:
+                            return None
+                        if json.loads(request.read())["root_globs"] != ["*"]:
+                            return None
+                        return httpx.Response(status_code=200, json={"op_id": 42, "status_url": f"{node_url}/clear/result"})
 
-                result_url = f"{node.url}/clear/result"
+                    return match_clear
 
-                respx.add(match_clear, content={"op_id": 42, "status_url": result_url})
+                respx.post(url=f"{node.url}/clear").mock(side_effect=get_match_clear(node.url))
 
                 # Failure point 5: clear result call fails
-                respx.get(result_url, content={
-                    "progress": {
-                        "final": True
-                    },
-                }, status_code=200 if rt.fail_at != 5 else 500)
+                respx.get(f"{node.url}/clear/result"
+                          ).respond(json={
+                              "progress": {
+                                  "final": True
+                              },
+                          }, status_code=200 if rt.fail_at != 5 else 500)
 
         req = {}
         if rt.storage_name:

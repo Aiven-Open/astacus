@@ -15,7 +15,7 @@ from astacus.coordinator.coordinator import Coordinator, SteppedCoordinatorOp
 from astacus.coordinator.plugins import m3db
 from astacus.coordinator.plugins.base import BackupManifestStep, StepsContext
 from astacus.coordinator.plugins.m3db import (
-    CreateM3ManifestStep, get_etcd_prefixes, InitStep, M3DBPlugin, RestoreEtcdStep, RetrieveEtcdAgainStep, RetrieveEtcdStep,
+    get_etcd_prefixes, InitStep, M3DBPlugin, PrepareM3ManifestStep, RestoreEtcdStep, RetrieveEtcdAgainStep, RetrieveEtcdStep,
     RewriteEtcdStep
 )
 from astacus.coordinator.state import CoordinatorState
@@ -119,15 +119,14 @@ async def test_m3_backup(coordinator: Coordinator, plugin: M3DBPlugin, etcd_clie
             InitStep(placement_nodes=plugin.placement_nodes),
             RetrieveEtcdStep(etcd_client=etcd_client, etcd_prefixes=etcd_prefixes),
             RetrieveEtcdAgainStep(etcd_client=etcd_client, etcd_prefixes=etcd_prefixes),
-            CreateM3ManifestStep(placement_nodes=plugin.placement_nodes),
+            PrepareM3ManifestStep(placement_nodes=plugin.placement_nodes),
         ]
     )
     context = StepsContext()
     with respx.mock:
         op.state.shutting_down = fail_at == 0
-        respx.post(
-            "http://dummy/etcd/kv/range",
-            content={"kvs": [
+        respx.post("http://dummy/etcd/kv/range").respond(
+            json={"kvs": [
                 {
                     "key": KEY1_B64,
                     "value": VALUE1_B64
@@ -142,7 +141,7 @@ async def test_m3_backup(coordinator: Coordinator, plugin: M3DBPlugin, etcd_clie
         assert await op.try_run(op.get_cluster(), context) == (fail_at is None)
     if fail_at is not None:
         return
-    assert context.get_result(CreateM3ManifestStep) == PLUGIN_DATA
+    assert context.get_result(PrepareM3ManifestStep) == PLUGIN_DATA
 
 
 @dataclass
@@ -183,6 +182,6 @@ async def test_m3_restore(coordinator: Coordinator, plugin: M3DBPlugin, etcd_cli
     fail_at = rt.fail_at
     with respx.mock:
         op.state.shutting_down = fail_at == 0
-        respx.post("http://dummy/etcd/kv/deleterange", content={"ok": True}, status_code=200 if fail_at != 1 else 500)
-        respx.post("http://dummy/etcd/kv/put", content={"ok": True}, status_code=200 if fail_at != 2 else 500)
+        respx.post("http://dummy/etcd/kv/deleterange").respond(json={"ok": True}, status_code=200 if fail_at != 1 else 500)
+        respx.post("http://dummy/etcd/kv/put").respond(json={"ok": True}, status_code=200 if fail_at != 2 else 500)
         assert await op.try_run(op.get_cluster(), context) == (fail_at is None)

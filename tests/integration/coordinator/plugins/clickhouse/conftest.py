@@ -210,6 +210,7 @@ def create_clickhouse_configs(
                     </logger>
                     <tcp_port>{tcp_port}</tcp_port>
                     <http_port>{http_port}</http_port>
+                    <interserver_http_host>localhost</interserver_http_host>
                     <interserver_http_port>{interserver_http_port}</interserver_http_port>
                     <zookeeper>
                         <node>

@@ -10,7 +10,7 @@ from astacus.coordinator.plugins.base import (
     BackupManifestStep, BackupNameStep, CoordinatorPlugin, OperationContext, Step, UploadManifestStep
 )
 from astacus.coordinator.plugins.flink.steps import (
-    CreateFlinkManifestStep, FlinkManifestStep, RestoreDataStep, RetrieveDataStep
+    FlinkManifestStep, PrepareFlinkManifestStep, RestoreDataStep, RetrieveDataStep
 )
 from astacus.coordinator.plugins.zookeeper_config import get_zookeeper_client, ZooKeeperConfiguration
 from typing import List
@@ -28,11 +28,11 @@ class FlinkPlugin(CoordinatorPlugin):
         zookeeper_client = get_zookeeper_client(self.zookeeper)
         return [
             RetrieveDataStep(zookeeper_client=zookeeper_client, zookeeper_paths=self.zookeeper_paths),
-            CreateFlinkManifestStep(),
+            PrepareFlinkManifestStep(),
             UploadManifestStep(
                 json_storage=context.json_storage,
                 plugin=Plugin.flink,
-                plugin_manifest_step=CreateFlinkManifestStep,
+                plugin_manifest_step=PrepareFlinkManifestStep,
                 snapshot_step=None,
                 upload_step=None
             ),

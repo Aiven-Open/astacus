@@ -3,11 +3,10 @@ Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
 from astacus.common.utils import build_netloc, httpx_request
-from typing import Dict, Iterable, List, Optional, Sequence, Union
+from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Union
 
 import copy
 import logging
-import re
 import urllib.parse
 
 Row = Sequence[Union[str, int, float, None]]
@@ -16,7 +15,10 @@ logger = logging.getLogger(__name__)
 
 
 class ClickHouseClient:
-    async def execute(self, query: str, timeout: Optional[float] = None, session_id: Optional[str] = None) -> Iterable[Row]:
+    async def execute(self,
+                      query: bytes,
+                      timeout: Optional[float] = None,
+                      session_id: Optional[str] = None) -> Iterable[Row]:
         raise NotImplementedError
 
 
@@ -48,7 +50,11 @@ class HttpClickHouseClient(ClickHouseClient):
         self.password = password
         self.timeout = timeout
 
-    async def execute(self, query: str, timeout: Optional[float] = None, session_id: Optional[str] = None) -> Iterable[Row]:
+    async def execute(self,
+                      query: bytes,
+                      timeout: Optional[float] = None,
+                      session_id: Optional[str] = None) -> Iterable[Row]:
+        assert isinstance(query, bytes)
         # Output format: https://clickhouse.tech/docs/en/interfaces/formats/#jsoncompact
         headers = [("X-ClickHouse-Database", "system"), ("X-ClickHouse-Format", "JSONCompact")]
         if self.username is not None:
@@ -56,13 +62,14 @@ class HttpClickHouseClient(ClickHouseClient):
         if self.password is not None:
             headers.append(("X-ClickHouse-Key", self.password))
         netloc = build_netloc(self.host, self.port)
-        params = {"query": query, "wait_end_of_query": "1"}
+        params = {"wait_end_of_query": "1"}
         if session_id is not None:
             params["session_id"] = session_id
         response = await httpx_request(
             url=urllib.parse.urlunsplit(("http", netloc, "", None, None)),
             params=params,
             method="post",
+            content=query,
             # The response can be empty so we can't use httpx_request builtin decoding
             json=False,
             caller="ClickHouseClient",
@@ -82,31 +89,75 @@ class HttpClickHouseClient(ClickHouseClient):
 
 class StubClickHouseClient(ClickHouseClient):
     def __init__(self) -> None:
-        self.responses: Dict[str, List[Row]] = {}
+        self.responses: Dict[bytes, List[Row]] = {}
 
-    def set_response(self, query: str, rows: List[Row]) -> None:
+    def set_response(self, query: bytes, rows: List[Row]) -> None:
         self.responses[query] = copy.deepcopy(rows)
 
-    async def execute(self, query: str, timeout: Optional[float] = None, session_id: Optional[str] = None) -> Iterable[Row]:
+    async def execute(self,
+                      query: bytes,
+                      timeout: Optional[float] = None,
+                      session_id: Optional[str] = None) -> Iterable[Row]:
+        assert isinstance(query, bytes)
         return copy.deepcopy(self.responses[query])
 
 
-def escape_sql_identifier(identifier: str) -> str:
-    """
-    Escapes backticks and backslashes with a backslash and wraps everything between backticks.
-    """
-    # The reference only specifies when escaping is not necessary, but does not completely
-    # specifies how the escaping is done and which character are allowed.
-    # We escape all identifiers. We could try to escape only the identifiers that conflict with keywords,
-    # but that requires knowing the set of all ClickHouse keywords, which is very likely to change.
-    # ref: https://clickhouse.tech/docs/en/sql-reference/syntax/#syntax-identifiers
-    escaped_identifier = re.sub(r"([`\\])", r"\\\1", identifier)
-    return f"`{escaped_identifier}`"
+IDENTIFIER_ESCAPE_MAP = {
+    b"\b"[0]: b"\\b",
+    b"\f"[0]: b"\\f",
+    b"\r"[0]: b"\\r",
+    b"\n"[0]: b"\\n",
+    b"\t"[0]: b"\\t",
+    b"\0"[0]: b"\\0",
+    b"\\"[0]: b"\\\\",
+    b"`"[0]: b"\\`",
+}
+
+STRING_ESCAPE_MAP = {
+    b"\b"[0]: b"\\b",
+    b"\f"[0]: b"\\f",
+    b"\r"[0]: b"\\r",
+    b"\n"[0]: b"\\n",
+    b"\t"[0]: b"\\t",
+    b"\0"[0]: b"\\0",
+    b"\\"[0]: b"\\\\",
+    b"'"[0]: b"\\'",
+}
 
 
-def escape_sql_string(string: str) -> str:
+def escape_sql_identifier(identifier: bytes) -> str:
+    r"""Escape a byte string into an sql identifier usable in a ClickHouse query.
+
+    Backtick, backslashes and \b \f \r \n \t \0 are escaped with a backslash.
+
+    Other special bytes (anything below 0x20 or greater than 0x7e) are escaped
+    with a \xHH sequence.
+
+    The entire value is wrapped in backticks, even when unnecessary :
+    We could try to escape only the identifiers that conflict with keywords,
+    but that requires knowing the set of all ClickHouse keywords, which is very
+    likely to change.
+    ref: https://clickhouse.com/docs/en/sql-reference/syntax/#syntax-identifiers
+    """
+    return _escape_bytes(identifier, IDENTIFIER_ESCAPE_MAP, b"`")
+
+
+def escape_sql_string(string: bytes) -> str:
     """
     Escapes single quotes and backslashes with a backslash and wraps everything between single quotes.
     """
-    escaped_identifier = re.sub(r"(['\\])", r"\\\1", string)
-    return f"'{escaped_identifier}'"
+    return _escape_bytes(string, STRING_ESCAPE_MAP, b"'")
+
+
+def _escape_bytes(value: bytes, escape_map: Mapping[int, bytes], quote_char: bytes) -> str:
+    buffer = [quote_char]
+    for byte in value:
+        escape_sequence = escape_map.get(byte)
+        if escape_sequence is not None:
+            buffer.append(escape_sequence)
+        elif byte < 0x20 or byte > 0x7E:
+            buffer.append(f"\\x{byte:02x}".encode())
+        else:
+            buffer.append(bytes((byte, )))
+    buffer.append(quote_char)
+    return b"".join(buffer).decode()

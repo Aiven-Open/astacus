@@ -237,22 +237,22 @@ def test_list_parts_to_attach() -> None:
     parts_to_attach = list_parts_to_attach(
         SnapshotResult(state=SnapshotState(files=TABLE_1_PART_1 + TABLE_1_PART_2)), {
             T1_UUID: Table(
-                database="default",
-                name="table_1",
+                database=b"default",
+                name=b"table_1",
                 engine="ReplicatedMergeTree",
                 uuid=T1_UUID,
-                create_query="CREATE TABLE ..."
+                create_query=b"CREATE TABLE ..."
             ),
             T2_UUID: Table(
-                database="default",
-                name="table_2",
+                database=b"default",
+                name=b"table_2",
                 engine="ReplicatedMergeTree",
                 uuid=T2_UUID,
-                create_query="CREATE TABLE ..."
+                create_query=b"CREATE TABLE ..."
             )
         }
     )
     assert parts_to_attach == [
-        ('`default`.`table_1`', 'all_0_0_0'),
-        ('`default`.`table_1`', 'all_1_1_0'),
+        ('`default`.`table_1`', b'all_0_0_0'),
+        ('`default`.`table_1`', b'all_1_1_0'),
     ]

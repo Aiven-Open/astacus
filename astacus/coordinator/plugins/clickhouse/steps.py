@@ -17,8 +17,9 @@ from astacus.common.limiter import Limiter
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import BackupManifestStep, SnapshotStep, Step, StepFailedError, StepsContext
 from astacus.coordinator.plugins.zookeeper import ChangeWatch, NodeExistsError, ZooKeeperClient
+from base64 import b64decode
 from pathlib import Path
-from typing import cast, Dict, List, Tuple
+from typing import Any, cast, Dict, List, Tuple
 
 import asyncio
 import dataclasses
@@ -30,10 +31,15 @@ logger = logging.getLogger(__name__)
 
 DatabasesAndTables = Tuple[List[ReplicatedDatabase], List[Table]]
 
-TABLES_LIST_QUERY = """SELECT
-    system.databases.name,
-    system.tables.name, system.tables.engine, system.tables.uuid, system.tables.create_table_query,
-    arrayZip(system.tables.dependencies_database, system.tables.dependencies_table)
+TABLES_LIST_QUERY = b"""SELECT
+    base64Encode(system.databases.name),
+    base64Encode(system.tables.name),
+    system.tables.engine,
+    system.tables.uuid,
+    base64Encode(system.tables.create_table_query),
+    arrayZip(
+        arrayMap(x -> base64Encode(x), system.tables.dependencies_database),
+        arrayMap(x -> base64Encode(x), system.tables.dependencies_table))
 FROM system.databases LEFT JOIN system.tables ON system.tables.database == system.databases.name
 WHERE
     system.databases.engine == 'Replicated'
@@ -95,7 +101,7 @@ class RetrieveAccessEntitiesStep(Step[List[AccessEntity]]):
                                 type=entity_type,
                                 uuid=entity_uuid,
                                 name=unescape_from_file_name(node_name),
-                                attach_query=attach_query_bytes.decode(),
+                                attach_query=attach_query_bytes,
                             )
                         )
             if change_watch.has_changed:
@@ -126,27 +132,31 @@ class RetrieveDatabasesAndTablesStep(Step[DatabasesAndTables]):
         clickhouse_client = self.clients[0]
         # We fetch everything in a single query, we don't have to care about consistency within that step.
         # However, the schema could be modified between now and the freeze step.
-        databases: Dict[str, ReplicatedDatabase] = {}
+        databases: Dict[bytes, ReplicatedDatabase] = {}
         tables: List[Table] = []
         rows = await clickhouse_client.execute(TABLES_LIST_QUERY)
-        for db_name, table_name, table_engine, table_uuid, table_query, dependencies in rows:
+        for base64_db_name, base64_table_name, table_engine, table_uuid, base64_table_query, base64_dependencies in rows:
+            assert isinstance(base64_db_name, str)
+            assert isinstance(base64_table_name, str)
+            assert isinstance(base64_table_query, str)
+            assert isinstance(base64_dependencies, list)
+            db_name = b64decode(base64_db_name)
             if db_name not in databases:
-                assert isinstance(db_name, str)
                 databases[db_name] = ReplicatedDatabase(name=db_name)
             # Thanks to the LEFT JOIN, an empty database without table will still return a row.
             # Unlike standard SQL, the table properties will have a default value instead of NULL,
             # that's why we skip tables with an empty name.
             # We need these rows and the LEFT JOIN that makes them: we want to list all
             # Replicated databases, including those without any table.
-            if table_name != "":
+            if base64_table_name != "":
                 tables.append(
                     Table(
                         database=db_name,
-                        name=table_name,
+                        name=b64decode(base64_table_name),
                         engine=table_engine,
                         uuid=uuid.UUID(cast(str, table_uuid)),
-                        create_query=table_query,
-                        dependencies=dependencies,
+                        create_query=b64decode(base64_table_query),
+                        dependencies=[(b64decode(d), b64decode(t)) for d, t in base64_dependencies],
                     )
                 )
         databases_list = sorted(databases.values(), key=lambda d: d.name)
@@ -154,17 +164,18 @@ class RetrieveDatabasesAndTablesStep(Step[DatabasesAndTables]):
 
 
 @dataclasses.dataclass
-class CreateClickHouseManifestStep(Step[ClickHouseManifest]):
+class PrepareClickHouseManifestStep(Step[Dict[str, Any]]):
     """
-    Collects access entities, databases and tables from previous steps into a `ClickHouseManifest`.
+    Collects access entities, databases and tables from previous steps into an uploadable manifest.
     """
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> ClickHouseManifest:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> Dict[str, Any]:
         databases, tables = context.get_result(RetrieveDatabasesAndTablesStep)
-        return ClickHouseManifest(
+        manifest = ClickHouseManifest(
             access_entities=context.get_result(RetrieveAccessEntitiesStep),
             replicated_databases=databases,
             tables=tables,
         )
+        return manifest.to_plugin_data()
 
 
 @dataclasses.dataclass
@@ -198,10 +209,10 @@ class FreezeUnfreezeTablesStepBase(Step[None]):
         for table in tables:
             if table.requires_freezing:
                 # We only run it on the first client because the `ALTER TABLE (UN)FREEZE` is replicated
-                await self.clients[0].execute(
+                await self.clients[0].execute((
                     f"ALTER TABLE {table.escaped_sql_identifier} "
-                    f"{self.operation} WITH NAME {escape_sql_string(self.freeze_name)}"
-                )
+                    f"{self.operation} WITH NAME {escape_sql_string(self.freeze_name.encode())}"
+                ).encode())
 
 
 @dataclasses.dataclass
@@ -268,7 +279,7 @@ class MoveFrozenPartsStep(Step[None]):
         # I do not like mutating an existing result, we should making this more visible
         # by returning a mutated copy and use that in other steps
         snapshot_results: List[ipc.SnapshotResult] = context.get_result(SnapshotStep)
-        escaped_freeze_name = escape_for_file_name(self.freeze_name)
+        escaped_freeze_name = escape_for_file_name(self.freeze_name.encode())
         shadow_store_path = "shadow", escaped_freeze_name, "store"
         for snapshot_result in snapshot_results:
             for snapshot_file in snapshot_result.state.files:
@@ -322,7 +333,7 @@ class ClickHouseManifestStep(Step[ClickHouseManifest]):
     """
     async def run_step(self, cluster: Cluster, context: StepsContext) -> ClickHouseManifest:
         backup_manifest = context.get_result(BackupManifestStep)
-        return ClickHouseManifest.parse_obj(backup_manifest.plugin_data)
+        return ClickHouseManifest.from_plugin_data(backup_manifest.plugin_data)
 
 
 @dataclasses.dataclass
@@ -341,7 +352,7 @@ class RestoreReplicatedDatabasesStep(Step[None]):
         settings = [
             "{}={}".format(
                 setting_name,
-                escape_sql_string(value) if isinstance(value, str) else value,
+                escape_sql_string(value.encode()) if isinstance(value, str) else value,
             ) for setting_name, value in self.replicated_database_settings.dict().items() if value is not None
         ]
         settings_clause = " SETTINGS {}".format(", ".join(settings)) if settings else ""
@@ -352,19 +363,20 @@ class RestoreReplicatedDatabasesStep(Step[None]):
             # If we don't do that, then the recreated database on one node will recover data from
             # a node where the database wasn't recreated yet.
             for client in self.clients:
-                await client.execute(f"DROP DATABASE IF EXISTS {escape_sql_identifier(database.name)} SYNC")
+                await client.execute(f"DROP DATABASE IF EXISTS {escape_sql_identifier(database.name)} SYNC".encode())
             for client in self.clients:
-                await client.execute(
+                await client.execute((
                     f"CREATE DATABASE {escape_sql_identifier(database.name)} "
-                    f"ENGINE = Replicated({escape_sql_string(database_path)}, '{{shard}}', '{{replica}}'){settings_clause}"
-                )
+                    f"ENGINE = Replicated({escape_sql_string(database_path.encode())}, '{{shard}}', '{{replica}}')"
+                    f"{settings_clause}"
+                ).encode())
         # If any known table depends on an unknown table that was inside a non-replicated
         # database engine, then this will crash. See comment in `RetrieveReplicatedDatabasesStep`.
         for table in tables_sorted_by_dependencies(manifest.tables):
             # Materialized views creates both a table for the view itself and a table
             # with the .inner_id. prefix to store the data, we don't need to recreate
             # them manually. We will need to restore their data parts however.
-            if not table.name.startswith(".inner_id."):
+            if not table.name.startswith(b".inner_id."):
                 # Create on the first client and let replication do its thing
                 await self.clients[0].execute(table.create_query)
 
@@ -395,7 +407,7 @@ class RestoreAccessEntitiesStep(Step[None]):
                 escaped_entity_name = escape_for_file_name(access_entity.name)
                 entity_name_path = f"{self.access_entities_path}/{access_entity.type}/{escaped_entity_name}"
                 entity_path = f"{self.access_entities_path}/uuid/{access_entity.uuid}"
-                attach_query_bytes = access_entity.attach_query.encode()
+                attach_query_bytes = access_entity.attach_query
                 # Nobody else should be touching ZooKeeper during the restore operation,
                 # and we know that ClickHouse only reacts to creation of the node at `entity_path`.
                 # Theses conditions make it safe to create this pair of nodes without a transaction.
@@ -435,7 +447,7 @@ class AttachMergeTreePartsStep(Step[None]):
                         execute_with_timeout(
                             client,
                             self.attach_timeout,
-                            f"ALTER TABLE {table_identifier} ATTACH PART {escape_sql_string(part_name)}",
+                            f"ALTER TABLE {table_identifier} ATTACH PART {escape_sql_string(part_name)}".encode(),
                         )
                     )
                 )
@@ -457,14 +469,16 @@ class SyncReplicasStep(Step[None]):
         limiter = Limiter(self.max_concurrent_sync)
         tasks = [
             limiter.run(
-                execute_with_timeout(client, self.sync_timeout, f"SYSTEM SYNC REPLICA {table.escaped_sql_identifier}")
+                execute_with_timeout(
+                    client, self.sync_timeout, f"SYSTEM SYNC REPLICA {table.escaped_sql_identifier}".encode()
+                )
             ) for table in manifest.tables for client in self.clients if table.is_replicated
         ]
         await asyncio.gather(*tasks)
 
 
-async def execute_with_timeout(client: ClickHouseClient, timeout: float, query: str) -> None:
+async def execute_with_timeout(client: ClickHouseClient, timeout: float, query: bytes) -> None:
     # we use a session because we can't use the SETTINGS clause with all types of queries
     session_id = secrets.token_hex()
-    await client.execute(f"SET receive_timeout={timeout}", session_id=session_id)
+    await client.execute(f"SET receive_timeout={timeout}".encode(), session_id=session_id)
     await client.execute(query, session_id=session_id, timeout=timeout)

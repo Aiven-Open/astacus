@@ -5,16 +5,15 @@ See LICENSE for details
 import re
 
 
-def escape_for_file_name(name: str) -> str:
+def escape_for_file_name(name: bytes) -> str:
     # This is based on ClickHouse's escapeForFileName which is used internally to
     # safely create both file and folders on disk and ZooKeeper node names.
-    name_bytes = name.encode()
-    return re.sub(rb"[^a-zA-Z0-9_]", _percent_encode_byte, name_bytes).decode()
+    return re.sub(rb"[^a-zA-Z0-9_]", _percent_encode_byte, name).decode()
 
 
-def unescape_from_file_name(encoded_name: str) -> str:
+def unescape_from_file_name(encoded_name: str) -> bytes:
     encoded_bytes = encoded_name.encode()
-    return re.sub(rb"%([0-9A-F][0-9A-F])", _percent_decode_byte, encoded_bytes).decode()
+    return re.sub(rb"%([0-9A-F][0-9A-F])", _percent_decode_byte, encoded_bytes)
 
 
 def _percent_encode_byte(match: re.Match) -> bytes:

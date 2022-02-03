@@ -19,7 +19,7 @@ from astacus.common.ipc import Plugin
 from astacus.common.utils import AstacusModel
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import dataclasses
 import logging
@@ -49,11 +49,11 @@ class M3DBPlugin(CoordinatorPlugin):
             ListHexdigestsStep(hexdigest_storage=context.hexdigest_storage),
             UploadBlocksStep(storage_name=context.storage_name),
             RetrieveEtcdAgainStep(etcd_client=etcd_client, etcd_prefixes=etcd_prefixes),
-            CreateM3ManifestStep(placement_nodes=self.placement_nodes),
+            PrepareM3ManifestStep(placement_nodes=self.placement_nodes),
             # upload backup manifest only after we've retrieved again etcd
             # contents and found it consistent
             UploadManifestStep(
-                json_storage=context.json_storage, plugin=Plugin.m3db, plugin_manifest_step=CreateM3ManifestStep
+                json_storage=context.json_storage, plugin=Plugin.m3db, plugin_manifest_step=PrepareM3ManifestStep
             ),
         ]
 
@@ -108,12 +108,12 @@ class RetrieveEtcdAgainStep(Step[None]):
 
 
 @dataclasses.dataclass
-class CreateM3ManifestStep(Step[M3DBManifest]):
+class PrepareM3ManifestStep(Step[Dict[str, Any]]):
     placement_nodes: List[m3placement.M3PlacementNode]
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> M3DBManifest:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> Dict[str, Any]:
         etcd = context.get_result(RetrieveEtcdStep)
-        return M3DBManifest(etcd=etcd, placement_nodes=self.placement_nodes)
+        return M3DBManifest(etcd=etcd, placement_nodes=self.placement_nodes).dict()
 
 
 @dataclasses.dataclass
