@@ -34,9 +34,23 @@ shared code
 - [Design overview](doc/design/overview.md)
 - [Implementation overview](doc/design/implementation.md)
 
-# Installation
+# Development
 
-Use setup.py.
+The supported Python versions are 3.7 - 3.9.
+Note, below `python` needs to be a supported version.
+
+```
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+pip install -r requirements.testing.txt
+```
+
+Now you can e.g.
+
+```
+make test
+```
 
 # Configuration
 
