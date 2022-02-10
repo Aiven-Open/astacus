@@ -79,12 +79,63 @@ def _run_server(args):
     app = init_app()
     uconfig = app.state.global_config.uvicorn
     _systemd_notify_ready()
+    # uvicorn log_level option overrides log levels defined in log_config.
+    # This is fine, except that the list of overridden loggers depends on the version: it changes at version 0.12.
+    # For now, it's safer to apply the overriding ourself to avoid surprising changes if uvicorn is upgraded.
+    log_level = uconfig.log_level
+    if isinstance(log_level, str):
+        log_level = uvicorn.config.LOG_LEVELS[log_level]
+    # We don't want debug-level info from kazoo, this leaks znode content to logs.
+    kazoo_log_level = max(log_level, logging.INFO)
     uvicorn.run(
         "astacus.server:app",
         host=uconfig.host,
         port=uconfig.port,
         reload=uconfig.reload,
-        log_level=uconfig.log_level,
+        log_config={
+            "version": 1,
+            "disable_existing_loggers": False,
+            "formatters": {
+                "default": {
+                    "()": "uvicorn.logging.DefaultFormatter",
+                    "fmt": "%(levelprefix)s %(message)s",
+                    "use_colors": None,
+                },
+                "access": {
+                    "()": "uvicorn.logging.AccessFormatter",
+                    "fmt": '%(levelprefix)s %(client_addr)s - "%(request_line)s" %(status_code)s',
+                },
+            },
+            "handlers": {
+                "default": {
+                    "class": "logging.StreamHandler",
+                    "formatter": "default",
+                    "stream": "ext://sys.stderr"
+                },
+                "access": {
+                    "class": "logging.StreamHandler",
+                    "formatter": "access",
+                    "stream": "ext://sys.stdout",
+                },
+            },
+            "loggers": {
+                "": {
+                    "handlers": ["default"],
+                    "level": log_level
+                },
+                "uvicorn.error": {
+                    "level": log_level
+                },
+                "uvicorn.access": {
+                    "handlers": ["access"],
+                    "level": log_level,
+                    "propagate": False
+                },
+                "kazoo.client": {
+                    "level": kazoo_log_level
+                },
+            },
+        },
         http=uconfig.http
     )
 
