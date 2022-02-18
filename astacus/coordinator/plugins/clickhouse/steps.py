@@ -282,6 +282,7 @@ class MoveFrozenPartsStep(Step[None]):
         escaped_freeze_name = escape_for_file_name(self.freeze_name.encode())
         shadow_store_path = "shadow", escaped_freeze_name, "store"
         for snapshot_result in snapshot_results:
+            assert snapshot_result.state is not None
             for snapshot_file in snapshot_result.state.files:
                 file_path_parts = snapshot_file.relative_path.parts
                 # The original path starts with something like that :
@@ -316,13 +317,16 @@ class DistributeReplicatedPartsStep(Step[None]):
     """
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         snapshot_results = context.get_result(SnapshotStep)
-        snapshot_files = [snapshot_result.state.files for snapshot_result in snapshot_results]
+        snapshot_files = [
+            snapshot_result.state.files for snapshot_result in snapshot_results if snapshot_result.state is not None
+        ]
         _, tables = context.get_result(RetrieveDatabasesAndTablesStep)
         table_uuids = {table.uuid for table in tables if table.is_replicated}
         parts, server_files = group_files_into_parts(snapshot_files, table_uuids)
         check_parts_replication(parts)
         distribute_parts_to_servers(parts, server_files)
         for files, snapshot_result in zip(server_files, snapshot_results):
+            assert snapshot_result.state is not None
             snapshot_result.state.files = files
 
 
