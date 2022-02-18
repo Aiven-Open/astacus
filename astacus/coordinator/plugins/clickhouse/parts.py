@@ -156,6 +156,7 @@ def list_parts_to_attach(
     Returns a list of table identifiers and part names to attach from the snapshot.
     """
     parts_to_attach: Set[Tuple[str, bytes]] = set()
+    assert snapshot_result.state is not None
     for snapshot_file in snapshot_result.state.files:
         table_uuid = uuid.UUID(snapshot_file.relative_path.parts[2])
         table = tables_by_uuid.get(table_uuid)

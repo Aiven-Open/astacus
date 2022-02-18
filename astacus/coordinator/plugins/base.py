@@ -213,17 +213,20 @@ class RestoreStep(Step[List[ipc.NodeResult]]):
         for node, backup_index in zip(cluster.nodes, node_to_backup_index):
             if backup_index is not None:
                 # Restore whatever was backed up
+                snapshot_result = snapshot_results[backup_index]
+                assert snapshot_result.state is not None
                 node_request: ipc.NodeRequest = ipc.SnapshotDownloadRequest(
                     storage=self.storage_name,
                     backup_name=backup_name,
                     snapshot_index=backup_index,
-                    root_globs=snapshot_results[backup_index].state.root_globs,
+                    root_globs=snapshot_result.state.root_globs,
                 )
                 op = "download"
             elif self.partial_restore_nodes:
                 # If partial restore, do not clear other nodes
                 continue
             else:
+                assert snapshot_results[0].state is not None
                 node_request = ipc.SnapshotClearRequest(root_globs=snapshot_results[0].state.root_globs)
                 op = "clear"
             start_result = await cluster.request_from_nodes(

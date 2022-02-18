@@ -121,7 +121,7 @@ class SnapshotResult(NodeResult):
     end: Optional[datetime]
 
     # should be passed opaquely to restore
-    state: SnapshotState = Field(default_factory=SnapshotState)
+    state: Optional[SnapshotState] = Field(default_factory=SnapshotState)
 
     # Summary data for manifest use
     files: int = 0
