@@ -16,7 +16,11 @@ logger = logging.getLogger()
 
 @pytest.fixture(scope="session", name="docker_client")
 def docker_client_fixture() -> DockerClient:
-    return DockerClient.from_env()
+    try:
+        return DockerClient.from_env()
+    except Exception as ex:
+        pytest.skip(f"docker client not available: {ex!r}")
+        raise
 
 
 @pytest.fixture(scope="session", name="resource_postfix")
