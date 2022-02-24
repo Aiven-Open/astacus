@@ -9,6 +9,8 @@ BuildArch:      noarch
 
 # These are used when e.g. in podman, creating package from scratch
 # using pre-commit + pip; psycopg2 is indirect dependency of pghoard
+BuildRequires:  gcc
+BuildRequires:  g++
 BuildRequires:  git
 BuildRequires:  protobuf-compiler
 BuildRequires:  python3-chardet
@@ -16,6 +18,7 @@ BuildRequires:  python3-devel
 BuildRequires:  python3-pip
 BuildRequires:  python3-psycopg2
 BuildRequires:  python3-wheel
+BuildRequires:  which
 
 # These are used when actually running the package
 Requires:       pghoard
