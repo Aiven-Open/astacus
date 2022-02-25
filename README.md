@@ -36,7 +36,30 @@ shared code
 
 # Installation
 
-Use setup.py.
+Please see Dockerfile.fedora and Dockerfile.ubuntu for concrete up-to-date
+examples, but here are the current ones:
+
+## Fedora 34
+
+(as root or user with sudo access; for root, skip sudo prefix)
+
+```
+sudo dnf install -y make
+make build-dep-fedora
+sudo python3 ./setup.py install
+```
+
+## Ubuntu 20.04
+
+(as root or user with sudo access; for root, skip sudo prefix)
+
+```
+sudo apt-get update
+sudo apt-get install -y make sudo
+make build-dep-ubuntu
+sudo python3 ./setup.py install
+```
+
 
 # Configuration
 
