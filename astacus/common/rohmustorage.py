@@ -82,11 +82,22 @@ class RohmuS3StorageConfig(RohmuModel):
     # Some more obscure options with defaults are omitted
 
 
+class RohmuAzureServicePrincipalCredentials(RohmuModel):
+    client_id: str
+    secret: str
+
+
+class RohmuAzureServicePrincipalConfig(RohmuModel):
+    client_credentials: RohmuAzureServicePrincipalCredentials
+    tenant_id: str
+
+
 class RohmuAzureStorageConfig(RohmuModel):
     storage_type: Literal[RohmuStorageType.azure]
     account_name: str
-    account_key: str
     bucket_name: str
+    account_key: Optional[str] = None
+    client_config: Optional[RohmuAzureServicePrincipalConfig] = None
     prefix: Optional[str] = None
     azure_cloud: Optional[str] = None
 
