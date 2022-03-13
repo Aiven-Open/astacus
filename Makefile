@@ -29,6 +29,13 @@ build-dep-fedora:
 build-dep-ubuntu:
 	sudo sh -c 'apt-get update && apt-get install -y git libsnappy-dev python3-pip python3-psycopg2 protobuf-compiler'
 
+.PHONY: test-dep-ubuntu
+test-dep-ubuntu:
+	wget --no-verbose https://dlcdn.apache.org/zookeeper/zookeeper-3.5.9/apache-zookeeper-3.5.9-bin.tar.gz
+	echo "7ad00caf8374edc984b9204cd585ad151c8ed19969045d0c23666b18a8102548  apache-zookeeper-3.5.9-bin.tar.gz" | sha256sum -c -
+	tar vxf apache-zookeeper-3.5.9-bin.tar.gz --wildcards apache-zookeeper-3.5.9-bin/lib/*.jar
+	sudo cp -r apache-zookeeper-3.5.9-bin/lib /usr/share/zookeeper
+
 .PHONY: pylint
 pylint: $(GENERATED)
 	pre-commit run pylint --all-files

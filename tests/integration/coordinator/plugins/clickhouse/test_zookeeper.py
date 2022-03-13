@@ -2,9 +2,8 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
-from .conftest import Service
-from astacus.common.utils import build_netloc
 from astacus.coordinator.plugins.zookeeper import KazooZooKeeperClient, NodeExistsError, NoNodeError
+from tests.integration.conftest import get_kazoo_host, Service
 
 import dataclasses
 import kazoo.client
@@ -22,15 +21,6 @@ pytestmark = [
 class ZNode:
     path: str
     content: bytes
-
-
-def get_kazoo_host(zookeeper: Service) -> str:
-    return build_netloc(zookeeper.host, zookeeper.port)
-
-
-@pytest.fixture(name="zookeeper_client")
-def fixture_zookeeper_client(zookeeper: Service) -> KazooZooKeeperClient:
-    return KazooZooKeeperClient(hosts=[get_kazoo_host(zookeeper)], timeout=1)
 
 
 @pytest.fixture(name="znode")

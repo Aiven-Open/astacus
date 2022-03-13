@@ -2,8 +2,9 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
-from .conftest import create_clickhouse_service, get_clickhouse_client, Ports, Service
+from .conftest import create_clickhouse_service, get_clickhouse_client
 from astacus.coordinator.plugins.clickhouse.client import ClickHouseClientQueryError
+from tests.integration.conftest import Ports, Service
 
 import pytest
 import time
