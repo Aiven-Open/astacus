@@ -2,11 +2,12 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
-from .conftest import create_clickhouse_cluster, create_zookeeper, get_clickhouse_client, Ports
+from .conftest import create_clickhouse_cluster, get_clickhouse_client
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import StepsContext
 from astacus.coordinator.plugins.clickhouse.manifest import ReplicatedDatabase, Table
 from astacus.coordinator.plugins.clickhouse.steps import RetrieveDatabasesAndTablesStep
+from tests.integration.conftest import create_zookeeper, Ports
 from uuid import UUID
 
 import pytest

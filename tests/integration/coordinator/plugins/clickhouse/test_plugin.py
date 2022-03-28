@@ -8,8 +8,9 @@ from astacus.coordinator.plugins import ClickHousePlugin
 from astacus.coordinator.plugins.base import OperationContext
 from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, HttpClickHouseClient
 from pathlib import Path
+from tests.integration.conftest import create_zookeeper, Ports
 from tests.integration.coordinator.plugins.clickhouse.conftest import (
-    create_astacus_cluster, create_clickhouse_cluster, create_zookeeper, get_clickhouse_client, Ports, run_astacus_command
+    create_astacus_cluster, create_clickhouse_cluster, get_clickhouse_client, run_astacus_command
 )
 from typing import AsyncIterable, AsyncIterator, List, Sequence
 from unittest import mock

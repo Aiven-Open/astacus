@@ -12,7 +12,7 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_restore_data(zk_client: KazooZooKeeperClient, resource_postfix: str):
+async def test_restore_data(zookeeper_client: KazooZooKeeperClient):
     table_id1 = str(uuid4()).partition("-")[0]
     table_id2 = str(uuid4()).partition("-")[0]
     data = {
@@ -35,6 +35,6 @@ async def test_restore_data(zk_client: KazooZooKeeperClient, resource_postfix: s
     manifest = FlinkManifest(data=data)
     context = StepsContext()
     context.set_result(FlinkManifestStep, manifest)
-    await RestoreDataStep(zk_client, ["catalog", "flink"]).run_step(cluster=None, context=context)
-    res = await RetrieveDataStep(zk_client, ["catalog", "flink"]).run_step(cluster=None, context=None)
+    await RestoreDataStep(zookeeper_client, ["catalog", "flink"]).run_step(cluster=None, context=context)
+    res = await RetrieveDataStep(zookeeper_client, ["catalog", "flink"]).run_step(cluster=None, context=None)
     assert res == data
