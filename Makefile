@@ -62,11 +62,14 @@ isort:
 	pre-commit run isort --all-files
 
 .PHONY: yapf
-yapf:
-	pre-commit run yapf --all-files
+yapf: black
+
+.PHONY: black
+black:
+	pre-commit run black --all-files
 
 .PHONY: reformat
-reformat: isort yapf
+reformat: isort black
 
 .PHONY: pre-commit
 pre-commit: $(GENERATED)
