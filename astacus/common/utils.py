@@ -61,7 +61,7 @@ class AstacusModel(BaseModel):
 
 
 def get_or_create_state(*, state: object, key: str, factory: Callable[[], Any]) -> Any:
-    """ Get or create sub-state entry (using factory callback) """
+    """Get or create sub-state entry (using factory callback)"""
     value = getattr(state, key, None)
     if value is None:
         value = factory()

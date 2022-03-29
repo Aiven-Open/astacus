@@ -7,10 +7,18 @@ Flink backup/restore plugin
 from astacus.common import ipc
 from astacus.common.ipc import Plugin
 from astacus.coordinator.plugins.base import (
-    BackupManifestStep, BackupNameStep, CoordinatorPlugin, OperationContext, Step, UploadManifestStep
+    BackupManifestStep,
+    BackupNameStep,
+    CoordinatorPlugin,
+    OperationContext,
+    Step,
+    UploadManifestStep,
 )
 from astacus.coordinator.plugins.flink.steps import (
-    FlinkManifestStep, PrepareFlinkManifestStep, RestoreDataStep, RetrieveDataStep
+    FlinkManifestStep,
+    PrepareFlinkManifestStep,
+    RestoreDataStep,
+    RetrieveDataStep,
 )
 from astacus.coordinator.plugins.zookeeper_config import get_zookeeper_client, ZooKeeperConfiguration
 from typing import List
@@ -34,7 +42,7 @@ class FlinkPlugin(CoordinatorPlugin):
                 plugin=Plugin.flink,
                 plugin_manifest_step=PrepareFlinkManifestStep,
                 snapshot_step=None,
-                upload_step=None
+                upload_step=None,
             ),
         ]
 
@@ -44,5 +52,5 @@ class FlinkPlugin(CoordinatorPlugin):
             BackupNameStep(json_storage=context.json_storage, requested_name=req.name),
             BackupManifestStep(json_storage=context.json_storage),
             FlinkManifestStep(),
-            RestoreDataStep(zookeeper_client=zookeeper_client, zookeeper_paths=self.zookeeper_paths)
+            RestoreDataStep(zookeeper_client=zookeeper_client, zookeeper_paths=self.zookeeper_paths),
         ]

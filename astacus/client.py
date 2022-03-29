@@ -73,7 +73,7 @@ def print_list_result(result):
             "pchanged": "% change",
             "csaving": "Comp %",
             "attempt": "Att",
-            "nodes": "Nodes"
+            "nodes": "Nodes",
         }
         headers = {
             "plugin": "Plugin",
@@ -110,13 +110,15 @@ def print_list_result(result):
                 del gheaders[field_name]
 
         for b in storage.backups:
-            table.append({
-                "name": b.name,
-                # "start": b.start,
-                "duration": utils.timedelta_as_short_str(b.end - b.start),
-                "files": b.files,
-                "total_size": utils.size_as_short_str(b.total_size),
-            })
+            table.append(
+                {
+                    "name": b.name,
+                    # "start": b.start,
+                    "duration": utils.timedelta_as_short_str(b.end - b.start),
+                    "files": b.files,
+                    "total_size": utils.size_as_short_str(b.total_size),
+                }
+            )
             for field_name in local_fields:
                 table[-1][field_name] = getattr(b, field_name)
             tsize += b.total_size
@@ -168,7 +170,7 @@ def create_client_parsers(parser, subparsers):
         "-w",
         "--wait-completion",
         type=int,
-        help="Wait at most this long the requested (client) operation to complete (unit:seconds)"
+        help="Wait at most this long the requested (client) operation to complete (unit:seconds)",
     )
 
     p_backup = subparsers.add_parser("backup", help="Request backup")

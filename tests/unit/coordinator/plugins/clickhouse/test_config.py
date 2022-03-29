@@ -16,8 +16,7 @@ pytestmark = [pytest.mark.clickhouse]
 
 def test_get_zookeeper_client() -> None:
     configuration = ZooKeeperConfiguration(
-        nodes=[ZooKeeperNode(host="localhost", port=5555),
-               ZooKeeperNode(host="::1", port=5556)]
+        nodes=[ZooKeeperNode(host="localhost", port=5555), ZooKeeperNode(host="::1", port=5556)]
     )
     client = cast(KazooZooKeeperClient, get_zookeeper_client(configuration))
     assert client.hosts == ["localhost:5555", "[::1]:5556"]
@@ -33,7 +32,7 @@ def test_get_clickhouse_clients() -> None:
     configuration = ClickHouseConfiguration(
         username="user",
         password="password",
-        nodes=[ClickHouseNode(host=f"n{i}.example.org", port=8123 + i) for i in range(3)]
+        nodes=[ClickHouseNode(host=f"n{i}.example.org", port=8123 + i) for i in range(3)],
     )
     clients = cast(List[HttpClickHouseClient], get_clickhouse_clients(configuration))
     assert [client.host for client in clients] == [node.host for node in configuration.nodes]

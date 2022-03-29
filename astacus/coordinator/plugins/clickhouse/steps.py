@@ -8,8 +8,11 @@ from .dependencies import access_entities_sorted_by_dependencies, tables_sorted_
 from .escaping import escape_for_file_name, unescape_from_file_name
 from .manifest import AccessEntity, ClickHouseManifest, ReplicatedDatabase, Table
 from .parts import (
-    check_parts_replication, distribute_parts_to_servers, get_frozen_parts_pattern, group_files_into_parts,
-    list_parts_to_attach
+    check_parts_replication,
+    distribute_parts_to_servers,
+    get_frozen_parts_pattern,
+    group_files_into_parts,
+    list_parts_to_attach,
 )
 from astacus.common import ipc
 from astacus.common.exceptions import TransientException
@@ -54,6 +57,7 @@ class ValidateConfigStep(Step[None]):
     """
     Validates that we have the same number of astacus node and clickhouse nodes.
     """
+
     clickhouse: ClickHouseConfiguration
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
@@ -79,6 +83,7 @@ class RetrieveAccessEntitiesStep(Step[List[AccessEntity]]):
     and the value is the SQL queries required to recreate that entity. Some entities have more
     than one query because they need separate queries to add grants related to the entity.
     """
+
     zookeeper_client: ZooKeeperClient
     access_entities_path: str
 
@@ -126,6 +131,7 @@ class RetrieveDatabasesAndTablesStep(Step[DatabasesAndTables]):
     databases (with the same database name pointing on the same ZooKeeper
     node), and relies on that to query only the first server of the cluster.
     """
+
     clients: List[ClickHouseClient]
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> DatabasesAndTables:
@@ -168,6 +174,7 @@ class PrepareClickHouseManifestStep(Step[Dict[str, Any]]):
     """
     Collects access entities, databases and tables from previous steps into an uploadable manifest.
     """
+
     async def run_step(self, cluster: Cluster, context: StepsContext) -> Dict[str, Any]:
         databases, tables = context.get_result(RetrieveDatabasesAndTablesStep)
         manifest = ClickHouseManifest(
@@ -183,6 +190,7 @@ class RemoveFrozenTablesStep(Step[None]):
     """
     Removes traces of previous backups that might have failed.
     """
+
     freeze_name: str
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
@@ -209,10 +217,12 @@ class FreezeUnfreezeTablesStepBase(Step[None]):
         for table in tables:
             if table.requires_freezing:
                 # We only run it on the first client because the `ALTER TABLE (UN)FREEZE` is replicated
-                await self.clients[0].execute((
-                    f"ALTER TABLE {table.escaped_sql_identifier} "
-                    f"{self.operation} WITH NAME {escape_sql_string(self.freeze_name.encode())}"
-                ).encode())
+                await self.clients[0].execute(
+                    (
+                        f"ALTER TABLE {table.escaped_sql_identifier} "
+                        f"{self.operation} WITH NAME {escape_sql_string(self.freeze_name.encode())}"
+                    ).encode()
+                )
 
 
 @dataclasses.dataclass
@@ -233,6 +243,7 @@ class FreezeTablesStep(FreezeUnfreezeTablesStepBase):
     directory. This directory will be scanned by the `SnapshotStep`. However we will need to write
     it in a different place when restoring the backup (see `MoveFrozenPartsStep`).
     """
+
     @property
     def operation(self) -> str:
         return "FREEZE"
@@ -247,6 +258,7 @@ class UnfreezeTablesStep(FreezeUnfreezeTablesStepBase):
     the table and replaces existing parts with new ones, these frozen parts will take disk
     space. `ALTER TABLE UNFREEZE` removes these unused parts.
     """
+
     @property
     def operation(self) -> str:
         return "UNFREEZE"
@@ -271,6 +283,7 @@ class MoveFrozenPartsStep(Step[None]):
     problem when actually downloading files from the backup storage because the storage
     only identifies files by their hash, it doesn't care about their original, or modified, path.
     """
+
     freeze_name: str
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
@@ -315,6 +328,7 @@ class DistributeReplicatedPartsStep(Step[None]):
     This step must be run after `MoveFrozenPartsStep` to find the correct paths
     in the snapshot.
     """
+
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         snapshot_results = context.get_result(SnapshotStep)
         snapshot_files = [
@@ -335,6 +349,7 @@ class ClickHouseManifestStep(Step[ClickHouseManifest]):
     """
     Extracts the ClickHouse plugin manifest from the main backup manifest.
     """
+
     async def run_step(self, cluster: Cluster, context: StepsContext) -> ClickHouseManifest:
         backup_manifest = context.get_result(BackupManifestStep)
         return ClickHouseManifest.from_plugin_data(backup_manifest.plugin_data)
@@ -347,6 +362,7 @@ class RestoreReplicatedDatabasesStep(Step[None]):
 
     After this step, all tables will be empty.
     """
+
     clients: List[ClickHouseClient]
     replicated_databases_zookeeper_path: str
     replicated_database_settings: ReplicatedDatabaseSettings
@@ -357,7 +373,9 @@ class RestoreReplicatedDatabasesStep(Step[None]):
             "{}={}".format(
                 setting_name,
                 escape_sql_string(value.encode()) if isinstance(value, str) else value,
-            ) for setting_name, value in self.replicated_database_settings.dict().items() if value is not None
+            )
+            for setting_name, value in self.replicated_database_settings.dict().items()
+            if value is not None
         ]
         settings_clause = " SETTINGS {}".format(", ".join(settings)) if settings else ""
         for database in manifest.replicated_databases:
@@ -369,11 +387,13 @@ class RestoreReplicatedDatabasesStep(Step[None]):
             for client in self.clients:
                 await client.execute(f"DROP DATABASE IF EXISTS {escape_sql_identifier(database.name)} SYNC".encode())
             for client in self.clients:
-                await client.execute((
-                    f"CREATE DATABASE {escape_sql_identifier(database.name)} "
-                    f"ENGINE = Replicated({escape_sql_string(database_path.encode())}, '{{shard}}', '{{replica}}')"
-                    f"{settings_clause}"
-                ).encode())
+                await client.execute(
+                    (
+                        f"CREATE DATABASE {escape_sql_identifier(database.name)} "
+                        f"ENGINE = Replicated({escape_sql_string(database_path.encode())}, '{{shard}}', '{{replica}}')"
+                        f"{settings_clause}"
+                    ).encode()
+                )
         # If any known table depends on an unknown table that was inside a non-replicated
         # database engine, then this will crash. See comment in `RetrieveReplicatedDatabasesStep`.
         for table in tables_sorted_by_dependencies(manifest.tables):
@@ -401,6 +421,7 @@ class RestoreAccessEntitiesStep(Step[None]):
     only has an in-memory cache and uses ZooKeeper watches to detect added, modified or
     removed entities.
     """
+
     zookeeper_client: ZooKeeperClient
     access_entities_path: str
 
@@ -434,6 +455,7 @@ class AttachMergeTreePartsStep(Step[None]):
     a Replicated table engine or not, see `DistributeReplicatedPartsStep` for more
     details.
     """
+
     clients: List[ClickHouseClient]
     attach_timeout: float
     max_concurrent_attach: int
@@ -464,6 +486,7 @@ class SyncReplicasStep(Step[None]):
     Before declaring the restoration as finished, make sure all parts of replicated tables
     are all exchanged between all nodes.
     """
+
     clients: List[ClickHouseClient]
     sync_timeout: float
     max_concurrent_sync: int
@@ -476,7 +499,10 @@ class SyncReplicasStep(Step[None]):
                 execute_with_timeout(
                     client, self.sync_timeout, f"SYSTEM SYNC REPLICA {table.escaped_sql_identifier}".encode()
                 )
-            ) for table in manifest.tables for client in self.clients if table.is_replicated
+            )
+            for table in manifest.tables
+            for client in self.clients
+            if table.is_replicated
         ]
         await asyncio.gather(*tasks)
 

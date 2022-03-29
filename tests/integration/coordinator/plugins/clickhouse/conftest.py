@@ -5,7 +5,12 @@ See LICENSE for details
 from astacus.client import create_client_parsers
 from astacus.common.ipc import Plugin
 from astacus.common.rohmustorage import (
-    RohmuCompression, RohmuCompressionType, RohmuConfig, RohmuEncryptionKey, RohmuLocalStorageConfig, RohmuStorageType
+    RohmuCompression,
+    RohmuCompressionType,
+    RohmuConfig,
+    RohmuEncryptionKey,
+    RohmuLocalStorageConfig,
+    RohmuStorageType,
 )
 from astacus.config import GlobalConfig, UvicornConfig
 from astacus.coordinator.config import CoordinatorConfig, CoordinatorNode
@@ -93,7 +98,8 @@ async def create_clickhouse_cluster(
             processes = [
                 await stack.enter_async_context(
                     run_process_and_wait_for_pattern(args=command, cwd=data_dir, pattern="Ready for connections.")
-                ) for data_dir in data_dirs
+                )
+                for data_dir in data_dirs
             ]
             yield ServiceCluster(
                 services=[
@@ -104,8 +110,9 @@ async def create_clickhouse_cluster(
 
 
 @contextlib.asynccontextmanager
-async def create_astacus_cluster(storage_path: Path, zookeeper: Service, clickhouse_cluster: ServiceCluster,
-                                 ports: Ports) -> AsyncIterator[ServiceCluster]:
+async def create_astacus_cluster(
+    storage_path: Path, zookeeper: Service, clickhouse_cluster: ServiceCluster, ports: Ports
+) -> AsyncIterator[ServiceCluster]:
     configs = create_astacus_configs(zookeeper, clickhouse_cluster, ports, Path(storage_path))
     async with contextlib.AsyncExitStack() as stack:
         astacus_services_coro: List[Awaitable] = [stack.enter_async_context(_astacus(config=config)) for config in configs]
@@ -123,7 +130,8 @@ def create_clickhouse_configs(
             <port>{tcp_port}</port>
             <secure>false</secure>
         </replica>
-        """ for tcp_port in tcp_ports
+        """
+        for tcp_port in tcp_ports
     )
     return [
         f"""
@@ -166,8 +174,10 @@ def create_clickhouse_configs(
                         <replica>r{http_port}</replica>
                     </macros>
                 </yandex>
-                """ for data_dir, tcp_port, http_port, interserver_http_port in
-        zip(data_dirs, tcp_ports, http_ports, interserver_http_ports)
+                """
+        for data_dir, tcp_port, http_port, interserver_http_port in zip(
+            data_dirs, tcp_ports, http_ports, interserver_http_ports
+        )
     ]
 
 
@@ -230,35 +240,41 @@ def create_astacus_configs(
                             ClickHouseNode(
                                 host=service.host,
                                 port=service.port,
-                            ) for service in clickhouse_cluster.services
-                        ]
+                            )
+                            for service in clickhouse_cluster.services
+                        ],
                     ),
                     replicated_databases_settings=ReplicatedDatabaseSettings(
                         cluster_username=clickhouse_cluster.services[0].username,
                         cluster_password=clickhouse_cluster.services[0].password,
                     ),
                     sync_timeout=30.0,
-                ).jsondict()
+                ).jsondict(),
             ),
-            node=NodeConfig(root=clickhouse_service.data_dir, ),
+            node=NodeConfig(
+                root=clickhouse_service.data_dir,
+            ),
             object_storage=RohmuConfig(
                 temporary_directory=str(storage_tmp_path),
                 default_storage="test",
-                storages={"test": RohmuLocalStorageConfig(
-                    storage_type=RohmuStorageType.local,
-                    directory=storage_path,
-                )},
+                storages={
+                    "test": RohmuLocalStorageConfig(
+                        storage_type=RohmuStorageType.local,
+                        directory=storage_path,
+                    )
+                },
                 compression=RohmuCompression(algorithm=RohmuCompressionType.zstd),
                 encryption_key_id="test",
                 encryption_keys={
                     "test": RohmuEncryptionKey(public=CONSTANT_TEST_RSA_PUBLIC_KEY, private=CONSTANT_TEST_RSA_PRIVATE_KEY)
-                }
+                },
             ),
             uvicorn=UvicornConfig(
                 port=node_port,
                 log_level="debug",
             ),
-        ) for node_port, clickhouse_service in zip(node_ports, clickhouse_cluster.services)
+        )
+        for node_port, clickhouse_service in zip(node_ports, clickhouse_cluster.services)
     ]
 
 
@@ -268,5 +284,5 @@ def get_clickhouse_client(clickhouse: Service, timeout: float = 10.0) -> HttpCli
         port=clickhouse.port,
         username=clickhouse.username,
         password=clickhouse.password,
-        timeout=timeout
+        timeout=timeout,
     )

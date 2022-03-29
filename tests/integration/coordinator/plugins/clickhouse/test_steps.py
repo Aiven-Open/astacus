@@ -25,10 +25,12 @@ async def test_retrieve_tables(ports: Ports) -> None:
         async with create_clickhouse_cluster(zookeeper, ports, cluster_size=1) as clickhouse_cluster:
             clickhouse = clickhouse_cluster.services[0]
             client = get_clickhouse_client(clickhouse)
-            await client.execute((
-                "CREATE DATABASE `has_tablés` "
-                "ENGINE = Replicated('/clickhouse/databases/has_tables', '{shard}', '{replica}')"
-            ).encode())
+            await client.execute(
+                (
+                    "CREATE DATABASE `has_tablés` "
+                    "ENGINE = Replicated('/clickhouse/databases/has_tables', '{shard}', '{replica}')"
+                ).encode()
+            )
             await client.execute(
                 b"CREATE DATABASE no_tables "
                 b"ENGINE = Replicated('/clickhouse/databases/no_tables', '{shard}', '{replica}')"
@@ -38,8 +40,9 @@ async def test_retrieve_tables(ports: Ports) -> None:
                 b"ENGINE = Replicated('/clickhouse/databases/bad_db', '{shard}', '{replica}')"
             )
             await client.execute(
-                ("CREATE TABLE `has_tablés`.`tablé_1` (thekey UInt32) "
-                 "ENGINE = ReplicatedMergeTree ORDER BY (thekey)").encode()
+                (
+                    "CREATE TABLE `has_tablés`.`tablé_1` (thekey UInt32) " "ENGINE = ReplicatedMergeTree ORDER BY (thekey)"
+                ).encode()
             )
             step = RetrieveDatabasesAndTablesStep(clients=[client])
             context = StepsContext()
@@ -62,6 +65,6 @@ async def test_retrieve_tables(ports: Ports) -> None:
                         f"ENGINE = ReplicatedMergeTree('/clickhouse/tables/{str(table_uuid)}/{{shard}}', '{{replica}}') "
                         f"ORDER BY thekey SETTINGS index_granularity = 8192"
                     ).encode(),
-                    dependencies=[]
+                    dependencies=[],
                 ),
             ]

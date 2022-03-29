@@ -16,7 +16,7 @@ _log_1_1 = math.log(1.1)
 
 
 def increase_worth_reporting(value, new_value=None, *, total=None):
-    """ Make reporting sparser and sparser as values grow larger
+    """Make reporting sparser and sparser as values grow larger
     - report every 1.1**N or so
     - if we know total, report every percent
     """
@@ -37,7 +37,8 @@ def increase_worth_reporting(value, new_value=None, *, total=None):
 
 
 class Progress(AstacusModel):
-    """ JSON-encodable progress meter of sorts """
+    """JSON-encodable progress meter of sorts"""
+
     handled: int = 0
     failed: int = 0
     total: int = 0
@@ -48,7 +49,7 @@ class Progress(AstacusModel):
         return f"{self.handled}/{self.total} handled, {self.failed} failures{finished}"
 
     def start(self, n):
-        " Optional 'first' step, just for logic handling state (e.g. no progress object reuse desired) "
+        "Optional 'first' step, just for logic handling state (e.g. no progress object reuse desired)"
         assert not self.total
         logger.debug("start")
         self.add_total(n)

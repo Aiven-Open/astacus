@@ -57,4 +57,5 @@ def update_project_version(version_file):
 
 if __name__ == "__main__":
     import sys
+
     update_project_version(sys.argv[1])

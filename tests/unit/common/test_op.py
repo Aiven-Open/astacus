@@ -38,7 +38,7 @@ class MockOp:
         (op.ExpiredOperationException, op.Op.Status.running, None),
         # If operation throws 'something else', it should fail the op status
         (AssertionError, op.Op.Status.fail, AssertionError),
-    ]
+    ],
 )
 @pytest.mark.parametrize("is_async", [False, True])
 async def test_opmixin_start_op(is_async, fun_ex, expect_status, expect_ex):

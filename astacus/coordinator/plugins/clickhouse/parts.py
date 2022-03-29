@@ -36,8 +36,9 @@ class PartKey:
     part_name: str
 
 
-def group_files_into_parts(snapshot_files: List[List[SnapshotFile]],
-                           table_uuids: Set[uuid.UUID]) -> Tuple[List[Part], List[List[SnapshotFile]]]:
+def group_files_into_parts(
+    snapshot_files: List[List[SnapshotFile]], table_uuids: Set[uuid.UUID]
+) -> Tuple[List[Part], List[List[SnapshotFile]]]:
     """
     Regroup all files that form a MergeTree table parts together in a `Part`.
 

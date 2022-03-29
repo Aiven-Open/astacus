@@ -9,8 +9,19 @@ state is consistent.
 
 """
 from .base import (
-    BackupManifestStep, BackupNameStep, CoordinatorPlugin, get_node_to_backup_index, ListHexdigestsStep, OperationContext,
-    RestoreStep, SnapshotStep, Step, StepFailedError, StepsContext, UploadBlocksStep, UploadManifestStep
+    BackupManifestStep,
+    BackupNameStep,
+    CoordinatorPlugin,
+    get_node_to_backup_index,
+    ListHexdigestsStep,
+    OperationContext,
+    RestoreStep,
+    SnapshotStep,
+    Step,
+    StepFailedError,
+    StepsContext,
+    UploadBlocksStep,
+    UploadManifestStep,
 )
 from .etcd import ETCDDump, ETCDKey, get_etcd_dump, restore_etcd_dump
 from astacus.common import exceptions, ipc, m3placement
@@ -65,7 +76,7 @@ class M3DBPlugin(CoordinatorPlugin):
             BackupManifestStep(json_storage=context.json_storage),
             RewriteEtcdStep(placement_nodes=self.placement_nodes, partial_restore_nodes=req.partial_restore_nodes),
             RestoreEtcdStep(etcd_client=etcd_client, partial_restore_nodes=req.partial_restore_nodes),
-            RestoreStep(storage_name=context.storage_name, partial_restore_nodes=req.partial_restore_nodes)
+            RestoreStep(storage_name=context.storage_name, partial_restore_nodes=req.partial_restore_nodes),
         ]
 
 
@@ -142,7 +153,7 @@ class RewriteEtcdStep(Step[Optional[ETCDDump]]):
                         node_to_backup_index=node_to_backup_index,
                         src_placement_nodes=plugin_manifest.placement_nodes,
                         dst_placement_nodes=self.placement_nodes,
-                        nodes=cluster.nodes
+                        nodes=cluster.nodes,
                     )
         return etcd
 

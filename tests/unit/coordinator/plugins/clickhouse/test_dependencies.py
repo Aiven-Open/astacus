@@ -3,7 +3,8 @@ Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
 from astacus.coordinator.plugins.clickhouse.dependencies import (
-    access_entities_sorted_by_dependencies, tables_sorted_by_dependencies
+    access_entities_sorted_by_dependencies,
+    tables_sorted_by_dependencies,
 )
 from astacus.coordinator.plugins.clickhouse.manifest import AccessEntity, Table
 
@@ -36,7 +37,7 @@ def test_tables_sorted_by_dependencies() -> None:
         engine="DontCare",
         uuid=uuid.UUID(int=0),
         create_query="",
-        dependencies=[("db_one", "t2")]
+        dependencies=[("db_one", "t2")],
     )
     t4 = Table(
         database="db_two",
@@ -44,7 +45,7 @@ def test_tables_sorted_by_dependencies() -> None:
         engine="DontCare",
         uuid=uuid.UUID(int=0),
         create_query="",
-        dependencies=[("db_one", "t2"), ("db_one", "t3")]
+        dependencies=[("db_one", "t2"), ("db_one", "t3")],
     )
     assert tables_sorted_by_dependencies([t1, t2, t3, t4]) == [t1, t4, t3, t2]
 
@@ -56,7 +57,7 @@ def test_dangling_table_dependency_doesnt_crash() -> None:
         engine="DontCare",
         uuid=uuid.UUID(int=0),
         create_query="",
-        dependencies=[("db_two", "t4")]
+        dependencies=[("db_two", "t4")],
     )
     assert tables_sorted_by_dependencies([t1]) == [t1]
 

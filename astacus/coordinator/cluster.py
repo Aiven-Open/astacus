@@ -37,7 +37,7 @@ class Cluster:
         poll_config: Optional[PollConfig] = None,
         subresult_url: Optional[str] = None,
         subresult_sleeper: Optional[AsyncSleeper] = None,
-        stats: Optional[StatsClient] = None
+        stats: Optional[StatsClient] = None,
     ):
         self.nodes = nodes
         self.poll_config = PollConfig() if poll_config is None else poll_config
@@ -66,7 +66,7 @@ class Cluster:
         caller: str,
         req: Optional[ipc.NodeRequest] = None,
         nodes: Optional[List[CoordinatorNode]] = None,
-        **kw
+        **kw,
     ) -> Sequence[Optional[Result]]:
         if nodes is None:
             nodes = self.nodes
@@ -90,7 +90,7 @@ class Cluster:
             ignore_status_code=True,
             json=False,
             nodes=nodes,
-            caller="Cluster._request_lock_call_from_nodes"
+            caller="Cluster._request_lock_call_from_nodes",
         )
         logger.debug("%s results: %r", call, results)
         if call in [LockCall.lock, LockCall.relock]:
@@ -120,10 +120,13 @@ class Cluster:
                     logger.info("%s of %s failed - unexpected result %r", call, node, decoded_result)
                     rv = LockResult.failure
         if rv == LockResult.failure and self.stats is not None:
-            self.stats.increase("astacus_lock_call_failure", tags={
-                "call": call,
-                "locker": locker,
-            })
+            self.stats.increase(
+                "astacus_lock_call_failure",
+                tags={
+                    "call": call,
+                    "locker": locker,
+                },
+            )
         return rv
 
     async def wait_successful_results(
@@ -131,7 +134,7 @@ class Cluster:
         *,
         start_results: Sequence[Optional[Result]],
         result_class: Type[NR],
-        required_successes: Optional[int] = None
+        required_successes: Optional[int] = None,
     ) -> List[NR]:
         urls = []
 

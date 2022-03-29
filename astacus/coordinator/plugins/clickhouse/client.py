@@ -15,10 +15,9 @@ logger = logging.getLogger(__name__)
 
 
 class ClickHouseClient:
-    async def execute(self,
-                      query: bytes,
-                      timeout: Optional[float] = None,
-                      session_id: Optional[str] = None) -> Iterable[Row]:
+    async def execute(
+        self, query: bytes, timeout: Optional[float] = None, session_id: Optional[str] = None
+    ) -> Iterable[Row]:
         raise NotImplementedError
 
 
@@ -35,6 +34,7 @@ class HttpClickHouseClient(ClickHouseClient):
     is desirable since we know this database always exists and should
     never be part of any backup.
     """
+
     def __init__(
         self,
         *,
@@ -50,10 +50,9 @@ class HttpClickHouseClient(ClickHouseClient):
         self.password = password
         self.timeout = timeout
 
-    async def execute(self,
-                      query: bytes,
-                      timeout: Optional[float] = None,
-                      session_id: Optional[str] = None) -> Iterable[Row]:
+    async def execute(
+        self, query: bytes, timeout: Optional[float] = None, session_id: Optional[str] = None
+    ) -> Iterable[Row]:
         assert isinstance(query, bytes)
         # Output format: https://clickhouse.tech/docs/en/interfaces/formats/#jsoncompact
         headers = [("X-ClickHouse-Database", "system"), ("X-ClickHouse-Format", "JSONCompact")]
@@ -94,10 +93,9 @@ class StubClickHouseClient(ClickHouseClient):
     def set_response(self, query: bytes, rows: List[Row]) -> None:
         self.responses[query] = copy.deepcopy(rows)
 
-    async def execute(self,
-                      query: bytes,
-                      timeout: Optional[float] = None,
-                      session_id: Optional[str] = None) -> Iterable[Row]:
+    async def execute(
+        self, query: bytes, timeout: Optional[float] = None, session_id: Optional[str] = None
+    ) -> Iterable[Row]:
         assert isinstance(query, bytes)
         return copy.deepcopy(self.responses[query])
 
@@ -158,6 +156,6 @@ def _escape_bytes(value: bytes, escape_map: Mapping[int, bytes], quote_char: byt
         elif byte < 0x20 or byte > 0x7E:
             buffer.append(f"\\x{byte:02x}".encode())
         else:
-            buffer.append(bytes((byte, )))
+            buffer.append(bytes((byte,)))
     buffer.append(quote_char)
     return b"".join(buffer).decode()

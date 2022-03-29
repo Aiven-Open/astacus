@@ -15,8 +15,16 @@ Configuration:
 
 """
 from .base import (
-    BackupManifestStep, BackupNameStep, CoordinatorPlugin, ListHexdigestsStep, OperationContext, RestoreStep, SnapshotStep,
-    Step, UploadBlocksStep, UploadManifestStep
+    BackupManifestStep,
+    BackupNameStep,
+    CoordinatorPlugin,
+    ListHexdigestsStep,
+    OperationContext,
+    RestoreStep,
+    SnapshotStep,
+    Step,
+    UploadBlocksStep,
+    UploadManifestStep,
 )
 from astacus.common import ipc
 from astacus.common.ipc import Plugin
@@ -32,12 +40,12 @@ class FilesPlugin(CoordinatorPlugin):
             SnapshotStep(snapshot_root_globs=self.root_globs),
             ListHexdigestsStep(hexdigest_storage=context.hexdigest_storage),
             UploadBlocksStep(storage_name=context.storage_name),
-            UploadManifestStep(json_storage=context.json_storage, plugin=Plugin.files)
+            UploadManifestStep(json_storage=context.json_storage, plugin=Plugin.files),
         ]
 
     def get_restore_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> List[Step]:
         return [
             BackupNameStep(json_storage=context.json_storage, requested_name=req.name),
             BackupManifestStep(json_storage=context.json_storage),
-            RestoreStep(storage_name=context.storage_name, partial_restore_nodes=req.partial_restore_nodes)
+            RestoreStep(storage_name=context.storage_name, partial_restore_nodes=req.partial_restore_nodes),
         ]

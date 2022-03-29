@@ -3,18 +3,41 @@ Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
 from .config import (
-    ClickHouseConfiguration, get_clickhouse_clients, get_zookeeper_client, ReplicatedDatabaseSettings, ZooKeeperConfiguration
+    ClickHouseConfiguration,
+    get_clickhouse_clients,
+    get_zookeeper_client,
+    ReplicatedDatabaseSettings,
+    ZooKeeperConfiguration,
 )
 from .parts import get_frozen_parts_pattern
 from .steps import (
-    AttachMergeTreePartsStep, ClickHouseManifestStep, DistributeReplicatedPartsStep, FreezeTablesStep, MoveFrozenPartsStep,
-    PrepareClickHouseManifestStep, RemoveFrozenTablesStep, RestoreAccessEntitiesStep, RestoreReplicatedDatabasesStep,
-    RetrieveAccessEntitiesStep, RetrieveDatabasesAndTablesStep, SyncReplicasStep, UnfreezeTablesStep, ValidateConfigStep
+    AttachMergeTreePartsStep,
+    ClickHouseManifestStep,
+    DistributeReplicatedPartsStep,
+    FreezeTablesStep,
+    MoveFrozenPartsStep,
+    PrepareClickHouseManifestStep,
+    RemoveFrozenTablesStep,
+    RestoreAccessEntitiesStep,
+    RestoreReplicatedDatabasesStep,
+    RetrieveAccessEntitiesStep,
+    RetrieveDatabasesAndTablesStep,
+    SyncReplicasStep,
+    UnfreezeTablesStep,
+    ValidateConfigStep,
 )
 from astacus.common.ipc import Plugin, RestoreRequest
 from astacus.coordinator.plugins.base import (
-    BackupManifestStep, BackupNameStep, CoordinatorPlugin, ListHexdigestsStep, OperationContext, RestoreStep, SnapshotStep,
-    Step, UploadBlocksStep, UploadManifestStep
+    BackupManifestStep,
+    BackupNameStep,
+    CoordinatorPlugin,
+    ListHexdigestsStep,
+    OperationContext,
+    RestoreStep,
+    SnapshotStep,
+    Step,
+    UploadBlocksStep,
+    UploadManifestStep,
 )
 from typing import List
 

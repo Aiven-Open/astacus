@@ -53,19 +53,18 @@ def create_rohmu_config(tmpdir, *, compression=True, encryption=True):
             "y": {
                 "storage_type": "local",
                 "directory": str(y_path),
-            }
-        }
+            },
+        },
     }
     if compression:
         config.update({"compression": {"algorithm": "zstd"}})
     if encryption:
-        config.update({
-            "encryption_key_id": "foo",
-            "encryption_keys": {
-                "foo": {
-                    "private": CONSTANT_TEST_RSA_PRIVATE_KEY,
-                    "public": CONSTANT_TEST_RSA_PUBLIC_KEY
-                }
+        config.update(
+            {
+                "encryption_key_id": "foo",
+                "encryption_keys": {
+                    "foo": {"private": CONSTANT_TEST_RSA_PRIVATE_KEY, "public": CONSTANT_TEST_RSA_PUBLIC_KEY}
+                },
             }
-        })
+        )
     return RohmuConfig.parse_obj(config)

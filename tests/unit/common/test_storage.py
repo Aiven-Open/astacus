@@ -76,17 +76,10 @@ def _test_jsonstorage(storage):
         ("file", {}, None),
         ("rohmu", {}, None),
         ("cache", {}, None),  # simple path - see test_caching_storage for rest
-        ("rohmu", {
-            "compression": False
-        }, None),
-        ("rohmu", {
-            "encryption": False
-        }, None),
-        ("rohmu", {
-            "compression": False,
-            "encryption": False
-        }, pytest.raises(exceptions.CompressionOrEncryptionRequired)),
-    ]
+        ("rohmu", {"compression": False}, None),
+        ("rohmu", {"encryption": False}, None),
+        ("rohmu", {"compression": False, "encryption": False}, pytest.raises(exceptions.CompressionOrEncryptionRequired)),
+    ],
 )
 def test_storage(tmpdir, engine, kw, ex):
     if ex is None:
@@ -119,39 +112,39 @@ def test_caching_storage(tmpdir, mocker):
 
 @pytest.mark.skipif(
     pkg_resources.get_distribution("pghoard").parsed_version <= pkg_resources.parse_version("2.1.0"),
-    reason="requires pghoard > 2.1.0"
+    reason="requires pghoard > 2.1.0",
 )
 @patch("pghoard.rohmu.object_storage.google.get_credentials")
 @patch.object(google.GoogleTransfer, "_init_google_client")
 def test_proxy_storage(mock_google_client, mock_get_credentials):
     rs = RohmuStorage(
-        config=RohmuConfig.parse_obj({
-            "temporary_directory": "/tmp/astacus/backup-tmp",
-            "default_storage": "x",
-            "compression": {
-                "algorithm": "zstd"
-            },
-            "storages": {
-                "x-proxy": {
-                    "bucket_name": "REDACTED",
-                    "credentials": {
-                        "token_uri": "https://accounts.google.com/o/oauth2/token",
-                        "type": "service_account"
-                    },
-                    "prefix": "REDACTED",
-                    "project_id": "REDACTED",
-                    "storage_type": "google",
-                    "proxy_info": {
-                        "type": "socks5",
-                        "host": "localhost",
-                        "port": 1080,
-                        "user": "REDACTED",
-                        "pass": "REDACTED"
+        config=RohmuConfig.parse_obj(
+            {
+                "temporary_directory": "/tmp/astacus/backup-tmp",
+                "default_storage": "x",
+                "compression": {"algorithm": "zstd"},
+                "storages": {
+                    "x-proxy": {
+                        "bucket_name": "REDACTED",
+                        "credentials": {
+                            "token_uri": "https://accounts.google.com/o/oauth2/token",
+                            "type": "service_account",
+                        },
+                        "prefix": "REDACTED",
+                        "project_id": "REDACTED",
+                        "storage_type": "google",
+                        "proxy_info": {
+                            "type": "socks5",
+                            "host": "localhost",
+                            "port": 1080,
+                            "user": "REDACTED",
+                            "pass": "REDACTED",
+                        },
                     }
-                }
+                },
             }
-        }),
-        storage="x-proxy"
+        ),
+        storage="x-proxy",
     )
     assert rs.storage.proxy_info["user"] == "REDACTED"
     assert rs.storage.proxy_info["pass"] == "REDACTED"

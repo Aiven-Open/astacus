@@ -15,7 +15,7 @@ SERIALIZED_ACCESS_ENTITY = {
     "type": "U",
     "uuid": "00000000-0000-0000-0000-000000000000",
     "name": b64encode(b"bad\x80user").decode(),
-    "attach_query": b64encode(b"ATTACH USER ...").decode()
+    "attach_query": b64encode(b"ATTACH USER ...").decode(),
 }
 SAMPLE_DATABASE = ReplicatedDatabase(name=b"bad\x80db")
 SERIALIZED_DATABASE = {"name": b64encode(b"bad\x80db").decode()}
@@ -25,7 +25,7 @@ SAMPLE_TABLE = Table(
     uuid=uuid.UUID(int=0),
     engine="ReplicatedMergeTree",
     create_query=b"CREATE TABLE ...",
-    dependencies=[(b"db", b"othertable")]
+    dependencies=[(b"db", b"othertable")],
 )
 SERIALIZED_TABLE = {
     "database": b64encode(b"d\x80b").decode(),
@@ -33,12 +33,13 @@ SERIALIZED_TABLE = {
     "uuid": "00000000-0000-0000-0000-000000000000",
     "engine": "ReplicatedMergeTree",
     "create_query": b64encode(b"CREATE TABLE ...").decode(),
-    "dependencies": [[b64encode(b"db").decode(), b64encode(b"othertable").decode()]]
+    "dependencies": [[b64encode(b"db").decode(), b64encode(b"othertable").decode()]],
 }
 
 
 @pytest.mark.parametrize(
-    "engine,is_replicated,requires_freezing", [
+    "engine,is_replicated,requires_freezing",
+    [
         ("AggregatingMergeTree", False, True),
         ("Buffer", False, False),
         ("CollapsingMergeTree", False, True),
@@ -82,7 +83,7 @@ SERIALIZED_TABLE = {
         ("URL", False, False),
         ("VersionedCollapsingMergeTree", False, True),
         ("View", False, False),
-    ]
+    ],
 )
 def test_clickhouse_table_attributes(engine: str, is_replicated: bool, requires_freezing: bool) -> None:
     table = Table(database=b"db", name=b"name", uuid=uuid.UUID(int=0), engine=engine, create_query=b"")
@@ -110,11 +111,13 @@ def test_table_from_plugin_data() -> None:
 
 
 def test_clickhouse_manifest_from_plugin_data() -> None:
-    manifest = ClickHouseManifest.from_plugin_data({
-        "access_entities": [SERIALIZED_ACCESS_ENTITY],
-        "replicated_databases": [SERIALIZED_DATABASE],
-        "tables": [SERIALIZED_TABLE]
-    })
+    manifest = ClickHouseManifest.from_plugin_data(
+        {
+            "access_entities": [SERIALIZED_ACCESS_ENTITY],
+            "replicated_databases": [SERIALIZED_DATABASE],
+            "tables": [SERIALIZED_TABLE],
+        }
+    )
     assert manifest == ClickHouseManifest(
         access_entities=[SAMPLE_ACCESS_ENTITY],
         replicated_databases=[SAMPLE_DATABASE],
@@ -131,5 +134,5 @@ def test_clickhouse_manifest_to_plugin_data() -> None:
     assert serialized_manifest == {
         "access_entities": [SERIALIZED_ACCESS_ENTITY],
         "replicated_databases": [SERIALIZED_DATABASE],
-        "tables": [SERIALIZED_TABLE]
+        "tables": [SERIALIZED_TABLE],
     }

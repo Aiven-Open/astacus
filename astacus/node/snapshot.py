@@ -73,6 +73,6 @@ class UploadOp(NodeOp):
                 hashes=self.req.hashes,
                 parallel=self.config.parallel.uploads,
                 progress=self.result.progress,
-                still_running_callback=self.still_running_callback
+                still_running_callback=self.still_running_callback,
             )
             self.result.progress.done()

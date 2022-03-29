@@ -39,8 +39,9 @@ ASTACUS_NODES = [
 
 
 @asynccontextmanager
-async def background_process(program: Union[str, Path], *args: Union[str, Path],
-                             **kwargs) -> AsyncIterator[asyncio.subprocess.Process]:
+async def background_process(
+    program: Union[str, Path], *args: Union[str, Path], **kwargs
+) -> AsyncIterator[asyncio.subprocess.Process]:
     # pylint: disable=bare-except
     proc = await asyncio.create_subprocess_exec(program, *args, **kwargs)
     try:
@@ -86,7 +87,7 @@ def create_astacus_config_dict(*, tmpdir, root_path, link_path, node):
         "uvicorn": {
             "port": node.port,
             "log_level": "debug",
-        }
+        },
     }
 
 

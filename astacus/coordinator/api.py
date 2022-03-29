@@ -23,7 +23,8 @@ logger = logging.getLogger(__name__)
 
 
 class OpName(str, Enum):
-    """ (Long-running) operations defined in this API (for coordinator) """
+    """(Long-running) operations defined in this API (for coordinator)"""
+
     backup = "backup"
     lock = "lock"
     restore = "restore"

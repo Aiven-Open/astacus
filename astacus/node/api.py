@@ -16,7 +16,8 @@ router = APIRouter()
 
 
 class OpName(str, Enum):
-    """ (Long-running) operations defined in this API (for node) """
+    """(Long-running) operations defined in this API (for node)"""
+
     clear = "clear"
     download = "download"
     snapshot = "snapshot"

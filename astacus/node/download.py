@@ -96,7 +96,7 @@ class Downloader(ThreadLocalStorage):
             fun=self._download_snapshotfiles_from_storage,
             iterable=sorted_all_snapshotfiles,
             result_callback=_cb,
-            n=self.parallel
+            n=self.parallel,
         ):
             progress.add_fail()
             progress.done()
@@ -134,10 +134,10 @@ class DownloadOp(NodeOp):
                 dst=self.config.root,
                 snapshotter=self.snapshotter,
                 storage=self.storage,
-                parallel=self.config.parallel.downloads
+                parallel=self.config.parallel.downloads,
             )
             downloader.download_from_storage(
                 snapshotstate=snapshotstate,
                 progress=self.result.progress,
-                still_running_callback=self.still_running_callback
+                still_running_callback=self.still_running_callback,
             )

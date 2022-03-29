@@ -43,6 +43,7 @@ class ZooKeeperConnection:
 
     A `ZooKeeperConnection` cannot be shared between multiple threads or multiple asyncio coroutines.
     """
+
     async def __aenter__(self) -> "ZooKeeperConnection":
         raise NotImplementedError
 
@@ -88,6 +89,7 @@ class ZooKeeperClient:
 
     This can be safely shared between multiple threads or multiple asyncio coroutines.
     """
+
     def connect(self) -> ZooKeeperConnection:
         raise NotImplementedError
 
@@ -160,7 +162,7 @@ class FakeZooKeeperClient(ZooKeeperClient):
     Parts = Tuple[str, ...]
 
     def __init__(self) -> None:
-        self._storage: Dict[Tuple[str, ...], bytes] = {("", ): b""}
+        self._storage: Dict[Tuple[str, ...], bytes] = {("",): b""}
         self._lock = asyncio.Lock()
         self.connections: List["FakeZooKeeperConnection"] = []
 

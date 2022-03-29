@@ -21,6 +21,7 @@ class RetrieveDataStep(Step[Dict[str, Any]]):
     """
     Backups Flink tables from ZooKeeper.
     """
+
     zookeeper_client: ZooKeeperClient
     zookeeper_paths: List[str]
 
@@ -64,6 +65,7 @@ class PrepareFlinkManifestStep(Step[Dict[str, Any]]):
     """
     Collects data from previous steps into an uploadable manifest.
     """
+
     async def run_step(self, cluster: Cluster, context: StepsContext) -> Dict[str, Any]:
         return FlinkManifest(data=context.get_result(RetrieveDataStep)).dict()
 
@@ -73,6 +75,7 @@ class FlinkManifestStep(Step[FlinkManifest]):
     """
     Extracts the Flink plugin manifest from the main backup manifest.
     """
+
     async def run_step(self, cluster: Cluster, context: StepsContext) -> FlinkManifest:
         backup_manifest = context.get_result(BackupManifestStep)
         return FlinkManifest.parse_obj(backup_manifest.plugin_data)
@@ -83,6 +86,7 @@ class RestoreDataStep(Step[None]):
     """
     Restores Flint tables to ZooKeeper.
     """
+
     zookeeper_client: ZooKeeperClient
     zookeeper_paths: List[str]
 
