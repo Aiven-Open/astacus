@@ -3,13 +3,14 @@ Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
 from astacus.common.exceptions import TransientException
-from kazoo.client import EventType, KazooClient, KeeperState, WatchedEvent
+from kazoo.client import EventType, KazooClient, KeeperState, TransactionRequest, WatchedEvent
 from kazoo.protocol.states import ZnodeStat
 from kazoo.retry import KazooRetry
-from typing import Any, AsyncIterator, Callable, cast, Dict, List, Optional, Tuple, TypeVar
+from typing import Any, AsyncIterator, Callable, cast, Collection, Dict, List, Optional, Tuple, Type, TypeVar, Union
 
 import asyncio
 import contextlib
+import enum
 import functools
 import kazoo.exceptions
 import logging
@@ -33,6 +34,20 @@ except ImportError:
 
 
 Watcher = Callable[[WatchedEvent], None]
+
+
+class ZooKeeperTransaction:
+    def create(self, path: str, value: bytes) -> None:
+        """
+        Add a create operation to the transaction.
+        """
+        raise NotImplementedError
+
+    async def commit(self) -> None:
+        """
+        Commit the transaction.
+        """
+        raise NotImplementedError
 
 
 class ZooKeeperConnection:
@@ -82,6 +97,12 @@ class ZooKeeperConnection:
         """
         raise NotImplementedError
 
+    def transaction(self) -> ZooKeeperTransaction:
+        """
+        Begin a transaction.
+        """
+        raise NotImplementedError
+
 
 class ZooKeeperClient:
     """
@@ -106,6 +127,25 @@ class NodeExistsError(TransientException):
         self.message = f"Zookeeper node already exists: {path}"
 
 
+class TransactionError(TransientException):
+    def __init__(self, results: Collection[Union[bool, TransientException]]):
+        super().__init__(results)
+        self.message = f"Transaction failed: {results!r}"
+        self.results = results
+
+
+class RolledBackError(TransientException):
+    def __init__(self, path: str) -> None:
+        super().__init__(path)
+        self.message = f"Rolled back operation on: {path}"
+
+
+class RuntimeInconsistency(TransientException):
+    def __init__(self, path: str) -> None:
+        super().__init__(path)
+        self.message = f"Runtime inconsistency on: {path}"
+
+
 class KazooZooKeeperClient(ZooKeeperClient):
     def __init__(self, hosts: List[str], timeout: float = 10):
         self.hosts = hosts
@@ -117,6 +157,29 @@ class KazooZooKeeperClient(ZooKeeperClient):
         retry = KazooRetry(max_tries=None, deadline=self.timeout)
         client = KazooClient(hosts=self.hosts, connection_retry=retry, command_retry=retry)
         return KazooZooKeeperConnection(client)
+
+
+class KazooZooKeeperTransaction(ZooKeeperTransaction):
+    def __init__(self, request: TransactionRequest):
+        self.request = request
+
+    def create(self, path: str, value: bytes) -> None:
+        self.request.create(path, value)
+
+    async def commit(self) -> None:
+        results = await to_thread(self.request.client.retry, self.request.commit)
+        if any(isinstance(result, Exception) for result in results):
+            exceptions_map: Dict[Type, Callable[[str], TransientException]] = {
+                kazoo.exceptions.RolledBackError: RolledBackError,
+                kazoo.exceptions.RuntimeInconsistency: RuntimeInconsistency,
+                kazoo.exceptions.NoNodeError: NoNodeError,
+                kazoo.exceptions.NodeExistsError: NodeExistsError,
+            }
+            mapped_results: Collection[Union[bool, TransientException]] = [
+                exceptions_map[result.__class__](operation.path) if isinstance(result, Exception) else True
+                for result, operation in zip(results, self.request.operations)
+            ]
+            raise TransactionError(results=mapped_results)
 
 
 class KazooZooKeeperConnection(ZooKeeperConnection):
@@ -150,12 +213,15 @@ class KazooZooKeeperConnection(ZooKeeperConnection):
 
     async def create(self, path: str, value: bytes) -> None:
         try:
-            return await to_thread(self.client.retry, self.client.create, path, value, makepath=True)
+            await to_thread(self.client.retry, self.client.create, path, value, makepath=True)
         except kazoo.exceptions.NodeExistsError as e:
             raise NodeExistsError(path) from e
 
     async def exists(self, path) -> Optional[ZnodeStat]:
         return await to_thread(self.client.retry, self.client.exists, path)
+
+    def transaction(self) -> KazooZooKeeperTransaction:
+        return KazooZooKeeperTransaction(request=self.client.transaction())
 
 
 class FakeZooKeeperClient(ZooKeeperClient):
@@ -188,6 +254,49 @@ class FakeZooKeeperClient(ZooKeeperClient):
             watch(event)
 
 
+class TransactionOperation(enum.Enum):
+    CREATE = "create"
+
+
+class FakeZooKeeperTransaction(ZooKeeperTransaction):
+    def __init__(self, connection: "FakeZooKeeperConnection") -> None:
+        self.connection = connection
+        self.operations: List[Tuple[TransactionOperation, str, bytes]] = []
+        self.committed = False
+
+    def create(self, path: str, value: bytes) -> None:
+        assert not self.committed
+        self.operations.append((TransactionOperation.CREATE, path, value))
+
+    async def commit(self) -> None:
+        triggers = []
+        results: List[Union[bool, TransientException]] = []
+        async with self.connection.client.get_storage() as storage:
+            storage_copy = storage.copy()
+            for operation in self.operations:
+                if operation[0] == TransactionOperation.CREATE:
+                    path, value = operation[1], operation[2]
+                    try:
+                        triggers.append(create_locked(path, value, storage_copy, makepath=False))
+                        results.append(True)
+                    except (NoNodeError, NodeExistsError) as e:
+                        # Anything before the first error is now RolledBack, then the first error,
+                        # then anything after that is failing with RuntimeInconsistency.
+                        results = [
+                            *[RolledBackError(operation[1]) for operation in self.operations[: len(results)]],
+                            e,
+                            *[RuntimeInconsistency(operation[1]) for operation in self.operations[len(results) + 1 :]],
+                        ]
+                        break
+            if any(result is not True for result in results):
+                raise TransactionError(results=results)
+            storage.clear()
+            storage.update(storage_copy)
+            self.committed = True
+        for parts, event in triggers:
+            await self.connection.client.trigger(parts, event)
+
+
 class FakeZooKeeperConnection(ZooKeeperConnection):
     def __init__(self, client: FakeZooKeeperClient):
         self.client = client
@@ -200,14 +309,10 @@ class FakeZooKeeperConnection(ZooKeeperConnection):
     async def __aexit__(self, *exc_info) -> None:
         self.client.connections.remove(self)
 
-    @staticmethod
-    def parse_path(path: str) -> Tuple[str, ...]:
-        return tuple(path.rstrip("/").split("/"))
-
     async def get(self, path: str, watch: Optional[Watcher] = None) -> bytes:
         # We don't have the "set" command so we can ignore the watch
         assert self in self.client.connections
-        parts = self.parse_path(path)
+        parts = parse_path(path)
         async with self.client.get_storage() as storage:
             if parts not in storage:
                 raise NoNodeError(path)
@@ -218,7 +323,7 @@ class FakeZooKeeperConnection(ZooKeeperConnection):
     async def get_children(self, path: str, watch: Optional[Watcher] = None) -> List[str]:
         # Since we have the "create" command, the watch can be triggered on the parent
         assert self in self.client.connections
-        parts = self.parse_path(path)
+        parts = parse_path(path)
         async with self.client.get_storage() as storage:
             if parts not in storage:
                 raise NoNodeError(path)
@@ -228,21 +333,16 @@ class FakeZooKeeperConnection(ZooKeeperConnection):
 
     async def create(self, path: str, value: bytes) -> None:
         assert self in self.client.connections
-        parts = self.parse_path(path)
         async with self.client.get_storage() as storage:
-            if parts in storage:
-                raise NodeExistsError(path)
-            storage[parts] = value
-            # Auto-create parents
-            parent_parts = parts[:-1]
-            while len(parent_parts) and parent_parts not in storage:
-                storage[parent_parts] = b""
-                parent_parts = parent_parts[:-1]
-            event = WatchedEvent(type=EventType.CREATED, state=KeeperState.CONNECTED, path="/".join(parent_parts))
+            parent_parts, event = create_locked(path, value, storage, makepath=True)
         await self.client.trigger(parent_parts, event)
 
     async def exists(self, path: str) -> Optional[ZnodeStat]:
-        pass
+        async with self.client.get_storage() as storage:
+            return parse_path(path) in storage
+
+    def transaction(self) -> FakeZooKeeperTransaction:
+        return FakeZooKeeperTransaction(connection=self)
 
 
 class ChangeWatch:
@@ -252,3 +352,27 @@ class ChangeWatch:
     def __call__(self, event: WatchedEvent) -> None:
         logger.debug("on change: %s", event)
         self.has_changed = True
+
+
+def parse_path(path: str) -> Tuple[str, ...]:
+    return tuple(path.rstrip("/").split("/"))
+
+
+def create_locked(
+    path: str, value: bytes, storage: Dict[Tuple[str, ...], bytes], *, makepath: bool
+) -> Tuple[Tuple[str, ...], WatchedEvent]:
+    """Low level create operation, assumes the storage is already locked."""
+    parts = parse_path(path)
+    if parts in storage:
+        raise NodeExistsError(path)
+    storage[parts] = value
+    # Auto-create parents
+    parent_parts = parts[:-1]
+    while len(parent_parts) and parent_parts not in storage:
+        if makepath:
+            storage[parent_parts] = b""
+            parent_parts = parent_parts[:-1]
+        else:
+            raise NoNodeError("/".join(parent_parts))
+    event = WatchedEvent(type=EventType.CREATED, state=KeeperState.CONNECTED, path="/".join(parent_parts))
+    return parent_parts, event
