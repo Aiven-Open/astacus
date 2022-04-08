@@ -593,7 +593,7 @@ async def test_creating_all_access_entities_can_be_retried() -> None:
         await connection.create("/clickhouse/access/P/a_policy", str(uuid.UUID(int=1)).encode())
         await connection.create(f"/clickhouse/access/uuid/{str(uuid.UUID(int=1))}", b"ATTACH ROW POLICY ...")
         await connection.create("/clickhouse/access/Q/a_quota", str(uuid.UUID(int=2)).encode())
-        await connection.create(f"/clickhouse/access/uuid/{str(uuid.UUID(int=3))}", b"ATTACH ROLE ...")
+        await connection.create(f"/clickhouse/access/uuid/{str(uuid.UUID(int=2))}", b"ATTACH QUOTA ...")
     await step.run_step(Cluster(nodes=[]), context)
     await check_restored_entities(client)
 
