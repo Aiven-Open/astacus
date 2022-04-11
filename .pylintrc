@@ -6,7 +6,7 @@ jobs=4
 
 [MESSAGES CONTROL]
 disable=
-    bad-continuation,              # yapf style
+    bad-continuation,
     invalid-name,                  # fastapi conventions break this
     missing-docstring,
     no-member,                     # broken with pydantic + inheritance

@@ -78,6 +78,7 @@ class SnapshotStep(Step[List[ipc.SnapshotResult]]):
     The snapshot for each file contains its path, size, modification time and hash,
     see `SnapshotFile` for details.
     """
+
     snapshot_root_globs: List[str]
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> List[ipc.SnapshotResult]:
@@ -93,6 +94,7 @@ class ListHexdigestsStep(Step[Set[str]]):
     """
     Fetch the list of all files already present in object storage, identified by their hexdigest.
     """
+
     hexdigest_storage: AsyncHexDigestStorage
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> Set[str]:
@@ -114,6 +116,7 @@ class UploadBlocksStep(Step[List[ipc.SnapshotUploadResult]]):
     This returns a list of `SnapshotUploadResult`, one for each node, that collects statistics
     about the uploads.
     """
+
     storage_name: str
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> List[ipc.SnapshotUploadResult]:
@@ -133,6 +136,7 @@ class UploadManifestStep(Step[None]):
     The backup manifest contains the snapshot from the `SnapshotStep` as well as the
     statistics collected by the `UploadBlocksStep` and the plugin manifest.
     """
+
     json_storage: AsyncJsonStorage
     plugin: ipc.Plugin
     plugin_manifest_step: Optional[Type[Step[Dict]]] = None
@@ -161,6 +165,7 @@ class BackupNameStep(Step[str]):
     If the backup name was not specified in the restore request, this will select the
     most recent backup available in object storage, and fail if there are no backup.
     """
+
     json_storage: AsyncJsonStorage
     requested_name: str
 
@@ -177,6 +182,7 @@ class BackupManifestStep(Step[ipc.BackupManifest]):
     """
     Download the backup manifest from object storage.
     """
+
     json_storage: AsyncJsonStorage
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> ipc.BackupManifest:
@@ -190,6 +196,7 @@ class RestoreStep(Step[List[ipc.NodeResult]]):
     """
     Request each node to download and restore all files listed in the backup manifest.
     """
+
     storage_name: str
     partial_restore_nodes: Optional[List[ipc.PartialRestoreRequestNode]] = None
 
@@ -271,8 +278,10 @@ def get_node_to_backup_index(
 
 
 def get_node_to_backup_index_from_partial_restore_nodes(
-    *, partial_restore_nodes: List[ipc.PartialRestoreRequestNode], snapshot_results: List[ipc.SnapshotResult],
-    nodes: List[CoordinatorNode]
+    *,
+    partial_restore_nodes: List[ipc.PartialRestoreRequestNode],
+    snapshot_results: List[ipc.SnapshotResult],
+    nodes: List[CoordinatorNode],
 ) -> List[Optional[int]]:
     node_to_backup_index: List[Optional[int]] = [None] * len(nodes)
     hostname_to_backup_index: Dict[Optional[str], int] = {}
@@ -349,8 +358,9 @@ class NodeIndexData(ipc.AstacusModel):
         self.sshashes.append(sshash)
 
 
-def build_node_index_datas(*, hexdigests, snapshots: List[ipc.SnapshotResult],
-                           node_indices: List[int]) -> List[NodeIndexData]:
+def build_node_index_datas(
+    *, hexdigests, snapshots: List[ipc.SnapshotResult], node_indices: List[int]
+) -> List[NodeIndexData]:
     assert len(snapshots) == len(node_indices)
     sshash_to_node_indexes: Dict[ipc.SnapshotHash, List[int]] = {}
     for i, snapshot_result in enumerate(snapshots):

@@ -91,6 +91,7 @@ class OpMixin:
     Convenience mixin which provides for both asynchronous as well as
     synchronous op starting functionality, and active job querying
     """
+
     state: OpState
     stats: StatsClient
     request_url: URL
@@ -152,10 +153,11 @@ class OpMixin:
         if op_id != op_info.op_id or (op_name and op_name != op_info.op_name):
             logger.info("request for nonexistent %s.%s != %r", op_name, op_id, op_info)
             raise HTTPException(
-                404, {
+                404,
+                {
                     "code": magic.ErrorCode.operation_id_mismatch,
                     "op": op_id,
-                    "message": "Unknown operation id"
-                }
+                    "message": "Unknown operation id",
+                },
             )
         return self.state.op, op_info

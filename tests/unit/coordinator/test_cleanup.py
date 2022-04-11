@@ -52,12 +52,13 @@ def test_api_cleanup_flow(fail_at, client, populated_mstorage, app):
         app=app,
         retention=ipc.Retention(maximum_backups=1),
         exp_jsons=1,
-        exp_digests=1
+        exp_digests=1,
     )
 
 
 @pytest.mark.parametrize(
-    "data", [
+    "data",
+    [
         (ipc.Retention(maximum_backups=1), 1, 1),
         (ipc.Retention(keep_days=-1), 0, 0),
         (ipc.Retention(minimum_backups=1, keep_days=-1), 1, 1),
@@ -66,7 +67,7 @@ def test_api_cleanup_flow(fail_at, client, populated_mstorage, app):
         (ipc.Retention(keep_days=10000), 2, 2),
         (ipc.Retention(minimum_backups=1, keep_days=10000), 2, 2),
         (ipc.Retention(maximum_backups=1, keep_days=10000), 1, 1),
-    ]
+    ],
 )
 def test_api_cleanup_retention(data, client, populated_mstorage, app):
     retention, exp_jsons, exp_digests = data
@@ -76,5 +77,5 @@ def test_api_cleanup_retention(data, client, populated_mstorage, app):
         app=app,
         retention=retention,
         exp_jsons=exp_jsons,
-        exp_digests=exp_digests
+        exp_digests=exp_digests,
     )

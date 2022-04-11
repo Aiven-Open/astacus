@@ -86,6 +86,7 @@ def node_stats(config: NodeConfig = Depends(node_config)) -> statsd.StatsClient:
 class Node(op.OpMixin):
     state: NodeState
     """ Convenience dependency which contains sub-dependencies most API endpoints need """
+
     def __init__(
         self,
         *,

@@ -12,7 +12,7 @@ def _iter_backups(storage):
     for name in sorted(storage.list_jsons()):
         if not name.startswith(magic.JSON_BACKUP_PREFIX):
             continue
-        pname = name[len(magic.JSON_BACKUP_PREFIX):]
+        pname = name[len(magic.JSON_BACKUP_PREFIX) :]
         manifest = ipc.BackupManifest.parse_obj(storage.download_json(name))
         files = sum(x.files for x in manifest.snapshot_results)
         total_size = sum(x.total_size for x in manifest.snapshot_results)

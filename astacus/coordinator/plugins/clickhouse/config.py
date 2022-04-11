@@ -40,5 +40,6 @@ def get_clickhouse_clients(configuration: ClickHouseConfiguration) -> List[Click
             port=node.port,
             username=configuration.username,
             password=configuration.password,
-        ) for node in configuration.nodes
+        )
+        for node in configuration.nodes
     ]

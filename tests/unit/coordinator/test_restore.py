@@ -30,7 +30,7 @@ BACKUP_MANIFEST = ipc.BackupManifest(
         ipc.SnapshotResult(
             state=ipc.SnapshotState(
                 root_globs=["*"],
-                files=[ipc.SnapshotFile(relative_path=Path("foo"), file_size=6, mtime_ns=0, hexdigest="DEADBEEF")]
+                files=[ipc.SnapshotFile(relative_path=Path("foo"), file_size=6, mtime_ns=0, hexdigest="DEADBEEF")],
             ),
             hashes=[ipc.SnapshotHash(hexdigest="DEADBEEF", size=6)],
             files=1,
@@ -54,14 +54,15 @@ class RestoreTest:
 @pytest.mark.parametrize(
     "rt",
     # failures: [0] - [4]
-    [RestoreTest(fail_at=i) for i in range(1, 6)] + [
+    [RestoreTest(fail_at=i) for i in range(1, 6)]
+    + [
         # success cases
         RestoreTest(),  # default
         # named storage
         RestoreTest(storage_name="x"),
         RestoreTest(storage_name="y"),
         # partial
-        RestoreTest(partial=True)
+        RestoreTest(partial=True),
     ],
 )
 def test_restore(rt, app, client, mstorage):
@@ -86,10 +87,7 @@ def test_restore(rt, app, client, mstorage):
                         if json.loads(request.read())["root_globs"] != ["*"]:
                             return None
                         return httpx.Response(
-                            status_code=200, json={
-                                "op_id": 42,
-                                "status_url": f"{node_url}/download/result"
-                            }
+                            status_code=200, json={"op_id": 42, "status_url": f"{node_url}/download/result"}
                         )
 
                     return match_download
@@ -99,14 +97,9 @@ def test_restore(rt, app, client, mstorage):
                 # Failure point 3: download result call fails
                 respx.get(f"{node.url}/download/result").respond(
                     json={
-                        "progress": {
-                            "handled": 10,
-                            "failed": 0,
-                            "total": 10,
-                            "final": True
-                        },
+                        "progress": {"handled": 10, "failed": 0, "total": 10, "final": True},
                     },
-                    status_code=200 if rt.fail_at != 3 else 500
+                    status_code=200 if rt.fail_at != 3 else 500,
                 )
             else:
 
@@ -123,12 +116,12 @@ def test_restore(rt, app, client, mstorage):
                 respx.post(url=f"{node.url}/clear").mock(side_effect=get_match_clear(node.url))
 
                 # Failure point 5: clear result call fails
-                respx.get(f"{node.url}/clear/result"
-                          ).respond(json={
-                              "progress": {
-                                  "final": True
-                              },
-                          }, status_code=200 if rt.fail_at != 5 else 500)
+                respx.get(f"{node.url}/clear/result").respond(
+                    json={
+                        "progress": {"final": True},
+                    },
+                    status_code=200 if rt.fail_at != 5 else 500,
+                )
 
         req = {}
         if rt.storage_name:
@@ -173,12 +166,11 @@ def test_restore(rt, app, client, mstorage):
         (["foo", "foo", "bar"], ["1", "2", "2"], [1, 2, 0], does_not_raise()),
         (["a", "bb", "bb", "ccc", "ccc", "ccc"], ["1", "2", "2"], [None, 0, None, 1, 2, None], does_not_raise()),
         (["a", "bb", "bb", "ccc", "ccc", "ccc"], ["3", "3", "3", "1", "2", "2"], [3, 4, 5, 0, 1, 2], does_not_raise()),
-
         # errors
         (["foo", "foo"], ["1", "2", "2"], None, pytest.raises(exceptions.InsufficientNodesException)),
         (["foo", "foo", "foo"], ["1", "2", "2"], None, pytest.raises(exceptions.InsufficientAZsException)),
         (["foo", "foo", "bar", "bar"], ["1", "3", "3", "3"], None, pytest.raises(exceptions.InsufficientNodesException)),
-    ]
+    ],
 )
 def test_node_to_backup_index(node_azlist, backup_azlist, expected_index, exception):
     snapshot_results = [ipc.SnapshotResult(az=az) for az in backup_azlist]
@@ -193,63 +185,23 @@ def test_node_to_backup_index(node_azlist, backup_azlist, expected_index, except
     "partial_node_spec,expected_index,exception",
     [
         # 4 (supported) ways of expressing same thing
-        ({
-            "backup_index": 1,
-            "node_index": 2
-        }, [None, None, 1], does_not_raise()),
-        ({
-            "backup_hostname": "host1",
-            "node_index": 2
-        }, [None, None, 1], does_not_raise()),
-        ({
-            "backup_index": 1,
-            "node_url": "url2"
-        }, [None, None, 1], does_not_raise()),
-        ({
-            "backup_hostname": "host1",
-            "node_url": "url2"
-        }, [None, None, 1], does_not_raise()),
-
+        ({"backup_index": 1, "node_index": 2}, [None, None, 1], does_not_raise()),
+        ({"backup_hostname": "host1", "node_index": 2}, [None, None, 1], does_not_raise()),
+        ({"backup_index": 1, "node_url": "url2"}, [None, None, 1], does_not_raise()),
+        ({"backup_hostname": "host1", "node_url": "url2"}, [None, None, 1], does_not_raise()),
         # errors - invalid node spec
         ({}, None, pytest.raises(pydantic.ValidationError)),
-        ({
-            "backup_index": 42,
-            "backup_hostname": "foo",
-            "node_index": 42
-        }, None, pytest.raises(pydantic.ValidationError)),
-        ({
-            "backup_index": 42,
-            "node_index": 42,
-            "node_url": "foo"
-        }, None, pytest.raises(pydantic.ValidationError)),
-
+        ({"backup_index": 42, "backup_hostname": "foo", "node_index": 42}, None, pytest.raises(pydantic.ValidationError)),
+        ({"backup_index": 42, "node_index": 42, "node_url": "foo"}, None, pytest.raises(pydantic.ValidationError)),
         # out of range
-        ({
-            "backup_index": -1,
-            "node_index": 2
-        }, [None, None, 1], pytest.raises(exceptions.NotFoundException)),
-        ({
-            "backup_index": 1,
-            "node_index": -2
-        }, [None, None, 1], pytest.raises(exceptions.NotFoundException)),
-        ({
-            "backup_index": 123,
-            "node_index": 2
-        }, [None, None, 1], pytest.raises(exceptions.NotFoundException)),
-        ({
-            "backup_index": 1,
-            "node_index": 123
-        }, [None, None, 1], pytest.raises(exceptions.NotFoundException)),
+        ({"backup_index": -1, "node_index": 2}, [None, None, 1], pytest.raises(exceptions.NotFoundException)),
+        ({"backup_index": 1, "node_index": -2}, [None, None, 1], pytest.raises(exceptions.NotFoundException)),
+        ({"backup_index": 123, "node_index": 2}, [None, None, 1], pytest.raises(exceptions.NotFoundException)),
+        ({"backup_index": 1, "node_index": 123}, [None, None, 1], pytest.raises(exceptions.NotFoundException)),
         # invalid url / hostname
-        ({
-            "backup_hostname": "host123",
-            "node_index": 2
-        }, [None, None, 1], pytest.raises(exceptions.NotFoundException)),
-        ({
-            "backup_index": 1,
-            "node_url": "url123"
-        }, [None, None, 1], pytest.raises(exceptions.NotFoundException)),
-    ]
+        ({"backup_hostname": "host123", "node_index": 2}, [None, None, 1], pytest.raises(exceptions.NotFoundException)),
+        ({"backup_index": 1, "node_url": "url123"}, [None, None, 1], pytest.raises(exceptions.NotFoundException)),
+    ],
 )
 def test_partial_node_to_backup_index(partial_node_spec, expected_index, exception):
     num_nodes = 3

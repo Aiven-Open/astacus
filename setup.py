@@ -10,6 +10,7 @@ import setuptools
 def _run():
     try:
         import version  # pylint: disable=import-outside-toplevel
+
         version_for_setup_py = version.update_project_version("astacus/version.py")
         version_for_setup_py = ".dev".join(version_for_setup_py.split("-", 2)[:2])
     except ImportError:

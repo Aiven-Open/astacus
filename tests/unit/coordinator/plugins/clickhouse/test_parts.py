@@ -5,8 +5,15 @@ See LICENSE for details
 from astacus.common.ipc import SnapshotFile, SnapshotResult, SnapshotState
 from astacus.coordinator.plugins.clickhouse.manifest import Table
 from astacus.coordinator.plugins.clickhouse.parts import (
-    add_file_to_parts, check_parts_replication, distribute_parts_to_servers, get_frozen_parts_pattern,
-    group_files_into_parts, list_parts_to_attach, Part, PartFile, PartKey
+    add_file_to_parts,
+    check_parts_replication,
+    distribute_parts_to_servers,
+    get_frozen_parts_pattern,
+    group_files_into_parts,
+    list_parts_to_attach,
+    Part,
+    PartFile,
+    PartKey,
 )
 from pathlib import Path
 from typing import Dict, List
@@ -26,16 +33,16 @@ def create_part_files(*, table_uuid: UUID, part_name: str, digest_seed: str) -> 
             relative_path=Path(f"store/{uuid_head}/{str(table_uuid)}/detached/{part_name}/{filename}"),
             file_size=file_size,
             mtime_ns=0,
-            hexdigest=hashlib.sha256(f"{digest_seed}-{part_name}-{filename}".encode()).hexdigest()
-        ) for filename, file_size in [("data.bin", 1000), ("checksums.txt", 100), ("count.txt", 20)]
+            hexdigest=hashlib.sha256(f"{digest_seed}-{part_name}-{filename}".encode()).hexdigest(),
+        )
+        for filename, file_size in [("data.bin", 1000), ("checksums.txt", 100), ("count.txt", 20)]
     ]
 
 
 def create_part_from_part_files(part_files: List[SnapshotFile]) -> Part:
     return Part(
-        files={file.relative_path: PartFile(snapshot_file=file, servers={0, 1})
-               for file in part_files},
-        total_size=sum(file.file_size for file in part_files)
+        files={file.relative_path: PartFile(snapshot_file=file, servers={0, 1}) for file in part_files},
+        total_size=sum(file.file_size for file in part_files),
     )
 
 
@@ -80,7 +87,8 @@ def test_group_files_into_parts_ignores_unknown_files() -> None:
 
 
 @pytest.mark.parametrize(
-    "file_path", [
+    "file_path",
+    [
         Path("something/random_a"),
         Path("notstore/000/00000000-0000-0000-0000-000000000001/detached/all_0_0_0/data.bin"),
         Path("store/123/00000000-0000-0000-0000-000000000001/detached/all_0_0_0/data.bin"),
@@ -89,7 +97,7 @@ def test_group_files_into_parts_ignores_unknown_files() -> None:
         Path("store/000/00000000-0000-0000-0000-000000000001/notdetached/all_0_0_0/data.bin"),
         Path("store/000/00000000-0000-0000-0000-000000000001/detached/notapart.txt"),
     ],
-    ids=["random", "not-store", "wrong-uuid-prefix", "invalid-uuid", "wrong-uuid", "not-detached", "not-folder"]
+    ids=["random", "not-store", "wrong-uuid-prefix", "invalid-uuid", "wrong-uuid", "not-detached", "not-folder"],
 )
 def test_add_file_to_parts_ignores_unknown_files(file_path: Path) -> None:
     snapshot_file = SnapshotFile(relative_path=file_path, file_size=100, mtime_ns=0)
@@ -104,7 +112,7 @@ def test_add_file_to_parts_adds_file() -> None:
         relative_path=Path("store/000/00000000-0000-0000-0000-000000000001/detached/all_0_0_0/data.bin"),
         file_size=100,
         mtime_ns=0,
-        hexdigest="0001"
+        hexdigest="0001",
     )
     parts = {}
     added = add_file_to_parts(snapshot_file=file_a, server_index=0, table_uuids={T1_UUID}, parts=parts)
@@ -118,7 +126,7 @@ def test_add_file_to_parts_collects_all_servers() -> None:
         relative_path=Path("store/000/00000000-0000-0000-0000-000000000001/detached/all_0_0_0/data.bin"),
         file_size=100,
         mtime_ns=0,
-        hexdigest="0001"
+        hexdigest="0001",
     )
     parts = {}
     for server_index in range(3):
@@ -134,7 +142,7 @@ def test_add_file_to_parts_fails_on_inconsistent_file() -> None:
         relative_path=Path("store/000/00000000-0000-0000-0000-000000000001/detached/all_0_0_0/data.bin"),
         file_size=100,
         mtime_ns=0,
-        hexdigest="0001"
+        hexdigest="0001",
     )
     file_b = file_a.copy(update={"hexdigest": "0002"})
     parts = {}
@@ -148,7 +156,7 @@ def test_add_file_to_parts_ignores_inconsistent_modification_time() -> None:
         relative_path=Path("store/000/00000000-0000-0000-0000-000000000001/detached/all_0_0_0/data.bin"),
         file_size=100,
         mtime_ns=123456,
-        hexdigest="0001"
+        hexdigest="0001",
     )
     file_b = file_a.copy(update={"mtime_ns": 789789})
     parts = {}
@@ -162,13 +170,13 @@ def test_add_file_to_parts_computes_total_part_size() -> None:
         relative_path=Path("store/000/00000000-0000-0000-0000-000000000001/detached/all_0_0_0/data.bin"),
         file_size=1000,
         mtime_ns=0,
-        hexdigest="0001"
+        hexdigest="0001",
     )
     file_b = SnapshotFile(
         relative_path=Path("store/000/00000000-0000-0000-0000-000000000001/detached/all_0_0_0/checksums.txt"),
         file_size=138,
         mtime_ns=0,
-        hexdigest="0002"
+        hexdigest="0002",
     )
     parts = {}
     for server_index in range(3):
@@ -181,14 +189,12 @@ def test_add_file_to_parts_computes_total_part_size() -> None:
 def test_check_parts_replication_succeeds_on_valid_parts() -> None:
     parts = [
         Part(
-            files={file.relative_path: PartFile(snapshot_file=file, servers={0, 1})
-                   for file in TABLE_1_PART_1},
-            total_size=1120
+            files={file.relative_path: PartFile(snapshot_file=file, servers={0, 1}) for file in TABLE_1_PART_1},
+            total_size=1120,
         ),
         Part(
-            files={file.relative_path: PartFile(snapshot_file=file, servers={0})
-                   for file in TABLE_3_PART_1B},
-            total_size=1120
+            files={file.relative_path: PartFile(snapshot_file=file, servers={0}) for file in TABLE_3_PART_1B},
+            total_size=1120,
         ),
     ]
     check_parts_replication(parts)
@@ -197,9 +203,8 @@ def test_check_parts_replication_succeeds_on_valid_parts() -> None:
 def test_check_parts_replication_fails_on_inconsistent_servers_set() -> None:
     parts = [
         Part(
-            files={file.relative_path: PartFile(snapshot_file=file, servers={0, 1})
-                   for file in TABLE_1_PART_1},
-            total_size=1120
+            files={file.relative_path: PartFile(snapshot_file=file, servers={0, 1}) for file in TABLE_1_PART_1},
+            total_size=1120,
         )
     ]
     list(parts[0].files.values())[1].servers = {0, 1, 2}
@@ -235,24 +240,25 @@ def test_get_frozen_parts_pattern_escapes_backup_name() -> None:
 
 def test_list_parts_to_attach() -> None:
     parts_to_attach = list_parts_to_attach(
-        SnapshotResult(state=SnapshotState(files=TABLE_1_PART_1 + TABLE_1_PART_2)), {
+        SnapshotResult(state=SnapshotState(files=TABLE_1_PART_1 + TABLE_1_PART_2)),
+        {
             T1_UUID: Table(
                 database=b"default",
                 name=b"table_1",
                 engine="ReplicatedMergeTree",
                 uuid=T1_UUID,
-                create_query=b"CREATE TABLE ..."
+                create_query=b"CREATE TABLE ...",
             ),
             T2_UUID: Table(
                 database=b"default",
                 name=b"table_2",
                 engine="ReplicatedMergeTree",
                 uuid=T2_UUID,
-                create_query=b"CREATE TABLE ..."
-            )
-        }
+                create_query=b"CREATE TABLE ...",
+            ),
+        },
     )
     assert parts_to_attach == [
-        ('`default`.`table_1`', b'all_0_0_0'),
-        ('`default`.`table_1`', b'all_1_1_0'),
+        ("`default`.`table_1`", b"all_0_0_0"),
+        ("`default`.`table_1`", b"all_1_1_0"),
     ]

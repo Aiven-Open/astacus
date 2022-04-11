@@ -15,8 +15,14 @@ from astacus.coordinator.coordinator import Coordinator, SteppedCoordinatorOp
 from astacus.coordinator.plugins import m3db
 from astacus.coordinator.plugins.base import BackupManifestStep, StepsContext
 from astacus.coordinator.plugins.m3db import (
-    get_etcd_prefixes, InitStep, M3DBPlugin, PrepareM3ManifestStep, RestoreEtcdStep, RetrieveEtcdAgainStep, RetrieveEtcdStep,
-    RewriteEtcdStep
+    get_etcd_prefixes,
+    InitStep,
+    M3DBPlugin,
+    PrepareM3ManifestStep,
+    RestoreEtcdStep,
+    RetrieveEtcdAgainStep,
+    RetrieveEtcdStep,
+    RewriteEtcdStep,
 )
 from astacus.coordinator.state import CoordinatorState
 from dataclasses import dataclass
@@ -32,16 +38,8 @@ import threading
 ENV = "dummyenv"
 
 PLACEMENT_NODES = [
-    {
-        "node_id": "node-1",
-        "hostname": "node-1",
-        "endpoint": "http://node-1:123456"
-    },
-    {
-        "node_id": "node-2",
-        "hostname": "node-2",
-        "endpoint": "http://node-2:123456"
-    },
+    {"node_id": "node-1", "hostname": "node-1", "endpoint": "http://node-1:123456"},
+    {"node_id": "node-2", "hostname": "node-2", "endpoint": "http://node-2:123456"},
 ]
 
 COORDINATOR_CONFIG = {
@@ -51,11 +49,7 @@ COORDINATOR_CONFIG = {
         "environment": ENV,
         "placement_nodes": PLACEMENT_NODES,
     },
-    "nodes": [{
-        "url": "http://localhost:12345/asdf"
-    }, {
-        "url": "http://localhost:12346/asdf"
-    }]
+    "nodes": [{"url": "http://localhost:12345/asdf"}, {"url": "http://localhost:12346/asdf"}],
 }
 
 BACKUP_FAILS = [0, 1, None]
@@ -65,19 +59,16 @@ KEY2_B64 = b64encode_to_str(b"key2")
 VALUE1_B64 = b64encode_to_str(create_dummy_placement().SerializeToString())
 VALUE2_B64 = b64encode_to_str(b"value2")
 
-PREFIXES = [{
-    "keys": [
-        {
-            "key_b64": KEY1_B64,
-            "value_b64": VALUE1_B64
-        },
-        {
-            "key_b64": KEY2_B64,
-            "value_b64": VALUE2_B64
-        },
-    ],
-    "prefix_b64": b64encode_to_str(prefix.format(env=ENV).encode())
-} for prefix in m3db.ETCD_PREFIX_FORMATS]
+PREFIXES = [
+    {
+        "keys": [
+            {"key_b64": KEY1_B64, "value_b64": VALUE1_B64},
+            {"key_b64": KEY2_B64, "value_b64": VALUE2_B64},
+        ],
+        "prefix_b64": b64encode_to_str(prefix.format(env=ENV).encode()),
+    }
+    for prefix in m3db.ETCD_PREFIX_FORMATS
+]
 
 PLUGIN_DATA = {"etcd": {"prefixes": PREFIXES}, "placement_nodes": PLACEMENT_NODES}
 
@@ -92,7 +83,7 @@ def fixture_coordinator() -> Coordinator:
         stats=StatsClient(config=None),
         sync_lock=threading.RLock(),
         hexdigest_mstorage=MultiStorage(),
-        json_mstorage=MultiStorage()
+        json_mstorage=MultiStorage(),
     )
 
 
@@ -120,22 +111,18 @@ async def test_m3_backup(coordinator: Coordinator, plugin: M3DBPlugin, etcd_clie
             RetrieveEtcdStep(etcd_client=etcd_client, etcd_prefixes=etcd_prefixes),
             RetrieveEtcdAgainStep(etcd_client=etcd_client, etcd_prefixes=etcd_prefixes),
             PrepareM3ManifestStep(placement_nodes=plugin.placement_nodes),
-        ]
+        ],
     )
     context = StepsContext()
     with respx.mock:
         op.state.shutting_down = fail_at == 0
         respx.post("http://dummy/etcd/kv/range").respond(
-            json={"kvs": [
-                {
-                    "key": KEY1_B64,
-                    "value": VALUE1_B64
-                },
-                {
-                    "key": KEY2_B64,
-                    "value": VALUE2_B64
-                },
-            ]},
+            json={
+                "kvs": [
+                    {"key": KEY1_B64, "value": VALUE1_B64},
+                    {"key": KEY2_B64, "value": VALUE2_B64},
+                ]
+            },
             status_code=200 if fail_at != 1 else 500,
         )
         assert await op.try_run(op.get_cluster(), context) == (fail_at is None)
@@ -165,19 +152,21 @@ async def test_m3_restore(coordinator: Coordinator, plugin: M3DBPlugin, etcd_cli
         steps=[
             RewriteEtcdStep(placement_nodes=plugin.placement_nodes, partial_restore_nodes=partial_restore_nodes),
             RestoreEtcdStep(etcd_client=etcd_client, partial_restore_nodes=partial_restore_nodes),
-        ]
+        ],
     )
     context = StepsContext()
     context.set_result(
         BackupManifestStep,
-        ipc.BackupManifest.parse_obj({
-            "plugin": "m3db",
-            "plugin_data": PLUGIN_DATA,
-            "attempt": 1,
-            "snapshot_results": [],
-            "start": "2020-01-01 12:00",
-            "upload_results": [],
-        })
+        ipc.BackupManifest.parse_obj(
+            {
+                "plugin": "m3db",
+                "plugin_data": PLUGIN_DATA,
+                "attempt": 1,
+                "snapshot_results": [],
+                "start": "2020-01-01 12:00",
+                "upload_results": [],
+            }
+        ),
     )
     fail_at = rt.fail_at
     with respx.mock:

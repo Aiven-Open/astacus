@@ -14,6 +14,7 @@ class AccessEntity(AstacusModel):
     An access entity can be a user, a role, a quota, etc.
     See `RetrieveAccessEntitiesStep` for more info.
     """
+
     type: str
     uuid: UUID
     name: bytes
@@ -61,8 +62,9 @@ class Table(AstacusModel):
 
     @classmethod
     def from_plugin_data(cls, data: Dict[str, Any]) -> "Table":
-        dependencies = [(b64decode(database_name), b64decode(table_name))
-                        for database_name, table_name in data["dependencies"]]
+        dependencies = [
+            (b64decode(database_name), b64decode(table_name)) for database_name, table_name in data["dependencies"]
+        ]
         return Table(
             database=b64decode(data["database"]),
             name=b64decode(data["name"]),
@@ -86,7 +88,7 @@ class ClickHouseManifest(AstacusModel):
         return ClickHouseManifest(
             access_entities=[AccessEntity.from_plugin_data(item) for item in data["access_entities"]],
             replicated_databases=[ReplicatedDatabase.from_plugin_data(item) for item in data["replicated_databases"]],
-            tables=[Table.from_plugin_data(item) for item in data["tables"]]
+            tables=[Table.from_plugin_data(item) for item in data["tables"]],
         )
 
 

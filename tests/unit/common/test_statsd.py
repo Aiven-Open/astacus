@@ -31,8 +31,8 @@ async def test_statsd():
         return _Protocol()
 
     transport, _ = await loop.create_datagram_endpoint(_protocol_factory, family=socket.AF_INET)
-    sock = transport.get_extra_info('socket')
-    sock.bind(('', 0))
+    sock = transport.get_extra_info("socket")
+    sock.bind(("", 0))
     port = sock.getsockname()[-1]
 
     # Ensure that no config = no action
@@ -43,14 +43,14 @@ async def test_statsd():
     c.increase("bar")
 
     data = await received.get()
-    assert data == b'bar:1|c'
+    assert data == b"bar:1|c"
 
     with c.timing_manager("sync_timing"):
         pass
     data = await received.get()
-    assert data.startswith(b'sync_timing,success=1:') and data.endswith(b'|ms')
+    assert data.startswith(b"sync_timing,success=1:") and data.endswith(b"|ms")
 
     async with c.async_timing_manager("async_timing"):
         pass
     data = await received.get()
-    assert data.startswith(b'async_timing,success=1:') and data.endswith(b'|ms')
+    assert data.startswith(b"async_timing,success=1:") and data.endswith(b"|ms")

@@ -13,10 +13,20 @@ from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, Stub
 from astacus.coordinator.plugins.clickhouse.config import ClickHouseConfiguration, ClickHouseNode, ReplicatedDatabaseSettings
 from astacus.coordinator.plugins.clickhouse.manifest import AccessEntity, ClickHouseManifest, ReplicatedDatabase, Table
 from astacus.coordinator.plugins.clickhouse.steps import (
-    AttachMergeTreePartsStep, ClickHouseManifestStep, DistributeReplicatedPartsStep, FreezeTablesStep,
-    PrepareClickHouseManifestStep, RemoveFrozenTablesStep, RestoreAccessEntitiesStep, RestoreReplicatedDatabasesStep,
-    RetrieveAccessEntitiesStep, RetrieveDatabasesAndTablesStep, SyncReplicasStep, TABLES_LIST_QUERY, UnfreezeTablesStep,
-    ValidateConfigStep
+    AttachMergeTreePartsStep,
+    ClickHouseManifestStep,
+    DistributeReplicatedPartsStep,
+    FreezeTablesStep,
+    PrepareClickHouseManifestStep,
+    RemoveFrozenTablesStep,
+    RestoreAccessEntitiesStep,
+    RestoreReplicatedDatabasesStep,
+    RetrieveAccessEntitiesStep,
+    RetrieveDatabasesAndTablesStep,
+    SyncReplicasStep,
+    TABLES_LIST_QUERY,
+    UnfreezeTablesStep,
+    ValidateConfigStep,
 )
 from astacus.coordinator.plugins.zookeeper import FakeZooKeeperClient, ZooKeeperClient
 from base64 import b64encode
@@ -55,7 +65,7 @@ SAMPLE_TABLES = [
         uuid=uuid.UUID("00000000-0000-0000-0000-100000000001"),
         engine="ReplicatedMergeTree",
         create_query=b"CREATE TABLE db-one.table-uno ...",
-        dependencies=[(b"db-one", b"table-dos"), (b"db-two", b"table-eins")]
+        dependencies=[(b"db-one", b"table-dos"), (b"db-two", b"table-eins")],
     ),
     Table(
         database=b"db-one",
@@ -70,7 +80,7 @@ SAMPLE_TABLES = [
         uuid=uuid.UUID("00000000-0000-0000-0000-200000000001"),
         engine="ReplicatedMergeTree",
         create_query=b"CREATE TABLE db-two.table-eins ...",
-    )
+    ),
 ]
 
 SAMPLE_MANIFEST = ClickHouseManifest(
@@ -93,14 +103,15 @@ def mock_clickhouse_client() -> mock.Mock:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "clickhouse_count,coordinator_count,success", [
+    "clickhouse_count,coordinator_count,success",
+    [
         (3, 3, True),
         (0, 0, True),
         (1, 2, False),
         (0, 1, False),
         (2, 1, False),
         (1, 0, False),
-    ]
+    ],
 )
 async def test_validate_step_require_equal_nodes_count(clickhouse_count: int, coordinator_count: int, success: bool) -> None:
     clickhouse_configuration = ClickHouseConfiguration(
@@ -120,23 +131,17 @@ async def test_validate_step_require_equal_nodes_count(clickhouse_count: int, co
 async def create_zookeper_access_entities(zookeeper_client: ZooKeeperClient) -> None:
     async with zookeeper_client.connect() as connection:
         await asyncio.gather(
-            connection.create("/clickhouse/access/P/a_policy",
-                              str(uuid.UUID(int=1)).encode()),
+            connection.create("/clickhouse/access/P/a_policy", str(uuid.UUID(int=1)).encode()),
             connection.create(f"/clickhouse/access/uuid/{str(uuid.UUID(int=1))}", b"ATTACH ROW POLICY ..."),
-            connection.create("/clickhouse/access/Q/a_quota",
-                              str(uuid.UUID(int=2)).encode()),
+            connection.create("/clickhouse/access/Q/a_quota", str(uuid.UUID(int=2)).encode()),
             connection.create(f"/clickhouse/access/uuid/{str(uuid.UUID(int=2))}", b"ATTACH QUOTA ..."),
-            connection.create("/clickhouse/access/R/a_role",
-                              str(uuid.UUID(int=3)).encode()),
+            connection.create("/clickhouse/access/R/a_role", str(uuid.UUID(int=3)).encode()),
             connection.create(f"/clickhouse/access/uuid/{str(uuid.UUID(int=3))}", b"ATTACH ROLE ..."),
-            connection.create("/clickhouse/access/S/a_settings_profile",
-                              str(uuid.UUID(int=4)).encode()),
+            connection.create("/clickhouse/access/S/a_settings_profile", str(uuid.UUID(int=4)).encode()),
             connection.create(f"/clickhouse/access/uuid/{str(uuid.UUID(int=4))}", b"ATTACH SETTINGS PROFILE ..."),
-            connection.create("/clickhouse/access/U/jos%C3%A9",
-                              str(uuid.UUID(int=5)).encode()),
+            connection.create("/clickhouse/access/U/jos%C3%A9", str(uuid.UUID(int=5)).encode()),
             connection.create(f"/clickhouse/access/uuid/{str(uuid.UUID(int=5))}", b"ATTACH USER ..."),
-            connection.create("/clickhouse/access/U/z%80enjoyer",
-                              str(uuid.UUID(int=6)).encode()),
+            connection.create("/clickhouse/access/U/z%80enjoyer", str(uuid.UUID(int=6)).encode()),
             connection.create(f"/clickhouse/access/uuid/{str(uuid.UUID(int=6))}", b"ATTACH USER \x80 ..."),
         )
 
@@ -154,6 +159,7 @@ class TrappedZooKeeperClient(FakeZooKeeperClient):
     """
     A fake ZooKeeper client with a trap: it will inject a concurrent write after a few reads.
     """
+
     def __init__(self) -> None:
         super().__init__()
         self.calls_until_failure: Optional[int] = None
@@ -228,7 +234,7 @@ async def test_retrieve_tables() -> None:
                 b64_str(b"CREATE TABLE db-two.table-eins ..."),
                 [],
             ],
-        ]
+        ],
     )
     step = RetrieveDatabasesAndTablesStep(clients=clients)
     context = StepsContext()
@@ -250,11 +256,10 @@ async def test_retrieve_tables_without_any_database_or_table() -> None:
 async def test_retrieve_tables_without_any_table() -> None:
     clients = [StubClickHouseClient(), StubClickHouseClient()]
     clients[0].set_response(
-        TABLES_LIST_QUERY, [
-            [b64_str(b"db-empty"),
-             b64_str(b""), "", "00000000-0000-0000-0000-000000000000",
-             b64_str(b""), []],
-        ]
+        TABLES_LIST_QUERY,
+        [
+            [b64_str(b"db-empty"), b64_str(b""), "", "00000000-0000-0000-0000-000000000000", b64_str(b""), []],
+        ],
     )
     step = RetrieveDatabasesAndTablesStep(clients=clients)
     context = StepsContext()
@@ -335,7 +340,8 @@ async def test_distribute_parts_of_replicated_tables() -> None:
     step = DistributeReplicatedPartsStep()
     context = StepsContext()
     context.set_result(
-        SnapshotStep, [
+        SnapshotStep,
+        [
             SnapshotResult(
                 state=SnapshotState(
                     root_globs=[],
@@ -344,21 +350,21 @@ async def test_distribute_parts_of_replicated_tables() -> None:
                             relative_path=Path("store/000/00000000-0000-0000-0000-100000000001/detached/all_0_0_0/data.bin"),
                             file_size=1000,
                             mtime_ns=0,
-                            hexdigest="0001"
+                            hexdigest="0001",
                         ),
                         SnapshotFile(
                             relative_path=Path("store/000/00000000-0000-0000-0000-100000000001/detached/all_1_1_0/data.bin"),
                             file_size=1000,
                             mtime_ns=0,
-                            hexdigest="0002"
+                            hexdigest="0002",
                         ),
                         SnapshotFile(
                             relative_path=Path("store/000/00000000-0000-0000-0000-100000000002/detached/all_0_0_0/data.bin"),
                             file_size=1000,
                             mtime_ns=0,
-                            hexdigest="0003"
+                            hexdigest="0003",
                         ),
-                    ]
+                    ],
                 ),
             ),
             SnapshotResult(
@@ -369,24 +375,24 @@ async def test_distribute_parts_of_replicated_tables() -> None:
                             relative_path=Path("store/000/00000000-0000-0000-0000-100000000001/detached/all_0_0_0/data.bin"),
                             file_size=1000,
                             mtime_ns=0,
-                            hexdigest="0001"
+                            hexdigest="0001",
                         ),
                         SnapshotFile(
                             relative_path=Path("store/000/00000000-0000-0000-0000-100000000001/detached/all_1_1_0/data.bin"),
                             file_size=1000,
                             mtime_ns=0,
-                            hexdigest="0002"
+                            hexdigest="0002",
                         ),
                         SnapshotFile(
                             relative_path=Path("store/000/00000000-0000-0000-0000-100000000002/detached/all_0_0_0/data.bin"),
                             file_size=1000,
                             mtime_ns=0,
-                            hexdigest="0004"
+                            hexdigest="0004",
                         ),
-                    ]
+                    ],
                 ),
             ),
-        ]
+        ],
     )
     context.set_result(RetrieveDatabasesAndTablesStep, (SAMPLE_DATABASES, SAMPLE_TABLES))
     await step.run_step(Cluster(nodes=[]), context)
@@ -398,13 +404,13 @@ async def test_distribute_parts_of_replicated_tables() -> None:
             relative_path=Path("store/000/00000000-0000-0000-0000-100000000001/detached/all_0_0_0/data.bin"),
             file_size=1000,
             mtime_ns=0,
-            hexdigest="0001"
+            hexdigest="0001",
         ),
         SnapshotFile(
             relative_path=Path("store/000/00000000-0000-0000-0000-100000000002/detached/all_0_0_0/data.bin"),
             file_size=1000,
             mtime_ns=0,
-            hexdigest="0003"
+            hexdigest="0003",
         ),
     ]
     assert sorted(snapshot_results[1].state.files) == [
@@ -412,13 +418,13 @@ async def test_distribute_parts_of_replicated_tables() -> None:
             relative_path=Path("store/000/00000000-0000-0000-0000-100000000001/detached/all_1_1_0/data.bin"),
             file_size=1000,
             mtime_ns=0,
-            hexdigest="0002"
+            hexdigest="0002",
         ),
         SnapshotFile(
             relative_path=Path("store/000/00000000-0000-0000-0000-100000000002/detached/all_0_0_0/data.bin"),
             file_size=1000,
             mtime_ns=0,
-            hexdigest="0004"
+            hexdigest="0004",
         ),
     ]
 
@@ -441,25 +447,27 @@ async def test_parse_clickhouse_manifest() -> None:
             upload_results=[],
             plugin=Plugin.clickhouse,
             plugin_data={
-                "access_entities": [{
-                    "name": b64_str(b"default_\x80"),
-                    "uuid": "00000000-0000-0000-0000-000000000002",
-                    "type": "U",
-                    "attach_query": b64_str(b"ATTACH USER \x80 ...")
-                }],
-                "replicated_databases": [{
-                    "name": b64_str(b"db-one")
-                }],
-                "tables": [{
-                    "database": b64_str(b"db-one"),
-                    "name": b64_str(b"t1"),
-                    "engine": "MergeTree",
-                    "uuid": "00000000-0000-0000-0000-000000000004",
-                    "create_query": b64_str(b"CREATE ..."),
-                    "dependencies": [],
-                }]
-            }
-        )
+                "access_entities": [
+                    {
+                        "name": b64_str(b"default_\x80"),
+                        "uuid": "00000000-0000-0000-0000-000000000002",
+                        "type": "U",
+                        "attach_query": b64_str(b"ATTACH USER \x80 ..."),
+                    }
+                ],
+                "replicated_databases": [{"name": b64_str(b"db-one")}],
+                "tables": [
+                    {
+                        "database": b64_str(b"db-one"),
+                        "name": b64_str(b"t1"),
+                        "engine": "MergeTree",
+                        "uuid": "00000000-0000-0000-0000-000000000004",
+                        "create_query": b64_str(b"CREATE ..."),
+                        "dependencies": [],
+                    }
+                ],
+            },
+        ),
     )
     clickhouse_manifest = await step.run_step(Cluster(nodes=[]), context)
     assert clickhouse_manifest == ClickHouseManifest(
@@ -644,7 +652,7 @@ async def test_attaches_all_mergetree_parts_in_manifest() -> None:
                                 file_size=0,
                                 mtime_ns=0,
                             ),
-                        ]
+                        ],
                     )
                 ),
                 SnapshotResult(
@@ -661,13 +669,13 @@ async def test_attaches_all_mergetree_parts_in_manifest() -> None:
                                 file_size=0,
                                 mtime_ns=0,
                             ),
-                        ]
+                        ],
                     )
-                )
+                ),
             ],
             upload_results=[],
             plugin=Plugin.clickhouse,
-        )
+        ),
     )
     context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
     await step.run_step(cluster, context)
@@ -702,7 +710,7 @@ async def test_sync_replicas_for_replicated_mergetree_tables() -> None:
             mock.call.execute(b"SET receive_timeout=180", session_id=mock.ANY),
             mock.call.execute(b"SYSTEM SYNC REPLICA `db-one`.`table-uno`", session_id=mock.ANY, timeout=180),
             mock.call.execute(b"SET receive_timeout=180", session_id=mock.ANY),
-            mock.call.execute(b"SYSTEM SYNC REPLICA `db-two`.`table-eins`", session_id=mock.ANY, timeout=180)
+            mock.call.execute(b"SYSTEM SYNC REPLICA `db-two`.`table-eins`", session_id=mock.ANY, timeout=180),
         ], f"Wrong list of queries for client {client_index} of {len(clients)}"
         check_each_pair_of_calls_has_the_same_session_id(client.mock_calls)
 

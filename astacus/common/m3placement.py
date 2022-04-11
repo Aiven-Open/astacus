@@ -57,18 +57,18 @@ def rewrite_single_m3_placement_node(
 ):
     """rewrite single m3 placement entry in-place in protobuf
 
-Relevant places ( see m3db
-src/cluster/generated/proto/placementpb/placement.proto which is
-copied to astacus/proto/m3_placement.proto )) :
+    Relevant places ( see m3db
+    src/cluster/generated/proto/placementpb/placement.proto which is
+    copied to astacus/proto/m3_placement.proto )) :
 
-instance<str,Instance> map = 1, and then
+    instance<str,Instance> map = 1, and then
 
-message Instance {
-  string id                 = 1;
-  string isolation_group    = 2;
-  string endpoint           = 5;
-  string hostname           = 8;
-}
+    message Instance {
+      string id                 = 1;
+      string isolation_group    = 2;
+      string endpoint           = 5;
+      string hostname           = 8;
+    }
 
     """
     instance = placement.instances[src_pnode.node_id]
@@ -93,6 +93,6 @@ def rewrite_m3_placement_bytes(value: bytes, replacements: List[M3PlacementNodeR
             placement,
             src_pnode=replacement.src_pnode,
             dst_isolation_group=replacement.dst_isolation_group,
-            dst_pnode=replacement.dst_pnode
+            dst_pnode=replacement.dst_pnode,
         )
     return placement.SerializeToString()

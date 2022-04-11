@@ -10,7 +10,10 @@ from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, Http
 from pathlib import Path
 from tests.integration.conftest import create_zookeeper, Ports
 from tests.integration.coordinator.plugins.clickhouse.conftest import (
-    create_astacus_cluster, create_clickhouse_cluster, get_clickhouse_client, run_astacus_command
+    create_astacus_cluster,
+    create_clickhouse_cluster,
+    get_clickhouse_client,
+    run_astacus_command,
 )
 from typing import AsyncIterable, AsyncIterator, List, Sequence
 from unittest import mock
@@ -33,7 +36,7 @@ def get_restore_steps_names() -> List[str]:
     plugin = ClickHousePlugin()
     steps = plugin.get_restore_steps(
         context=OperationContext(storage_name="", json_storage=mock.Mock(), hexdigest_storage=mock.Mock()),
-        req=RestoreRequest(storage="", name="")
+        req=RestoreRequest(storage="", name=""),
     )
     return [step.__class__.__name__ for step in steps]
 
@@ -124,9 +127,11 @@ async def test_restores_access_entities(restored_cluster: List[ClickHouseClient]
             b"SELECT base64Encode(name) FROM system.users WHERE storage = 'replicated' ORDER BY name"
         ) == [[_b64_str(b"alice")], [_b64_str(b"z_\x80_enjoyer")]]
         assert await client.execute(b"SELECT name FROM system.roles WHERE storage = 'replicated' ORDER BY name") == [["bob"]]
-        assert await client.execute(b"SELECT user_name,role_name FROM system.grants ORDER BY user_name,role_name") == [[
-            "alice", None
-        ], ["default", None], [None, "bob"]]
+        assert await client.execute(b"SELECT user_name,role_name FROM system.grants ORDER BY user_name,role_name") == [
+            ["alice", None],
+            ["default", None],
+            [None, "bob"],
+        ]
         assert await client.execute(
             b"SELECT user_name,granted_role_name FROM system.role_grants ORDER BY user_name,granted_role_name"
         ) == [["alice", "bob"]]

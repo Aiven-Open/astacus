@@ -36,6 +36,7 @@ class CoordinatorState(OpState):
     replacement is atomic so contents should be only replaced, never
     mutated.
     """
+
     cached_list_response: Optional[CachedListResponse] = None
     cached_list_running: bool = False
     shutting_down: bool = False

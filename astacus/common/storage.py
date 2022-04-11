@@ -88,7 +88,8 @@ class Storage(HexDigestStorage, JsonStorage):
 
 
 def file_error_wrapper(fun):
-    """ Wrap rohmu exceptions in astacus ones; to be seen what is complete set """
+    """Wrap rohmu exceptions in astacus ones; to be seen what is complete set"""
+
     def _f(*a, **kw):
         try:
             return fun(*a, **kw)
@@ -99,7 +100,8 @@ def file_error_wrapper(fun):
 
 
 class FileStorage(Storage):
-    """ Implementation of the storage API, which just handles files - primarily useful for testing """
+    """Implementation of the storage API, which just handles files - primarily useful for testing"""
+
     def __init__(self, path, *, hexdigest_suffix=".dat", json_suffix=".json"):
         self.path = Path(path)
         self.path.mkdir(parents=True, exist_ok=True)

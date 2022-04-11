@@ -28,7 +28,8 @@ logger = logging.getLogger(__name__)
 
 
 class RohmuStorageType(str, Enum):
-    """ Embodies what is detected in rohmu.get_class_for_transfer """
+    """Embodies what is detected in rohmu.get_class_for_transfer"""
+
     azure = "azure"
     google = "google"
     local = "local"
@@ -59,6 +60,7 @@ class RohmuProxyInfo(RohmuModel):
 
 class RohmuProxyStorage(RohmuModel):
     """Storage backend with support for optional socks5 or http proxy connections"""
+
     proxy_info: Optional[RohmuProxyInfo] = None
 
 
@@ -155,7 +157,8 @@ class RohmuMetadata(RohmuModel):
 
 
 def rohmu_error_wrapper(fun):
-    """ Wrap rohmu exceptions in astacus ones; to be seen what is complete set """
+    """Wrap rohmu exceptions in astacus ones; to be seen what is complete set"""
+
     def _f(*a, **kw):
         try:
             return fun(*a, **kw)
@@ -169,6 +172,7 @@ def rohmu_error_wrapper(fun):
 
 class RohmuStorage(Storage):
     """Implementation of the storage API, on top of pghoard.rohmu."""
+
     def __init__(self, config: RohmuConfig, *, storage=None):
         assert config
         self.config = config
@@ -190,7 +194,7 @@ class RohmuStorage(Storage):
                 output_obj=f,
                 metadata=raw_metadata,
                 key_lookup=self._private_key_lookup,
-                log_func=logger.debug
+                log_func=logger.debug,
             )
         return True
 
@@ -224,7 +228,7 @@ class RohmuStorage(Storage):
                 compression_algorithm=compression.algorithm,
                 compression_level=compression.level,
                 rsa_public_key=rsa_public_key,
-                log_func=logger.debug
+                log_func=logger.debug,
             )
             # compression_threads=compression.threads, # I wish
             # currently not supported by write_file API

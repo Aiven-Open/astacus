@@ -52,6 +52,7 @@ class Snapshotter:
     built-in to Snapshotter, but having it there enables asserting its
     state during public API calls.
     """
+
     def __init__(self, *, src, dst, globs, parallel):
         assert globs  # model has empty; either plugin or configuration must supply them
         self.src = Path(src)

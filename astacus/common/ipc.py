@@ -60,7 +60,7 @@ class SnapshotFile(AstacusModel):
     relative_path: Path
     file_size: int
     mtime_ns: int
-    hexdigest: str = ''
+    hexdigest: str = ""
     content_b64: Optional[str]
 
     def __lt__(self, o):
@@ -94,6 +94,7 @@ class SnapshotHash(AstacusModel):
     For symmetry, same structure is passed back in SnapshotUploadRequest,
     although only hexdigest should really matter.
     """
+
     hexdigest: str
     size: int
 

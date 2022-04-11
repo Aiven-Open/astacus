@@ -31,7 +31,7 @@ def test_snapshot(snapshotter, uploader):
         hashes = snapshotter.get_snapshot_hashes()
         assert len(hashes) == 1
         assert hashes == [
-            ipc.SnapshotHash(hexdigest='326827fe6fd23503bf16eed91861766df522748794814a1bf46d479d9feae1a0', size=600)
+            ipc.SnapshotHash(hexdigest="326827fe6fd23503bf16eed91861766df522748794814a1bf46d479d9feae1a0", size=600)
         ]
 
         while True:
@@ -118,11 +118,7 @@ def test_api_snapshot_and_upload(client, mocker):
     response = client.post("/node/upload")
     assert response.status_code == 422, response.json()
     response = client.post(
-        "/node/upload", json={
-            "storage": "x",
-            "hashes": [x.dict() for x in result.hashes],
-            "result_url": url
-        }
+        "/node/upload", json={"storage": "x", "hashes": [x.dict() for x in result.hashes], "result_url": url}
     )
     assert response.status_code == 200, response.json()
     response = m.call_args[1]["data"]
@@ -146,8 +142,8 @@ def test_api_snapshot_error(client, mocker):
     with pytest.raises(ValueError):
         # The fact that it propagates here immediately kind of sucks
         response = client.post("/node/snapshot", json=req_json)
-    assert status_url.endswith('/1')
-    failed_op_status_url = status_url[:-2] + '/2'
+    assert status_url.endswith("/1")
+    failed_op_status_url = status_url[:-2] + "/2"
     response = client.get(failed_op_status_url)
     assert response.status_code == 200, response.json()
     progress = response.json()["progress"]

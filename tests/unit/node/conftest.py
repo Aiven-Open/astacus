@@ -30,22 +30,22 @@ def fixture_app(tmpdir):
     (root / "foo2").write_text("foobar")
     (root / "foobig").write_text("foobar" * magic.EMBEDDED_FILE_SIZE)
     (root / "foobig2").write_text("foobar" * magic.EMBEDDED_FILE_SIZE)
-    app.state.node_config = NodeConfig.parse_obj({
-        "root": str(root),
-        "object_storage": {
-            "temporary_directory": str(tmp_path),
-            "default_storage": "x",
-            "compression": {
-                "algorithm": "zstd"
+    app.state.node_config = NodeConfig.parse_obj(
+        {
+            "root": str(root),
+            "object_storage": {
+                "temporary_directory": str(tmp_path),
+                "default_storage": "x",
+                "compression": {"algorithm": "zstd"},
+                "storages": {
+                    "x": {
+                        "storage_type": "local",
+                        "directory": str(backup_root),
+                    }
+                },
             },
-            "storages": {
-                "x": {
-                    "storage_type": "local",
-                    "directory": str(backup_root),
-                }
-            }
         }
-    })
+    )
     yield app
 
 

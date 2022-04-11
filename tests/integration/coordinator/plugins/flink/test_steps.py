@@ -19,18 +19,18 @@ async def test_restore_data(zookeeper_client: KazooZooKeeperClient):
         "catalog": {
             "table_names": {
                 "test": table_id1,
-                "test2": table_id2
+                "test2": table_id2,
             },
             "table_ids": {
                 table_id1: "json",
-                table_id2: "json2"
-            }
+                table_id2: "json2",
+            },
         },
         "flink": {
             "test": {
-                "test_node": "test_value"
-            }
-        }
+                "test_node": "test_value",
+            },
+        },
     }
     manifest = FlinkManifest(data=data)
     context = StepsContext()

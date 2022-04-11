@@ -31,43 +31,31 @@ def test_backup(fail_at, app, client, storage):
 
             # Failure point 2: snapshot call fails
             respx.post(f"{node.url}/snapshot").respond(
-                json={
-                    "op_id": 42,
-                    "status_url": f"{node.url}/snapshot/result"
-                }, status_code=200 if fail_at != 2 else 500
+                json={"op_id": 42, "status_url": f"{node.url}/snapshot/result"}, status_code=200 if fail_at != 2 else 500
             )
 
             # Failure point 3: snapshot result call fails
             respx.get(f"{node.url}/snapshot/result").respond(
-                json={
-                    "progress": {
-                        "final": True
-                    },
-                    "hashes": [{
-                        "hexdigest": "HASH",
-                        "size": 42
-                    }]
-                },
-                status_code=200 if fail_at != 3 else 500
+                json={"progress": {"final": True}, "hashes": [{"hexdigest": "HASH", "size": 42}]},
+                status_code=200 if fail_at != 3 else 500,
             )
 
             # Failure point 4: upload call fails
             respx.post(f"{node.url}/upload").respond(
-                json={
-                    "op_id": 43,
-                    "status_url": f"{node.url}/upload/result"
-                }, status_code=200 if fail_at != 4 else 500
+                json={"op_id": 43, "status_url": f"{node.url}/upload/result"}, status_code=200 if fail_at != 4 else 500
             )
 
             # Failure point 5: upload result call fails
             respx.get(f"{node.url}/upload/result").respond(
-                json={"progress": {
-                    "final": True,
-                    "handled": 10,
-                    "failed": 0,
-                    "total": 10,
-                }},
-                status_code=200 if fail_at != 5 else 500
+                json={
+                    "progress": {
+                        "final": True,
+                        "handled": 10,
+                        "failed": 0,
+                        "total": 10,
+                    }
+                },
+                status_code=200 if fail_at != 5 else 500,
             )
 
         response = client.post("/backup")
@@ -141,7 +129,7 @@ def _ssresults(*kwarg_list):
                         SnapshotHash(hexdigest="23-2", size=2),
                         SnapshotHash(hexdigest="123-3", size=3),
                     ]
-                }
+                },
             ),
             [
                 NodeIndexData(
@@ -150,18 +138,17 @@ def _ssresults(*kwarg_list):
                         SnapshotHash(hexdigest="1-1", size=1),
                         SnapshotHash(hexdigest="123-3", size=3),
                     ],
-                    total_size=4
+                    total_size=4,
                 ),
                 NodeIndexData(node_index=2, sshashes=[SnapshotHash(hexdigest="12-2", size=2)], total_size=2),
                 NodeIndexData(
                     node_index=3,
-                    sshashes=[SnapshotHash(hexdigest="3-1", size=1),
-                              SnapshotHash(hexdigest="23-2", size=2)],
-                    total_size=3
+                    sshashes=[SnapshotHash(hexdigest="3-1", size=1), SnapshotHash(hexdigest="23-2", size=2)],
+                    total_size=3,
                 ),
-            ]
+            ],
         ),
-    ]
+    ],
 )
 def test_upload_optimization(hexdigests, snapshot_results, uploads):
     assert uploads == build_node_index_datas(hexdigests=hexdigests, snapshots=snapshot_results, node_indices=[0, 1, 2, 3])
@@ -177,15 +164,7 @@ def test_backup_stats(mock_time, app, client):
             respx.post(f"{node.url}/lock?locker=x&ttl=60").respond(json={"locked": True})
             respx.post(f"{node.url}/snapshot").respond(json={"op_id": 42, "status_url": f"{node.url}/snapshot/result"})
             respx.get(f"{node.url}/snapshot/result").respond(
-                json={
-                    "progress": {
-                        "final": True
-                    },
-                    "hashes": [{
-                        "hexdigest": "HASH",
-                        "size": 42
-                    }]
-                }
+                json={"progress": {"final": True}, "hashes": [{"hexdigest": "HASH", "size": 42}]}
             )
             respx.post(f"{node.url}/upload").respond(json={"op_id": 43, "status_url": f"{node.url}/upload/result"})
             respx.get(f"{node.url}/upload/result").respond(json={"progress": {"final": True}})

@@ -51,7 +51,7 @@ async def test_op_stats():
         stats=stats,
         sync_lock=threading.RLock(),
         hexdigest_mstorage=MultiStorage(),
-        json_mstorage=MultiStorage()
+        json_mstorage=MultiStorage(),
     )
     operation = SteppedCoordinatorOp(
         c=coordinator,
@@ -62,7 +62,7 @@ async def test_op_stats():
             DummyStep1(),
             DummyStep2(),
             DummyStep3(),
-        ]
+        ],
     )
     operation.op_id = operation.info.op_id
     operation.stats = stats

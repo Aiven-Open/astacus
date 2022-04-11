@@ -17,6 +17,7 @@ class AsyncHexDigestStorage:
     do so) using this.
 
     """
+
     def __init__(self, storage: HexDigestStorage):
         self.storage = storage
 
@@ -35,6 +36,7 @@ class AsyncJsonStorage:
     do so) using this.
 
     """
+
     def __init__(self, storage: JsonStorage):
         self.storage = storage
 

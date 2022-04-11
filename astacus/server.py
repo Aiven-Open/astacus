@@ -71,6 +71,7 @@ def _systemd_notify_ready():
         return
     try:
         from systemd import daemon  # pylint: disable=no-name-in-module,disable=import-outside-toplevel
+
         daemon.notify("READY=1")
     except ImportError:
         logger.warning("Running under systemd but python-systemd not available, attempting systemd notify via utility")
@@ -113,7 +114,7 @@ def _run_server(args):
                 "default": {
                     "class": "logging.StreamHandler",
                     "formatter": "default",
-                    "stream": "ext://sys.stderr"
+                    "stream": "ext://sys.stderr",
                 },
                 "access": {
                     "class": "logging.StreamHandler",
@@ -122,24 +123,13 @@ def _run_server(args):
                 },
             },
             "loggers": {
-                "": {
-                    "handlers": ["default"],
-                    "level": log_level
-                },
-                "uvicorn.error": {
-                    "level": log_level
-                },
-                "uvicorn.access": {
-                    "handlers": ["access"],
-                    "level": log_level,
-                    "propagate": False
-                },
-                "kazoo.client": {
-                    "level": kazoo_log_level
-                },
+                "": {"handlers": ["default"], "level": log_level},
+                "uvicorn.error": {"level": log_level},
+                "uvicorn.access": {"handlers": ["access"], "level": log_level, "propagate": False},
+                "kazoo.client": {"level": kazoo_log_level},
             },
         },
-        http=uconfig.http
+        http=uconfig.http,
     )
 
 
@@ -153,6 +143,6 @@ def create_server_parser(subparsers):
         type=str,
         help="YAML configuration file to use",
         required=True,
-        default=os.environ.get("ASTACUS_CONFIG")
+        default=os.environ.get("ASTACUS_CONFIG"),
     )
     server.set_defaults(func=_run_server)

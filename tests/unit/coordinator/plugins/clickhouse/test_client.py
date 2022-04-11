@@ -3,7 +3,9 @@ Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
 from astacus.coordinator.plugins.clickhouse.client import (
-    ClickHouseClientQueryError, escape_sql_identifier, HttpClickHouseClient
+    ClickHouseClientQueryError,
+    escape_sql_identifier,
+    HttpClickHouseClient,
 )
 
 import pytest
@@ -18,13 +20,10 @@ async def test_successful_execute_returns_rows() -> None:
     with respx.mock:
         # Source: https://clickhouse.tech/docs/en/interfaces/formats/#jsoncompact
         content = {
-            "meta": [{
-                "name": "name",
-                "type": "String"
-            }],
+            "meta": [{"name": "name", "type": "String"}],
             "data": [["system"], ["defaultdb"]],
             "rows": 2,
-            "rows_before_limit_at_least": 2
+            "rows_before_limit_at_least": 2,
         }
         respx.post("http://example.org:9000?wait_end_of_query=1").respond(json=content)
         response = await client.execute(b"SHOW DATABASES")
@@ -67,9 +66,9 @@ def test_escape_sql_identifier_named_escaped() -> None:
 
 
 def test_escape_sql_identifier_high_bytes() -> None:
-    assert escape_sql_identifier(bytes((0x7E, ))) == "`~`"
+    assert escape_sql_identifier(bytes((0x7E,))) == "`~`"
     for high_byte in range(0x7F, 0x100):
-        assert escape_sql_identifier(bytes((high_byte, ))) == f"`\\x{high_byte:02x}`"
+        assert escape_sql_identifier(bytes((high_byte,))) == f"`\\x{high_byte:02x}`"
 
 
 def test_escape_sql_identifier_utf8() -> None:

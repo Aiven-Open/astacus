@@ -56,6 +56,7 @@ def coordinator_json_mstorage(config: CoordinatorConfig = Depends(coordinator_co
 class Coordinator(op.OpMixin):
     state: CoordinatorState
     """ Convenience dependency which contains sub-dependencies most API endpoints need """
+
     def __init__(
         self,
         *,
@@ -166,10 +167,11 @@ class LockedCoordinatorOp(CoordinatorOp):
             # Ensure we don't wind up holding partial lock on the cluster
             await cluster.request_unlock(locker=self.locker)
             raise HTTPException(
-                409, {
+                409,
+                {
                     "code": ErrorCode.cluster_lock_unavailable,
-                    "message": "Unable to acquire cluster lock to create operation"
-                }
+                    "message": "Unable to acquire cluster lock to create operation",
+                },
             )
 
         async def run():
@@ -322,5 +324,5 @@ class RestoreOp(SteppedCoordinatorOp):
         if req.stop_after_step is not None:
             step_names = [step.__class__.__name__ for step in steps]
             step_index = step_names.index(req.stop_after_step)
-            steps = steps[:step_index + 1]
+            steps = steps[: step_index + 1]
         super().__init__(c=c, op_id=op_id, stats=stats, attempts=1, steps=steps)  # c.config.restore_attempts

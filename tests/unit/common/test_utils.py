@@ -107,25 +107,27 @@ async def test_exponential_backoff(mocker):
 
 
 @pytest.mark.parametrize(
-    "v,s", [
+    "v,s",
+    [
         (timedelta(days=1, seconds=1), "1d 1s"),
         (timedelta(hours=3, minutes=2, seconds=1), "3h 2m 1s"),
         (timedelta(seconds=0), ""),
-    ]
+    ],
 )
 def test_timedelta_as_short_str(v, s):
     assert utils.timedelta_as_short_str(v) == s
 
 
 @pytest.mark.parametrize(
-    "v,s", [
+    "v,s",
+    [
         (1_234_567_901_234_678, "1234.6 TB"),
         (1_234_567_901_234, "1.2 TB"),
         (1_234_567_901, "1.2 GB"),
         (1_234_567, "1.2 MB"),
         (1_234, "1.2 KB"),
         (1, "1 B"),
-    ]
+    ],
 )
 def test_size_as_short_str(v, s):
     assert utils.size_as_short_str(v) == s
