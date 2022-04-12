@@ -69,10 +69,25 @@ async def test_kazoo_zookeeper_client_get_children_of_missing_node_fails(zookeep
 
 
 @pytest.mark.asyncio
+async def test_kazoo_zookeeper_client_try_create(zookeeper_client: KazooZooKeeperClient) -> None:
+    async with zookeeper_client.connect() as connection:
+        assert await connection.try_create("/new/try_create", b"new_content") is True
+        assert await connection.get("/new/try_create") == b"new_content"
+
+
+@pytest.mark.asyncio
+async def test_kazoo_zookeeper_client_try_create_failure(zookeeper_client: KazooZooKeeperClient) -> None:
+    async with zookeeper_client.connect() as connection:
+        await connection.create("/new/try_create_failure", b"content")
+        assert await connection.try_create("/new/try_create_failure", b"new_content") is False
+        assert await connection.get("/new/try_create_failure") == b"content"
+
+
+@pytest.mark.asyncio
 async def test_kazoo_zookeeper_client_create(zookeeper_client: KazooZooKeeperClient) -> None:
     async with zookeeper_client.connect() as connection:
-        assert await connection.create("/new/node", b"content")
-        assert await connection.get("/new/node") == b"content"
+        await connection.create("/new/create", b"content")
+        assert await connection.get("/new/create") == b"content"
 
 
 @pytest.mark.asyncio

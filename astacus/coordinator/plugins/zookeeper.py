@@ -81,6 +81,22 @@ class ZooKeeperConnection:
         """
         raise NotImplementedError
 
+    async def try_create(self, path: str, value: bytes) -> bool:
+        """
+        Creates the node with the specified `path` and `value`.
+
+        Auto-creates all parent nodes if they don't exist.
+
+        Does nothing if the node did not already exist.
+
+        Returns `True` if the node was created
+        """
+        try:
+            await self.create(path, value)
+            return True
+        except NodeExistsError:
+            return False
+
     async def create(self, path: str, value: bytes) -> None:
         """
         Creates the node with the specified `path` and `value`.
