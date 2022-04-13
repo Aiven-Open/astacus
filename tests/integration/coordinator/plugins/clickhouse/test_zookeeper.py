@@ -2,8 +2,15 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
-from astacus.coordinator.plugins.zookeeper import KazooZooKeeperClient, NodeExistsError, NoNodeError
-from tests.integration.conftest import get_kazoo_host, Service
+from astacus.coordinator.plugins.zookeeper import (
+    KazooZooKeeperClient,
+    NodeExistsError,
+    NoNodeError,
+    RolledBackError,
+    RuntimeInconsistency,
+    TransactionError,
+)
+from tests.integration.conftest import create_zookeeper, get_kazoo_host, Ports, Service
 
 import dataclasses
 import kazoo.client
@@ -62,10 +69,25 @@ async def test_kazoo_zookeeper_client_get_children_of_missing_node_fails(zookeep
 
 
 @pytest.mark.asyncio
+async def test_kazoo_zookeeper_client_try_create(zookeeper_client: KazooZooKeeperClient) -> None:
+    async with zookeeper_client.connect() as connection:
+        assert await connection.try_create("/new/try_create", b"new_content") is True
+        assert await connection.get("/new/try_create") == b"new_content"
+
+
+@pytest.mark.asyncio
+async def test_kazoo_zookeeper_client_try_create_failure(zookeeper_client: KazooZooKeeperClient) -> None:
+    async with zookeeper_client.connect() as connection:
+        await connection.create("/new/try_create_failure", b"content")
+        assert await connection.try_create("/new/try_create_failure", b"new_content") is False
+        assert await connection.get("/new/try_create_failure") == b"content"
+
+
+@pytest.mark.asyncio
 async def test_kazoo_zookeeper_client_create(zookeeper_client: KazooZooKeeperClient) -> None:
     async with zookeeper_client.connect() as connection:
-        assert await connection.create("/new/node", b"content")
-        assert await connection.get("/new/node") == b"content"
+        await connection.create("/new/create", b"content")
+        assert await connection.get("/new/create") == b"content"
 
 
 @pytest.mark.asyncio
@@ -76,14 +98,40 @@ async def test_kazoo_zookeeper_client_create_existing_node_fails(zookeeper_clien
 
 
 @pytest.mark.asyncio
-async def test_kazoo_zookeeper_client_bounded_failure_time(
-    zookeeper_client: KazooZooKeeperClient, zookeeper: Service, znode: ZNode
-) -> None:
+async def test_kazoo_zookeeper_transaction(zookeeper_client: KazooZooKeeperClient) -> None:
     async with zookeeper_client.connect() as connection:
-        zookeeper.process.kill()
-        start_time = time.monotonic()
-        with pytest.raises(Exception):
-            await connection.get(znode.path)
-        elapsed_time = time.monotonic() - start_time
-        # We allow for a bit of margin
-        assert elapsed_time < 10.0
+        transaction = connection.transaction()
+        transaction.create("/transaction_1", b"content")
+        transaction.create("/transaction_2", b"content")
+        await transaction.commit()
+        assert await connection.get("/transaction_1") == b"content"
+        assert await connection.get("/transaction_2") == b"content"
+
+
+@pytest.mark.asyncio
+async def test_kazoo_zookeeper_failing_transaction(zookeeper_client: KazooZooKeeperClient) -> None:
+    async with zookeeper_client.connect() as connection:
+        await connection.create("/failing_transaction_2", b"old_content")
+        transaction = connection.transaction()
+        transaction.create("/failing_transaction_1", b"content")
+        transaction.create("/failing_transaction_2", b"content")
+        transaction.create("/failing_transaction_3", b"content")
+        with pytest.raises(TransactionError) as raised:
+            await transaction.commit()
+        assert isinstance(raised.value.results[0], RolledBackError)
+        assert isinstance(raised.value.results[1], NodeExistsError)
+        assert isinstance(raised.value.results[2], RuntimeInconsistency)
+
+
+@pytest.mark.asyncio
+async def test_kazoo_zookeeper_client_bounded_failure_time(ports: Ports) -> None:
+    async with create_zookeeper(ports) as zookeeper:
+        zookeeper_client = KazooZooKeeperClient(hosts=[get_kazoo_host(zookeeper)], timeout=1)
+        async with zookeeper_client.connect() as connection:
+            zookeeper.process.kill()
+            start_time = time.monotonic()
+            with pytest.raises(Exception):
+                await connection.exists("/bounded_failure_time")
+            elapsed_time = time.monotonic() - start_time
+            # We allow for a bit of margin
+            assert elapsed_time < 10.0

@@ -19,7 +19,7 @@ from astacus.common.exceptions import TransientException
 from astacus.common.limiter import Limiter
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import BackupManifestStep, SnapshotStep, Step, StepFailedError, StepsContext
-from astacus.coordinator.plugins.zookeeper import ChangeWatch, NodeExistsError, ZooKeeperClient
+from astacus.coordinator.plugins.zookeeper import ChangeWatch, TransactionError, ZooKeeperClient
 from base64 import b64decode
 from pathlib import Path
 from typing import Any, cast, Dict, List, Tuple
@@ -430,19 +430,25 @@ class RestoreAccessEntitiesStep(Step[None]):
         async with self.zookeeper_client.connect() as connection:
             for access_entity in access_entities_sorted_by_dependencies(clickhouse_manifest.access_entities):
                 escaped_entity_name = escape_for_file_name(access_entity.name)
-                entity_name_path = f"{self.access_entities_path}/{access_entity.type}/{escaped_entity_name}"
-                entity_path = f"{self.access_entities_path}/uuid/{access_entity.uuid}"
+                entity_type_path = f"{self.access_entities_path}/{access_entity.type}"
+                entity_uuids_path = f"{self.access_entities_path}/uuid"
+                await connection.try_create(entity_type_path, b"")
+                await connection.try_create(entity_uuids_path, b"")
+                entity_name_path = f"{entity_type_path}/{escaped_entity_name}"
+                entity_path = f"{entity_uuids_path}/{access_entity.uuid}"
                 attach_query_bytes = access_entity.attach_query
-                # Nobody else should be touching ZooKeeper during the restore operation,
-                # and we know that ClickHouse only reacts to creation of the node at `entity_path`.
-                # Theses conditions make it safe to create this pair of nodes without a transaction.
+                transaction = connection.transaction()
+                transaction.create(entity_name_path, str(access_entity.uuid).encode())
+                transaction.create(entity_path, attach_query_bytes)
                 try:
-                    await connection.create(entity_name_path, str(access_entity.uuid).encode())
-                except NodeExistsError:
-                    pass
-                try:
-                    await connection.create(entity_path, attach_query_bytes)
-                except NodeExistsError:
+                    await transaction.commit()
+                except TransactionError:
+                    # The only errors we can have inside the transaction are NodeExistsError.
+                    # It's most likely because we're resuming a failed restore.
+                    # There are odd cases where the cause and end result could be surprising:
+                    # if a different entity already exists with the same name and different id,
+                    # but we're not supposed to restore into a completely different
+                    # ZooKeeper storage.
                     pass
 
 
