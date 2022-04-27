@@ -14,11 +14,10 @@ from astacus.common.rohmustorage import RohmuConfig, RohmuStorage
 from astacus.common.storage import FileStorage, JsonStorage
 from contextlib import nullcontext as does_not_raise
 from pathlib import Path
-from pghoard.rohmu.object_storage import google
+from rohmu.object_storage import google
 from tests.utils import create_rohmu_config
 from unittest.mock import patch
 
-import pkg_resources
 import pytest
 
 TEST_HEXDIGEST = "deadbeef"
@@ -110,11 +109,7 @@ def test_caching_storage(tmpdir, mocker):
     assert not mocklist.called
 
 
-@pytest.mark.skipif(
-    pkg_resources.get_distribution("pghoard").parsed_version <= pkg_resources.parse_version("2.1.0"),
-    reason="requires pghoard > 2.1.0",
-)
-@patch("pghoard.rohmu.object_storage.google.get_credentials")
+@patch("rohmu.object_storage.google.get_credentials")
 @patch.object(google.GoogleTransfer, "_init_google_client")
 def test_proxy_storage(mock_google_client, mock_get_credentials):
     rs = RohmuStorage(
