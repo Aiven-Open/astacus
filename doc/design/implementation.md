@@ -2,7 +2,7 @@
 
 ## Platform choices
 
-- Target latest reasonable Python (3.7 or later)
+- Target latest reasonable Python (3.8 or later)
     - Go was also on the table, but pghoard.rohmu is compelling reason to
       use Python
 - Use [pytest][pytest] for unit tests
