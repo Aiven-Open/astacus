@@ -52,28 +52,24 @@ def root():
 
 
 @router.post("/lock")
-async def lock(*, locker: str, ttl: int = 60, c: Coordinator = Depends()):
-    op = LockOps(c=c, op_id=c.allocate_op_id(), stats=c.stats, ttl=ttl, locker=locker)
+async def lock(*, locker: str, c: Coordinator = Depends(), op: LockOps = Depends()):
     result = c.start_op(op_name=OpName.lock, op=op, fun=op.lock)
     return LockStartResult(unlock_url=urljoin(str(c.request_url), f"../unlock?locker={locker}"), **result.dict())
 
 
 @router.post("/unlock")
-def unlock(*, locker: str, c: Coordinator = Depends()):
-    op = LockOps(c=c, op_id=c.allocate_op_id(), stats=c.stats, locker=locker)
+def unlock(*, locker: str, c: Coordinator = Depends(), op: LockOps = Depends()):
     return c.start_op(op_name=OpName.unlock, op=op, fun=op.unlock)
 
 
 @router.post("/backup")
-async def backup(*, c: Coordinator = Depends()):
-    op = BackupOp(c=c, op_id=c.allocate_op_id(), stats=c.stats)
+async def backup(*, c: Coordinator = Depends(), op: BackupOp = Depends()):
     runner = await op.acquire_cluster_lock()
     return c.start_op(op_name=OpName.backup, op=op, fun=runner)
 
 
 @router.post("/restore")
-async def restore(*, req: ipc.RestoreRequest = ipc.RestoreRequest(), c: Coordinator = Depends()):
-    op = RestoreOp(c=c, op_id=c.allocate_op_id(), stats=c.stats, req=req)
+async def restore(*, c: Coordinator = Depends(), op: RestoreOp = Depends()):
     runner = await op.acquire_cluster_lock()
     return c.start_op(op_name=OpName.restore, op=op, fun=runner)
 
@@ -97,8 +93,7 @@ def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordinator = 
 
 
 @router.post("/cleanup")
-async def cleanup(*, req: ipc.CleanupRequest = ipc.CleanupRequest(), c: Coordinator = Depends()):
-    op = CleanupOp(c=c, op_id=c.allocate_op_id(), stats=c.stats, req=req)
+async def cleanup(*, op: CleanupOp = Depends(), c: Coordinator = Depends()):
     runner = await op.acquire_cluster_lock()
     return c.start_op(op_name=OpName.cleanup, op=op, fun=runner)
 

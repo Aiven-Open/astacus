@@ -17,6 +17,7 @@ from astacus.coordinator.config import coordinator_config, CoordinatorConfig, Co
 from astacus.coordinator.plugins import PLUGINS
 from astacus.coordinator.state import coordinator_state, CoordinatorState
 from fastapi import BackgroundTasks, Depends, HTTPException, Request
+from functools import cached_property
 from starlette.datastructures import URL
 from typing import Any, Awaitable, Callable, Dict, Iterator, List, Optional, Type
 from urllib.parse import urlunsplit
@@ -126,12 +127,11 @@ class CacheClearingJsonStorage(JsonStorage):
 
 
 class CoordinatorOp(op.Op):
-    def __init__(self, *, c: Coordinator, op_id: int, stats: StatsClient):
-        super().__init__(info=c.state.op_info, op_id=op_id, stats=stats)
+    def __init__(self, *, c: Coordinator = Depends()):
+        super().__init__(info=c.state.op_info, op_id=c.allocate_op_id(), stats=c.stats)
         self.request_url = c.request_url
         self.nodes = c.config.nodes
         self.poll_config = c.config.poll
-        self.subresult_sleeper = AsyncSleeper()
 
     def get_cluster(self) -> Cluster:
         # The only reason this exists is because op_id and stats are added after the op is created
@@ -143,12 +143,19 @@ class CoordinatorOp(op.Op):
             stats=self.stats,
         )
 
+    @cached_property
+    def subresult_sleeper(self):
+        # Sometimes we want to test this in non-asyncio code - sadly,
+        # asyncio.Event() call in Python 3 requires us to be inside
+        # asyncio event loop.
+        return AsyncSleeper()
+
 
 class LockedCoordinatorOp(CoordinatorOp):
     op_started: Optional[float]  # set when op_info.status is set to starting
 
-    def __init__(self, *, c: Coordinator, op_id: int, stats: StatsClient):
-        super().__init__(c=c, op_id=op_id, stats=stats)
+    def __init__(self, *, c: Coordinator = Depends()):
+        super().__init__(c=c)
         self.ttl = c.config.default_lock_ttl
         self.initial_lock_start = time.monotonic()
         self.locker = self.get_locker()
@@ -252,8 +259,8 @@ class SteppedCoordinatorOp(LockedCoordinatorOp):
     steps: List[Step]
     step_progress: Dict[Type[Step], Progress]
 
-    def __init__(self, *, c: Coordinator, op_id: int, stats: StatsClient, attempts: int, steps: List[Step]):
-        super().__init__(c=c, op_id=op_id, stats=stats)
+    def __init__(self, *, c: Coordinator = Depends(), attempts: int, steps: List[Step]):
+        super().__init__(c=c)
         self.state = c.state
         self.attempts = attempts
         self.steps = steps
@@ -311,18 +318,18 @@ class SteppedCoordinatorOp(LockedCoordinatorOp):
 
 
 class BackupOp(SteppedCoordinatorOp):
-    def __init__(self, *, c: Coordinator, op_id: int, stats: StatsClient):
+    def __init__(self, *, c: Coordinator = Depends()):
         context = c.get_operation_context()
         steps = c.get_plugin().get_backup_steps(context=context)
-        super().__init__(c=c, op_id=op_id, stats=stats, attempts=c.config.backup_attempts, steps=steps)
+        super().__init__(c=c, attempts=c.config.backup_attempts, steps=steps)
 
 
 class RestoreOp(SteppedCoordinatorOp):
-    def __init__(self, *, c: Coordinator, op_id: int, stats: StatsClient, req: ipc.RestoreRequest):
+    def __init__(self, *, c: Coordinator = Depends(), req: ipc.RestoreRequest = ipc.RestoreRequest()):
         context = c.get_operation_context(requested_storage=req.storage)
         steps = c.get_plugin().get_restore_steps(context=context, req=req)
         if req.stop_after_step is not None:
             step_names = [step.__class__.__name__ for step in steps]
             step_index = step_names.index(req.stop_after_step)
             steps = steps[: step_index + 1]
-        super().__init__(c=c, op_id=op_id, stats=stats, attempts=1, steps=steps)  # c.config.restore_attempts
+        super().__init__(c=c, attempts=1, steps=steps)  # c.config.restore_attempts

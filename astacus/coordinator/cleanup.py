@@ -7,10 +7,10 @@ Database cleanup operation
 """
 
 from astacus.common import ipc, magic, utils
-from astacus.common.statsd import StatsClient
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.coordinator import Coordinator, LockedCoordinatorOp
 from astacus.coordinator.manifest import download_backup_manifest
+from fastapi import Depends
 
 import logging
 
@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 class CleanupOp(LockedCoordinatorOp):
-    def __init__(self, *, c: Coordinator, op_id: int, stats: StatsClient, req: ipc.CleanupRequest):
-        super().__init__(c=c, op_id=op_id, stats=stats)
+    def __init__(self, *, c: Coordinator = Depends(), req: ipc.CleanupRequest = ipc.CleanupRequest()):
+        super().__init__(c=c)
         self.req = req
         self.retention = c.config.retention
         self.context = c.get_operation_context(requested_storage=req.storage)
