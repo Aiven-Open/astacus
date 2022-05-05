@@ -4,7 +4,7 @@ version
 Copyright (c) 2019 Aiven Ltd
 See LICENSE for details
 """
-import imp
+import importlib.util
 import os
 import subprocess
 
@@ -22,12 +22,10 @@ def save_version(*, new_ver, old_ver, version_file):
 
 def update_project_version(version_file):
     "Update the version_file, and return the version number stored in the file"
-    version_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), version_file)
-    try:
-        module = imp.load_source("verfile", version_file)
-        file_ver = module.__version__
-    except IOError:
-        file_ver = None
+    version_file_full_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), version_file)
+    module_spec = importlib.util.spec_from_file_location("verfile", version_file_full_path)
+    module = importlib.util.module_from_spec(module_spec)
+    file_ver = getattr(module, "__version__", None)
 
     os.chdir(os.path.dirname(__file__) or ".")
     try:
