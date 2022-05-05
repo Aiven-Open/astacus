@@ -153,7 +153,8 @@ class FileStorage(Storage):
     def download_json(self, name: str):
         logger.debug("download_json %r", name)
         path = self._json_to_path(name)
-        return json.load(open(path))
+        with open(path) as f:
+            return json.load(f)
 
     def list_jsons(self):
         return self._list(self.json_suffix)
