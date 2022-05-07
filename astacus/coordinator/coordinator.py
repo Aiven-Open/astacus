@@ -318,14 +318,22 @@ class SteppedCoordinatorOp(LockedCoordinatorOp):
 
 
 class BackupOp(SteppedCoordinatorOp):
-    def __init__(self, *, c: Coordinator = Depends()):
+    @staticmethod
+    async def create(*, c: Coordinator = Depends()) -> "BackupOp":
+        return BackupOp(c=c)
+
+    def __init__(self, *, c: Coordinator) -> None:
         context = c.get_operation_context()
         steps = c.get_plugin().get_backup_steps(context=context)
         super().__init__(c=c, attempts=c.config.backup_attempts, steps=steps)
 
 
 class RestoreOp(SteppedCoordinatorOp):
-    def __init__(self, *, c: Coordinator = Depends(), req: ipc.RestoreRequest = ipc.RestoreRequest()):
+    @staticmethod
+    async def create(*, c: Coordinator = Depends(), req: ipc.RestoreRequest = ipc.RestoreRequest()) -> "RestoreOp":
+        return RestoreOp(c=c, req=req)
+
+    def __init__(self, *, c: Coordinator, req: ipc.RestoreRequest) -> None:
         context = c.get_operation_context(requested_storage=req.storage)
         steps = c.get_plugin().get_restore_steps(context=context, req=req)
         if req.stop_after_step is not None:
