@@ -63,13 +63,13 @@ def unlock(*, locker: str, c: Coordinator = Depends(), op: LockOps = Depends()):
 
 
 @router.post("/backup")
-async def backup(*, c: Coordinator = Depends(), op: BackupOp = Depends()):
+async def backup(*, c: Coordinator = Depends(), op: BackupOp = Depends(BackupOp.create)):
     runner = await op.acquire_cluster_lock()
     return c.start_op(op_name=OpName.backup, op=op, fun=runner)
 
 
 @router.post("/restore")
-async def restore(*, c: Coordinator = Depends(), op: RestoreOp = Depends()):
+async def restore(*, c: Coordinator = Depends(), op: RestoreOp = Depends(RestoreOp.create)):
     runner = await op.acquire_cluster_lock()
     return c.start_op(op_name=OpName.restore, op=op, fun=runner)
 
