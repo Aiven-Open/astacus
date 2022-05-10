@@ -31,3 +31,4 @@ extension-pkg-whitelist=pydantic
 [SIMILARITIES]
 # Ignore import statements when computing similarities
 ignore-imports=yes
+min-similarity-lines=6

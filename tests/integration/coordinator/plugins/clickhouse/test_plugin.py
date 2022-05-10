@@ -25,6 +25,7 @@ import tempfile
 pytestmark = [
     pytest.mark.clickhouse,
     pytest.mark.order("last"),
+    pytest.mark.x86_64,
 ]
 
 

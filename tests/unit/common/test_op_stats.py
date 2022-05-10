@@ -55,8 +55,6 @@ async def test_op_stats():
     )
     operation = SteppedCoordinatorOp(
         c=coordinator,
-        op_id=1,
-        stats=StatsClient(config=None),
         attempts=1,
         steps=[
             DummyStep1(),

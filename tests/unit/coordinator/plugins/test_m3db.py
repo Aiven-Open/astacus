@@ -103,8 +103,6 @@ async def test_m3_backup(coordinator: Coordinator, plugin: M3DBPlugin, etcd_clie
     etcd_prefixes = get_etcd_prefixes(plugin.environment)
     op = SteppedCoordinatorOp(
         c=coordinator,
-        op_id=1,
-        stats=StatsClient(config=None),
         attempts=1,
         steps=[
             InitStep(placement_nodes=plugin.placement_nodes),
@@ -146,8 +144,6 @@ async def test_m3_restore(coordinator: Coordinator, plugin: M3DBPlugin, etcd_cli
         partial_restore_nodes = None
     op = SteppedCoordinatorOp(
         c=coordinator,
-        op_id=1,
-        stats=StatsClient(config=None),
         attempts=1,
         steps=[
             RewriteEtcdStep(placement_nodes=plugin.placement_nodes, partial_restore_nodes=partial_restore_nodes),

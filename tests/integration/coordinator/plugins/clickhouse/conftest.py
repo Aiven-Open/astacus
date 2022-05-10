@@ -35,7 +35,7 @@ import tempfile
 
 logger = logging.getLogger(__name__)
 
-pytestmark = [pytest.mark.clickhouse]
+pytestmark = [pytest.mark.clickhouse, pytest.mark.x86_64]
 
 USER_CONFIG = """
     <yandex>
