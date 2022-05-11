@@ -2,11 +2,11 @@
 string-quote=double-avoid-escape
 triple-quote=double
 docstring-quote=double
-jobs=4
 
 [MESSAGES CONTROL]
 disable=
     bad-continuation,
+    duplicate-code,                # the checker in 2.9.6 fails with parallelism
     invalid-name,                  # fastapi conventions break this
     missing-docstring,
     no-member,                     # broken with pydantic + inheritance
@@ -27,8 +27,3 @@ score=no
 [TYPECHECK]
 ignored-classes=responses
 extension-pkg-whitelist=pydantic
-
-[SIMILARITIES]
-# Ignore import statements when computing similarities
-ignore-imports=yes
-min-similarity-lines=6

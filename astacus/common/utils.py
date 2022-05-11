@@ -9,7 +9,9 @@ Shared utilities (between coordinator and node)
 
 """
 from abc import ABC
+from contextlib import contextmanager
 from multiprocessing.dummy import Pool  # fastapi + fork = bad idea
+from pathlib import Path
 from pydantic import BaseModel
 from typing import Any, AsyncIterable, Callable, Dict, Iterable, Optional, TypeVar, Union
 
@@ -21,6 +23,7 @@ import json as _json
 import logging
 import os
 import requests
+import tempfile
 import time
 
 logger = logging.getLogger(__name__)
@@ -294,3 +297,23 @@ def now():
 
 def monotonic_time():
     return time.monotonic()
+
+
+@contextmanager
+def open_path_with_atomic_rename(path, **kwargs):
+    """Pathlib-style ~atomic file replacement.
+
+    This utility function creates new temporary file 'near' the path
+    (=in the same directory, with .astacus.tmp suffix). If the file
+    creation succeeds (=no exception is thrown), the temporary file is
+    renamed to the target file.
+    """
+    if not isinstance(path, Path):
+        path = Path(path)
+    with tempfile.NamedTemporaryFile(prefix=path.name, dir=path.parent, suffix=".astacus.tmp", delete=False, **kwargs) as f:
+        try:
+            yield f
+            os.rename(f.name, path)
+        except:
+            os.unlink(f.name)
+            raise
