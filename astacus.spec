@@ -8,7 +8,7 @@ Source0:        astacus-rpm-src.tar
 BuildArch:      noarch
 
 # These are used when e.g. in podman, creating package from scratch
-# using pre-commit + pip; psycopg2 is indirect dependency of pghoard
+# using pre-commit + pip
 BuildRequires:  gcc
 BuildRequires:  g++
 BuildRequires:  git
@@ -16,16 +16,15 @@ BuildRequires:  protobuf-compiler
 BuildRequires:  python3-chardet
 BuildRequires:  python3-devel
 BuildRequires:  python3-pip
-BuildRequires:  python3-psycopg2
 BuildRequires:  python3-wheel
 BuildRequires:  which
 
 # These are used when actually running the package
-Requires:       pghoard
 Requires:       python3-fastapi
 Requires:       python3-httpx
 Requires:       python3-protobuf
 Requires:       python3-pyyaml
+Requires:       python3-rohmu
 Requires:       python3-sentry-sdk
 Requires:       python3-tabulate
 Requires:       python3-typing-extensions

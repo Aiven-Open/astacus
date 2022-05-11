@@ -36,8 +36,6 @@ these.
 
 - push this to PIP
 
-- separate rohmu from pghoard (right now, pghoard dependency is bit .. ugly ..)
-
 - use result-url instead of polling for somewhat faster results for CLI
 
 

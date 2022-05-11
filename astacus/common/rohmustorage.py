@@ -11,10 +11,9 @@ from .storage import MultiStorage, Storage, StorageUploadResult
 from .utils import AstacusModel
 from astacus.common import exceptions
 from enum import Enum
-from pghoard import rohmu  # type: ignore
-from pghoard.rohmu import rohmufile  # type: ignore
-from pghoard.rohmu import errors
 from pydantic import DirectoryPath, Field
+from rohmu import rohmufile  # type: ignore
+from rohmu import errors
 from typing import Dict, Optional, Union
 from typing_extensions import Literal
 
@@ -22,6 +21,7 @@ import io
 import json
 import logging
 import os
+import rohmu  # type: ignore
 import tempfile
 
 logger = logging.getLogger(__name__)
@@ -171,7 +171,7 @@ def rohmu_error_wrapper(fun):
 
 
 class RohmuStorage(Storage):
-    """Implementation of the storage API, on top of pghoard.rohmu."""
+    """Implementation of the storage API, on top of rohmu."""
 
     def __init__(self, config: RohmuConfig, *, storage=None):
         assert config
