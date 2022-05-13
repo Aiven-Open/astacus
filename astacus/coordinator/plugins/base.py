@@ -348,7 +348,7 @@ def get_node_to_backup_index_from_azs(
     return node_to_backup_index
 
 
-class NodeIndexData(ipc.AstacusModel):
+class NodeIndexData(utils.AstacusModel):
     node_index: int
     sshashes: List[ipc.SnapshotHash] = []
     total_size: int = 0

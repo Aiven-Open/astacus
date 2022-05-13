@@ -130,12 +130,11 @@ def print_list_result(result):
         if usize:
             gtable[0]["csaving"] = "%.2f%%" % (100.0 - 100.0 * ssize / usize)
 
-        # headers type hint is for some reason wrong - it accepts Dict[str,str]
         if i:
             print()
-        print(tabulate(gtable, headers=gheaders, tablefmt="github"))  # type: ignore
+        print(tabulate(gtable, headers=gheaders, tablefmt="github"))
         print()
-        print(tabulate(table, headers=headers, tablefmt="github"))  # type: ignore
+        print(tabulate(table, headers=headers, tablefmt="github"))
 
 
 def _run_list(args) -> bool:

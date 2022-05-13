@@ -29,7 +29,7 @@ from dataclasses import dataclass
 from fastapi import BackgroundTasks
 from starlette.datastructures import URL
 from tests.unit.common.test_m3placement import create_dummy_placement
-from typing import Optional
+from typing import List, Optional
 
 import pytest
 import respx
@@ -138,10 +138,9 @@ class RestoreTest:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("rt", [RestoreTest(fail_at=i) for i in range(3)] + [RestoreTest(), RestoreTest(partial=True)])
 async def test_m3_restore(coordinator: Coordinator, plugin: M3DBPlugin, etcd_client: ETCDClient, rt: RestoreTest):
+    partial_restore_nodes: Optional[List[ipc.PartialRestoreRequestNode]] = None
     if rt.partial:
         partial_restore_nodes = [ipc.PartialRestoreRequestNode(backup_index=0, node_index=0)]
-    else:
-        partial_restore_nodes = None
     op = SteppedCoordinatorOp(
         c=coordinator,
         attempts=1,

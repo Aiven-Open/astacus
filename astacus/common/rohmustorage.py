@@ -21,7 +21,7 @@ import io
 import json
 import logging
 import os
-import rohmu  # type: ignore
+import rohmu
 import tempfile
 
 logger = logging.getLogger(__name__)

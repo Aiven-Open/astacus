@@ -54,7 +54,7 @@ def global_config(request: Request) -> GlobalConfig:
     return getattr(request.app.state, APP_KEY)
 
 
-def set_global_config_from_path(app, path):
+def set_global_config_from_path(app, path) -> GlobalConfig:
     with open(path) as fh:
         config = GlobalConfig.parse_obj(yaml.safe_load(fh))
     cconfig = config.coordinator
