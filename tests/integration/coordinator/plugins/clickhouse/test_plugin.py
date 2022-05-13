@@ -4,9 +4,9 @@ See LICENSE for details
 """
 from _pytest.fixtures import SubRequest
 from astacus.common.ipc import RestoreRequest
-from astacus.coordinator.plugins import ClickHousePlugin
 from astacus.coordinator.plugins.base import OperationContext
 from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, HttpClickHouseClient
+from astacus.coordinator.plugins.clickhouse.plugin import ClickHousePlugin
 from pathlib import Path
 from tests.integration.conftest import create_zookeeper, Ports
 from tests.integration.coordinator.plugins.clickhouse.conftest import (

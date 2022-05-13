@@ -9,7 +9,7 @@ import copy
 import logging
 import urllib.parse
 
-Row = Sequence[Union[str, int, float, None]]
+Row = Sequence[Union[str, int, float, List, None]]
 
 logger = logging.getLogger(__name__)
 

@@ -144,6 +144,7 @@ class RetrieveDatabasesAndTablesStep(Step[DatabasesAndTables]):
         for base64_db_name, base64_table_name, table_engine, table_uuid, base64_table_query, base64_dependencies in rows:
             assert isinstance(base64_db_name, str)
             assert isinstance(base64_table_name, str)
+            assert isinstance(table_engine, str)
             assert isinstance(base64_table_query, str)
             assert isinstance(base64_dependencies, list)
             db_name = b64decode(base64_db_name)

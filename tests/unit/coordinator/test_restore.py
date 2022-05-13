@@ -78,7 +78,7 @@ def test_restore(rt, app, client, mstorage):
             respx.post(f"{node.url}/lock?locker=x&ttl=60").respond(json={"locked": rt.fail_at != 1})
             if i == 0:
                 # Failure point 2: download call fails
-                def get_match_download(node_url: str) -> Callable[[httpx.Request], httpx.Response]:
+                def get_match_download(node_url: str) -> Callable[[httpx.Request], Optional[httpx.Response]]:
                     def match_download(request: httpx.Request) -> Optional[httpx.Response]:
                         if rt.fail_at == 2:
                             return None
@@ -103,7 +103,7 @@ def test_restore(rt, app, client, mstorage):
                 )
             else:
 
-                def get_match_clear(node_url: str) -> Callable[[httpx.Request], httpx.Response]:
+                def get_match_clear(node_url: str) -> Callable[[httpx.Request], Optional[httpx.Response]]:
                     def match_clear(request: httpx.Request) -> Optional[httpx.Response]:
                         if rt.fail_at == 4:
                             return None

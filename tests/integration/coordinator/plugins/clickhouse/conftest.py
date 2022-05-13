@@ -14,9 +14,9 @@ from astacus.common.rohmustorage import (
 )
 from astacus.config import GlobalConfig, UvicornConfig
 from astacus.coordinator.config import CoordinatorConfig, CoordinatorNode
-from astacus.coordinator.plugins import ClickHousePlugin
 from astacus.coordinator.plugins.clickhouse.client import HttpClickHouseClient
 from astacus.coordinator.plugins.clickhouse.config import ClickHouseConfiguration, ClickHouseNode, ReplicatedDatabaseSettings
+from astacus.coordinator.plugins.clickhouse.plugin import ClickHousePlugin
 from astacus.coordinator.plugins.zookeeper_config import ZooKeeperConfiguration, ZooKeeperNode
 from astacus.node.config import NodeConfig
 from pathlib import Path

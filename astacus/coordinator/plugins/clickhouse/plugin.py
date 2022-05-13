@@ -2,13 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
-from .config import (
-    ClickHouseConfiguration,
-    get_clickhouse_clients,
-    get_zookeeper_client,
-    ReplicatedDatabaseSettings,
-    ZooKeeperConfiguration,
-)
+from .config import ClickHouseConfiguration, get_clickhouse_clients, get_zookeeper_client, ReplicatedDatabaseSettings
 from .parts import get_frozen_parts_pattern
 from .steps import (
     AttachMergeTreePartsStep,
@@ -39,6 +33,7 @@ from astacus.coordinator.plugins.base import (
     UploadBlocksStep,
     UploadManifestStep,
 )
+from astacus.coordinator.plugins.zookeeper_config import ZooKeeperConfiguration
 from typing import List
 
 

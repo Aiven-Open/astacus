@@ -93,11 +93,11 @@ class InitStep(Step[None]):
 
 
 @dataclasses.dataclass
-class RetrieveEtcdStep(Step[Optional[ETCDDump]]):
+class RetrieveEtcdStep(Step[ETCDDump]):
     etcd_client: ETCDClient
     etcd_prefixes: List[bytes]
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> Optional[ETCDDump]:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> ETCDDump:
         etcd_dump = await get_etcd_dump(self.etcd_client, self.etcd_prefixes)
         if etcd_dump is None:
             raise StepFailedError("etcd dump failed")

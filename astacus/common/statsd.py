@@ -28,7 +28,7 @@ class MessageFormat(str, Enum):
     telegraf = "telegraf"
 
 
-Tags = Dict[str, Union[int, str]]
+Tags = Dict[str, Union[int, str, None]]
 
 
 class StatsdConfig(AstacusModel):
