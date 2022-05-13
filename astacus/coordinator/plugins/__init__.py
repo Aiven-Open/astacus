@@ -1,12 +1,25 @@
-from .clickhouse.plugin import ClickHousePlugin
-from .files import FilesPlugin
-from .flink.plugin import FlinkPlugin
-from .m3db import M3DBPlugin
+from .base import CoordinatorPlugin
 from astacus.common.ipc import Plugin
+from typing import Type
 
-PLUGINS = {
-    Plugin.clickhouse: ClickHousePlugin,
-    Plugin.files: FilesPlugin,
-    Plugin.m3db: M3DBPlugin,
-    Plugin.flink: FlinkPlugin,
-}
+
+def get_plugin(plugin: Plugin) -> Type[CoordinatorPlugin]:
+    # pylint: disable=import-outside-toplevel
+
+    if plugin == Plugin.clickhouse:
+        from .clickhouse.plugin import ClickHousePlugin
+
+        return ClickHousePlugin
+    if plugin == Plugin.files:
+        from .files import FilesPlugin
+
+        return FilesPlugin
+    if plugin == Plugin.flink:
+        from .flink.plugin import FlinkPlugin
+
+        return FlinkPlugin
+    if plugin == Plugin.m3db:
+        from .m3db import M3DBPlugin
+
+        return M3DBPlugin
+    raise NotImplementedError

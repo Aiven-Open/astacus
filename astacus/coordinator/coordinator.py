@@ -14,7 +14,7 @@ from astacus.common.storage import JsonStorage, MultiFileStorage, MultiStorage
 from astacus.common.utils import AsyncSleeper
 from astacus.coordinator.cluster import Cluster, LockResult, WaitResultError
 from astacus.coordinator.config import coordinator_config, CoordinatorConfig, CoordinatorNode
-from astacus.coordinator.plugins import PLUGINS
+from astacus.coordinator.plugins import get_plugin
 from astacus.coordinator.state import coordinator_state, CoordinatorState
 from fastapi import BackgroundTasks, Depends, HTTPException, Request
 from functools import cached_property
@@ -89,7 +89,7 @@ class Coordinator(op.OpMixin):
         )
 
     def get_plugin(self) -> CoordinatorPlugin:
-        return PLUGINS[self.config.plugin].parse_obj(self.config.plugin_config)
+        return get_plugin(self.config.plugin).parse_obj(self.config.plugin_config)
 
     def get_storage_name(self, *, requested_storage: str = ""):
         return requested_storage if requested_storage else self.json_mstorage.get_default_storage_name()
