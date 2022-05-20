@@ -137,9 +137,10 @@ async def _astacus(*, tmpdir, rootdir, index):
     # cmd = ["astacus", "server", "-c", str(a_conf_path)]
     cmd = [sys.executable, "-m", "astacus.main", "server", "-c", str(a_conf_path)]
 
-    async with background_process(*cmd, env={"PYTHONPATH": astacus_source_root}):
+    async with background_process(*cmd, env={"PYTHONPATH": astacus_source_root}) as process:
         await wait_url_up(node.url)
         yield node
+    assert process.returncode == 0
 
 
 @pytest.fixture(name="astacus1")
