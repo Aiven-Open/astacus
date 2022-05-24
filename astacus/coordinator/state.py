@@ -11,6 +11,7 @@ By design it cannot be persisted to disk, but e.g. op_info can be if necessary.
 
 from astacus.common import ipc, utils
 from astacus.common.op import OpState
+from astacus.coordinator.config import CoordinatorConfig
 from dataclasses import dataclass
 from fastapi import FastAPI, Request
 from pydantic import Field
@@ -23,6 +24,7 @@ APP_KEY = "coordinator_state"
 
 class CachedListResponse(utils.AstacusModel):
     timestamp: float = Field(default_factory=time.monotonic)
+    coordinator_config: CoordinatorConfig
     list_request: ipc.ListRequest
     list_response: ipc.ListResponse
 
