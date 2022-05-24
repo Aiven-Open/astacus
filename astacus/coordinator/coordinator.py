@@ -16,7 +16,7 @@ from astacus.coordinator.cluster import Cluster, LockResult, WaitResultError
 from astacus.coordinator.config import coordinator_config, CoordinatorConfig, CoordinatorNode
 from astacus.coordinator.plugins import get_plugin
 from astacus.coordinator.state import coordinator_state, CoordinatorState
-from fastapi import BackgroundTasks, Depends, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, HTTPException
 from functools import cached_property
 from starlette.datastructures import URL
 from typing import Any, Awaitable, Callable, Dict, Iterator, List, Optional, Type
@@ -26,7 +26,6 @@ import asyncio
 import contextlib
 import logging
 import socket
-import threading
 import time
 
 logger = logging.getLogger(__name__)
@@ -34,10 +33,6 @@ logger = logging.getLogger(__name__)
 
 def coordinator_stats(config: CoordinatorConfig = Depends(coordinator_config)) -> StatsClient:
     return StatsClient(config=config.statsd)
-
-
-def coordinator_lock(request: Request) -> threading.RLock:
-    return utils.get_or_create_state(state=request.app.state, key="sync_lock", factory=threading.RLock)
 
 
 def coordinator_hexdigest_mstorage(config: CoordinatorConfig = Depends(coordinator_config)) -> MultiStorage:
@@ -66,7 +61,6 @@ class Coordinator(op.OpMixin):
         config: CoordinatorConfig = Depends(coordinator_config),
         state: CoordinatorState = Depends(coordinator_state),
         stats: statsd.StatsClient = Depends(coordinator_stats),
-        sync_lock: threading.RLock = Depends(coordinator_lock),
         hexdigest_mstorage: MultiStorage = Depends(coordinator_hexdigest_mstorage),
         json_mstorage: MultiStorage = Depends(coordinator_json_mstorage),
     ):
@@ -75,7 +69,6 @@ class Coordinator(op.OpMixin):
         self.config = config
         self.state = state
         self.stats = stats
-        self.sync_lock = sync_lock
 
         self.hexdigest_mstorage = hexdigest_mstorage
         self.json_mstorage = json_mstorage

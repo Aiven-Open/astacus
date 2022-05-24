@@ -11,6 +11,7 @@ from .state import CachedListResponse
 from astacus import config
 from astacus.common import ipc
 from astacus.common.op import Op
+from asyncio import to_thread
 from enum import Enum
 from fastapi import APIRouter, Depends, HTTPException, Request
 from urllib.parse import urljoin
@@ -48,7 +49,7 @@ class LockStartResult(Op.StartResult):
 
 
 @router.get("/")
-def root():
+async def root():
     # Root is no-op, just useful for testing that Astacus is actually running
     return {}
 
@@ -56,10 +57,9 @@ def root():
 @router.post("/config/reload")
 async def config_reload(*, request: Request, c: Coordinator = Depends()):
     """Reload astacus configuration"""
-    with c.sync_lock:
-        config_path = os.environ.get("ASTACUS_CONFIG")
-        assert config_path is not None
-        config.set_global_config_from_path(request.app, config_path)
+    config_path = os.environ.get("ASTACUS_CONFIG")
+    assert config_path is not None
+    config.set_global_config_from_path(request.app, config_path)
     return {}
 
 
@@ -87,29 +87,27 @@ async def restore(*, c: Coordinator = Depends(), op: RestoreOp = Depends(Restore
 
 
 @router.get("/list")
-def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordinator = Depends(), request: Request):
-    with c.sync_lock:
-        coordinator_config = c.config
-        cached_list_response = c.state.cached_list_response
-        if cached_list_response is not None:
-            age = time.monotonic() - cached_list_response.timestamp
-            if (
-                age < c.config.list_ttl
-                and cached_list_response.coordinator_config == coordinator_config
-                and cached_list_response.list_request
-            ):
-                return cached_list_response.list_response
-        if c.state.cached_list_running:
-            raise HTTPException(status_code=429, detail="Already caching list result")
-        c.state.cached_list_running = True
-    list_response = list_backups(req=req, json_mstorage=c.json_mstorage)
-    with c.sync_lock:
-        c.state.cached_list_response = CachedListResponse(
-            coordinator_config=coordinator_config,
-            list_request=req,
-            list_response=list_response,
-        )
-        c.state.cached_list_running = False
+async def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordinator = Depends(), request: Request):
+    coordinator_config = c.config
+    cached_list_response = c.state.cached_list_response
+    if cached_list_response is not None:
+        age = time.monotonic() - cached_list_response.timestamp
+        if (
+            age < c.config.list_ttl
+            and cached_list_response.coordinator_config == coordinator_config
+            and cached_list_response.list_request
+        ):
+            return cached_list_response.list_response
+    if c.state.cached_list_running:
+        raise HTTPException(status_code=429, detail="Already caching list result")
+    c.state.cached_list_running = True
+    list_response = await to_thread(list_backups, req=req, json_mstorage=c.json_mstorage)
+    c.state.cached_list_response = CachedListResponse(
+        coordinator_config=coordinator_config,
+        list_request=req,
+        list_response=list_response,
+    )
+    c.state.cached_list_running = False
     return list_response
 
 

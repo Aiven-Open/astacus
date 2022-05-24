@@ -20,7 +20,6 @@ from starlette.datastructures import URL
 from unittest.mock import patch
 
 import pytest
-import threading
 
 
 class DummyStep(Step[bool]):
@@ -49,7 +48,6 @@ async def test_op_stats():
         config=CoordinatorConfig(plugin=Plugin.files),
         state=CoordinatorState(),
         stats=stats,
-        sync_lock=threading.RLock(),
         hexdigest_mstorage=MultiStorage(),
         json_mstorage=MultiStorage(),
     )
