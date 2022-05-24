@@ -162,6 +162,11 @@ def _run_delete(args) -> bool:
     return _run_op("cleanup", args, json={"explicit_delete": args.backups})
 
 
+def _reload_config(args) -> bool:
+    response = http_request(f"{args.url}/config/reload", method="post", caller="client._reload_config")
+    return response is not None
+
+
 def create_client_parsers(parser, subparsers):
     default_url = f"http://localhost:{magic.ASTACUS_DEFAULT_PORT}"
     parser.add_argument("-u", "--url", type=str, help="Astacus REST endpoint URL", default=default_url)
@@ -171,6 +176,9 @@ def create_client_parsers(parser, subparsers):
         type=int,
         help="Wait at most this long the requested (client) operation to complete (unit:seconds)",
     )
+
+    p_reload = subparsers.add_parser("reload", help="Reload astacus configuration")
+    p_reload.set_defaults(func=_reload_config)
 
     p_backup = subparsers.add_parser("backup", help="Request backup")
     p_backup.set_defaults(func=_run_backup)
