@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class TestNode(AstacusModel):
+    __test__ = False
     name: str
     url: str
     port: int
