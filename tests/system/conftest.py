@@ -171,14 +171,20 @@ async def fixture_astacus3(tmpdir):
         yield a
 
 
-def astacus_run(rootdir: str, astacus: TestNode, *args: str) -> None:
+def astacus_run(
+    rootdir: str,
+    astacus: TestNode,
+    *args: str,
+    check: bool = True,
+    capture_output: bool = False,
+) -> subprocess.CompletedProcess:
     # simulate this (for some reason, in podman the 'astacus' command
     # is not to be found, I suppose the package hasn't been
     # initialized)
     #
     # cmd = ["astacus", "--url", astacus.url, "-w", "10"]
     cmd = [sys.executable, "-m", "astacus.main", "--url", astacus.url, "-w", "10"]
-    subprocess.run(cmd + list(args), check=True, env={"PYTHONPATH": rootdir})
+    return subprocess.run(cmd + list(args), check=check, capture_output=capture_output, env={"PYTHONPATH": rootdir})
 
 
 def astacus_ls(astacus: TestNode) -> List[str]:
