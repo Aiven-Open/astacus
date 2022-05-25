@@ -35,15 +35,6 @@ class OpName(str, Enum):
     cleanup = "cleanup"
 
 
-@router.get("/{op_name}/{op_id}")
-def op_status(*, op_name: OpName, op_id: int, c: Coordinator = Depends()):
-    op, op_info = c.get_op_and_op_info(op_id=op_id, op_name=op_name)
-    result = {"state": op_info.op_status}
-    if isinstance(op, (BackupOp, RestoreOp)):
-        result["progress"] = op.progress
-    return result
-
-
 class LockStartResult(Op.StartResult):
     unlock_url: str
 
@@ -115,6 +106,15 @@ async def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordina
 async def cleanup(*, op: CleanupOp = Depends(), c: Coordinator = Depends()):
     runner = await op.acquire_cluster_lock()
     return c.start_op(op_name=OpName.cleanup, op=op, fun=runner)
+
+
+@router.get("/{op_name}/{op_id}")
+def op_status(*, op_name: OpName, op_id: int, c: Coordinator = Depends()):
+    op, op_info = c.get_op_and_op_info(op_id=op_id, op_name=op_name)
+    result = {"state": op_info.op_status}
+    if isinstance(op, (BackupOp, RestoreOp)):
+        result["progress"] = op.progress
+    return result
 
 
 @router.put("/{op_name}/{op_id}/sub-result")
