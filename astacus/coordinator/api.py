@@ -11,6 +11,7 @@ from .state import CachedListResponse
 from astacus import config
 from astacus.common import ipc
 from astacus.common.op import Op
+from astacus.config import APP_HASH_KEY, get_config_content_and_hash
 from asyncio import to_thread
 from enum import Enum
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -52,6 +53,15 @@ async def config_reload(*, request: Request, c: Coordinator = Depends()):
     assert config_path is not None
     config.set_global_config_from_path(request.app, config_path)
     return {}
+
+
+@router.get("/config/status")
+async def config_status(*, request: Request):
+    config_path = os.environ.get("ASTACUS_CONFIG")
+    assert config_path is not None
+    _, config_hash = get_config_content_and_hash(config_path)
+    loaded_config_hash = getattr(request.app.state, APP_HASH_KEY)
+    return {"config_hash": loaded_config_hash, "needs_reload": config_hash != loaded_config_hash}
 
 
 @router.post("/lock")

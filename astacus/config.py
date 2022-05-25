@@ -7,7 +7,6 @@ Root-level astacus configuration, which includes
 - coordinator configuration
 - node configuration
 """
-
 from astacus.common import magic
 from astacus.common.rohmustorage import RohmuConfig
 from astacus.common.statsd import StatsdConfig
@@ -15,12 +14,16 @@ from astacus.common.utils import AstacusModel
 from astacus.coordinator.config import APP_KEY as COORDINATOR_CONFIG_KEY, CoordinatorConfig
 from astacus.node.config import APP_KEY as NODE_CONFIG_KEY, NodeConfig
 from enum import Enum
-from fastapi import Request
-from typing import Optional
+from fastapi import FastAPI, Request
+from pathlib import Path
+from typing import Optional, Tuple, Union
 
+import hashlib
+import io
 import yaml
 
 APP_KEY = "global_config"
+APP_HASH_KEY = "global_config_hash"
 
 
 class UvicornConfig(AstacusModel):
@@ -54,9 +57,17 @@ def global_config(request: Request) -> GlobalConfig:
     return getattr(request.app.state, APP_KEY)
 
 
-def set_global_config_from_path(app, path) -> GlobalConfig:
-    with open(path) as fh:
-        config = GlobalConfig.parse_obj(yaml.safe_load(fh))
+def get_config_content_and_hash(config_path: Union[str, Path]) -> Tuple[str, str]:
+    with open(config_path, "rb") as fh:
+        config_content = fh.read()
+    config_hash = hashlib.sha256(config_content).hexdigest()
+    return config_content.decode(), config_hash
+
+
+def set_global_config_from_path(app: FastAPI, path: Union[str, Path]) -> GlobalConfig:
+    config_content, config_hash = get_config_content_and_hash(path)
+    with io.StringIO(config_content) as config_file:
+        config = GlobalConfig.parse_obj(yaml.safe_load(config_file))
     cconfig = config.coordinator
     nconfig = config.node
     setattr(app.state, APP_KEY, config)
@@ -68,4 +79,5 @@ def set_global_config_from_path(app, path) -> GlobalConfig:
             if getattr(subconfig, propagated_key) is not None:
                 continue
             setattr(subconfig, propagated_key, getattr(config, propagated_key))
+    setattr(app.state, APP_HASH_KEY, config_hash)
     return config
