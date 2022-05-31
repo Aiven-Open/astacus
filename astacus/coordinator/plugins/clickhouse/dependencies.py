@@ -22,7 +22,7 @@ def tables_sorted_by_dependencies(tables: List[Table]) -> List[Table]:
     The `dependencies` attribute of each table must contain the list of
     `(database_name: str, table_name: str)` that depend on this table.
     """
-    sorter = graphlib.TopologicalSorter()
+    sorter = graphlib.TopologicalSorter()  # type: ignore
     for table in tables:
         sorter.add((table.database, table.name))
         for dependency in table.dependencies:
@@ -42,7 +42,7 @@ def access_entities_sorted_by_dependencies(access_entities: List[AccessEntity]) 
     roles can depend on other roles. This forces us to use a real topological sort to
     determine the creation order.
     """
-    sorter = graphlib.TopologicalSorter()
+    sorter = graphlib.TopologicalSorter()  # type: ignore
     # Unlike tables, ClickHouse does not provide a list of dependencies between entities.
     # This means we need to parse the `attach_query` of the entity to find the uuid of
     # other entities. This is unpleasant, but the quoting format of entity names and entity

@@ -3,34 +3,19 @@ Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
 from astacus.common.exceptions import TransientException
+from asyncio import to_thread
 from kazoo.client import EventType, KazooClient, KeeperState, TransactionRequest, WatchedEvent
 from kazoo.protocol.states import ZnodeStat
 from kazoo.retry import KazooRetry
-from typing import Any, AsyncIterator, Callable, cast, Collection, Dict, List, Optional, Tuple, Type, TypeVar, Union
+from typing import AsyncIterator, Callable, Collection, Dict, List, Optional, Tuple, Type, Union
 
 import asyncio
 import contextlib
 import enum
-import functools
 import kazoo.exceptions
 import logging
 
 logger = logging.getLogger(__name__)
-
-try:
-    # noinspection PyCompatibility
-    from asyncio import to_thread  # type: ignore[attr-defined]
-except ImportError:
-    import contextvars
-
-    # Only available in python >= 3.9
-    T = TypeVar("T")
-
-    async def to_thread(func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
-        loop = asyncio.events.get_running_loop()
-        ctx = contextvars.copy_context()
-        func_call = cast(Callable[[], T], functools.partial(ctx.run, func, *args, **kwargs))
-        return await loop.run_in_executor(None, func_call)
 
 
 Watcher = Callable[[WatchedEvent], None]
