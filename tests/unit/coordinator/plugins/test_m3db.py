@@ -33,7 +33,6 @@ from typing import List, Optional
 
 import pytest
 import respx
-import threading
 
 ENV = "dummyenv"
 
@@ -81,7 +80,6 @@ def fixture_coordinator() -> Coordinator:
         config=CoordinatorConfig.parse_obj(COORDINATOR_CONFIG),
         state=CoordinatorState(),
         stats=StatsClient(config=None),
-        sync_lock=threading.RLock(),
         hexdigest_mstorage=MultiStorage(),
         json_mstorage=MultiStorage(),
     )

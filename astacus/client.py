@@ -162,6 +162,25 @@ def _run_delete(args) -> bool:
     return _run_op("cleanup", args, json={"explicit_delete": args.backups})
 
 
+def _reload_config(args) -> bool:
+    response = http_request(f"{args.url}/config/reload", method="post", caller="client._reload_config")
+    return response is not None
+
+
+def _check_reload_config(args) -> bool:
+    response = http_request(f"{args.url}/config/status", method="get", caller="client._check_reload_config")
+    if response is None:
+        print("Failed to get configuration status")
+        return False
+    if args.status:
+        return not response["needs_reload"]
+    if response["needs_reload"]:
+        print("Configuration needs to be reloaded")
+    else:
+        print("Configuration does not need to be reloaded")
+    return True
+
+
 def create_client_parsers(parser, subparsers):
     default_url = f"http://localhost:{magic.ASTACUS_DEFAULT_PORT}"
     parser.add_argument("-u", "--url", type=str, help="Astacus REST endpoint URL", default=default_url)
@@ -170,6 +189,17 @@ def create_client_parsers(parser, subparsers):
         "--wait-completion",
         type=int,
         help="Wait at most this long the requested (client) operation to complete (unit:seconds)",
+    )
+
+    p_reload = subparsers.add_parser("reload", help="Reload astacus configuration")
+    p_reload.set_defaults(func=_reload_config)
+
+    p_check_reload = subparsers.add_parser(
+        "check-reload", help="Check if the astacus configuration needs to be reloaded from disk"
+    )
+    p_check_reload.set_defaults(func=_check_reload_config)
+    p_check_reload.add_argument(
+        "--status", action="store_true", help="Returns a status code of 1 if the configuration needs to be reloaded"
     )
 
     p_backup = subparsers.add_parser("backup", help="Request backup")

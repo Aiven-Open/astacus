@@ -8,13 +8,17 @@ from .coordinator import BackupOp, Coordinator, RestoreOp
 from .list import list_backups
 from .lockops import LockOps
 from .state import CachedListResponse
+from astacus import config
 from astacus.common import ipc
 from astacus.common.op import Op
+from astacus.config import APP_HASH_KEY, get_config_content_and_hash
+from asyncio import to_thread
 from enum import Enum
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from urllib.parse import urljoin
 
 import logging
+import os
 import time
 
 router = APIRouter()
@@ -32,23 +36,32 @@ class OpName(str, Enum):
     cleanup = "cleanup"
 
 
-@router.get("/{op_name}/{op_id}")
-def op_status(*, op_name: OpName, op_id: int, c: Coordinator = Depends()):
-    op, op_info = c.get_op_and_op_info(op_id=op_id, op_name=op_name)
-    result = {"state": op_info.op_status}
-    if isinstance(op, (BackupOp, RestoreOp)):
-        result["progress"] = op.progress
-    return result
-
-
 class LockStartResult(Op.StartResult):
     unlock_url: str
 
 
 @router.get("/")
-def root():
+async def root():
     # Root is no-op, just useful for testing that Astacus is actually running
     return {}
+
+
+@router.post("/config/reload")
+async def config_reload(*, request: Request, c: Coordinator = Depends()):
+    """Reload astacus configuration"""
+    config_path = os.environ.get("ASTACUS_CONFIG")
+    assert config_path is not None
+    config.set_global_config_from_path(request.app, config_path)
+    return {}
+
+
+@router.get("/config/status")
+async def config_status(*, request: Request):
+    config_path = os.environ.get("ASTACUS_CONFIG")
+    assert config_path is not None
+    _, config_hash = get_config_content_and_hash(config_path)
+    loaded_config_hash = getattr(request.app.state, APP_HASH_KEY)
+    return {"config_hash": loaded_config_hash, "needs_reload": config_hash != loaded_config_hash}
 
 
 @router.post("/lock")
@@ -75,19 +88,28 @@ async def restore(*, c: Coordinator = Depends(), op: RestoreOp = Depends(Restore
 
 
 @router.get("/list")
-def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordinator = Depends()):
-    with c.sync_lock:
-        cached_list_response = c.state.cached_list_response
-        if cached_list_response is not None:
-            age = time.monotonic() - cached_list_response.timestamp
-            if age < c.config.list_ttl and cached_list_response.list_request == req:
-                return cached_list_response.list_response
-        if c.state.cached_list_running:
-            raise HTTPException(status_code=429, detail="Already caching list result")
-        c.state.cached_list_running = True
-    list_response = list_backups(req=req, json_mstorage=c.json_mstorage)
-    with c.sync_lock:
-        c.state.cached_list_response = CachedListResponse(list_request=req, list_response=list_response)
+async def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordinator = Depends(), request: Request):
+    coordinator_config = c.config
+    cached_list_response = c.state.cached_list_response
+    if cached_list_response is not None:
+        age = time.monotonic() - cached_list_response.timestamp
+        if (
+            age < c.config.list_ttl
+            and cached_list_response.coordinator_config == coordinator_config
+            and cached_list_response.list_request
+        ):
+            return cached_list_response.list_response
+    if c.state.cached_list_running:
+        raise HTTPException(status_code=429, detail="Already caching list result")
+    c.state.cached_list_running = True
+    try:
+        list_response = await to_thread(list_backups, req=req, json_mstorage=c.json_mstorage)
+        c.state.cached_list_response = CachedListResponse(
+            coordinator_config=coordinator_config,
+            list_request=req,
+            list_response=list_response,
+        )
+    finally:
         c.state.cached_list_running = False
     return list_response
 
@@ -96,6 +118,15 @@ def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordinator = 
 async def cleanup(*, op: CleanupOp = Depends(), c: Coordinator = Depends()):
     runner = await op.acquire_cluster_lock()
     return c.start_op(op_name=OpName.cleanup, op=op, fun=runner)
+
+
+@router.get("/{op_name}/{op_id}")
+def op_status(*, op_name: OpName, op_id: int, c: Coordinator = Depends()):
+    op, op_info = c.get_op_and_op_info(op_id=op_id, op_name=op_name)
+    result = {"state": op_info.op_status}
+    if isinstance(op, (BackupOp, RestoreOp)):
+        result["progress"] = op.progress
+    return result
 
 
 @router.put("/{op_name}/{op_id}/sub-result")

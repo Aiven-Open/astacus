@@ -7,7 +7,8 @@ from contextlib import asynccontextmanager
 from httpx import URL
 from pathlib import Path
 from tests.utils import create_rohmu_config
-from typing import AsyncIterator, Optional, Union
+from types import MappingProxyType
+from typing import Any, AsyncIterator, List, Mapping, Optional, Union
 
 import asyncio
 import httpx
@@ -15,12 +16,14 @@ import json
 import logging
 import os.path
 import pytest
+import subprocess
 import sys
 
 logger = logging.getLogger(__name__)
 
 
 class TestNode(AstacusModel):
+    __test__ = False
     name: str
     url: str
     port: int
@@ -36,6 +39,10 @@ ASTACUS_NODES = [
     TestNode(name="a2", url="http://localhost:55151", port=55151),
     TestNode(name="a3", url="http://localhost:55152", port=55152),
 ]
+
+DEFAULT_PLUGIN_CONFIG = {
+    "root_globs": ["*"],
+}
 
 
 @asynccontextmanager
@@ -69,16 +76,12 @@ async def background_process(
                         break
 
 
-def create_astacus_config_dict(*, tmpdir, root_path, link_path, node):
+def create_astacus_config_dict(
+    *, tmpdir: Path, root_path: Path, link_path: Path, node: TestNode, plugin_config: Mapping[str, Any]
+) -> Mapping[str, Any]:
     nodes = [{"url": f"{node.url}/node"} for node in ASTACUS_NODES]
     return {
-        "coordinator": {
-            "nodes": nodes,
-            "plugin": "files",
-            "plugin_config": {
-                "root_globs": ["*"],
-            },
-        },
+        "coordinator": {"nodes": nodes, "plugin": "files", "plugin_config": dict(plugin_config)},
         "node": {
             "root": str(root_path),
             "root_link": str(link_path),
@@ -91,15 +94,22 @@ def create_astacus_config_dict(*, tmpdir, root_path, link_path, node):
     }
 
 
-def create_astacus_config(*, tmpdir, node):
+def create_astacus_config(
+    *,
+    tmpdir,
+    node: TestNode,
+    plugin_config: Mapping[str, Any] = MappingProxyType(DEFAULT_PLUGIN_CONFIG),
+) -> Path:
     a = Path(tmpdir / "node" / node.name)
     node.path = a
     root_path = a / "root"
-    root_path.mkdir(parents=True)
+    root_path.mkdir(parents=True, exist_ok=True)
     node.root_path = root_path
     link_path = a / "link"
-    link_path.mkdir()
-    a_conf = create_astacus_config_dict(tmpdir=tmpdir, root_path=root_path, link_path=link_path, node=node)
+    link_path.mkdir(exist_ok=True)
+    a_conf = create_astacus_config_dict(
+        tmpdir=Path(tmpdir), root_path=root_path, link_path=link_path, node=node, plugin_config=plugin_config
+    )
     a_conf_path = a / "astacus.conf"
     a_conf_path.write_text(json.dumps(a_conf))
     return a_conf_path
@@ -125,7 +135,7 @@ def fixture_rootdir(pytestconfig):
 
 
 @asynccontextmanager
-async def _astacus(*, tmpdir, rootdir, index):
+async def _astacus(*, tmpdir, index):
     node = ASTACUS_NODES[index]
     a_conf_path = create_astacus_config(tmpdir=tmpdir, node=node)
     astacus_source_root = os.path.join(os.path.dirname(__file__), "..", "..")
@@ -137,24 +147,45 @@ async def _astacus(*, tmpdir, rootdir, index):
     # cmd = ["astacus", "server", "-c", str(a_conf_path)]
     cmd = [sys.executable, "-m", "astacus.main", "server", "-c", str(a_conf_path)]
 
-    async with background_process(*cmd, env={"PYTHONPATH": astacus_source_root}):
+    async with background_process(*cmd, env={"PYTHONPATH": astacus_source_root}) as process:
         await wait_url_up(node.url)
         yield node
+    assert process.returncode == 0
 
 
 @pytest.fixture(name="astacus1")
-async def fixture_astacus1(tmpdir, rootdir):
-    async with _astacus(tmpdir=tmpdir, rootdir=rootdir, index=0) as a:
+async def fixture_astacus1(tmpdir):
+    async with _astacus(tmpdir=tmpdir, index=0) as a:
         yield a
 
 
 @pytest.fixture(name="astacus2")
-async def fixture_astacus2(tmpdir, rootdir):
-    async with _astacus(tmpdir=tmpdir, rootdir=rootdir, index=1) as a:
+async def fixture_astacus2(tmpdir):
+    async with _astacus(tmpdir=tmpdir, index=1) as a:
         yield a
 
 
 @pytest.fixture(name="astacus3")
-async def fixture_astacus3(tmpdir, rootdir):
-    async with _astacus(tmpdir=tmpdir, rootdir=rootdir, index=2) as a:
+async def fixture_astacus3(tmpdir):
+    async with _astacus(tmpdir=tmpdir, index=2) as a:
         yield a
+
+
+def astacus_run(
+    rootdir: str,
+    astacus: TestNode,
+    *args: str,
+    check: bool = True,
+    capture_output: bool = False,
+) -> subprocess.CompletedProcess:
+    # simulate this (for some reason, in podman the 'astacus' command
+    # is not to be found, I suppose the package hasn't been
+    # initialized)
+    #
+    # cmd = ["astacus", "--url", astacus.url, "-w", "10"]
+    cmd = [sys.executable, "-m", "astacus.main", "--url", astacus.url, "-w", "10"]
+    return subprocess.run(cmd + list(args), check=check, capture_output=capture_output, env={"PYTHONPATH": rootdir})
+
+
+def astacus_ls(astacus: TestNode) -> List[str]:
+    return sorted(str(x.relative_to(astacus.root_path)) for x in astacus.root_path.glob("**/*"))

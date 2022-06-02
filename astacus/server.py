@@ -78,7 +78,7 @@ def _systemd_notify_ready():
         subprocess.run(["systemd-notify", "--ready"], check=True)
 
 
-def _run_server(args):
+def _run_server(args) -> bool:
     # On reload (and following init_app), the app is configured based on this
     os.environ["ASTACUS_CONFIG"] = args.config
     uconfig = init_app().state.global_config.uvicorn
@@ -131,6 +131,7 @@ def _run_server(args):
         },
         http=uconfig.http,
     )
+    return True
 
 
 def create_server_parser(subparsers):
