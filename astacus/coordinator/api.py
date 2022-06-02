@@ -102,13 +102,15 @@ async def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordina
     if c.state.cached_list_running:
         raise HTTPException(status_code=429, detail="Already caching list result")
     c.state.cached_list_running = True
-    list_response = await to_thread(list_backups, req=req, json_mstorage=c.json_mstorage)
-    c.state.cached_list_response = CachedListResponse(
-        coordinator_config=coordinator_config,
-        list_request=req,
-        list_response=list_response,
-    )
-    c.state.cached_list_running = False
+    try:
+        list_response = await to_thread(list_backups, req=req, json_mstorage=c.json_mstorage)
+        c.state.cached_list_response = CachedListResponse(
+            coordinator_config=coordinator_config,
+            list_request=req,
+            list_response=list_response,
+        )
+    finally:
+        c.state.cached_list_running = False
     return list_response
 
 
