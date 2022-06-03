@@ -113,6 +113,7 @@ def test_api_snapshot_and_upload(client, mocker):
     assert result.hashes
     assert result.files
     assert result.total_size
+    assert result.az
 
     # Ask it to be uploaded
     response = client.post("/node/upload")
