@@ -1,9 +1,5 @@
 # List of things that need to be implemented #
 
-Note: This is more granular and detailed version what should be done; there
-is also (Aiven-internal) backlog of Astacus tickets that track subset of
-these.
-
 
 ## Short-term
 
@@ -17,11 +13,23 @@ these.
 - more metrics endpoints - think on what is really needed
     - perhaps backup/snapshot/restore sizes and file counts? copy from *hoard?
 
-- plugin
-    - (partial?) cassandra plugin; mostly to validate plugin arch is broad enough
-
 
 ## Eventually
+
+- Cassandra partial restore support; notably, we should be able to recover
+  single nodes (perhaps in this case, if version matches, restore both
+  system keyspace AND user keyspaces, and avoid the create steps in full
+  restore)
+
+- Cassandra specific table restore support; we should then pick more
+  carefully where exactly we are restoring things:
+  - get table ids for freshly created tables (during restore when Cassandra
+    is up from system_schema.tables)
+  - pass the keyspace+table+table id tuples to the actual restore Cassandra
+    step
+    - clear the directory
+    - move files to it
+
 
 - package (or have someone do it?) this for distros
 
@@ -31,6 +39,10 @@ these.
 - push this to PIP
 
 - use result-url instead of polling for somewhat faster results for CLI
+
+- we should have some sort of packfile format for small files - right now,
+  the embed-in-manifest kind of works, but is not pretty, and doesn't work
+  for still trivial sized files
 
 
 ## Maybe not - known design choice for now
