@@ -26,4 +26,5 @@ score=no
 
 [TYPECHECK]
 ignored-classes=responses
-extension-pkg-whitelist=pydantic
+ignored-modules=cassandra
+extension-pkg-whitelist=pydantic,cassandra.cluster,cassandra.metadata,cassandra.query

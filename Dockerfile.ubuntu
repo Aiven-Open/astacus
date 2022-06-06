@@ -10,7 +10,8 @@ ADD Makefile /build/
 RUN cd /build && make build-dep-ubuntu
 
 ADD README.md setup.cfg setup.py requirements*.txt /build/
-RUN cd /build && python3 -m pip install -r requirements.txt
+RUN cd /build && pip3 install -e '.[cassandra]'
+RUN cd /build && pip3 install -r requirements.testing.txt
 
 # This step depends on pre-commit installed from requirements.txt
 ADD .pre-commit-config.yaml /build/

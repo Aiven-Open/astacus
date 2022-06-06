@@ -11,6 +11,7 @@ from .state import node_state, NodeState
 from astacus.common import ipc
 from enum import Enum
 from fastapi import APIRouter, Depends, HTTPException
+from typing import Union
 
 router = APIRouter()
 
@@ -18,6 +19,7 @@ router = APIRouter()
 class OpName(str, Enum):
     """(Long-running) operations defined in this API (for node)"""
 
+    cassandra = "cassandra"
     clear = "clear"
     download = "download"
     snapshot = "snapshot"
@@ -104,4 +106,31 @@ def clear(req: ipc.SnapshotClearRequest, n: Node = Depends()):
 @router.get("/clear/{op_id}")
 def clear_result(*, op_id: int, n: Node = Depends()):
     op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.clear)
+    return op.result
+
+
+@router.post("/cassandra/{subop}")
+def cassandra(req: Union[ipc.NodeRequest, ipc.CassandraStartRequest], subop: ipc.CassandraSubOp, n: Node = Depends()):
+    # pylint: disable=import-outside-toplevel
+    # pylint: disable=raise-missing-from
+    try:
+        from .cassandra import CassandraGetSchemaHashOp, CassandraStartOp, SimpleCassandraSubOp
+    except ImportError:
+        raise HTTPException(status_code=501, detail="Cassandra support is not installed")
+    if not n.state.is_locked:
+        raise HTTPException(status_code=409, detail="Not locked")
+
+    if subop == ipc.CassandraSubOp.get_schema_hash:
+        return CassandraGetSchemaHashOp(n=n, op_id=n.allocate_op_id(), stats=n.stats).start(req=req)
+
+    if subop == ipc.CassandraSubOp.start_cassandra:
+        assert isinstance(req, ipc.CassandraStartRequest)
+        return CassandraStartOp(n=n, op_id=n.allocate_op_id(), stats=n.stats).start(req=req)
+
+    return SimpleCassandraSubOp(n=n, op_id=n.allocate_op_id(), stats=n.stats).start(req=req, subop=subop)
+
+
+@router.get("/cassandra/{subop}/{op_id}")
+def cassandra_result(*, subop: ipc.CassandraSubOp, op_id: int, n: Node = Depends()):
+    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.cassandra)
     return op.result

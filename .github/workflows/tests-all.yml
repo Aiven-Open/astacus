@@ -1,8 +1,6 @@
-name: Test Suite (Minimal)
+name: Test Suite (Maximal)
 
 on: pull_request
-
-# Note: This test runs only on one Python version the minimal pip install
 
 jobs:
   unit-test:
@@ -10,7 +8,7 @@ jobs:
     strategy:
       max-parallel: 4
       matrix:
-        python-version: ['3.9']
+        python-version: ['3.9', '3.10']
     steps:
     - uses: actions/checkout@v1
 
@@ -24,7 +22,10 @@ jobs:
         cache: 'pip'
 
     - name: Install requirements
-      run: pip install -r requirements.txt
+      run: pip install -e '.[cassandra]'
+
+    - name: Install testing requirements (not included by default in normal install)
+      run: pip install -r requirements.testing.txt
 
     - name: Execute unit-tests
       run: make unittest

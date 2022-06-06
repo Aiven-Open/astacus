@@ -192,6 +192,7 @@ class Snapshotter:
 
         src_dirs, src_files = self._list_dirs_and_files(self.src)
         progress.start(1)
+        changes = 0
         if self.src == self.dst:
             # The src=dst mode should be used if and only if it is
             # known that files will not disappear between snapshot and
@@ -205,7 +206,7 @@ class Snapshotter:
             dst_dirs, dst_files = self._list_dirs_and_files(self.dst)
 
             # Create missing directories
-            changes = self._snapshot_create_missing_directories(src_dirs=src_dirs, dst_dirs=dst_dirs)
+            changes += self._snapshot_create_missing_directories(src_dirs=src_dirs, dst_dirs=dst_dirs)
             progress.add_success()
 
             # Remove extra files

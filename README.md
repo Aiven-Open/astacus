@@ -39,6 +39,15 @@ shared code
 Please see Dockerfile.fedora and Dockerfile.ubuntu for concrete up-to-date
 examples, but here are the current ones:
 
+## Optional features
+
+- cassandra can be added with 'cassandra' optional:
+```
+sudo pip3 install -e '.[cassandra]'
+```
+
+
+
 ## Fedora 34
 
 (as root or user with sudo access; for root, skip sudo prefix)

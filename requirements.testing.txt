@@ -25,3 +25,4 @@ pytest-watch
 types-PyYAML
 types-requests
 types-tabulate
+types-urllib3

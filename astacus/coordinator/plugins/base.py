@@ -46,7 +46,7 @@ class Step(Generic[StepResult]):
         raise NotImplementedError
 
 
-class StepFailedError(Exception):
+class StepFailedError(exceptions.PermanentException):
     pass
 
 
@@ -66,7 +66,8 @@ class StepsContext:
 
     def set_result(self, step_class: Type[Step[T]], result: T) -> None:
         if step_class in self.step_results:
-            raise RuntimeError(f"result already set for step {step_class}")
+            if self.step_results[step_class] is not None or result is not None:
+                raise RuntimeError(f"result already set for step {step_class}")
         self.step_results[step_class] = result
 
 
@@ -216,6 +217,11 @@ class RestoreStep(Step[List[ipc.NodeResult]]):
             snapshot_results=snapshot_results,
             nodes=cluster.nodes,
         )
+        if not snapshot_results:
+            raise exceptions.MissingSnapshotResultsException(
+                f"No snapshot results, yet full restore desired; {node_to_backup_index!r} {cluster.nodes!r}"
+            )
+
         start_results: List[Optional[Result]] = []
         for node, backup_index in zip(cluster.nodes, node_to_backup_index):
             if backup_index is not None:
