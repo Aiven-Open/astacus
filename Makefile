@@ -14,6 +14,9 @@ GENERATED = astacus/version.py $(GENERATED_PROTOBUFS)
 PYTHON = python3
 DNF_INSTALL = sudo dnf install -y
 
+ZOOKEEPER_VERSION = 3.5.10
+ZOOKEEPER_HASH = 87e555869211cc3dc5f3cdfe7c22124b62605dac50a14e6c84e7e66b583c4eb3
+
 default: $(GENERATED)
 
 clean:
@@ -31,10 +34,10 @@ build-dep-ubuntu:
 
 .PHONY: test-dep-ubuntu
 test-dep-ubuntu:
-	wget --no-verbose https://dlcdn.apache.org/zookeeper/zookeeper-3.5.9/apache-zookeeper-3.5.9-bin.tar.gz
-	echo "7ad00caf8374edc984b9204cd585ad151c8ed19969045d0c23666b18a8102548  apache-zookeeper-3.5.9-bin.tar.gz" | sha256sum -c -
-	tar vxf apache-zookeeper-3.5.9-bin.tar.gz --wildcards apache-zookeeper-3.5.9-bin/lib/*.jar
-	sudo cp -r apache-zookeeper-3.5.9-bin/lib /usr/share/zookeeper
+	wget --no-verbose https://dlcdn.apache.org/zookeeper/zookeeper-$(ZOOKEEPER_VERSION)/apache-zookeeper-$(ZOOKEEPER_VERSION)-bin.tar.gz
+	echo "$(ZOOKEEPER_HASH)  apache-zookeeper-$(ZOOKEEPER_VERSION)-bin.tar.gz" | sha256sum -c -
+	tar vxf apache-zookeeper-$(ZOOKEEPER_VERSION)-bin.tar.gz --wildcards apache-zookeeper-$(ZOOKEEPER_VERSION)-bin/lib/*.jar
+	sudo cp -r apache-zookeeper-$(ZOOKEEPER_VERSION)-bin/lib /usr/share/zookeeper
 
 .PHONY: pylint
 pylint: $(GENERATED)
