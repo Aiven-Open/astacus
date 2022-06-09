@@ -19,7 +19,7 @@ from astacus.coordinator.state import coordinator_state, CoordinatorState
 from fastapi import BackgroundTasks, Depends, HTTPException
 from functools import cached_property
 from starlette.datastructures import URL
-from typing import Any, Awaitable, Callable, Dict, Iterator, List, Optional, Type
+from typing import Any, Awaitable, Callable, Dict, Iterator, List, Optional
 from urllib.parse import urlunsplit
 
 import asyncio
@@ -250,7 +250,7 @@ def get_subresult_url(request_url: URL, op_id: int) -> str:
 class SteppedCoordinatorOp(LockedCoordinatorOp):
     attempts: int
     steps: List[Step]
-    step_progress: Dict[Type[Step], Progress]
+    step_progress: Dict[int, Progress]
 
     def __init__(self, *, c: Coordinator = Depends(), attempts: int, steps: List[Step]):
         super().__init__(c=c)
@@ -301,7 +301,7 @@ class SteppedCoordinatorOp(LockedCoordinatorOp):
     @contextlib.contextmanager
     def _progress_handler(self, cluster: Cluster, step: Step) -> Iterator[None]:
         def progress_handler(progress: Progress):
-            self.step_progress[step.__class__] = progress
+            self.step_progress[self.steps.index(step)] = progress
 
         cluster.set_progress_handler(progress_handler)
         try:
