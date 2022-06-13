@@ -12,6 +12,7 @@ from enum import Enum
 from typing import Callable, cast, Dict, List, Optional, Sequence, Type, TypeVar, Union
 
 import asyncio
+import copy
 import httpx
 import json
 import logging
@@ -61,24 +62,56 @@ class Cluster:
 
     async def request_from_nodes(
         self,
-        url,
+        url: str,
         *,
         caller: str,
         req: Optional[ipc.NodeRequest] = None,
+        reqs: Optional[List[ipc.NodeRequest]] = None,
         nodes: Optional[List[CoordinatorNode]] = None,
         **kw,
     ) -> Sequence[Optional[Result]]:
+        """Perform asynchronously parallel request to the node components.
+
+        The 'url' specifies sub-url under the node's own url. The set
+        of nodes is by default all nodes, unless specified as
+        argument.
+
+        The request to be given can be provided either using 'req' (in
+        which case all nodes get the same request), or 'reqs' iterable
+        which must provide one entry for each covered node. It can be
+        also omitted in which case empty ipc.NodeRequest is used.
+        """
         if nodes is None:
             nodes = self.nodes
-        if req is not None:
-            assert isinstance(req, ipc.NodeRequest)
-            if self.subresult_url is not None:
-                req.result_url = self.subresult_url
-            kw["data"] = req.json()
+        else:
+            nodes = list(nodes)
+
+        if not nodes:
+            return []
+
+        if reqs is not None:
+            assert req is None
+            reqs = list(reqs)
+        else:
+            if req is None:
+                req = ipc.NodeRequest()
+            reqs = [copy.deepcopy(req) for _ in nodes]
+        assert reqs
+
+        if self.subresult_url:
+            for subreq in reqs:
+                assert isinstance(subreq, ipc.NodeRequest)
+                subreq.result_url = self.subresult_url
+
         urls = [f"{node.url}/{url}" for node in nodes]
-        aws = [utils.httpx_request(url, caller=caller, **kw) for url in urls]
+        assert len(reqs) == len(urls)
+
+        # Now 'reqs' + 'urls' contains all we need to actually perform
+        # requests we want to.
+        aws = [utils.httpx_request(url, caller=caller, data=req.json(), **kw) for req, url in zip(reqs, urls)]
         results = await asyncio.gather(*aws, return_exceptions=True)
-        logger.info("request_from_nodes %r => %r", urls, results)
+
+        logger.info("request_from_nodes %r to %r => %r", reqs, urls, results)
         return results
 
     async def _request_lock_call_from_nodes(

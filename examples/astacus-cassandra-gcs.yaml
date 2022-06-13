@@ -1,0 +1,92 @@
+#
+# This is single-node example of how Cassandra plugin works; for more
+# realistic cases, coordinator should be specified with list of nodes
+# instead of the local default that is produced from the configuration
+# file.
+#
+
+coordinator:
+ nodes:
+ - url: http://localhost:5515/node
+ object_storage_cache: /tmp/astacus/cache
+ plugin: cassandra
+ plugin_config:
+  nodes:
+   # This is used to identify the node(s)
+    - listen_address: fda7:a938:5bfe:5fa6:0:3b5:aacd:f2bb
+    - listen_address: fda7:a938:5bfe:5fa6:0:3b5:aacd:f2bc
+
+  # This is how (some node) of the cluster can be contacted
+  client:
+   # this is optional, but convenient to get native_transport_port
+   #config_path: example/cassandra-conf.yaml
+   #default
+   hostnames:
+    - 127.0.0.1
+   #port can be set, but it can be also read from file
+   port: 27140
+   username: aiven
+   password: REDACTED
+
+# with Cassandra, root_link == root works best, as no need to have
+# dangling symlinks in the link directory
+node:
+ root: /tmp/astacus/cassandra
+ root_link: /tmp/astacus/cassandra
+ cassandra:
+  nodetool_command: ["nodetool"]
+  start_command: ["systemctl", "start", "cassandra"]
+  stop_command: ["systemctl", "stop", "cassandra"]
+  client:
+   # this is mandatory for restore to work, so no point specifying anything else
+   config_path: example/cassandra-conf.yaml
+   username: aiven
+   password: REDACTED
+
+object_storage:
+  compression:
+    algorithm: zstd
+  default_storage: storage1
+  encryption_key_id: key1
+  encryption_keys:
+    key1:
+      private: '-----BEGIN PRIVATE KEY-----
+
+        REDACTED-----END PRIVATE KEY-----
+
+        '
+      public: '-----BEGIN PUBLIC KEY-----
+
+        REDACTED
+
+        -----END PUBLIC KEY-----
+
+        '
+  storages:
+    storage1:
+      bucket_name: bucket1
+      credentials:
+        auth_provider_x509_cert_url: https://www.googleapis.com/oauth2/v1/certs
+        auth_uri: https://accounts.google.com/o/oauth2/auth
+        client_email: REDACTED
+        client_id: '1234567890'
+        client_x509_cert_url: https://www.googleapis.com/robot/v1/metadata/x509/REDACTED
+        private_key: '-----BEGIN PRIVATE KEY-----
+
+          REDACTED
+
+          -----END PRIVATE KEY-----
+
+          '
+        private_key_id: REDACTED
+        project_id: project1
+        token_uri: https://accounts.google.com/o/oauth2/token
+        type: service_account
+      prefix: storage1
+      project_id: project1
+      storage_type: google
+  temporary_directory: /tmp/astacus/storage-tmp
+
+uvicorn:
+ log_level: debug
+ reload: true

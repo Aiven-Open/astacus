@@ -4,9 +4,13 @@ See LICENSE for details
 """
 
 from astacus.common import utils
+from astacus.common.cassandra.config import CassandraClientConfiguration, SNAPSHOT_NAME
+from io import StringIO
+from pathlib import Path
 
 import logging
 import pytest
+import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -34,3 +38,40 @@ def fixture_utils_http_request_list(mocker):
     mocker.patch.object(utils, "http_request", new=_http_request)
     yield result_list
     assert not result_list, f"Unconsumed requests: {result_list!r}"
+
+
+class CassandraTestConfig:
+    def __init__(self, *, mocker, tmpdir):
+        self.root = Path(tmpdir) / "root"
+
+        # Create fake snapshot files that we want to see being moved/removed/..
+        keyspace_path = self.root / "data" / "dummyks"
+        self.snapshot_path = keyspace_path / "dummytable-123" / "snapshots" / SNAPSHOT_NAME
+        self.snapshot_path.mkdir(parents=True)
+
+        self.other_snapshot_path = keyspace_path / "dummytable-123" / "snapshots" / f"not{SNAPSHOT_NAME}"
+        self.other_snapshot_path.mkdir(parents=True)
+
+        self.cassandra_conf = Path(tmpdir / "cassandra.yaml")
+        self.cassandra_conf.write_text(
+            """
+listen_address: 127.0.0.1
+"""
+        )
+
+        (self.snapshot_path / "asdf").write_text("foobar")
+        (keyspace_path / "dummytable-234").mkdir()
+
+        named_temporary_file = mocker.patch.object(tempfile, "NamedTemporaryFile")
+        self.fake_conffile = StringIO()
+        named_temporary_file.return_value.__enter__.return_value = self.fake_conffile
+        self.fake_conffile.name = "tempfilename"
+
+        self.cassandra_client_config = CassandraClientConfiguration(
+            hostnames=["127.0.0.1"], port=42, username="dummy", password="", config_path=self.cassandra_conf
+        )
+
+
+@pytest.fixture(name="cassandra_test_config")
+def fixture_cassandra_test_config(mocker, tmpdir):
+    yield CassandraTestConfig(mocker=mocker, tmpdir=tmpdir)

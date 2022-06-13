@@ -6,6 +6,10 @@ from typing import Type
 def get_plugin(plugin: Plugin) -> Type[CoordinatorPlugin]:
     # pylint: disable=import-outside-toplevel
 
+    if plugin == Plugin.cassandra:
+        from .cassandra.plugin import CassandraPlugin
+
+        return CassandraPlugin
     if plugin == Plugin.clickhouse:
         from .clickhouse.plugin import ClickHousePlugin
 

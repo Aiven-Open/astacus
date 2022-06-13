@@ -1,0 +1,8 @@
+# This is example cassandra config file - obviously there should be
+# more than what is here, but this is what Astacus uses for
+# configuration via config file
+#
+# (if chosen - these can be also supplied explicitly).
+
+listen_address: fda7:a938:5bfe:5fa6:0:3b5:aacd:f2bb
+native_transport_port: 27140

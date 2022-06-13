@@ -32,6 +32,7 @@ def fixture_app(tmpdir):
     (root / "foobig2").write_text("foobar" * magic.EMBEDDED_FILE_SIZE)
     app.state.node_config = NodeConfig.parse_obj(
         {
+            "az": "testaz",
             "root": str(root),
             "object_storage": {
                 "temporary_directory": str(tmp_path),
