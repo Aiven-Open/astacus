@@ -248,7 +248,8 @@ def create_astacus_configs(
                         cluster_username=clickhouse_cluster.services[0].username,
                         cluster_password=clickhouse_cluster.services[0].password,
                     ),
-                    sync_timeout=30.0,
+                    sync_databases_timeout=10.0,
+                    sync_tables_timeout=30.0,
                 ).jsondict(),
             ),
             node=NodeConfig(

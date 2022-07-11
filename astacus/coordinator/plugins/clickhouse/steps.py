@@ -14,6 +14,7 @@ from .parts import (
     group_files_into_parts,
     list_parts_to_attach,
 )
+from .replication import DatabaseReplica, sync_replicated_database
 from astacus.common import ipc
 from astacus.common.exceptions import TransientException
 from astacus.common.limiter import Limiter
@@ -22,7 +23,7 @@ from astacus.coordinator.plugins.base import BackupManifestStep, SnapshotStep, S
 from astacus.coordinator.plugins.zookeeper import ChangeWatch, TransactionError, ZooKeeperClient
 from base64 import b64decode
 from pathlib import Path
-from typing import Any, cast, Dict, List, Tuple
+from typing import Any, cast, Dict, List, Sequence, Tuple
 
 import asyncio
 import dataclasses
@@ -33,6 +34,8 @@ import uuid
 logger = logging.getLogger(__name__)
 
 DatabasesAndTables = Tuple[List[ReplicatedDatabase], List[Table]]
+
+MACROS_LIST_QUERY = b"SELECT base64Encode(macro),base64Encode(substitution) FROM system.macros"
 
 TABLES_LIST_QUERY = b"""SELECT
     base64Encode(system.databases.name),
@@ -407,6 +410,48 @@ class RestoreReplicatedDatabasesStep(Step[None]):
 
 
 @dataclasses.dataclass
+class ListDatabaseReplicasStep(Step[Sequence[DatabaseReplica]]):
+    clients: List[ClickHouseClient]
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> Sequence[DatabaseReplica]:
+        replicas: list[DatabaseReplica] = []
+        expected_macros = {b"shard", b"replica"}
+        for server_index, client in enumerate(self.clients, start=1):
+            rows = await client.execute(MACROS_LIST_QUERY)
+            macros: dict[bytes, bytes] = {}
+            for b64_macro_name, b64_macro_value in rows:
+                assert isinstance(b64_macro_name, str)
+                assert isinstance(b64_macro_value, str)
+                macros[b64decode(b64_macro_name)] = b64decode(b64_macro_value)
+            missing_macros = expected_macros - set(macros)
+            if missing_macros:
+                raise StepFailedError(f"Missing macro definitions on server {server_index}: {missing_macros!r}")
+            replicas.append(
+                DatabaseReplica(
+                    shard_name=macros[b"shard"].decode(),
+                    replica_name=macros[b"replica"].decode(),
+                )
+            )
+        return replicas
+
+
+@dataclasses.dataclass
+class SyncDatabaseReplicasStep(Step[None]):
+    zookeeper_client: ZooKeeperClient
+    replicated_databases_zookeeper_path: str
+    sync_timeout: float
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
+        manifest = context.get_result(ClickHouseManifestStep)
+        replicas = context.get_result(ListDatabaseReplicasStep)
+        async with self.zookeeper_client.connect() as connection:
+            for database in manifest.replicated_databases:
+                database_znode_name = escape_for_file_name(database.name)
+                database_path = f"{self.replicated_databases_zookeeper_path}/{database_znode_name}"
+                await sync_replicated_database(connection, database_path, replicas, self.sync_timeout)
+
+
+@dataclasses.dataclass
 class RestoreAccessEntitiesStep(Step[None]):
     """
     Restores access entities (user, roles, quotas, row_policies, settings profiles) and their grants
@@ -488,7 +533,7 @@ class AttachMergeTreePartsStep(Step[None]):
 
 
 @dataclasses.dataclass
-class SyncReplicasStep(Step[None]):
+class SyncTableReplicasStep(Step[None]):
     """
     Before declaring the restoration as finished, make sure all parts of replicated tables
     are all exchanged between all nodes.

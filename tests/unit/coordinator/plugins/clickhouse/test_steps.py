@@ -12,18 +12,22 @@ from astacus.coordinator.plugins.base import BackupManifestStep, SnapshotStep, S
 from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, StubClickHouseClient
 from astacus.coordinator.plugins.clickhouse.config import ClickHouseConfiguration, ClickHouseNode, ReplicatedDatabaseSettings
 from astacus.coordinator.plugins.clickhouse.manifest import AccessEntity, ClickHouseManifest, ReplicatedDatabase, Table
+from astacus.coordinator.plugins.clickhouse.replication import DatabaseReplica
 from astacus.coordinator.plugins.clickhouse.steps import (
     AttachMergeTreePartsStep,
     ClickHouseManifestStep,
     DistributeReplicatedPartsStep,
     FreezeTablesStep,
+    ListDatabaseReplicasStep,
+    MACROS_LIST_QUERY,
     PrepareClickHouseManifestStep,
     RemoveFrozenTablesStep,
     RestoreAccessEntitiesStep,
     RestoreReplicatedDatabasesStep,
     RetrieveAccessEntitiesStep,
     RetrieveDatabasesAndTablesStep,
-    SyncReplicasStep,
+    SyncDatabaseReplicasStep,
+    SyncTableReplicasStep,
     TABLES_LIST_QUERY,
     UnfreezeTablesStep,
     ValidateConfigStep,
@@ -482,6 +486,89 @@ async def test_parse_clickhouse_manifest() -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_database_replicas_step() -> None:
+    clients = [StubClickHouseClient(), StubClickHouseClient()]
+    for client, replica_name in zip(clients, [b"node1", b"node2"]):
+        client.set_response(
+            MACROS_LIST_QUERY,
+            [
+                [b64_str(b"shard"), b64_str(b"all")],
+                [b64_str(b"replica"), b64_str(replica_name)],
+                [b64_str(b"don\x80care"), b64_str(b"its\x00fine")],
+            ],
+        )
+    step = ListDatabaseReplicasStep(clients=clients)
+    cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
+    context = StepsContext()
+    database_replicas = await step.run_step(cluster, context)
+    assert database_replicas == [
+        DatabaseReplica(shard_name="all", replica_name="node1"),
+        DatabaseReplica(shard_name="all", replica_name="node2"),
+    ]
+
+
+@pytest.mark.parametrize("missing_macro", [b"shard", b"replica"])
+@pytest.mark.asyncio
+async def test_list_database_replicas_step_fails_on_missing_macro(missing_macro: bytes) -> None:
+    clients = [StubClickHouseClient(), StubClickHouseClient()]
+    for client, replica_name in zip(clients, [b"node1", b"node2"]):
+        response = []
+        if missing_macro != b"shard":
+            response.append([b64_str(b"shard"), b64_str(b"all")])
+        if missing_macro != b"replica":
+            response.append([b64_str(b"replica"), b64_str(replica_name)])
+        client.set_response(MACROS_LIST_QUERY, response)
+    step = ListDatabaseReplicasStep(clients=clients)
+    cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
+    context = StepsContext()
+    with pytest.raises(StepFailedError, match="Missing macro definition"):
+        await step.run_step(cluster, context)
+
+
+@pytest.mark.asyncio
+async def test_list_sync_database_replicas_step() -> None:
+    zookeeper_client = FakeZooKeeperClient()
+    async with zookeeper_client.connect() as connection:
+        await connection.create("/clickhouse/databases", b"")
+        # In the first database, node1 is done but node2 is late
+        await connection.create("/clickhouse/databases/db%2Done", b"")
+        await connection.create("/clickhouse/databases/db%2Done/max_log_ptr", b"100")
+        await connection.create("/clickhouse/databases/db%2Done/replicas", b"")
+        await connection.create("/clickhouse/databases/db%2Done/replicas/all|node1", b"")
+        await connection.create("/clickhouse/databases/db%2Done/replicas/all|node1/log_ptr", b"95")
+        await connection.create("/clickhouse/databases/db%2Done/replicas/all|node2", b"")
+        await connection.create("/clickhouse/databases/db%2Done/replicas/all|node2/log_ptr", b"90")
+    step = SyncDatabaseReplicasStep(
+        zookeeper_client=zookeeper_client, replicated_databases_zookeeper_path="/clickhouse/databases", sync_timeout=1.0
+    )
+    cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
+    context = StepsContext()
+    context.set_result(
+        ClickHouseManifestStep,
+        ClickHouseManifest(replicated_databases=[ReplicatedDatabase(name=b"db-one")]),
+    )
+    context.set_result(
+        ListDatabaseReplicasStep,
+        [DatabaseReplica(shard_name="all", replica_name="node1"), DatabaseReplica(shard_name="all", replica_name="node2")],
+    )
+
+    async def advance_node1():
+        async with zookeeper_client.connect() as connection:
+            for ptr in range(96, 101):
+                await connection.set("/clickhouse/databases/db%2Done/replicas/all|node1/log_ptr", str(ptr).encode())
+
+    async def advance_node2():
+        async with zookeeper_client.connect() as connection:
+            for ptr in range(91, 101):
+                await connection.set("/clickhouse/databases/db%2Done/replicas/all|node2/log_ptr", str(ptr).encode())
+
+    await asyncio.gather(step.run_step(cluster, context), advance_node1(), advance_node2())
+    async with zookeeper_client.connect() as connection:
+        assert await connection.get("/clickhouse/databases/db%2Done/replicas/all|node1/log_ptr") == b"100"
+        assert await connection.get("/clickhouse/databases/db%2Done/replicas/all|node2/log_ptr") == b"100"
+
+
+@pytest.mark.asyncio
 async def test_creates_all_replicated_databases_and_tables_in_manifest() -> None:
     clients = [mock_clickhouse_client(), mock_clickhouse_client()]
     step = RestoreReplicatedDatabasesStep(
@@ -700,7 +787,7 @@ async def test_attaches_all_mergetree_parts_in_manifest() -> None:
 @pytest.mark.asyncio
 async def test_sync_replicas_for_replicated_mergetree_tables() -> None:
     clients = [mock_clickhouse_client(), mock_clickhouse_client()]
-    step = SyncReplicasStep(clients, sync_timeout=180, max_concurrent_sync=10)
+    step = SyncTableReplicasStep(clients, sync_timeout=180, max_concurrent_sync=10)
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
     context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)

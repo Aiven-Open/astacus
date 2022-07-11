@@ -9,6 +9,7 @@ from .steps import (
     ClickHouseManifestStep,
     DistributeReplicatedPartsStep,
     FreezeTablesStep,
+    ListDatabaseReplicasStep,
     MoveFrozenPartsStep,
     PrepareClickHouseManifestStep,
     RemoveFrozenTablesStep,
@@ -16,7 +17,8 @@ from .steps import (
     RestoreReplicatedDatabasesStep,
     RetrieveAccessEntitiesStep,
     RetrieveDatabasesAndTablesStep,
-    SyncReplicasStep,
+    SyncDatabaseReplicasStep,
+    SyncTableReplicasStep,
     UnfreezeTablesStep,
     ValidateConfigStep,
 )
@@ -46,7 +48,8 @@ class ClickHousePlugin(CoordinatorPlugin):
     freeze_name: str = "astacus"
     attach_timeout: float = 300.0
     max_concurrent_attach: int = 100
-    sync_timeout: float = 3600.0
+    sync_databases_timeout: float = 60.0
+    sync_tables_timeout: float = 3600.0
     max_concurrent_sync: int = 100
 
     def get_backup_steps(self, *, context: OperationContext) -> List[Step]:
@@ -97,10 +100,16 @@ class ClickHousePlugin(CoordinatorPlugin):
             BackupNameStep(json_storage=context.json_storage, requested_name=req.name),
             BackupManifestStep(json_storage=context.json_storage),
             ClickHouseManifestStep(),
+            ListDatabaseReplicasStep(clients=clients),
             RestoreReplicatedDatabasesStep(
                 clients=clients,
                 replicated_databases_zookeeper_path=self.replicated_databases_zookeeper_path,
                 replicated_database_settings=self.replicated_databases_settings,
+            ),
+            SyncDatabaseReplicasStep(
+                zookeeper_client=zookeeper_client,
+                replicated_databases_zookeeper_path=self.replicated_databases_zookeeper_path,
+                sync_timeout=self.sync_databases_timeout,
             ),
             # We should deduplicate parts of ReplicatedMergeTree tables to only download once from
             # backup storage and then let ClickHouse replicate between all servers.
@@ -110,9 +119,9 @@ class ClickHousePlugin(CoordinatorPlugin):
                 attach_timeout=self.attach_timeout,
                 max_concurrent_attach=self.max_concurrent_attach,
             ),
-            SyncReplicasStep(
+            SyncTableReplicasStep(
                 clients=clients,
-                sync_timeout=self.sync_timeout,
+                sync_timeout=self.sync_tables_timeout,
                 max_concurrent_sync=self.max_concurrent_sync,
             ),
             # Keeping this step last avoids access from non-admin users while we are still restoring
