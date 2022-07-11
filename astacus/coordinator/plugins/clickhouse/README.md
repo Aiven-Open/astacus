@@ -105,7 +105,7 @@ CREATE DATABASE ` db_name ` ENGINE = Replicated('/clickhouse/databases/db_name',
 ## Restoration behavior
 
 The synchronization step exchanges replicated data between all servers of the cluster.
-If you have large volumes of data, adjust the `sync_timeout` (in seconds) accordingly.
+If you have large volumes of data, adjust the `sync_tables_timeout` (in seconds) accordingly.
 
 ### Databases
 
