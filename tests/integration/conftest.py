@@ -133,7 +133,7 @@ def get_kazoo_host(zookeeper: Service) -> str:
 
 @pytest.fixture(name="zookeeper_client")
 def fixture_zookeeper_client(zookeeper: Service) -> KazooZooKeeperClient:
-    return KazooZooKeeperClient(hosts=[get_kazoo_host(zookeeper)], timeout=1)
+    return KazooZooKeeperClient(hosts=[get_kazoo_host(zookeeper)], timeout=10)
 
 
 @contextlib.asynccontextmanager
