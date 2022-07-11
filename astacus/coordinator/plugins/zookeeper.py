@@ -92,6 +92,16 @@ class ZooKeeperConnection:
         """
         raise NotImplementedError
 
+    async def set(self, path: str, value: bytes) -> None:
+        """
+        Set the `value` node with the specified `path`.
+
+        The node must already exist.
+
+        Raises `NoNodeError` if the node already exists.
+        """
+        raise NotImplementedError
+
     async def exists(self, path: str) -> Optional[ZnodeStat]:
         """
         Check if specified node exists.
@@ -218,6 +228,12 @@ class KazooZooKeeperConnection(ZooKeeperConnection):
         except kazoo.exceptions.NodeExistsError as e:
             raise NodeExistsError(path) from e
 
+    async def set(self, path: str, value: bytes) -> None:
+        try:
+            await to_thread(self.client.retry, self.client.set, path, value)
+        except kazoo.exceptions.NoNodeError as e:
+            raise NoNodeError(path) from e
+
     async def exists(self, path) -> Optional[ZnodeStat]:
         return await to_thread(self.client.retry, self.client.exists, path)
 
@@ -337,6 +353,16 @@ class FakeZooKeeperConnection(ZooKeeperConnection):
         async with self.client.get_storage() as storage:
             parent_parts, event = create_locked(path, value, storage, makepath=True)
         await self.client.trigger(parent_parts, event)
+
+    async def set(self, path: str, value: bytes) -> None:
+        assert self in self.client.connections
+        parts = parse_path(path)
+        event = WatchedEvent(type=EventType.CHANGED, state=KeeperState.CONNECTED, path="/".join(parts))
+        async with self.client.get_storage() as storage:
+            if parts not in storage:
+                raise NoNodeError(path)
+            storage[parts] = value
+        await self.client.trigger(parts, event)
 
     async def exists(self, path: str) -> Optional[ZnodeStat]:
         async with self.client.get_storage() as storage:

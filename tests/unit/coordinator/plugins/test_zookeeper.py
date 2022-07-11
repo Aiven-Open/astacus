@@ -37,6 +37,15 @@ async def test_fake_zookeeper_client_create_then_get() -> None:
 
 
 @pytest.mark.asyncio
+async def test_fake_zookeeper_client_create_then_set() -> None:
+    client = FakeZooKeeperClient()
+    async with client.connect() as connection:
+        await connection.create("/path/to_key", b"content")
+        await connection.set("/path/to_key", b"new content")
+        assert await connection.get("/path/to_key/") == b"new content"
+
+
+@pytest.mark.asyncio
 async def test_fake_zookeeper_client_create_existing_node_fails() -> None:
     client = FakeZooKeeperClient()
     async with client.connect() as connection:
@@ -51,6 +60,14 @@ async def test_fake_zookeeper_client_get_missing_node_fails() -> None:
     async with client.connect() as connection:
         with pytest.raises(NoNodeError):
             await connection.get("/path/to_key")
+
+
+@pytest.mark.asyncio
+async def test_fake_zookeeper_client_set_missing_node_fails() -> None:
+    client = FakeZooKeeperClient()
+    async with client.connect() as connection:
+        with pytest.raises(NoNodeError):
+            await connection.set("/path/to_key", b"content")
 
 
 @pytest.mark.asyncio
@@ -79,7 +96,7 @@ async def test_fake_zookeeper_client_get_children_of_missing_node_fails() -> Non
 
 
 @pytest.mark.asyncio
-async def test_fake_zookeeper_client_get_watch() -> None:
+async def test_fake_zookeeper_client_get_watch_on_child() -> None:
     client = FakeZooKeeperClient()
     change_watch = ChangeWatch()
     async with client.connect() as connection:
@@ -87,6 +104,18 @@ async def test_fake_zookeeper_client_get_watch() -> None:
         await connection.get("/group/of/key_1", watch=change_watch)
         async with client.connect() as connection_2:
             await connection_2.create("/group/of/key_1/subitem", b"content")
+    assert change_watch.has_changed
+
+
+@pytest.mark.asyncio
+async def test_fake_zookeeper_client_get_watch_on_set() -> None:
+    client = FakeZooKeeperClient()
+    change_watch = ChangeWatch()
+    async with client.connect() as connection:
+        await connection.create("/group/of/key_1", b"content")
+        await connection.get("/group/of/key_1", watch=change_watch)
+        async with client.connect() as connection_2:
+            await connection_2.set("/group/of/key_1", b"new content")
     assert change_watch.has_changed
 
 
