@@ -5,8 +5,10 @@ See LICENSE for details
 from astacus.common.utils import AstacusModel
 from astacus.coordinator.plugins.clickhouse.client import escape_sql_identifier
 from base64 import b64decode, b64encode
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
+
+import uuid
 
 
 class AccessEntity(AstacusModel):
@@ -32,10 +34,20 @@ class AccessEntity(AstacusModel):
 
 class ReplicatedDatabase(AstacusModel):
     name: bytes
+    # This is optional because of older backups without uuids
+    uuid: Optional[UUID]
+    # These contain macros, not per-server final values
+    shard: bytes
+    replica: bytes
 
     @classmethod
     def from_plugin_data(cls, data: Dict[str, Any]) -> "ReplicatedDatabase":
-        return ReplicatedDatabase(name=b64decode(data["name"]))
+        return ReplicatedDatabase(
+            name=b64decode(data["name"]),
+            uuid=uuid.UUID(data["uuid"]) if "uuid" in data else None,
+            shard=b64decode(data["shard"]) if "shard" in data else b"{shard}",
+            replica=b64decode(data["replica"]) if "replica" in data else b"{replica}",
+        )
 
 
 class Table(AstacusModel):

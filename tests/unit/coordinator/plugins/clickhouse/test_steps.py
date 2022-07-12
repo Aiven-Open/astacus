@@ -59,8 +59,8 @@ SAMPLE_ENTITIES = [
     AccessEntity(type="U", uuid=uuid.UUID(int=6), name=b"z\x80enjoyer", attach_query=b"ATTACH USER \x80 ..."),
 ]
 SAMPLE_DATABASES = [
-    ReplicatedDatabase(name=b"db-one"),
-    ReplicatedDatabase(name=b"db-two"),
+    ReplicatedDatabase(name=b"db-one", uuid=uuid.UUID(int=17), shard=b"{my_shard}", replica=b"{my_replica}"),
+    ReplicatedDatabase(name=b"db-two", uuid=uuid.UUID(int=18), shard=b"{my_shard}", replica=b"{my_replica}"),
 ]
 SAMPLE_TABLES = [
     Table(
@@ -205,6 +205,7 @@ async def test_retrieve_tables() -> None:
             # This special row is what we get for a database without tables
             [
                 b64_str(b"db-empty"),
+                "00000000-0000-0000-0000-000000000010",
                 b64_str(b""),
                 "",
                 "00000000-0000-0000-0000-000000000000",
@@ -213,6 +214,7 @@ async def test_retrieve_tables() -> None:
             ],
             [
                 b64_str(b"db-one"),
+                "00000000-0000-0000-0000-000000000011",
                 b64_str(b"table-uno"),
                 "ReplicatedMergeTree",
                 "00000000-0000-0000-0000-100000000001",
@@ -224,6 +226,7 @@ async def test_retrieve_tables() -> None:
             ],
             [
                 b64_str(b"db-one"),
+                "00000000-0000-0000-0000-000000000011",
                 b64_str(b"table-dos"),
                 "MergeTree",
                 "00000000-0000-0000-0000-100000000002",
@@ -232,6 +235,7 @@ async def test_retrieve_tables() -> None:
             ],
             [
                 b64_str(b"db-two"),
+                "00000000-0000-0000-0000-000000000012",
                 b64_str(b"table-eins"),
                 "ReplicatedMergeTree",
                 "00000000-0000-0000-0000-200000000001",
@@ -240,10 +244,48 @@ async def test_retrieve_tables() -> None:
             ],
         ],
     )
+    clients[0].set_response(
+        b"SHOW CREATE DATABASE `db-empty`",
+        [
+            [
+                "CREATE DATABASE `db-empty` ENGINE = "
+                "Replicated('/clickhouse/databases/db%2Dempty', '{my_other_shard}', '{my_other_replica}')"
+            ]
+        ],
+    )
+    clients[0].set_response(
+        b"SHOW CREATE DATABASE `db-one`",
+        [
+            [
+                "CREATE DATABASE `db-one` ENGINE = "
+                "Replicated('/clickhouse/databases/db%2Done', '{my_shard}', '{my_replica}')"
+            ]
+        ],
+    )
+    clients[0].set_response(
+        b"SHOW CREATE DATABASE `db-two`",
+        [
+            [
+                "CREATE DATABASE `db-two` ENGINE = "
+                "Replicated('/clickhouse/databases/db%2Dtwo', '{my_shard}', '{my_replica}')"
+            ]
+        ],
+    )
     step = RetrieveDatabasesAndTablesStep(clients=clients)
     context = StepsContext()
     databases, tables = await step.run_step(Cluster(nodes=[]), context)
-    assert databases == [ReplicatedDatabase(name=b"db-empty")] + SAMPLE_DATABASES
+    assert (
+        databases
+        == [
+            ReplicatedDatabase(
+                name=b"db-empty",
+                uuid=uuid.UUID(int=16),
+                shard=b"{my_other_shard}",
+                replica=b"{my_other_replica}",
+            )
+        ]
+        + SAMPLE_DATABASES
+    )
     assert tables == SAMPLE_TABLES
 
 
@@ -262,13 +304,37 @@ async def test_retrieve_tables_without_any_table() -> None:
     clients[0].set_response(
         TABLES_LIST_QUERY,
         [
-            [b64_str(b"db-empty"), b64_str(b""), "", "00000000-0000-0000-0000-000000000000", b64_str(b""), []],
+            [
+                b64_str(b"db-empty"),
+                "00000000-0000-0000-0000-000000000010",
+                b64_str(b""),
+                "",
+                "00000000-0000-0000-0000-000000000000",
+                b64_str(b""),
+                [],
+            ],
+        ],
+    )
+    clients[0].set_response(
+        b"SHOW CREATE DATABASE `db-empty`",
+        [
+            [
+                "CREATE DATABASE `db-empty` ENGINE = "
+                "Replicated('/clickhouse/databases/db%2Dempty', '{my_other_shard}', '{my_other_replica}')"
+            ]
         ],
     )
     step = RetrieveDatabasesAndTablesStep(clients=clients)
     context = StepsContext()
     databases, tables = await step.run_step(Cluster(nodes=[]), context)
-    assert databases == [ReplicatedDatabase(name=b"db-empty")]
+    assert databases == [
+        ReplicatedDatabase(
+            name=b"db-empty",
+            uuid=uuid.UUID(int=16),
+            shard=b"{my_other_shard}",
+            replica=b"{my_other_replica}",
+        )
+    ]
     assert tables == []
 
 
@@ -459,7 +525,14 @@ async def test_parse_clickhouse_manifest() -> None:
                         "attach_query": b64_str(b"ATTACH USER \x80 ..."),
                     }
                 ],
-                "replicated_databases": [{"name": b64_str(b"db-one")}],
+                "replicated_databases": [
+                    {
+                        "name": b64_str(b"db-one"),
+                        "uuid": "00000000-0000-0000-0000-000000000010",
+                        "shard": b64_str(b"{my_shard}"),
+                        "replica": b64_str(b"{my_replica}"),
+                    }
+                ],
                 "tables": [
                     {
                         "database": b64_str(b"db-one"),
@@ -478,7 +551,9 @@ async def test_parse_clickhouse_manifest() -> None:
         access_entities=[
             AccessEntity(type="U", uuid=uuid.UUID(int=2), name=b"default_\x80", attach_query=b"ATTACH USER \x80 ...")
         ],
-        replicated_databases=[ReplicatedDatabase(name=b"db-one")],
+        replicated_databases=[
+            ReplicatedDatabase(name=b"db-one", uuid=uuid.UUID(int=16), shard=b"{my_shard}", replica=b"{my_replica}")
+        ],
         tables=[
             Table(database=b"db-one", name=b"t1", engine="MergeTree", uuid=uuid.UUID(int=4), create_query=b"CREATE ...")
         ],
@@ -488,11 +563,12 @@ async def test_parse_clickhouse_manifest() -> None:
 @pytest.mark.asyncio
 async def test_list_database_replicas_step() -> None:
     clients = [StubClickHouseClient(), StubClickHouseClient()]
-    for client, replica_name in zip(clients, [b"node1", b"node2"]):
+    for client, replica_name, shard_a, shard_b in zip(clients, [b"node1", b"node2"], [b"a1", b"a2"], [b"b1", b"b2"]):
         client.set_response(
             MACROS_LIST_QUERY,
             [
-                [b64_str(b"shard"), b64_str(b"all")],
+                [b64_str(b"shard_group_a"), b64_str(shard_a)],
+                [b64_str(b"shard_group_b"), b64_str(shard_b)],
                 [b64_str(b"replica"), b64_str(replica_name)],
                 [b64_str(b"don\x80care"), b64_str(b"its\x00fine")],
             ],
@@ -500,11 +576,26 @@ async def test_list_database_replicas_step() -> None:
     step = ListDatabaseReplicasStep(clients=clients)
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
+    context.set_result(
+        ClickHouseManifestStep,
+        ClickHouseManifest(
+            replicated_databases=[
+                ReplicatedDatabase(name=b"db-one", shard=b"pre_{shard_group_a}", replica=b"{replica}"),
+                ReplicatedDatabase(name=b"db-two", shard=b"{shard_group_b}", replica=b"{replica}_suf"),
+            ]
+        ),
+    )
     database_replicas = await step.run_step(cluster, context)
-    assert database_replicas == [
-        DatabaseReplica(shard_name="all", replica_name="node1"),
-        DatabaseReplica(shard_name="all", replica_name="node2"),
-    ]
+    assert database_replicas == {
+        b"db-one": [
+            DatabaseReplica(shard_name="pre_a1", replica_name="node1"),
+            DatabaseReplica(shard_name="pre_a2", replica_name="node2"),
+        ],
+        b"db-two": [
+            DatabaseReplica(shard_name="b1", replica_name="node1_suf"),
+            DatabaseReplica(shard_name="b2", replica_name="node2_suf"),
+        ],
+    }
 
 
 @pytest.mark.parametrize("missing_macro", [b"shard", b"replica"])
@@ -521,7 +612,15 @@ async def test_list_database_replicas_step_fails_on_missing_macro(missing_macro:
     step = ListDatabaseReplicasStep(clients=clients)
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
-    with pytest.raises(StepFailedError, match="Missing macro definition"):
+    context.set_result(
+        ClickHouseManifestStep,
+        ClickHouseManifest(
+            replicated_databases=[
+                ReplicatedDatabase(name=b"db-one", shard=b"{shard}", replica=b"{replica}"),
+            ]
+        ),
+    )
+    with pytest.raises(StepFailedError, match=f"Error in macro of server 1: No macro named {missing_macro!r}"):
         await step.run_step(cluster, context)
 
 
@@ -545,11 +644,20 @@ async def test_list_sync_database_replicas_step() -> None:
     context = StepsContext()
     context.set_result(
         ClickHouseManifestStep,
-        ClickHouseManifest(replicated_databases=[ReplicatedDatabase(name=b"db-one")]),
+        ClickHouseManifest(
+            replicated_databases=[
+                ReplicatedDatabase(name=b"db-one", uuid=uuid.UUID(int=16), shard=b"{my_shard}", replica=b"{my_replica}")
+            ]
+        ),
     )
     context.set_result(
         ListDatabaseReplicasStep,
-        [DatabaseReplica(shard_name="all", replica_name="node1"), DatabaseReplica(shard_name="all", replica_name="node2")],
+        {
+            b"db-one": [
+                DatabaseReplica(shard_name="all", replica_name="node1"),
+                DatabaseReplica(shard_name="all", replica_name="node2"),
+            ]
+        },
     )
 
     async def advance_node1():
@@ -583,9 +691,11 @@ async def test_creates_all_replicated_databases_and_tables_in_manifest() -> None
     await step.run_step(cluster, context)
     first_client_queries = [
         b"DROP DATABASE IF EXISTS `db-one` SYNC",
-        b"CREATE DATABASE `db-one` ENGINE = Replicated('/clickhouse/databases/db%2Done', '{shard}', '{replica}')",
+        b"CREATE DATABASE `db-one` UUID '00000000-0000-0000-0000-000000000011'"
+        b" ENGINE = Replicated('/clickhouse/databases/db%2Done', '{my_shard}', '{my_replica}')",
         b"DROP DATABASE IF EXISTS `db-two` SYNC",
-        b"CREATE DATABASE `db-two` ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{shard}', '{replica}')",
+        b"CREATE DATABASE `db-two` UUID '00000000-0000-0000-0000-000000000012'"
+        b" ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{my_shard}', '{my_replica}')",
         b"CREATE TABLE db-one.table-uno ...",
         b"CREATE TABLE db-one.table-dos ...",
         b"CREATE TABLE db-two.table-eins ...",
@@ -593,9 +703,11 @@ async def test_creates_all_replicated_databases_and_tables_in_manifest() -> None
     # CREATE TABLE is replicated, that why we only create the table on the first client
     second_client_queries = [
         b"DROP DATABASE IF EXISTS `db-one` SYNC",
-        b"CREATE DATABASE `db-one` ENGINE = Replicated('/clickhouse/databases/db%2Done', '{shard}', '{replica}')",
+        b"CREATE DATABASE `db-one` UUID '00000000-0000-0000-0000-000000000011'"
+        b" ENGINE = Replicated('/clickhouse/databases/db%2Done', '{my_shard}', '{my_replica}')",
         b"DROP DATABASE IF EXISTS `db-two` SYNC",
-        b"CREATE DATABASE `db-two` ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{shard}', '{replica}')",
+        b"CREATE DATABASE `db-two` UUID '00000000-0000-0000-0000-000000000012'"
+        b" ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{my_shard}', '{my_replica}')",
     ]
     assert clients[0].mock_calls == list(map(mock.call.execute, first_client_queries))
     assert clients[1].mock_calls == list(map(mock.call.execute, second_client_queries))
@@ -618,10 +730,12 @@ async def test_creates_all_replicated_databases_and_tables_in_manifest_with_cust
     await step.run_step(cluster, context)
     first_client_queries = [
         b"DROP DATABASE IF EXISTS `db-one` SYNC",
-        b"CREATE DATABASE `db-one` ENGINE = Replicated('/clickhouse/databases/db%2Done', '{shard}', '{replica}') "
+        b"CREATE DATABASE `db-one` UUID '00000000-0000-0000-0000-000000000011'"
+        b" ENGINE = Replicated('/clickhouse/databases/db%2Done', '{my_shard}', '{my_replica}') "
         b"SETTINGS cluster_username='alice', cluster_password='alice_secret'",
         b"DROP DATABASE IF EXISTS `db-two` SYNC",
-        b"CREATE DATABASE `db-two` ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{shard}', '{replica}') "
+        b"CREATE DATABASE `db-two` UUID '00000000-0000-0000-0000-000000000012'"
+        b" ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{my_shard}', '{my_replica}') "
         b"SETTINGS cluster_username='alice', cluster_password='alice_secret'",
         b"CREATE TABLE db-one.table-uno ...",
         b"CREATE TABLE db-one.table-dos ...",
@@ -643,20 +757,24 @@ async def test_drops_each_database_on_all_servers_before_recreating_it() -> None
     context = StepsContext()
     context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
     await step.run_step(cluster, context)
-    first_client_queries = [
+    all_client_queries = [
         b"DROP DATABASE IF EXISTS `db-one` SYNC",
         b"DROP DATABASE IF EXISTS `db-one` SYNC",
-        b"CREATE DATABASE `db-one` ENGINE = Replicated('/clickhouse/databases/db%2Done', '{shard}', '{replica}')",
-        b"CREATE DATABASE `db-one` ENGINE = Replicated('/clickhouse/databases/db%2Done', '{shard}', '{replica}')",
+        b"CREATE DATABASE `db-one` UUID '00000000-0000-0000-0000-000000000011'"
+        b" ENGINE = Replicated('/clickhouse/databases/db%2Done', '{my_shard}', '{my_replica}')",
+        b"CREATE DATABASE `db-one` UUID '00000000-0000-0000-0000-000000000011'"
+        b" ENGINE = Replicated('/clickhouse/databases/db%2Done', '{my_shard}', '{my_replica}')",
         b"DROP DATABASE IF EXISTS `db-two` SYNC",
         b"DROP DATABASE IF EXISTS `db-two` SYNC",
-        b"CREATE DATABASE `db-two` ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{shard}', '{replica}')",
-        b"CREATE DATABASE `db-two` ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{shard}', '{replica}')",
+        b"CREATE DATABASE `db-two` UUID '00000000-0000-0000-0000-000000000012'"
+        b" ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{my_shard}', '{my_replica}')",
+        b"CREATE DATABASE `db-two` UUID '00000000-0000-0000-0000-000000000012'"
+        b" ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{my_shard}', '{my_replica}')",
         b"CREATE TABLE db-one.table-uno ...",
         b"CREATE TABLE db-one.table-dos ...",
         b"CREATE TABLE db-two.table-eins ...",
     ]
-    assert client.mock_calls == list(map(mock.call.execute, first_client_queries))
+    assert client.mock_calls == list(map(mock.call.execute, all_client_queries))
 
 
 @pytest.mark.asyncio

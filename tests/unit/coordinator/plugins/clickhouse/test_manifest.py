@@ -17,8 +17,13 @@ SERIALIZED_ACCESS_ENTITY = {
     "name": b64encode(b"bad\x80user").decode(),
     "attach_query": b64encode(b"ATTACH USER ...").decode(),
 }
-SAMPLE_DATABASE = ReplicatedDatabase(name=b"bad\x80db")
-SERIALIZED_DATABASE = {"name": b64encode(b"bad\x80db").decode()}
+SAMPLE_DATABASE = ReplicatedDatabase(name=b"bad\x80db", uuid=uuid.UUID(int=1), shard=b"{my_shard}", replica=b"{my_replica}")
+SERIALIZED_DATABASE = {
+    "name": b64encode(b"bad\x80db").decode(),
+    "uuid": "00000000-0000-0000-0000-000000000001",
+    "shard": b64encode(b"{my_shard}").decode(),
+    "replica": b64encode(b"{my_replica}").decode(),
+}
 SAMPLE_TABLE = Table(
     database=b"d\x80b",
     name=b"tab\x80e",

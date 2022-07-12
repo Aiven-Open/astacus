@@ -7,6 +7,7 @@ from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import StepsContext
 from astacus.coordinator.plugins.clickhouse.manifest import ReplicatedDatabase, Table
 from astacus.coordinator.plugins.clickhouse.steps import RetrieveDatabasesAndTablesStep
+from base64 import b64decode
 from tests.integration.conftest import create_zookeeper, Ports
 from uuid import UUID
 
@@ -29,31 +30,51 @@ async def test_retrieve_tables(ports: Ports) -> None:
             await client.execute(
                 (
                     "CREATE DATABASE `has_tablés` "
-                    "ENGINE = Replicated('/clickhouse/databases/has_tables', '{shard}', '{replica}')"
+                    "ENGINE = Replicated('/clickhouse/databases/has_tables', '{my_shard}', '{my_replica}')"
                 ).encode()
             )
             await client.execute(
                 b"CREATE DATABASE no_tables "
-                b"ENGINE = Replicated('/clickhouse/databases/no_tables', '{shard}', '{replica}')"
+                b"ENGINE = Replicated('/clickhouse/databases/no_tables', '{my_shard}', '{my_replica}')"
             )
             await client.execute(
                 b"CREATE DATABASE `bad\x80\x00db` "
-                b"ENGINE = Replicated('/clickhouse/databases/bad_db', '{shard}', '{replica}')"
+                b"ENGINE = Replicated('/clickhouse/databases/bad_db', '{my_shard}', '{my_replica}')"
             )
             await client.execute(
                 (
-                    "CREATE TABLE `has_tablés`.`tablé_1` (thekey UInt32) " "ENGINE = ReplicatedMergeTree ORDER BY (thekey)"
+                    "CREATE TABLE `has_tablés`.`tablé_1` (thekey UInt32) ENGINE = ReplicatedMergeTree ORDER BY (thekey)"
                 ).encode()
             )
             step = RetrieveDatabasesAndTablesStep(clients=[client])
             context = StepsContext()
             databases, tables = await step.run_step(Cluster(nodes=[]), context=context)
-            uuid_lines = list(await client.execute("SELECT uuid FROM system.tables where name = 'tablé_1'".encode()))
-            table_uuid = UUID(uuid_lines[0][0])
+            database_uuid_lines = list(await client.execute(b"SELECT base64Encode(name),uuid FROM system.databases"))
+            database_uuids = {
+                b64decode(database_name): UUID(database_uuid) for database_name, database_uuid in database_uuid_lines
+            }
+            table_uuid_lines = list(await client.execute("SELECT uuid FROM system.tables where name = 'tablé_1'".encode()))
+            table_uuid = UUID(table_uuid_lines[0][0])
+
             assert databases == [
-                ReplicatedDatabase(name=b"bad\x80\x00db"),
-                ReplicatedDatabase(name="has_tablés".encode()),
-                ReplicatedDatabase(name=b"no_tables"),
+                ReplicatedDatabase(
+                    name=b"bad\x80\x00db",
+                    uuid=database_uuids[b"bad\x80\x00db"],
+                    shard=b"{my_shard}",
+                    replica=b"{my_replica}",
+                ),
+                ReplicatedDatabase(
+                    name="has_tablés".encode(),
+                    uuid=database_uuids["has_tablés".encode()],
+                    shard=b"{my_shard}",
+                    replica=b"{my_replica}",
+                ),
+                ReplicatedDatabase(
+                    name=b"no_tables",
+                    uuid=database_uuids[b"no_tables"],
+                    shard=b"{my_shard}",
+                    replica=b"{my_replica}",
+                ),
             ]
             assert tables == [
                 Table(
@@ -63,7 +84,8 @@ async def test_retrieve_tables(ports: Ports) -> None:
                     uuid=table_uuid,
                     create_query=(
                         f"CREATE TABLE `has_tablés`.`tablé_1` UUID '{str(table_uuid)}' (`thekey` UInt32) "
-                        f"ENGINE = ReplicatedMergeTree('/clickhouse/tables/{str(table_uuid)}/{{shard}}', '{{replica}}') "
+                        f"ENGINE = "
+                        f"ReplicatedMergeTree('/clickhouse/tables/{str(table_uuid)}/{{my_shard}}', '{{my_replica}}') "
                         f"ORDER BY thekey SETTINGS index_granularity = 8192"
                     ).encode(),
                     dependencies=[],

@@ -22,7 +22,7 @@ async def test_get_shard_and_replica(ports: Ports) -> None:
             client = get_clickhouse_client(clickhouse)
             await client.execute(
                 b"CREATE DATABASE replicated_database "
-                b"ENGINE = Replicated('/clickhouse/databases/replicated_database', '{shard}', '{replica}')"
+                b"ENGINE = Replicated('/clickhouse/databases/replicated_database', '{my_shard}', '{my_replica}')"
             )
             shard_and_replica = await get_shard_and_replica(client, b"replicated_database")
-            assert shard_and_replica == (b"{shard}", b"{replica}")
+            assert shard_and_replica == (b"{my_shard}", b"{my_replica}")

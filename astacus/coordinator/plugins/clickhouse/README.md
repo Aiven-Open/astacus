@@ -109,7 +109,7 @@ If you have large volumes of data, adjust the `sync_tables_timeout` (in seconds)
 
 ### Databases
 
-Replicated database are restored with their original name. However, they are not restored with the same UUID.
+Replicated database are restored with their original name, UUID, shard macro and replica macros.
 
 The replicated databases will be restored with the settings from the configuration files, not their original settings.
 

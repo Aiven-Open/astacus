@@ -84,7 +84,7 @@ async def setup_cluster_content(clients: List[HttpClickHouseClient]) -> None:
     for client in clients:
         await client.execute(b"DROP DATABASE default SYNC")
         await client.execute(
-            b"CREATE DATABASE default ENGINE = Replicated('/clickhouse/databases/thebase', '{shard}', '{replica}') "
+            b"CREATE DATABASE default ENGINE = Replicated('/clickhouse/databases/thebase', '{my_shard}', '{my_replica}') "
             b"SETTINGS cluster_username='default', cluster_password='secret'"
         )
     # table creation is auto-replicated so we only do it once :
