@@ -2,12 +2,16 @@
 Copyright (c) 2022 Aiven Ltd
 See LICENSE for details
 """
+from .client import ClickHouseClient, escape_sql_identifier, unescape_sql_string
+from .sql import chain_of, named_group, one_of, TokenType
+from astacus.coordinator.plugins.base import StepFailedError
 from astacus.coordinator.plugins.zookeeper import ZooKeeperConnection
 from kazoo.client import EventType, WatchedEvent
 from typing import Optional, Sequence
 
 import asyncio
 import dataclasses
+import re
 
 
 @dataclasses.dataclass(frozen=True)
@@ -72,3 +76,30 @@ async def sync_replicated_database(
                 f"replicas {replica_names_str} in database {database_path!r} "
                 f"to all reach mutation pointer {database_max_ptr} (last pointer values: {replica_ptrs})"
             )
+
+
+async def get_shard_and_replica(clickhouse_client: ClickHouseClient, database_name: bytes) -> tuple[bytes, bytes]:
+    escaped_database_name = escape_sql_identifier(database_name)
+    db_rows = await clickhouse_client.execute(f"SHOW CREATE DATABASE {escaped_database_name}".encode())
+    assert isinstance(db_rows[0][0], str)
+    create_database_query = db_rows[0][0].encode()
+    matched = re.match(
+        chain_of(
+            b"CREATE DATABASE",
+            one_of(TokenType.RawIdentifier, TokenType.QuotedIdentifier),
+            b"ENGINE",
+            TokenType.Equal,
+            b"Replicated",
+            TokenType.OpenParenthesis,
+            named_group("zookeeper_path", TokenType.String),
+            TokenType.Comma,
+            named_group("shard", TokenType.String),
+            TokenType.Comma,
+            named_group("replica", TokenType.String),
+            TokenType.CloseParenthesis,
+        ),
+        create_database_query,
+    )
+    if not matched:
+        raise StepFailedError(f"Could not parse CREATE DATABASE query for {database_name!r}")
+    return unescape_sql_string(matched.group("shard")), unescape_sql_string(matched.group("replica"))
