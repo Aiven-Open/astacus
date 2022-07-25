@@ -169,9 +169,11 @@ def create_clickhouse_configs(
                             </shard>
                         </defaultcluster>
                     </remote_servers>
+                    <default_replica_path>/clickhouse/tables/{{uuid}}/{{my_shard}}</default_replica_path>
+                    <default_replica_name>{{my_replica}}</default_replica_name>
                     <macros>
-                        <shard>s01</shard>
-                        <replica>r{http_port}</replica>
+                        <my_shard>s01</my_shard>
+                        <my_replica>r{http_port}</my_replica>
                     </macros>
                 </yandex>
                 """

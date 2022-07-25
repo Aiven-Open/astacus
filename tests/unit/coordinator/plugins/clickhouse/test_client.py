@@ -6,6 +6,7 @@ from astacus.coordinator.plugins.clickhouse.client import (
     ClickHouseClientQueryError,
     escape_sql_identifier,
     HttpClickHouseClient,
+    unescape_sql_string,
 )
 
 import pytest
@@ -73,3 +74,42 @@ def test_escape_sql_identifier_high_bytes() -> None:
 
 def test_escape_sql_identifier_utf8() -> None:
     assert escape_sql_identifier("éléphant".encode()) == "`\\xc3\\xa9l\\xc3\\xa9phant`"
+
+
+def test_unescape_sql_string() -> None:
+    assert unescape_sql_string(b"''") == b""
+    assert unescape_sql_string(b"'foo'") == b"foo"
+    assert unescape_sql_string(b"'fo\\o'") == b"foo"
+    assert unescape_sql_string(b"'foo\\\\bar'") == b"foo\\bar"
+    assert unescape_sql_string(b"'foo\\x00bar'") == b"foo\x00bar"
+    assert unescape_sql_string(b"'foo\\x80bar'") == b"foo\x80bar"
+    assert unescape_sql_string(b"'foo\x80bar'") == b"foo\x80bar"
+    assert unescape_sql_string(b"'foo\\xc3\\xa9'").decode("UTF-8") == "fooé"
+
+
+def test_unescape_sql_string_named_escaped() -> None:
+    assert unescape_sql_string(b"'fo\\bo'") == b"fo\bo"
+    assert unescape_sql_string(b"'fo\\fo'") == b"fo\fo"
+    assert unescape_sql_string(b"'fo\\ro'") == b"fo\ro"
+    assert unescape_sql_string(b"'fo\\no'") == b"fo\no"
+    assert unescape_sql_string(b"'fo\\to'") == b"fo\to"
+    assert unescape_sql_string(b"'fo\\0o'") == b"fo\0o"
+
+
+def test_unescape_sql_string_invalid() -> None:
+    with pytest.raises(ValueError, match="Not a valid sql string: not enclosed in quotes"):
+        assert unescape_sql_string(b"")
+    with pytest.raises(ValueError, match="Not a valid sql string: not enclosed in quotes"):
+        assert unescape_sql_string(b"foo")
+    with pytest.raises(ValueError, match="Not a valid sql string: not enclosed in quotes"):
+        assert unescape_sql_string(b"'")
+    with pytest.raises(ValueError, match="Not a valid sql string: unescaped quote"):
+        assert unescape_sql_string(b"'foo'bar'")
+    with pytest.raises(ValueError, match="Not a valid sql string: unescaped backslash"):
+        assert unescape_sql_string(b"'foo\\'")
+
+
+def test_unescape_sql_string_invalid_utf8_does_not_raise_error() -> None:
+    # Since we keep the output as bytes, no errors
+    assert unescape_sql_string(b"'foo\\x80'") == b"foo\x80"
+    assert unescape_sql_string(b"'foo\\xc3'") == b"foo\xc3"

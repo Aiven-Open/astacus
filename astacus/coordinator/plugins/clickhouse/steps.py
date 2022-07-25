@@ -6,6 +6,7 @@ from .client import ClickHouseClient, escape_sql_identifier, escape_sql_string
 from .config import ClickHouseConfiguration, ReplicatedDatabaseSettings
 from .dependencies import access_entities_sorted_by_dependencies, tables_sorted_by_dependencies
 from .escaping import escape_for_file_name, unescape_from_file_name
+from .macros import MacroExpansionError, Macros
 from .manifest import AccessEntity, ClickHouseManifest, ReplicatedDatabase, Table
 from .parts import (
     check_parts_replication,
@@ -14,7 +15,7 @@ from .parts import (
     group_files_into_parts,
     list_parts_to_attach,
 )
-from .replication import DatabaseReplica, sync_replicated_database
+from .replication import DatabaseReplica, get_shard_and_replica, sync_replicated_database
 from astacus.common import ipc
 from astacus.common.exceptions import TransientException
 from astacus.common.limiter import Limiter
@@ -23,7 +24,7 @@ from astacus.coordinator.plugins.base import BackupManifestStep, SnapshotStep, S
 from astacus.coordinator.plugins.zookeeper import ChangeWatch, TransactionError, ZooKeeperClient
 from base64 import b64decode
 from pathlib import Path
-from typing import Any, cast, Dict, List, Sequence, Tuple
+from typing import Any, cast, Dict, List, Mapping, Sequence, Tuple
 
 import asyncio
 import dataclasses
@@ -39,6 +40,7 @@ MACROS_LIST_QUERY = b"SELECT base64Encode(macro),base64Encode(substitution) FROM
 
 TABLES_LIST_QUERY = b"""SELECT
     base64Encode(system.databases.name),
+    system.databases.uuid,
     base64Encode(system.tables.name),
     system.tables.engine,
     system.tables.uuid,
@@ -123,12 +125,8 @@ class RetrieveDatabasesAndTablesStep(Step[DatabasesAndTables]):
     """
     Retrieves the list of all databases that use the replicated database engine and their tables.
 
-    The table names, uuids and schemas of all tables are collected but the databases
-    uuids are not collected.
-
-    The shard and replica options of the replicated database engine are also not
-    collected, the restore operation uses the `{shard}` and `{replica}` macro and assumes
-    that each server of the cluster has values for them.
+    The table names, uuids and schemas of all tables are collected.
+    The database names, uuids, shard and replica parameters are collected.
 
     This assumes that all servers of the cluster have created the same replicated
     databases (with the same database name pointing on the same ZooKeeper
@@ -139,20 +137,36 @@ class RetrieveDatabasesAndTablesStep(Step[DatabasesAndTables]):
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> DatabasesAndTables:
         clickhouse_client = self.clients[0]
-        # We fetch everything in a single query, we don't have to care about consistency within that step.
+        # We fetch databases and tables in a single query, we don't have to care about consistency within that step.
         # However, the schema could be modified between now and the freeze step.
         databases: Dict[bytes, ReplicatedDatabase] = {}
         tables: List[Table] = []
         rows = await clickhouse_client.execute(TABLES_LIST_QUERY)
-        for base64_db_name, base64_table_name, table_engine, table_uuid, base64_table_query, base64_dependencies in rows:
+        for (
+            base64_db_name,
+            db_uuid_str,
+            base64_table_name,
+            table_engine,
+            table_uuid,
+            base64_table_query,
+            base64_dependencies,
+        ) in rows:
             assert isinstance(base64_db_name, str)
+            assert isinstance(db_uuid_str, str)
             assert isinstance(base64_table_name, str)
             assert isinstance(table_engine, str)
             assert isinstance(base64_table_query, str)
             assert isinstance(base64_dependencies, list)
+            db_uuid = uuid.UUID(db_uuid_str)
             db_name = b64decode(base64_db_name)
             if db_name not in databases:
-                databases[db_name] = ReplicatedDatabase(name=db_name)
+                shard, replica = await get_shard_and_replica(clickhouse_client, db_name)
+                databases[db_name] = ReplicatedDatabase(
+                    name=db_name,
+                    uuid=db_uuid,
+                    shard=shard,
+                    replica=replica,
+                )
             # Thanks to the LEFT JOIN, an empty database without table will still return a row.
             # Unlike standard SQL, the table properties will have a default value instead of NULL,
             # that's why we skip tables with an empty name.
@@ -390,11 +404,19 @@ class RestoreReplicatedDatabasesStep(Step[None]):
             # a node where the database wasn't recreated yet.
             for client in self.clients:
                 await client.execute(f"DROP DATABASE IF EXISTS {escape_sql_identifier(database.name)} SYNC".encode())
+            optional_uuid_fragment = ""
+            if database.uuid is not None:
+                escaped_database_uuid = escape_sql_string(str(database.uuid).encode())
+                optional_uuid_fragment = f" UUID {escaped_database_uuid}"
             for client in self.clients:
                 await client.execute(
                     (
-                        f"CREATE DATABASE {escape_sql_identifier(database.name)} "
-                        f"ENGINE = Replicated({escape_sql_string(database_path.encode())}, '{{shard}}', '{{replica}}')"
+                        f"CREATE DATABASE {escape_sql_identifier(database.name)}"
+                        f"{optional_uuid_fragment}"
+                        f" ENGINE = Replicated("
+                        f"{escape_sql_string(database_path.encode())}, "
+                        f"{escape_sql_string(database.shard)}, "
+                        f"{escape_sql_string(database.replica)})"
                         f"{settings_clause}"
                     ).encode()
                 )
@@ -409,30 +431,38 @@ class RestoreReplicatedDatabasesStep(Step[None]):
                 await self.clients[0].execute(table.create_query)
 
 
+DatabasesReplicas = Mapping[bytes, Sequence[DatabaseReplica]]
+
+
 @dataclasses.dataclass
-class ListDatabaseReplicasStep(Step[Sequence[DatabaseReplica]]):
+class ListDatabaseReplicasStep(Step[DatabasesReplicas]):
     clients: List[ClickHouseClient]
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> Sequence[DatabaseReplica]:
-        replicas: list[DatabaseReplica] = []
-        expected_macros = {b"shard", b"replica"}
-        for server_index, client in enumerate(self.clients, start=1):
-            rows = await client.execute(MACROS_LIST_QUERY)
-            macros: dict[bytes, bytes] = {}
-            for b64_macro_name, b64_macro_value in rows:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> DatabasesReplicas:
+        manifest = context.get_result(ClickHouseManifestStep)
+        server_macros: list[Macros] = []
+        for client in self.clients:
+            macros = Macros()
+            for b64_macro_name, b64_macro_value in await client.execute(MACROS_LIST_QUERY):
                 assert isinstance(b64_macro_name, str)
                 assert isinstance(b64_macro_value, str)
-                macros[b64decode(b64_macro_name)] = b64decode(b64_macro_value)
-            missing_macros = expected_macros - set(macros)
-            if missing_macros:
-                raise StepFailedError(f"Missing macro definitions on server {server_index}: {missing_macros!r}")
-            replicas.append(
-                DatabaseReplica(
-                    shard_name=macros[b"shard"].decode(),
-                    replica_name=macros[b"replica"].decode(),
-                )
-            )
-        return replicas
+                macros.add(b64decode(b64_macro_name), b64decode(b64_macro_value))
+            server_macros.append(macros)
+        databases_replicas: dict[bytes, Sequence[DatabaseReplica]] = {}
+        for database in manifest.replicated_databases:
+            replicas: list[DatabaseReplica] = []
+            for server_index, macros in enumerate(server_macros, start=1):
+                try:
+                    replicas.append(
+                        DatabaseReplica(
+                            shard_name=macros.expand(database.shard).decode(),
+                            replica_name=macros.expand(database.replica).decode(),
+                        )
+                    )
+                except (MacroExpansionError, UnicodeDecodeError) as e:
+                    raise StepFailedError(f"Error in macro of server {server_index}: {e}") from e
+            databases_replicas[database.name] = replicas
+        return databases_replicas
 
 
 @dataclasses.dataclass
@@ -442,11 +472,10 @@ class SyncDatabaseReplicasStep(Step[None]):
     sync_timeout: float
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
-        manifest = context.get_result(ClickHouseManifestStep)
-        replicas = context.get_result(ListDatabaseReplicasStep)
+        databases_replicas = context.get_result(ListDatabaseReplicasStep)
         async with self.zookeeper_client.connect() as connection:
-            for database in manifest.replicated_databases:
-                database_znode_name = escape_for_file_name(database.name)
+            for database_name, replicas in sorted(databases_replicas.items()):
+                database_znode_name = escape_for_file_name(database_name)
                 database_path = f"{self.replicated_databases_zookeeper_path}/{database_znode_name}"
                 await sync_replicated_database(connection, database_path, replicas, self.sync_timeout)
 

@@ -3,10 +3,12 @@ Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
 from astacus.common.utils import build_netloc, httpx_request
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Union
+from re import Match
+from typing import Dict, List, Mapping, Optional, Sequence, Union
 
 import copy
 import logging
+import re
 import urllib.parse
 
 Row = Sequence[Union[str, int, float, List, None]]
@@ -17,7 +19,7 @@ logger = logging.getLogger(__name__)
 class ClickHouseClient:
     async def execute(
         self, query: bytes, timeout: Optional[float] = None, session_id: Optional[str] = None
-    ) -> Iterable[Row]:
+    ) -> Sequence[Row]:
         raise NotImplementedError
 
 
@@ -52,7 +54,7 @@ class HttpClickHouseClient(ClickHouseClient):
 
     async def execute(
         self, query: bytes, timeout: Optional[float] = None, session_id: Optional[str] = None
-    ) -> Iterable[Row]:
+    ) -> Sequence[Row]:
         assert isinstance(query, bytes)
         # Output format: https://clickhouse.tech/docs/en/interfaces/formats/#jsoncompact
         headers = [("X-ClickHouse-Database", "system"), ("X-ClickHouse-Format", "JSONCompact")]
@@ -95,7 +97,7 @@ class StubClickHouseClient(ClickHouseClient):
 
     async def execute(
         self, query: bytes, timeout: Optional[float] = None, session_id: Optional[str] = None
-    ) -> Iterable[Row]:
+    ) -> Sequence[Row]:
         assert isinstance(query, bytes)
         return copy.deepcopy(self.responses[query])
 
@@ -159,3 +161,29 @@ def _escape_bytes(value: bytes, escape_map: Mapping[int, bytes], quote_char: byt
             buffer.append(bytes((byte,)))
     buffer.append(quote_char)
     return b"".join(buffer).decode()
+
+
+def unescape_sql_string(string: bytes) -> bytes:
+    """Parse a ClickHouse-escaped SQL string.
+
+    Since ClickHouse does not have any text encoding and their string can contain anything,
+    keep the output as bytes and don't attempt UTF-8 decoding.
+    """
+    if len(string) >= 2 and string[:1] == b"'" and string[-1:] == b"'":
+        # The last four alternatives of the regex look weird, "anything but X" or "X":
+        # This is used to detect incomplete \x escape sequences, unescaped backslashes or quotes (see tests).
+        return re.sub(rb"\\x([0-9a-fA-F]{2})|\\([^x])|(\\x)|([^\\'])|([\\'])", _unescape_sql_char, string[1:-1])
+    raise ValueError("Not a valid sql string: not enclosed in quotes")
+
+
+def _unescape_sql_char(match: Match) -> bytes:
+    if match.group(1):
+        return int(match.group(1), base=16).to_bytes(1, "little")
+    if match.group(2):
+        return match.group(2).translate(bytes.maketrans(b"bfrnt0", b"\b\f\r\n\t\0"))  # cspell: disable-line
+    if match.group(3):
+        raise ValueError("Not a valid sql string: incomplete escape sequence")
+    if match.group(4):
+        return match.group(4)
+    unescaped_char = {b"'": "quote", b"\\": "backslash"}[match.group(5)]
+    raise ValueError(f"Not a valid sql string: unescaped {unescaped_char}")
