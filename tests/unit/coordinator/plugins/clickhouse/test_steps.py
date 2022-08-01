@@ -490,6 +490,13 @@ async def test_distribute_parts_of_replicated_tables() -> None:
         ],
     )
     context.set_result(RetrieveDatabasesAndTablesStep, (SAMPLE_DATABASES, SAMPLE_TABLES))
+    context.set_result(
+        RetrieveMacrosStep,
+        [
+            Macros.from_mapping({b"my_shard": b"shard_1", b"my_replica": b"replica_1"}),
+            Macros.from_mapping({b"my_shard": b"shard_1", b"my_replica": b"replica_2"}),
+        ],
+    )
     await step.run_step(Cluster(nodes=[]), context)
     snapshot_results = context.get_result(SnapshotStep)
     # On the ReplicatedMergeTree table (uuid ending in 0001), each server has only half the parts now

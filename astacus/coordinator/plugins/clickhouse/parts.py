@@ -7,9 +7,10 @@ Replicated family of table engines.
 
 This does not support shards, but this is the right place to add support for them.
 """
+from .escaping import escape_for_file_name, unescape_from_file_name
+from .manifest import Table
+from .replication import DatabaseReplica
 from astacus.common.ipc import SnapshotFile, SnapshotResult
-from astacus.coordinator.plugins.clickhouse.escaping import escape_for_file_name, unescape_from_file_name
-from astacus.coordinator.plugins.clickhouse.manifest import Table
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
@@ -24,25 +25,30 @@ class PartFile:
     servers: Set[int]
 
 
-@dataclasses.dataclass
-class Part:
-    files: Dict[Path, PartFile]
-    total_size: int
-
-
 @dataclasses.dataclass(frozen=True)
 class PartKey:
     table_uuid: uuid.UUID
+    shard_name: str
     part_name: str
 
 
+@dataclasses.dataclass(frozen=True)
+class Part:
+    table_uuid: uuid.UUID
+    part_name: str
+    servers: Set[int]
+    snapshot_files: Sequence[SnapshotFile]
+    total_size: int
+
+
 def group_files_into_parts(
-    snapshot_files: List[List[SnapshotFile]], table_uuids: Set[uuid.UUID]
+    snapshot_files: List[List[SnapshotFile]],
+    tables_replicas: Mapping[uuid.UUID, Sequence[DatabaseReplica]],
 ) -> Tuple[List[Part], List[List[SnapshotFile]]]:
     """
-    Regroup all files that form a MergeTree table parts together in a `Part`.
+    Regroup all files that form a MergeTree table part together in a `Part`.
 
-    Only parts from the provided list of `table_uuids` are regrouped.
+    Only parts from the provided map of `tables_replicas` are regrouped.
 
     Returns the list of `Part` and a separate list of list of `SnapshotFile` that
     were not selected to make a `Part`.
@@ -51,20 +57,36 @@ def group_files_into_parts(
     of server in the cluster (the first list is for the first server, etc.)
     """
     other_files: List[List[SnapshotFile]] = [[] for _ in snapshot_files]
-    keyed_parts: Dict[PartKey, Part] = {}
+    keyed_parts: Dict[PartKey, Dict[Path, PartFile]] = {}
     for server_index, server_files in enumerate(snapshot_files):
         for snapshot_file in server_files:
-            if not add_file_to_parts(snapshot_file, server_index, table_uuids, keyed_parts):
+            if not add_file_to_parts(snapshot_file, server_index, tables_replicas, keyed_parts):
                 other_files[server_index].append(snapshot_file)
-    return list(keyed_parts.values()), other_files
+    parts: list[Part] = []
+    for part_key, part_files in keyed_parts.items():
+        part_servers = get_part_servers(part_files.values())
+        part_snapshot_files = [part_file.snapshot_file for part_file in part_files.values()]
+        parts.append(
+            Part(
+                table_uuid=part_key.table_uuid,
+                part_name=part_key.part_name,
+                servers=part_servers,
+                snapshot_files=part_snapshot_files,
+                total_size=sum(snapshot_file.file_size for snapshot_file in part_snapshot_files),
+            )
+        )
+    return parts, other_files
 
 
 def add_file_to_parts(
-    snapshot_file: SnapshotFile, server_index: int, table_uuids: Set[uuid.UUID], parts: Dict[PartKey, Part]
+    snapshot_file: SnapshotFile,
+    server_index: int,
+    tables_replicas: Mapping[uuid.UUID, Sequence[DatabaseReplica]],
+    parts_files: Dict[PartKey, Dict[Path, PartFile]],
 ) -> bool:
     """
     If the `snapshot_file` is a file from a part of one of the tables listed in
-    `table_uuids`, add it to the corresponding Part in `parts`.
+    `replicated_tables`, add it to the corresponding dictionary in `parts_files`.
 
     A file is from a part if its path starts with
     "store/3_first_char_of_table_uuid/table_uuid/detached/part_name".
@@ -87,14 +109,14 @@ def add_file_to_parts(
     if not (has_store_and_detached and has_uuid_prefix and has_valid_uuid):
         return False
     table_uuid = uuid.UUID(path_parts[2])
-    if table_uuid not in table_uuids:
+    if table_uuid not in tables_replicas:
         return False
-    part_key = PartKey(table_uuid=table_uuid, part_name=path_parts[4])
-    part = parts.setdefault(part_key, Part(files={}, total_size=0))
-    part_file = part.files.get(snapshot_file.relative_path)
+    shard_name = tables_replicas[table_uuid][server_index].shard_name
+    part_key = PartKey(table_uuid=table_uuid, shard_name=shard_name, part_name=path_parts[4])
+    part_files = parts_files.setdefault(part_key, {})
+    part_file = part_files.get(snapshot_file.relative_path)
     if part_file is None:
-        part.files[snapshot_file.relative_path] = PartFile(snapshot_file=snapshot_file, servers={server_index})
-        part.total_size += snapshot_file.file_size
+        part_files[snapshot_file.relative_path] = PartFile(snapshot_file=snapshot_file, servers={server_index})
     elif part_file.snapshot_file.equals_excluding_mtime(snapshot_file):
         part_file.servers.add(server_index)
     else:
@@ -107,23 +129,27 @@ def add_file_to_parts(
     return True
 
 
-def check_parts_replication(parts: Iterable[Part]):
+def get_part_servers(part_files: Iterable[PartFile]) -> Set[int]:
     """
-    Checks that within a single part, all files are present on the same set of servers.
+    Return the list of server indices where the part made of all these files is present.
+
+    Raises a ValueError if not all servers contain all files.
     """
-    for part in parts:
-        part_servers: Optional[Set[int]] = None
-        for file_path, file in part.files.items():
-            if part_servers is None:
-                part_servers = file.servers
-            elif part_servers != file.servers:
-                raise ValueError(
-                    f"Inconsistent part, not all files are identically replicated: "
-                    f"some files are on servers {part_servers} while {file_path} is on servers {file.servers}"
-                )
+    part_servers: Optional[Set[int]] = None
+    for part_file in part_files:
+        if part_servers is None:
+            part_servers = part_file.servers
+        elif part_servers != part_file.servers:
+            raise ValueError(
+                f"Inconsistent part, not all files are identically replicated: "
+                f"some files are on servers {part_servers} "
+                f"while {part_file.snapshot_file.relative_path} is on servers {part_file.servers}"
+            )
+    assert part_servers is not None
+    return part_servers
 
 
-def distribute_parts_to_servers(parts: List[Part], server_files: List[List[SnapshotFile]]):
+def distribute_parts_to_servers(parts: Sequence[Part], server_files: List[List[SnapshotFile]]):
     """
     Distributes each part to only one of the multiple servers where the part was
     during the backup.
@@ -133,12 +159,9 @@ def distribute_parts_to_servers(parts: List[Part], server_files: List[List[Snaps
     """
     total_file_sizes = [0 for _ in server_files]
     for part in sorted(parts, key=lambda p: p.total_size, reverse=True):
-        server_index = None
-        for file in part.files.values():
-            if server_index is None:
-                server_index = min(file.servers, key=total_file_sizes.__getitem__)
-            total_file_sizes[server_index] += file.snapshot_file.file_size
-            server_files[server_index].append(file.snapshot_file)
+        server_index = min(part.servers, key=total_file_sizes.__getitem__)
+        server_files[server_index].extend(part.snapshot_files)
+        total_file_sizes[server_index] += part.total_size
 
 
 def get_frozen_parts_pattern(freeze_name: str) -> str:
