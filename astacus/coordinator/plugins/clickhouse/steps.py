@@ -6,7 +6,7 @@ from .client import ClickHouseClient, escape_sql_identifier, escape_sql_string
 from .config import ClickHouseConfiguration, ReplicatedDatabaseSettings
 from .dependencies import access_entities_sorted_by_dependencies, tables_sorted_by_dependencies
 from .escaping import escape_for_file_name, unescape_from_file_name
-from .macros import MacroExpansionError, Macros
+from .macros import fetch_server_macros, Macros
 from .manifest import AccessEntity, ClickHouseManifest, ReplicatedDatabase, Table
 from .parts import (
     check_parts_replication,
@@ -35,8 +35,6 @@ import uuid
 logger = logging.getLogger(__name__)
 
 DatabasesAndTables = Tuple[List[ReplicatedDatabase], List[Table]]
-
-MACROS_LIST_QUERY = b"SELECT base64Encode(macro),base64Encode(substitution) FROM system.macros"
 
 TABLES_LIST_QUERY = b"""SELECT
     base64Encode(system.databases.name),
@@ -185,6 +183,20 @@ class RetrieveDatabasesAndTablesStep(Step[DatabasesAndTables]):
                 )
         databases_list = sorted(databases.values(), key=lambda d: d.name)
         return databases_list, tables
+
+
+@dataclasses.dataclass
+class RetrieveMacrosStep(Step[Sequence[Macros]]):
+    """
+    Retrieves the value of all macros on each server.
+
+    Returns a list of `Macros` objects, each item of the list matches one server.
+    """
+
+    clients: Sequence[ClickHouseClient]
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> Sequence[Macros]:
+        return await asyncio.gather(*[fetch_server_macros(client) for client in self.clients])
 
 
 @dataclasses.dataclass
@@ -436,33 +448,16 @@ DatabasesReplicas = Mapping[bytes, Sequence[DatabaseReplica]]
 
 @dataclasses.dataclass
 class ListDatabaseReplicasStep(Step[DatabasesReplicas]):
-    clients: List[ClickHouseClient]
+    """
+    For each replicated database, returns the list of replicas.
+
+    Each replica has a `shard_name` and a `replica_name`.
+    """
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> DatabasesReplicas:
         manifest = context.get_result(ClickHouseManifestStep)
-        server_macros: list[Macros] = []
-        for client in self.clients:
-            macros = Macros()
-            for b64_macro_name, b64_macro_value in await client.execute(MACROS_LIST_QUERY):
-                assert isinstance(b64_macro_name, str)
-                assert isinstance(b64_macro_value, str)
-                macros.add(b64decode(b64_macro_name), b64decode(b64_macro_value))
-            server_macros.append(macros)
-        databases_replicas: dict[bytes, Sequence[DatabaseReplica]] = {}
-        for database in manifest.replicated_databases:
-            replicas: list[DatabaseReplica] = []
-            for server_index, macros in enumerate(server_macros, start=1):
-                try:
-                    replicas.append(
-                        DatabaseReplica(
-                            shard_name=macros.expand(database.shard).decode(),
-                            replica_name=macros.expand(database.replica).decode(),
-                        )
-                    )
-                except (MacroExpansionError, UnicodeDecodeError) as e:
-                    raise StepFailedError(f"Error in macro of server {server_index}: {e}") from e
-            databases_replicas[database.name] = replicas
-        return databases_replicas
+        server_macros = context.get_result(RetrieveMacrosStep)
+        return get_databases_replicas(manifest.replicated_databases, server_macros)
 
 
 @dataclasses.dataclass

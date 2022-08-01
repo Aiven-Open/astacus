@@ -17,6 +17,7 @@ from .steps import (
     RestoreReplicatedDatabasesStep,
     RetrieveAccessEntitiesStep,
     RetrieveDatabasesAndTablesStep,
+    RetrieveMacrosStep,
     SyncDatabaseReplicasStep,
     SyncTableReplicasStep,
     UnfreezeTablesStep,
@@ -100,7 +101,8 @@ class ClickHousePlugin(CoordinatorPlugin):
             BackupNameStep(json_storage=context.json_storage, requested_name=req.name),
             BackupManifestStep(json_storage=context.json_storage),
             ClickHouseManifestStep(),
-            ListDatabaseReplicasStep(clients=clients),
+            RetrieveMacrosStep(clients=clients),
+            ListDatabaseReplicasStep(),
             RestoreReplicatedDatabasesStep(
                 clients=clients,
                 replicated_databases_zookeeper_path=self.replicated_databases_zookeeper_path,
