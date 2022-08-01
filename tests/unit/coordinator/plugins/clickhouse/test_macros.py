@@ -2,9 +2,15 @@
 Copyright (c) 2022 Aiven Ltd
 See LICENSE for details
 """
-from astacus.coordinator.plugins.clickhouse.macros import MacroExpansionError, Macros
+from astacus.coordinator.plugins.clickhouse.client import StubClickHouseClient
+from astacus.coordinator.plugins.clickhouse.macros import fetch_server_macros, MacroExpansionError, Macros, MACROS_LIST_QUERY
+from base64 import b64encode
 
 import pytest
+
+
+def b64_str(b: bytes) -> str:
+    return b64encode(b).decode()
 
 
 @pytest.fixture(name="macros")
@@ -72,3 +78,39 @@ def test_too_long_expansion(macros: Macros) -> None:
     macros.add(b"d", b"eeeeeeeeeeeeeeee")
     with pytest.raises(MacroExpansionError, match="Too long string while expanding macros"):
         macros.expand(b"{a}")
+
+
+def test_from_mapping() -> None:
+    macros_from_mapping = Macros.from_mapping({b"foo": b"123", b"bar": b"456"})
+    expected_macros = Macros()
+    expected_macros.add(b"foo", b"123")
+    expected_macros.add(b"bar", b"456")
+    assert macros_from_mapping == expected_macros
+
+
+def test_as_mapping() -> None:
+    macros = Macros()
+    macros.add(b"foo", b"123")
+    macros.add(b"bar", b"456")
+    assert macros.as_mapping() == {b"foo": b"123", b"bar": b"456"}
+
+
+@pytest.mark.asyncio
+async def test_fetch_server_macros() -> None:
+    client = StubClickHouseClient()
+    client.set_response(
+        MACROS_LIST_QUERY,
+        [
+            [b64_str(b"shard_group_a"), b64_str(b"a1")],
+            [b64_str(b"shard_group_b"), b64_str(b"b1")],
+            [b64_str(b"replica"), b64_str(b"node_1")],
+            [b64_str(b"dont\x80care"), b64_str(b"its\x00fine")],
+        ],
+    )
+    server_macros = await fetch_server_macros(client)
+    assert server_macros.as_mapping() == {
+        b"shard_group_a": b"a1",
+        b"shard_group_b": b"b1",
+        b"replica": b"node_1",
+        b"dont\x80care": b"its\x00fine",
+    }
