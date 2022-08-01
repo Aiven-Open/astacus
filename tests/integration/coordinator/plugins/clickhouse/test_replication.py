@@ -17,7 +17,7 @@ pytestmark = [
 @pytest.mark.asyncio
 async def test_get_shard_and_replica(ports: Ports) -> None:
     async with create_zookeeper(ports) as zookeeper:
-        async with create_clickhouse_cluster(zookeeper, ports, cluster_size=1) as clickhouse_cluster:
+        async with create_clickhouse_cluster(zookeeper, ports, cluster_shards=["s1"]) as clickhouse_cluster:
             clickhouse = clickhouse_cluster.services[0]
             client = get_clickhouse_client(clickhouse)
             await client.execute(
