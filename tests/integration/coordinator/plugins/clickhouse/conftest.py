@@ -23,7 +23,7 @@ from pathlib import Path
 from tests.integration.conftest import get_command_path, Ports, run_process_and_wait_for_pattern, Service, ServiceCluster
 from tests.system.conftest import background_process, wait_url_up
 from tests.utils import CONSTANT_TEST_RSA_PRIVATE_KEY, CONSTANT_TEST_RSA_PUBLIC_KEY
-from typing import AsyncIterator, Awaitable, List, Optional, Union
+from typing import AsyncIterator, Awaitable, List, Optional, Sequence, Union
 
 import argparse
 import asyncio
@@ -78,8 +78,9 @@ async def create_clickhouse_service(ports: Ports) -> AsyncIterator[Service]:
 async def create_clickhouse_cluster(
     zookeeper: Service,
     ports: Ports,
-    cluster_size: int = 2,
+    cluster_shards: Sequence[str],
 ) -> AsyncIterator[ServiceCluster]:
+    cluster_size = len(cluster_shards)
     command = await get_clickhouse_command()
     if command is None:
         pytest.skip("clickhouse installation not found")
@@ -89,7 +90,9 @@ async def create_clickhouse_cluster(
     joined_http_ports = "-".join(str(port) for port in http_ports)
     with tempfile.TemporaryDirectory(prefix=f"clickhouse_{joined_http_ports}_") as base_data_dir:
         data_dirs = [Path(base_data_dir) / f"clickhouse_{http_port}" for http_port in http_ports]
-        configs = create_clickhouse_configs(zookeeper, data_dirs, tcp_ports, http_ports, interserver_http_ports)
+        configs = create_clickhouse_configs(
+            cluster_shards, zookeeper, data_dirs, tcp_ports, http_ports, interserver_http_ports
+        )
         for config, data_dir in zip(configs, data_dirs):
             data_dir.mkdir()
             (data_dir / "config.xml").write_text(config)
@@ -121,7 +124,12 @@ async def create_astacus_cluster(
 
 
 def create_clickhouse_configs(
-    zookeeper: Service, data_dirs: List[Path], tcp_ports: List[int], http_ports: List[int], interserver_http_ports: List[int]
+    cluster_shards: Sequence[str],
+    zookeeper: Service,
+    data_dirs: List[Path],
+    tcp_ports: List[int],
+    http_ports: List[int],
+    interserver_http_ports: List[int],
 ):
     replicas = "\n".join(
         f"""
@@ -172,13 +180,13 @@ def create_clickhouse_configs(
                     <default_replica_path>/clickhouse/tables/{{uuid}}/{{my_shard}}</default_replica_path>
                     <default_replica_name>{{my_replica}}</default_replica_name>
                     <macros>
-                        <my_shard>s01</my_shard>
+                        <my_shard>{cluster_shard}</my_shard>
                         <my_replica>r{http_port}</my_replica>
                     </macros>
                 </yandex>
                 """
-        for data_dir, tcp_port, http_port, interserver_http_port in zip(
-            data_dirs, tcp_ports, http_ports, interserver_http_ports
+        for cluster_shard, data_dir, tcp_port, http_port, interserver_http_port in zip(
+            cluster_shards, data_dirs, tcp_ports, http_ports, interserver_http_ports
         )
     ]
 

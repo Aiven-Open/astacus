@@ -2,10 +2,15 @@
 Copyright (c) 2022 Aiven Ltd
 See LICENSE for details
 """
+from .client import ClickHouseClient
+from base64 import b64decode
 from re import Match
+from typing import Mapping
 
 import dataclasses
 import re
+
+MACROS_LIST_QUERY = b"SELECT base64Encode(macro),base64Encode(substitution) FROM system.macros"
 
 
 class MacroExpansionError(Exception):
@@ -43,3 +48,21 @@ class Macros:
         if macro in self._macros:
             return self._macros[macro]
         raise MacroExpansionError(f"No macro named {macro!r}")
+
+    @classmethod
+    def from_mapping(cls, mapping: Mapping[bytes, bytes]) -> "Macros":
+        macros = cls()
+        macros._macros.update(mapping)
+        return macros
+
+    def as_mapping(self) -> Mapping[bytes, bytes]:
+        return self._macros
+
+
+async def fetch_server_macros(client: ClickHouseClient) -> Macros:
+    macros = Macros()
+    for b64_macro_name, b64_macro_value in await client.execute(MACROS_LIST_QUERY):
+        assert isinstance(b64_macro_name, str)
+        assert isinstance(b64_macro_value, str)
+        macros.add(b64decode(b64_macro_name), b64decode(b64_macro_value))
+    return macros

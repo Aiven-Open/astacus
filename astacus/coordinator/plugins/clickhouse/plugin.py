@@ -17,6 +17,7 @@ from .steps import (
     RestoreReplicatedDatabasesStep,
     RetrieveAccessEntitiesStep,
     RetrieveDatabasesAndTablesStep,
+    RetrieveMacrosStep,
     SyncDatabaseReplicasStep,
     SyncTableReplicasStep,
     UnfreezeTablesStep,
@@ -65,6 +66,7 @@ class ClickHousePlugin(CoordinatorPlugin):
                 access_entities_path=self.replicated_access_zookeeper_path,
             ),
             RetrieveDatabasesAndTablesStep(clients=clickhouse_clients),
+            RetrieveMacrosStep(clients=clickhouse_clients),
             # Then freeze all tables
             FreezeTablesStep(clients=clickhouse_clients, freeze_name=self.freeze_name),
             # Then snapshot and backup all frozen table parts
@@ -100,7 +102,8 @@ class ClickHousePlugin(CoordinatorPlugin):
             BackupNameStep(json_storage=context.json_storage, requested_name=req.name),
             BackupManifestStep(json_storage=context.json_storage),
             ClickHouseManifestStep(),
-            ListDatabaseReplicasStep(clients=clients),
+            RetrieveMacrosStep(clients=clients),
+            ListDatabaseReplicasStep(),
             RestoreReplicatedDatabasesStep(
                 clients=clients,
                 replicated_databases_zookeeper_path=self.replicated_databases_zookeeper_path,
@@ -111,8 +114,6 @@ class ClickHousePlugin(CoordinatorPlugin):
                 replicated_databases_zookeeper_path=self.replicated_databases_zookeeper_path,
                 sync_timeout=self.sync_databases_timeout,
             ),
-            # We should deduplicate parts of ReplicatedMergeTree tables to only download once from
-            # backup storage and then let ClickHouse replicate between all servers.
             RestoreStep(storage_name=context.storage_name, partial_restore_nodes=req.partial_restore_nodes),
             AttachMergeTreePartsStep(
                 clients=clients,

@@ -47,7 +47,7 @@ async def fixture_restorable_cluster(ports: Ports) -> AsyncIterator[Path]:
     with tempfile.TemporaryDirectory(prefix="storage_") as storage_path_str:
         storage_path = Path(storage_path_str)
         async with create_zookeeper(ports) as zookeeper:
-            async with create_clickhouse_cluster(zookeeper, ports) as clickhouse_cluster:
+            async with create_clickhouse_cluster(zookeeper, ports, ("s1", "s1", "s2")) as clickhouse_cluster:
                 async with create_astacus_cluster(storage_path, zookeeper, clickhouse_cluster, ports) as astacus_cluster:
                     clients = [get_clickhouse_client(service) for service in clickhouse_cluster.services]
                     await setup_cluster_content(clients)
@@ -65,7 +65,7 @@ async def fixture_restored_cluster(
 ) -> AsyncIterable[Sequence[ClickHouseClient]]:
     stop_after_step: str = request.param
     async with create_zookeeper(ports) as zookeeper:
-        async with create_clickhouse_cluster(zookeeper, ports) as clickhouse_cluster:
+        async with create_clickhouse_cluster(zookeeper, ports, ("s1", "s1", "s2")) as clickhouse_cluster:
             clients = [get_clickhouse_client(service) for service in clickhouse_cluster.services]
             async with create_astacus_cluster(restorable_cluster, zookeeper, clickhouse_cluster, ports) as astacus_cluster:
                 # To test if we can survive transient failures during an entire restore operation,
@@ -101,9 +101,10 @@ async def setup_cluster_content(clients: List[HttpClickHouseClient]) -> None:
         b"AS SELECT toInt32(thekey * 3) as thekey3 FROM default.replicated_merge_tree"
     )
     await clients[0].execute(b"CREATE TABLE default.memory  (thekey UInt32, thedata String)  ENGINE = Memory")
-    # This will be replicated between nodes
+    # This will be replicated between nodes of the same shard (servers 0 and 1, but not 2)
     await clients[0].execute(b"INSERT INTO default.replicated_merge_tree VALUES (123, 'foo')")
     await clients[1].execute(b"INSERT INTO default.replicated_merge_tree VALUES (456, 'bar')")
+    await clients[2].execute(b"INSERT INTO default.replicated_merge_tree VALUES (789, 'baz')")
     # This won't be backed up
     await clients[0].execute(b"INSERT INTO default.memory VALUES (123, 'foo')")
 
@@ -143,44 +144,39 @@ async def test_restores_access_entities(restored_cluster: List[ClickHouseClient]
 
 @pytest.mark.asyncio
 async def test_restores_replicated_merge_tree_tables_data(restored_cluster: List[ClickHouseClient]) -> None:
-    for client in restored_cluster:
-        assert await client.execute(b"SELECT thekey, thedata FROM default.replicated_merge_tree ORDER BY thekey") == [
-            [123, "foo"],
-            [456, "bar"],
-        ]
+    s1_data = [[123, "foo"], [456, "bar"]]
+    s2_data = [[789, "baz"]]
+    cluster_data = [s1_data, s1_data, s2_data]
+    for client, expected_data in zip(restored_cluster, cluster_data):
+        response = await client.execute(b"SELECT thekey, thedata FROM default.replicated_merge_tree ORDER BY thekey")
+        assert response == expected_data
 
 
 @pytest.mark.asyncio
 async def test_restores_simple_view(restored_cluster: List[ClickHouseClient]) -> None:
-    first_client, second_client = restored_cluster
-    assert await first_client.execute(b"SELECT thekey2 FROM default.simple_view ORDER BY thekey2") == [
-        [123 * 2],
-        [456 * 2],
-    ]
-    assert await second_client.execute(b"SELECT thekey2 FROM default.simple_view ORDER BY thekey2") == [
-        [123 * 2],
-        [456 * 2],
-    ]
+    s1_data = [[123 * 2], [456 * 2]]
+    s2_data = [[789 * 2]]
+    cluster_data = [s1_data, s1_data, s2_data]
+    for client, expected_data in zip(restored_cluster, cluster_data):
+        response = await client.execute(b"SELECT thekey2 FROM default.simple_view ORDER BY thekey2")
+        assert response == expected_data
 
 
 @pytest.mark.asyncio
 async def test_restores_materialized_view_data(restored_cluster: List[ClickHouseClient]) -> None:
-    first_client, second_client = restored_cluster
-    assert await first_client.execute(b"SELECT thekey3 FROM default.materialized_view ORDER BY thekey3") == [
-        [123 * 3],
-        [456 * 3],
-    ]
-    assert await second_client.execute(b"SELECT thekey3 FROM default.materialized_view ORDER BY thekey3") == [
-        [123 * 3],
-        [456 * 3],
-    ]
+    s1_data = [[123 * 3], [456 * 3]]
+    s2_data = [[789 * 3]]
+    cluster_data = [s1_data, s1_data, s2_data]
+    for client, expected_data in zip(restored_cluster, cluster_data):
+        response = await client.execute(b"SELECT thekey3 FROM default.materialized_view ORDER BY thekey3")
+        assert response == expected_data
 
 
 @pytest.mark.asyncio
 async def test_restores_connectivity_between_distributed_servers(restored_cluster: List[ClickHouseClient]) -> None:
     # This only works if each node can connect to all nodes of the cluster named after the Distributed database
     for client in restored_cluster:
-        assert await client.execute(b"SELECT * FROM clusterAllReplicas('default', system.one) ") == [[0], [0]]
+        assert await client.execute(b"SELECT * FROM clusterAllReplicas('default', system.one) ") == [[0], [0], [0]]
 
 
 @pytest.mark.asyncio

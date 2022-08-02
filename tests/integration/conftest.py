@@ -158,6 +158,6 @@ log4j.appender.default.layout.ConversionPattern=[%-5p] %m%n
         if command is None:
             pytest.skip("zookeeper installation not found")
         async with run_process_and_wait_for_pattern(
-            args=command, cwd=data_dir, pattern="PrepRequestProcessor (sid:0) started"
+            args=command, cwd=data_dir, pattern="PrepRequestProcessor (sid:0) started", timeout=20.0
         ) as process:
             yield Service(process=process, port=port, data_dir=data_dir)

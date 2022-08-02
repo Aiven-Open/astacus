@@ -11,6 +11,7 @@ from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins.base import BackupManifestStep, SnapshotStep, StepFailedError, StepsContext
 from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, StubClickHouseClient
 from astacus.coordinator.plugins.clickhouse.config import ClickHouseConfiguration, ClickHouseNode, ReplicatedDatabaseSettings
+from astacus.coordinator.plugins.clickhouse.macros import Macros, MACROS_LIST_QUERY
 from astacus.coordinator.plugins.clickhouse.manifest import AccessEntity, ClickHouseManifest, ReplicatedDatabase, Table
 from astacus.coordinator.plugins.clickhouse.replication import DatabaseReplica
 from astacus.coordinator.plugins.clickhouse.steps import (
@@ -19,13 +20,13 @@ from astacus.coordinator.plugins.clickhouse.steps import (
     DistributeReplicatedPartsStep,
     FreezeTablesStep,
     ListDatabaseReplicasStep,
-    MACROS_LIST_QUERY,
     PrepareClickHouseManifestStep,
     RemoveFrozenTablesStep,
     RestoreAccessEntitiesStep,
     RestoreReplicatedDatabasesStep,
     RetrieveAccessEntitiesStep,
     RetrieveDatabasesAndTablesStep,
+    RetrieveMacrosStep,
     SyncDatabaseReplicasStep,
     SyncTableReplicasStep,
     TABLES_LIST_QUERY,
@@ -339,6 +340,30 @@ async def test_retrieve_tables_without_any_table() -> None:
 
 
 @pytest.mark.asyncio
+async def test_retrieve_macros() -> None:
+    clients = [StubClickHouseClient(), StubClickHouseClient()]
+    for (
+        client,
+        replica_name,
+    ) in zip(clients, [b"node_1", b"node_2"]):
+        client.set_response(
+            MACROS_LIST_QUERY,
+            [
+                [b64_str(b"shard"), b64_str(b"a_shard")],
+                [b64_str(b"replica"), b64_str(replica_name)],
+            ],
+        )
+    step = RetrieveMacrosStep(clients=clients)
+    cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
+    context = StepsContext()
+    servers_macros = await step.run_step(cluster, context)
+    assert servers_macros == [
+        Macros.from_mapping({b"shard": b"a_shard", b"replica": b"node_1"}),
+        Macros.from_mapping({b"shard": b"a_shard", b"replica": b"node_2"}),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_create_clickhouse_manifest() -> None:
     step = PrepareClickHouseManifestStep()
     context = StepsContext()
@@ -465,6 +490,13 @@ async def test_distribute_parts_of_replicated_tables() -> None:
         ],
     )
     context.set_result(RetrieveDatabasesAndTablesStep, (SAMPLE_DATABASES, SAMPLE_TABLES))
+    context.set_result(
+        RetrieveMacrosStep,
+        [
+            Macros.from_mapping({b"my_shard": b"shard_1", b"my_replica": b"replica_1"}),
+            Macros.from_mapping({b"my_shard": b"shard_1", b"my_replica": b"replica_2"}),
+        ],
+    )
     await step.run_step(Cluster(nodes=[]), context)
     snapshot_results = context.get_result(SnapshotStep)
     # On the ReplicatedMergeTree table (uuid ending in 0001), each server has only half the parts now
@@ -562,18 +594,7 @@ async def test_parse_clickhouse_manifest() -> None:
 
 @pytest.mark.asyncio
 async def test_list_database_replicas_step() -> None:
-    clients = [StubClickHouseClient(), StubClickHouseClient()]
-    for client, replica_name, shard_a, shard_b in zip(clients, [b"node1", b"node2"], [b"a1", b"a2"], [b"b1", b"b2"]):
-        client.set_response(
-            MACROS_LIST_QUERY,
-            [
-                [b64_str(b"shard_group_a"), b64_str(shard_a)],
-                [b64_str(b"shard_group_b"), b64_str(shard_b)],
-                [b64_str(b"replica"), b64_str(replica_name)],
-                [b64_str(b"don\x80care"), b64_str(b"its\x00fine")],
-            ],
-        )
-    step = ListDatabaseReplicasStep(clients=clients)
+    step = ListDatabaseReplicasStep()
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
     context.set_result(
@@ -584,6 +605,13 @@ async def test_list_database_replicas_step() -> None:
                 ReplicatedDatabase(name=b"db-two", shard=b"{shard_group_b}", replica=b"{replica}_suf"),
             ]
         ),
+    )
+    context.set_result(
+        RetrieveMacrosStep,
+        [
+            Macros.from_mapping({b"shard_group_a": b"a1", b"shard_group_b": b"b1", b"replica": b"node1"}),
+            Macros.from_mapping({b"shard_group_a": b"a2", b"shard_group_b": b"b2", b"replica": b"node2"}),
+        ],
     )
     database_replicas = await step.run_step(cluster, context)
     assert database_replicas == {
@@ -601,15 +629,15 @@ async def test_list_database_replicas_step() -> None:
 @pytest.mark.parametrize("missing_macro", [b"shard", b"replica"])
 @pytest.mark.asyncio
 async def test_list_database_replicas_step_fails_on_missing_macro(missing_macro: bytes) -> None:
-    clients = [StubClickHouseClient(), StubClickHouseClient()]
-    for client, replica_name in zip(clients, [b"node1", b"node2"]):
-        response = []
-        if missing_macro != b"shard":
-            response.append([b64_str(b"shard"), b64_str(b"all")])
-        if missing_macro != b"replica":
-            response.append([b64_str(b"replica"), b64_str(replica_name)])
-        client.set_response(MACROS_LIST_QUERY, response)
-    step = ListDatabaseReplicasStep(clients=clients)
+    server_1_macros = Macros()
+    server_2_macros = Macros()
+    if missing_macro != b"shard":
+        server_1_macros.add(b"shard", b"s1")
+        server_2_macros.add(b"shard", b"s1")
+    elif missing_macro != b"replica":
+        server_1_macros.add(b"replica", b"r1")
+        server_2_macros.add(b"replica", b"r2")
+    step = ListDatabaseReplicasStep()
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
     context.set_result(
@@ -620,6 +648,7 @@ async def test_list_database_replicas_step_fails_on_missing_macro(missing_macro:
             ]
         ),
     )
+    context.set_result(RetrieveMacrosStep, [server_1_macros, server_2_macros])
     with pytest.raises(StepFailedError, match=f"Error in macro of server 1: No macro named {missing_macro!r}"):
         await step.run_step(cluster, context)
 
