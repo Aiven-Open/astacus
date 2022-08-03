@@ -148,8 +148,9 @@ class CassandraStartOp(NodeOp):
         progress.add_success()
 
         config["auto_bootstrap"] = False
-        config["initial_token"] = ", ".join(self.req.tokens)
-        config["num_tokens"] = len(self.req.tokens)
+        if self.req.tokens:
+            config["initial_token"] = ", ".join(self.req.tokens)
+            config["num_tokens"] = len(self.req.tokens)
         with tempfile.NamedTemporaryFile(mode="w") as config_fh:
             yaml.safe_dump(config, config_fh)
             config_fh.flush()

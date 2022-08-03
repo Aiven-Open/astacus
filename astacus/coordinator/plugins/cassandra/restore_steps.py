@@ -36,6 +36,7 @@ class ParsePluginManifestStep(Step[CassandraManifest]):
 @dataclass
 class StartCassandraStep(Step[None]):
     partial_restore_nodes: Optional[List[ipc.PartialRestoreRequestNode]]
+    override_tokens: bool
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         backup_manifest = context.get_result(BackupManifestStep)
@@ -53,7 +54,10 @@ class StartCassandraStep(Step[None]):
             if backup_index is None:
                 continue
             nodes.append(cluster.nodes[node_index])
-            reqs.append(ipc.CassandraStartRequest(tokens=plugin_manifest.nodes[backup_index].tokens))
+            tokens: Optional[List[str]] = None
+            if self.override_tokens:
+                tokens = plugin_manifest.nodes[backup_index].tokens
+            reqs.append(ipc.CassandraStartRequest(tokens=tokens))
 
         await run_subop(cluster, ipc.CassandraSubOp.start_cassandra, nodes=nodes, reqs=reqs, result_class=ipc.NodeResult)
 
