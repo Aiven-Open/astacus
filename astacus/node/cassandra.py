@@ -99,8 +99,12 @@ class SimpleCassandraSubOp(NodeOp):
             table_path = table_paths[0]
 
             # Ensure destination path is empty except for potential directories (e.g. backups/)
-            # This should never have anything
+            # This should never have anything - except for system_auth, it gets populated when we restore schema.
             existing_files = [file_path for file_path in table_path.glob("*") if file_path.is_file()]
+            if keyspace_name == "system_auth":
+                for existing_file in existing_files:
+                    existing_file.unlink()
+                existing_files = []
             assert not existing_files, f"Files found in {table_name}: {existing_files}"
 
             for file_path in table_snapshot.glob("*"):
@@ -144,7 +148,9 @@ class CassandraStartOp(NodeOp):
         progress.add_success()
 
         config["auto_bootstrap"] = False
-        config["initial_token"] = ", ".join(self.req.tokens)
+        if self.req.tokens:
+            config["initial_token"] = ", ".join(self.req.tokens)
+            config["num_tokens"] = len(self.req.tokens)
         with tempfile.NamedTemporaryFile(mode="w") as config_fh:
             yaml.safe_dump(config, config_fh)
             config_fh.flush()

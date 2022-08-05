@@ -13,7 +13,8 @@ import pytest
 # TBD: Eventually multinode configuration would be perhaps interesting to test too
 
 
-async def test_step_start_cassandra(mocker):
+@pytest.mark.parametrize("override_tokens", [False, True])
+async def test_step_start_cassandra(mocker, override_tokens):
     restore_steps = pytest.importorskip("astacus.coordinator.plugins.cassandra.model.restore_steps")
     cassandra_schema = pytest.importorskip("astacus.common.cassandra.schema")
     plugin_model = pytest.importorskip("astacus.coordinator.plugins.cassandra.model")
@@ -51,7 +52,7 @@ async def test_step_start_cassandra(mocker):
 
     mocker.patch.object(restore_steps, "run_subop")
 
-    step = restore_steps.StartCassandraStep(partial_restore_nodes=None)
+    step = restore_steps.StartCassandraStep(partial_restore_nodes=None, override_tokens=override_tokens)
     context = SimpleNamespace(get_result=get_result)
     cluster = SimpleNamespace(nodes=[SimpleNamespace(az="az1")])
     result = await step.run_step(cluster, context)

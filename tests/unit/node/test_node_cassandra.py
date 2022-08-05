@@ -102,6 +102,7 @@ def test_api_cassandra_subop(app, ctenv, mocker, subop):
             == """auto_bootstrap: false
 initial_token: 42, 7
 listen_address: 127.0.0.1
+num_tokens: 2
 """
         )
     elif subop == ipc.CassandraSubOp.stop_cassandra:

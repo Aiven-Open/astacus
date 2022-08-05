@@ -92,8 +92,8 @@ class CassandraPlugin(CoordinatorPlugin):
             base.BackupNameStep(json_storage=context.json_storage, requested_name=req.name),
             base.BackupManifestStep(json_storage=context.json_storage),
             restore_steps.ParsePluginManifestStep(),
-            # Start cassandra + set schema + stop it
-            restore_steps.StartCassandraStep(partial_restore_nodes=req.partial_restore_nodes),
+            # Start cassandra with backed up token distribution + set schema + stop it
+            restore_steps.StartCassandraStep(partial_restore_nodes=req.partial_restore_nodes, override_tokens=True),
             restore_steps.WaitCassandraUpStep(duration=self.restore_start_timeout),
             restore_steps.RestorePreDataStep(client=client),
             CassandraSubOpStep(op=ipc.CassandraSubOp.stop_cassandra),
@@ -101,7 +101,8 @@ class CassandraPlugin(CoordinatorPlugin):
             base.RestoreStep(storage_name=context.storage_name, partial_restore_nodes=req.partial_restore_nodes),
             CassandraSubOpStep(op=ipc.CassandraSubOp.restore_snapshot),
             # restart cassandra and do the final actions with data available
-            restore_steps.StartCassandraStep(partial_restore_nodes=req.partial_restore_nodes),
+            # not configuring tokens here, because we've already bootstrapped the ring when restoring schema
+            restore_steps.StartCassandraStep(partial_restore_nodes=req.partial_restore_nodes, override_tokens=False),
             restore_steps.WaitCassandraUpStep(duration=self.restore_start_timeout),
             restore_steps.RestorePostDataStep(client=client),
         ]

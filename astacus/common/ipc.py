@@ -167,7 +167,7 @@ class CassandraSubOp(str, Enum):
 
 
 class CassandraStartRequest(NodeRequest):
-    tokens: List[str]
+    tokens: Optional[List[str]]
 
 
 class CassandraGetSchemaHashResult(NodeResult):
