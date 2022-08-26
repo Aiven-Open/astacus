@@ -70,7 +70,7 @@ class RohmuLocalStorageConfig(RohmuModel):
     prefix: Optional[str] = None
 
 
-class RohmuS3StorageConfig(RohmuModel):
+class RohmuS3StorageConfig(RohmuProxyStorage):
     storage_type: Literal[RohmuStorageType.s3]
     region: str
     bucket_name: str
@@ -84,7 +84,7 @@ class RohmuS3StorageConfig(RohmuModel):
     # Some more obscure options with defaults are omitted
 
 
-class RohmuAzureStorageConfig(RohmuModel):
+class RohmuAzureStorageConfig(RohmuProxyStorage):
     storage_type: Literal[RohmuStorageType.azure]
     account_name: str
     bucket_name: str
