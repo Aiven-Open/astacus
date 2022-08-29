@@ -3,7 +3,7 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 
-from astacus.common import ipc, utils
+from astacus.common import ipc, magic, utils
 from astacus.common.progress import Progress
 from astacus.node.snapshot import SnapshotOp
 
@@ -150,3 +150,22 @@ def test_api_snapshot_error(client, mocker):
     progress = response.json()["progress"]
     assert progress["failed"]
     assert progress["final"]
+
+
+@pytest.mark.timeout(2)
+@pytest.mark.parametrize(
+    "truncate_to,hashes_in_second_snapshot",
+    [
+        (magic.EMBEDDED_FILE_SIZE - 1, 0),
+        (magic.EMBEDDED_FILE_SIZE + 1, 1),
+    ],
+)
+def test_snapshot_file_size_changed(snapshotter, truncate_to, hashes_in_second_snapshot):
+    path = snapshotter.src / "shrinky"
+    with snapshotter.lock:
+        path.write_text("foobar" * magic.EMBEDDED_FILE_SIZE)
+        assert snapshotter.snapshot(progress=Progress()) > 0
+
+        os.truncate(path, truncate_to)
+        assert snapshotter.snapshot(progress=Progress()) == 1
+        assert len(snapshotter.get_snapshot_hashes()) == hashes_in_second_snapshot
