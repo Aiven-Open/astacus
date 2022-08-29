@@ -107,21 +107,21 @@ class Snapshotter:
         for relative_path in relative_paths:
             old_snapshotfile = self.relative_path_to_snapshotfile.get(relative_path)
             try:
-                snapshotfile = self._snapshotfile_from_path(relative_path)
+                new_snapshotfile = self._snapshotfile_from_path(relative_path)
             except FileNotFoundError:
                 lost += 1
                 if increase_worth_reporting(lost):
                     logger.debug("#%d. lost - %s disappeared before stat, ignoring", lost, self.src / relative_path)
                 continue
-            if old_snapshotfile:
-                snapshotfile.hexdigest = old_snapshotfile.hexdigest
-                snapshotfile.content_b64 = old_snapshotfile.content_b64
-                if old_snapshotfile == snapshotfile:
-                    same += 1
-                    if increase_worth_reporting(same):
-                        logger.debug("#%d. same - %r in %s is same", same, old_snapshotfile, relative_path)
-                    continue
-            yield snapshotfile
+            if old_snapshotfile and old_snapshotfile.underlying_file_is_the_same(new_snapshotfile):
+                new_snapshotfile.hexdigest = old_snapshotfile.hexdigest
+                new_snapshotfile.content_b64 = old_snapshotfile.content_b64
+                same += 1
+                if increase_worth_reporting(same):
+                    logger.debug("#%d. same - %r in %s is same", same, old_snapshotfile, relative_path)
+                continue
+
+            yield new_snapshotfile
 
     def get_snapshot_hashes(self):
         assert self.lock.locked()

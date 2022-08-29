@@ -68,6 +68,9 @@ class SnapshotFile(AstacusModel):
         # In our use case, paths uniquely identify files we care about
         return self.relative_path < o.relative_path
 
+    def underlying_file_is_the_same(self, o):
+        return self.mtime_ns == o.mtime_ns and self.relative_path == o.relative_path and self.file_size == o.file_size
+
     def equals_excluding_mtime(self, o):
         return self.copy(update={"mtime_ns": 0}) == o.copy(update={"mtime_ns": 0})
 
