@@ -47,9 +47,13 @@ class ClickHousePlugin(CoordinatorPlugin):
     replicated_databases_zookeeper_path: str = "/clickhouse/databases"
     replicated_databases_settings: ReplicatedDatabaseSettings = ReplicatedDatabaseSettings()
     freeze_name: str = "astacus"
+    drop_databases_timeout: float = 300.0
+    max_concurrent_drop_databases: int = 100
+    create_databases_timeout: float = 60.0
+    max_concurrent_create_databases: int = 100
+    sync_databases_timeout: float = 60.0
     attach_timeout: float = 300.0
     max_concurrent_attach: int = 100
-    sync_databases_timeout: float = 60.0
     sync_tables_timeout: float = 3600.0
     max_concurrent_sync: int = 100
 
@@ -108,6 +112,10 @@ class ClickHousePlugin(CoordinatorPlugin):
                 clients=clients,
                 replicated_databases_zookeeper_path=self.replicated_databases_zookeeper_path,
                 replicated_database_settings=self.replicated_databases_settings,
+                drop_databases_timeout=self.drop_databases_timeout,
+                max_concurrent_drop_databases=self.max_concurrent_drop_databases,
+                create_databases_timeout=self.create_databases_timeout,
+                max_concurrent_create_database=self.max_concurrent_create_databases,
             ),
             SyncDatabaseReplicasStep(
                 zookeeper_client=zookeeper_client,

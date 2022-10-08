@@ -712,6 +712,10 @@ async def test_creates_all_replicated_databases_and_tables_in_manifest() -> None
         clients=clients,
         replicated_databases_zookeeper_path="/clickhouse/databases",
         replicated_database_settings=ReplicatedDatabaseSettings(),
+        drop_databases_timeout=20.0,
+        max_concurrent_drop_databases=100,
+        create_databases_timeout=10.0,
+        max_concurrent_create_database=100,
     )
 
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
@@ -719,10 +723,14 @@ async def test_creates_all_replicated_databases_and_tables_in_manifest() -> None
     context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
     await step.run_step(cluster, context)
     first_client_queries = [
+        b"SET receive_timeout=20.0",
         b"DROP DATABASE IF EXISTS `db-one` SYNC",
+        b"SET receive_timeout=20.0",
+        b"DROP DATABASE IF EXISTS `db-two` SYNC",
+        b"SET receive_timeout=10.0",
         b"CREATE DATABASE `db-one` UUID '00000000-0000-0000-0000-000000000011'"
         b" ENGINE = Replicated('/clickhouse/databases/db%2Done', '{my_shard}', '{my_replica}')",
-        b"DROP DATABASE IF EXISTS `db-two` SYNC",
+        b"SET receive_timeout=10.0",
         b"CREATE DATABASE `db-two` UUID '00000000-0000-0000-0000-000000000012'"
         b" ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{my_shard}', '{my_replica}')",
         b"CREATE TABLE db-one.table-uno ...",
@@ -731,15 +739,19 @@ async def test_creates_all_replicated_databases_and_tables_in_manifest() -> None
     ]
     # CREATE TABLE is replicated, that why we only create the table on the first client
     second_client_queries = [
+        b"SET receive_timeout=20.0",
         b"DROP DATABASE IF EXISTS `db-one` SYNC",
+        b"SET receive_timeout=20.0",
+        b"DROP DATABASE IF EXISTS `db-two` SYNC",
+        b"SET receive_timeout=10.0",
         b"CREATE DATABASE `db-one` UUID '00000000-0000-0000-0000-000000000011'"
         b" ENGINE = Replicated('/clickhouse/databases/db%2Done', '{my_shard}', '{my_replica}')",
-        b"DROP DATABASE IF EXISTS `db-two` SYNC",
+        b"SET receive_timeout=10.0",
         b"CREATE DATABASE `db-two` UUID '00000000-0000-0000-0000-000000000012'"
         b" ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{my_shard}', '{my_replica}')",
     ]
-    assert clients[0].mock_calls == list(map(mock.call.execute, first_client_queries))
-    assert clients[1].mock_calls == list(map(mock.call.execute, second_client_queries))
+    assert [call.args[0] for call in clients[0].execute.mock_calls] == first_client_queries
+    assert [call.args[0] for call in clients[1].execute.mock_calls] == second_client_queries
 
 
 @pytest.mark.asyncio
@@ -752,17 +764,25 @@ async def test_creates_all_replicated_databases_and_tables_in_manifest_with_cust
             cluster_username="alice",
             cluster_password="alice_secret",
         ),
+        drop_databases_timeout=20.0,
+        max_concurrent_drop_databases=100,
+        create_databases_timeout=10.0,
+        max_concurrent_create_database=100,
     )
     cluster = Cluster(nodes=[CoordinatorNode(url="node1")])
     context = StepsContext()
     context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
     await step.run_step(cluster, context)
     first_client_queries = [
+        b"SET receive_timeout=20.0",
         b"DROP DATABASE IF EXISTS `db-one` SYNC",
+        b"SET receive_timeout=20.0",
+        b"DROP DATABASE IF EXISTS `db-two` SYNC",
+        b"SET receive_timeout=10.0",
         b"CREATE DATABASE `db-one` UUID '00000000-0000-0000-0000-000000000011'"
         b" ENGINE = Replicated('/clickhouse/databases/db%2Done', '{my_shard}', '{my_replica}') "
         b"SETTINGS cluster_username='alice', cluster_password='alice_secret'",
-        b"DROP DATABASE IF EXISTS `db-two` SYNC",
+        b"SET receive_timeout=10.0",
         b"CREATE DATABASE `db-two` UUID '00000000-0000-0000-0000-000000000012'"
         b" ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{my_shard}', '{my_replica}') "
         b"SETTINGS cluster_username='alice', cluster_password='alice_secret'",
@@ -770,7 +790,7 @@ async def test_creates_all_replicated_databases_and_tables_in_manifest_with_cust
         b"CREATE TABLE db-one.table-dos ...",
         b"CREATE TABLE db-two.table-eins ...",
     ]
-    assert client.mock_calls == list(map(mock.call.execute, first_client_queries))
+    assert [call.args[0] for call in client.execute.mock_calls] == first_client_queries
 
 
 @pytest.mark.asyncio
@@ -781,29 +801,41 @@ async def test_drops_each_database_on_all_servers_before_recreating_it() -> None
         clients=[client, client],
         replicated_databases_zookeeper_path="/clickhouse/databases",
         replicated_database_settings=ReplicatedDatabaseSettings(),
+        drop_databases_timeout=20.0,
+        max_concurrent_drop_databases=100,
+        create_databases_timeout=10.0,
+        max_concurrent_create_database=100,
     )
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
     context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
     await step.run_step(cluster, context)
     all_client_queries = [
+        b"SET receive_timeout=20.0",
         b"DROP DATABASE IF EXISTS `db-one` SYNC",
+        b"SET receive_timeout=20.0",
         b"DROP DATABASE IF EXISTS `db-one` SYNC",
+        b"SET receive_timeout=20.0",
+        b"DROP DATABASE IF EXISTS `db-two` SYNC",
+        b"SET receive_timeout=20.0",
+        b"DROP DATABASE IF EXISTS `db-two` SYNC",
+        b"SET receive_timeout=10.0",
         b"CREATE DATABASE `db-one` UUID '00000000-0000-0000-0000-000000000011'"
         b" ENGINE = Replicated('/clickhouse/databases/db%2Done', '{my_shard}', '{my_replica}')",
+        b"SET receive_timeout=10.0",
         b"CREATE DATABASE `db-one` UUID '00000000-0000-0000-0000-000000000011'"
         b" ENGINE = Replicated('/clickhouse/databases/db%2Done', '{my_shard}', '{my_replica}')",
-        b"DROP DATABASE IF EXISTS `db-two` SYNC",
-        b"DROP DATABASE IF EXISTS `db-two` SYNC",
+        b"SET receive_timeout=10.0",
         b"CREATE DATABASE `db-two` UUID '00000000-0000-0000-0000-000000000012'"
         b" ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{my_shard}', '{my_replica}')",
+        b"SET receive_timeout=10.0",
         b"CREATE DATABASE `db-two` UUID '00000000-0000-0000-0000-000000000012'"
         b" ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{my_shard}', '{my_replica}')",
         b"CREATE TABLE db-one.table-uno ...",
         b"CREATE TABLE db-one.table-dos ...",
         b"CREATE TABLE db-two.table-eins ...",
     ]
-    assert client.mock_calls == list(map(mock.call.execute, all_client_queries))
+    assert [call.args[0] for call in client.execute.mock_calls] == all_client_queries
 
 
 @pytest.mark.asyncio

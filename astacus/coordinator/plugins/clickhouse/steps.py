@@ -18,7 +18,7 @@ from .replication import (
 )
 from astacus.common import ipc
 from astacus.common.exceptions import TransientException
-from astacus.common.limiter import Limiter
+from astacus.common.limiter import gather_limited, Limiter
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import BackupManifestStep, SnapshotStep, Step, StepFailedError, StepsContext
 from astacus.coordinator.plugins.zookeeper import ChangeWatch, TransactionError, ZooKeeperClient
@@ -398,9 +398,28 @@ class RestoreReplicatedDatabasesStep(Step[None]):
     clients: List[ClickHouseClient]
     replicated_databases_zookeeper_path: str
     replicated_database_settings: ReplicatedDatabaseSettings
+    drop_databases_timeout: float
+    max_concurrent_drop_databases: int
+    create_databases_timeout: float
+    max_concurrent_create_database: int
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         manifest = context.get_result(ClickHouseManifestStep)
+        # The database must be dropped on *every* node before attempting to recreate it.
+        # If we don't do that, then the recreated database on one node will recover data from
+        # a node where the database wasn't recreated yet.
+        await gather_limited(
+            self.max_concurrent_drop_databases,
+            [
+                execute_with_timeout(
+                    client,
+                    self.drop_databases_timeout,
+                    f"DROP DATABASE IF EXISTS {escape_sql_identifier(database.name)} SYNC".encode(),
+                )
+                for database in manifest.replicated_databases
+                for client in self.clients
+            ],
+        )
         settings = [
             "{}={}".format(
                 setting_name,
@@ -410,30 +429,34 @@ class RestoreReplicatedDatabasesStep(Step[None]):
             if value is not None
         ]
         settings_clause = " SETTINGS {}".format(", ".join(settings)) if settings else ""
+        create_queries = []
         for database in manifest.replicated_databases:
             database_znode_name = escape_for_file_name(database.name)
             database_path = f"{self.replicated_databases_zookeeper_path}/{database_znode_name}"
-            # The database must be dropped on *every* node before attempting to recreate it.
-            # If we don't do that, then the recreated database on one node will recover data from
-            # a node where the database wasn't recreated yet.
-            for client in self.clients:
-                await client.execute(f"DROP DATABASE IF EXISTS {escape_sql_identifier(database.name)} SYNC".encode())
             optional_uuid_fragment = ""
             if database.uuid is not None:
                 escaped_database_uuid = escape_sql_string(str(database.uuid).encode())
                 optional_uuid_fragment = f" UUID {escaped_database_uuid}"
-            for client in self.clients:
-                await client.execute(
-                    (
-                        f"CREATE DATABASE {escape_sql_identifier(database.name)}"
-                        f"{optional_uuid_fragment}"
-                        f" ENGINE = Replicated("
-                        f"{escape_sql_string(database_path.encode())}, "
-                        f"{escape_sql_string(database.shard)}, "
-                        f"{escape_sql_string(database.replica)})"
-                        f"{settings_clause}"
-                    ).encode()
-                )
+            create_queries.append(
+                f"CREATE DATABASE {escape_sql_identifier(database.name)}"
+                f"{optional_uuid_fragment}"
+                f" ENGINE = Replicated("
+                f"{escape_sql_string(database_path.encode())}, "
+                f"{escape_sql_string(database.shard)}, "
+                f"{escape_sql_string(database.replica)})"
+                f"{settings_clause}".encode()
+            )
+        await gather_limited(
+            self.max_concurrent_create_database,
+            [
+                execute_with_timeout(client, self.create_databases_timeout, create_query)
+                for create_query in create_queries
+                for client in self.clients
+            ],
+        )
+        # Tables creation is not parallelized with gather since they can depend on each other
+        # (although, we could use graphlib more subtly and parallelize what we can).
+
         # If any known table depends on an unknown table that was inside a non-replicated
         # database engine, then this will crash. See comment in `RetrieveReplicatedDatabasesStep`.
         for table in tables_sorted_by_dependencies(manifest.tables):
