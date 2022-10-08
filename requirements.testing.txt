@@ -1,8 +1,8 @@
 # makefile convenience
-pre-commit>=2.2.0
+pre-commit>=2.14.1
 
 # pre-commit tasks in Makefile need these
-anyio==2.0.2
+anyio==3.2.1
 mypy==0.910
 pylint==2.9.6
 pytest-asyncio==0.14.0
