@@ -18,7 +18,7 @@ from .replication import (
 )
 from astacus.common import ipc
 from astacus.common.exceptions import TransientException
-from astacus.common.limiter import gather_limited, Limiter
+from astacus.common.limiter import gather_limited
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import BackupManifestStep, SnapshotStep, Step, StepFailedError, StepsContext
 from astacus.coordinator.plugins.zookeeper import ChangeWatch, TransactionError, ZooKeeperClient
@@ -564,21 +564,19 @@ class AttachMergeTreePartsStep(Step[None]):
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         backup_manifest = context.get_result(BackupManifestStep)
         clickhouse_manifest = context.get_result(ClickHouseManifestStep)
-        tasks = []
         tables_by_uuid = {table.uuid: table for table in clickhouse_manifest.tables}
-        limiter = Limiter(self.max_concurrent_attach)
-        for client, snapshot_result in zip(self.clients, backup_manifest.snapshot_results):
-            for table_identifier, part_name in list_parts_to_attach(snapshot_result, tables_by_uuid):
-                tasks.append(
-                    limiter.run(
-                        execute_with_timeout(
-                            client,
-                            self.attach_timeout,
-                            f"ALTER TABLE {table_identifier} ATTACH PART {escape_sql_string(part_name)}".encode(),
-                        )
-                    )
+        await gather_limited(
+            self.max_concurrent_attach,
+            [
+                execute_with_timeout(
+                    client,
+                    self.attach_timeout,
+                    f"ALTER TABLE {table_identifier} ATTACH PART {escape_sql_string(part_name)}".encode(),
                 )
-        await asyncio.gather(*tasks)
+                for client, snapshot_result in zip(self.clients, backup_manifest.snapshot_results)
+                for table_identifier, part_name in list_parts_to_attach(snapshot_result, tables_by_uuid)
+            ],
+        )
 
 
 @dataclasses.dataclass
@@ -594,18 +592,17 @@ class SyncTableReplicasStep(Step[None]):
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         manifest = context.get_result(ClickHouseManifestStep)
-        limiter = Limiter(self.max_concurrent_sync)
-        tasks = [
-            limiter.run(
+        await gather_limited(
+            self.max_concurrent_sync,
+            [
                 execute_with_timeout(
                     client, self.sync_timeout, f"SYSTEM SYNC REPLICA {table.escaped_sql_identifier}".encode()
                 )
-            )
-            for table in manifest.tables
-            for client in self.clients
-            if table.is_replicated
-        ]
-        await asyncio.gather(*tasks)
+                for table in manifest.tables
+                for client in self.clients
+                if table.is_replicated
+            ],
+        )
 
 
 async def execute_with_timeout(client: ClickHouseClient, timeout: float, query: bytes) -> None:
