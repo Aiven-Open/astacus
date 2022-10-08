@@ -18,6 +18,7 @@ def fixture_cplugin(mocker, tmpdir):
     yield plugin.CassandraPlugin(client=ctc.cassandra_client_config)
 
 
+@pytest.mark.asyncio
 async def test_step_cassandrasubop(mocker):
     plugin = pytest.importorskip("astacus.coordinator.plugins.cassandra.plugin")
     mocker.patch.object(plugin, "run_subop")
@@ -30,6 +31,7 @@ async def test_step_cassandrasubop(mocker):
 
 
 @pytest.mark.parametrize("success", [False, True])
+@pytest.mark.asyncio
 async def test_step_cassandra_validate_configuration(mocker, success):
     plugin = pytest.importorskip("astacus.coordinator.plugins.cassandra.plugin")
     step = plugin.ValidateConfigurationStep(nodes=[])

@@ -12,6 +12,7 @@ import pytest
 
 
 @pytest.mark.parametrize("start_ok", [False, True])
+@pytest.mark.asyncio
 async def test_run_subop(mocker, start_ok):
     async def request_from_nodes(*args, **kwargs):
         if start_ok:
@@ -40,6 +41,7 @@ async def test_run_subop(mocker, start_ok):
         ([1], (1, "")),
     ],
 )
+@pytest.mark.asyncio
 async def test_get_schema_hash(mocker, hashes, result):
     mocker.patch.object(utils, "run_subop", return_value=[SimpleNamespace(schema_hash=hash) for hash in hashes])
     actual_result = await utils.get_schema_hash(None)
