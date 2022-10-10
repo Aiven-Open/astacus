@@ -14,6 +14,7 @@ import pytest
 
 
 @pytest.mark.parametrize("override_tokens", [False, True])
+@pytest.mark.asyncio
 async def test_step_start_cassandra(mocker, override_tokens):
     restore_steps = pytest.importorskip("astacus.coordinator.plugins.cassandra.model.restore_steps")
     cassandra_schema = pytest.importorskip("astacus.common.cassandra.schema")
@@ -75,6 +76,7 @@ class AsyncIterableWrapper:
 
 
 @pytest.mark.parametrize("steps,success", [([True], True), ([False, True], True), ([False], False)])
+@pytest.mark.asyncio
 async def test_step_wait_cassandra_up(mocker, steps, success):
     restore_steps = pytest.importorskip("astacus.coordinator.plugins.cassandra.model.restore_steps")
     get_schema_steps = steps[:]
