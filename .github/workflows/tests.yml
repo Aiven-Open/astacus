@@ -2,7 +2,7 @@ name: Test Suite (Minimal)
 
 on: pull_request
 
-# Note: This test runs only on one Python version the minimal pip install
+# Note: This test runs only on one Python version with the minimal pip install
 
 jobs:
   unit-test:
