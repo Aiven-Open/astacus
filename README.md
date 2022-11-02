@@ -48,7 +48,7 @@ sudo pip3 install -e '.[cassandra]'
 
 
 
-## Fedora 34
+## Fedora 37
 
 (as root or user with sudo access; for root, skip sudo prefix)
 
