@@ -76,6 +76,10 @@ async def test_retrieve_tables(ports: Ports) -> None:
                     replica=b"{my_replica}",
                 ),
             ]
+            zookeeper_path = (
+                f"/clickhouse/tables/{str(table_uuid)}/{{my_shard}}"
+                if clickhouse_cluster.expands_uuid_in_zookeeper_path else "/clickhouse/tables/{uuid}/{my_shard}"
+            )
             assert tables == [
                 Table(
                     database="has_tablés".encode(),
@@ -85,7 +89,7 @@ async def test_retrieve_tables(ports: Ports) -> None:
                     create_query=(
                         f"CREATE TABLE `has_tablés`.`tablé_1` UUID '{str(table_uuid)}' (`thekey` UInt32) "
                         f"ENGINE = "
-                        f"ReplicatedMergeTree('/clickhouse/tables/{str(table_uuid)}/{{my_shard}}', '{{my_replica}}') "
+                        f"ReplicatedMergeTree('{zookeeper_path}', '{{my_replica}}') "
                         f"ORDER BY thekey SETTINGS index_granularity = 8192"
                     ).encode(),
                     dependencies=[],
