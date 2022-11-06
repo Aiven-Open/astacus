@@ -2,7 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
-from .conftest import create_clickhouse_service, get_clickhouse_client
+from .conftest import ClickHouseCommand, create_clickhouse_service, get_clickhouse_client
 from astacus.coordinator.plugins.clickhouse.client import ClickHouseClientQueryError
 from tests.integration.conftest import Ports, Service
 
@@ -40,8 +40,8 @@ async def test_client_execute_with_empty_response(clickhouse: Service) -> None:
 
 
 @pytest.mark.asyncio
-async def test_client_execute_bounded_connection_failure_time(ports: Ports) -> None:
-    async with create_clickhouse_service(ports) as clickhouse:
+async def test_client_execute_bounded_connection_failure_time(ports: Ports, clickhouse_command: ClickHouseCommand) -> None:
+    async with create_clickhouse_service(ports, clickhouse_command) as clickhouse:
         client = get_clickhouse_client(clickhouse, timeout=1.0)
         clickhouse.process.kill()
         start_time = time.monotonic()

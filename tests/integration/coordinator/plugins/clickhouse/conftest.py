@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+from _pytest.fixtures import FixtureRequest
 from astacus.client import create_client_parsers
 from astacus.common.ipc import Plugin
 from astacus.common.rohmustorage import (
@@ -20,10 +21,11 @@ from astacus.coordinator.plugins.clickhouse.plugin import ClickHousePlugin
 from astacus.coordinator.plugins.zookeeper_config import ZooKeeperConfiguration, ZooKeeperNode
 from astacus.node.config import NodeConfig
 from pathlib import Path
+from tests.conftest import CLICKHOUSE_PATH_OPTION
 from tests.integration.conftest import get_command_path, Ports, run_process_and_wait_for_pattern, Service, ServiceCluster
 from tests.system.conftest import background_process, wait_url_up
 from tests.utils import CONSTANT_TEST_RSA_PRIVATE_KEY, CONSTANT_TEST_RSA_PUBLIC_KEY
-from typing import AsyncIterator, Awaitable, List, Optional, Sequence, Union
+from typing import AsyncIterator, Awaitable, List, Sequence, Union
 
 import argparse
 import asyncio
@@ -63,18 +65,29 @@ USER_CONFIG = """
     </clickhouse>
 """
 
+ClickHouseCommand = List[Union[str, Path]]
+
+
+@pytest.fixture(scope="module", name="clickhouse_command")
+async def fixture_clickhouse_command(request: FixtureRequest) -> ClickHouseCommand:
+    clickhouse_path = request.config.getoption(CLICKHOUSE_PATH_OPTION)
+    if clickhouse_path is None:
+        clickhouse_path = await get_command_path("clickhouse")
+    if clickhouse_path is None:
+        clickhouse_path = await get_command_path("clickhouse-server")
+    if clickhouse_path is None:
+        pytest.skip("clickhouse installation not found")
+    return [clickhouse_path] if clickhouse_path.name.endswith("-server") else [clickhouse_path, "server"]
+
 
 @pytest.fixture(scope="module", name="clickhouse")
-async def fixture_clickhouse(ports: Ports) -> AsyncIterator[Service]:
-    async with create_clickhouse_service(ports) as service:
+async def fixture_clickhouse(ports: Ports, clickhouse_command: ClickHouseCommand) -> AsyncIterator[Service]:
+    async with create_clickhouse_service(ports, clickhouse_command) as service:
         yield service
 
 
 @contextlib.asynccontextmanager
-async def create_clickhouse_service(ports: Ports) -> AsyncIterator[Service]:
-    command = await get_clickhouse_command()
-    if command is None:
-        pytest.skip("clickhouse installation not found")
+async def create_clickhouse_service(ports: Ports, command: ClickHouseCommand) -> AsyncIterator[Service]:
     http_port = ports.allocate()
     with tempfile.TemporaryDirectory(prefix=f"clickhouse_{http_port}_") as data_dir_str:
         data_dir = Path(data_dir_str)
@@ -88,11 +101,9 @@ async def create_clickhouse_cluster(
     zookeeper: Service,
     ports: Ports,
     cluster_shards: Sequence[str],
+    command: ClickHouseCommand,
 ) -> AsyncIterator[ClickHouseServiceCluster]:
     cluster_size = len(cluster_shards)
-    command = await get_clickhouse_command()
-    if command is None:
-        pytest.skip("clickhouse installation not found")
     raw_clickhouse_version = subprocess.check_output([*command, "--version"]).strip().partition(b"version")[2]
     clickhouse_version = tuple(int(part) for part in raw_clickhouse_version.split(b".") if part)
     use_named_collections = clickhouse_version >= (22, 4)
@@ -217,14 +228,6 @@ def create_clickhouse_configs(
             cluster_shards, data_dirs, tcp_ports, http_ports, interserver_http_ports
         )
     ]
-
-
-async def get_clickhouse_command() -> Optional[List[Union[str, Path]]]:
-    for command_name in "clickhouse", "clickhouse-server":
-        path = await get_command_path(command_name)
-        if path:
-            return [path] if path.name.endswith("-server") else [path, "server"]
-    return None
 
 
 @contextlib.asynccontextmanager

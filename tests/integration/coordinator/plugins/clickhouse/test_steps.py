@@ -2,7 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
-from .conftest import create_clickhouse_cluster, get_clickhouse_client
+from .conftest import ClickHouseCommand, create_clickhouse_cluster, get_clickhouse_client
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import StepsContext
 from astacus.coordinator.plugins.clickhouse.manifest import ReplicatedDatabase, Table
@@ -21,10 +21,10 @@ pytestmark = [
 
 
 @pytest.mark.asyncio
-async def test_retrieve_tables(ports: Ports) -> None:
+async def test_retrieve_tables(ports: Ports, clickhouse_command: ClickHouseCommand) -> None:
     async with create_zookeeper(ports) as zookeeper:
         # We need a "real" cluster to be able to use Replicated databases
-        async with create_clickhouse_cluster(zookeeper, ports, cluster_shards=["s1"]) as clickhouse_cluster:
+        async with create_clickhouse_cluster(zookeeper, ports, ["s1"], clickhouse_command) as clickhouse_cluster:
             clickhouse = clickhouse_cluster.services[0]
             client = get_clickhouse_client(clickhouse)
             await client.execute(
@@ -78,7 +78,8 @@ async def test_retrieve_tables(ports: Ports) -> None:
             ]
             zookeeper_path = (
                 f"/clickhouse/tables/{str(table_uuid)}/{{my_shard}}"
-                if clickhouse_cluster.expands_uuid_in_zookeeper_path else "/clickhouse/tables/{uuid}/{my_shard}"
+                if clickhouse_cluster.expands_uuid_in_zookeeper_path
+                else "/clickhouse/tables/{uuid}/{my_shard}"
             )
             assert tables == [
                 Table(
