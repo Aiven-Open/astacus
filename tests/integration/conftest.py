@@ -53,12 +53,17 @@ def get_zookeeper_command(*, java_path: Path, data_dir: Path, port: int) -> Opti
     return None
 
 
+class FailPatternFoundError(Exception):
+    pass
+
+
 @contextlib.asynccontextmanager
 async def run_process_and_wait_for_pattern(
     *,
     args: List[Union[str, Path]],
     cwd: Path,
     pattern: str,
+    fail_pattern: Optional[str] = None,
     timeout: float = 10.0,
 ) -> AsyncIterator[asyncio.subprocess.Process]:
     # This stringification is a workaround for a bug in pydev (pydev_monkey.py:111)
@@ -77,6 +82,8 @@ async def run_process_and_wait_for_pattern(
                     logger.debug("%d: %s", process.pid, decoded_line)
                     if pattern in decoded_line:
                         loop.call_soon_threadsafe(pattern_found.set)
+                    if fail_pattern is not None and fail_pattern in decoded_line:
+                        raise FailPatternFoundError(f"Fail pattern {fail_pattern!r} found")
 
         thread = threading.Thread(target=read_logs)
         thread.start()
@@ -157,7 +164,22 @@ log4j.appender.default.layout.ConversionPattern=[%-5p] %m%n
         command = get_zookeeper_command(java_path=java_path, data_dir=data_dir, port=port)
         if command is None:
             pytest.skip("zookeeper installation not found")
-        async with run_process_and_wait_for_pattern(
-            args=command, cwd=data_dir, pattern="PrepRequestProcessor (sid:0) started", timeout=20.0
-        ) as process:
+        async with contextlib.AsyncExitStack() as stack:
+            max_attempts = 10
+            for attempt in range(max_attempts):
+                try:
+                    process = await stack.enter_async_context(
+                        run_process_and_wait_for_pattern(
+                            args=command,
+                            cwd=data_dir,
+                            pattern="PrepRequestProcessor (sid:0) started",
+                            fail_pattern="java.net.BindException: Address already in use",
+                            timeout=20.0,
+                        )
+                    )
+                    break
+                except FailPatternFoundError:
+                    if attempt + 1 == max_attempts:
+                        raise
+                    await asyncio.sleep(2.0)
             yield Service(process=process, port=port, data_dir=data_dir)
