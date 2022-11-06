@@ -28,14 +28,23 @@ from typing import AsyncIterator, Awaitable, List, Optional, Sequence, Union
 import argparse
 import asyncio
 import contextlib
+import dataclasses
 import logging
 import pytest
+import subprocess
 import sys
 import tempfile
 
 logger = logging.getLogger(__name__)
 
 pytestmark = [pytest.mark.clickhouse, pytest.mark.x86_64]
+
+
+@dataclasses.dataclass
+class ClickHouseServiceCluster(ServiceCluster):
+    use_named_collections: bool
+    expands_uuid_in_zookeeper_path: bool
+
 
 USER_CONFIG = """
     <yandex>
@@ -79,11 +88,15 @@ async def create_clickhouse_cluster(
     zookeeper: Service,
     ports: Ports,
     cluster_shards: Sequence[str],
-) -> AsyncIterator[ServiceCluster]:
+) -> AsyncIterator[ClickHouseServiceCluster]:
     cluster_size = len(cluster_shards)
     command = await get_clickhouse_command()
     if command is None:
         pytest.skip("clickhouse installation not found")
+    raw_clickhouse_version = subprocess.check_output([*command, "--version"]).strip().partition(b"version")[2]
+    clickhouse_version = tuple(int(part) for part in raw_clickhouse_version.split(b".") if part)
+    use_named_collections = clickhouse_version >= (22, 4)
+    expands_uuid_in_zookeeper_path = clickhouse_version < (22, 4)
     tcp_ports = [ports.allocate() for _ in range(cluster_size)]
     http_ports = [ports.allocate() for _ in range(cluster_size)]
     interserver_http_ports = [ports.allocate() for _ in range(cluster_size)]
@@ -104,11 +117,13 @@ async def create_clickhouse_cluster(
                 )
                 for data_dir in data_dirs
             ]
-            yield ServiceCluster(
+            yield ClickHouseServiceCluster(
                 services=[
                     Service(process=process, port=http_port, username="default", password="secret", data_dir=data_dir)
                     for process, http_port, data_dir in zip(processes, http_ports, data_dirs)
-                ]
+                ],
+                use_named_collections=use_named_collections,
+                expands_uuid_in_zookeeper_path=expands_uuid_in_zookeeper_path,
             )
 
 
