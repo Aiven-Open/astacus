@@ -47,7 +47,7 @@ class ClickHouseServiceCluster(ServiceCluster):
 
 
 USER_CONFIG = """
-    <yandex>
+    <clickhouse>
         <users>
             <default>
                 <password>secret</password>
@@ -60,7 +60,7 @@ USER_CONFIG = """
             </default>
         </profiles>
         <quotas><default></default></quotas>
-    </yandex>
+    </clickhouse>
 """
 
 
@@ -170,7 +170,7 @@ def create_clickhouse_configs(
     )
     return [
         f"""
-                <yandex>
+                <clickhouse>
                     <path>{str(data_dir)}</path>
                     <logger>
                         <level>debug</level>
@@ -211,7 +211,7 @@ def create_clickhouse_configs(
                         <my_shard>{cluster_shard}</my_shard>
                         <my_replica>r{http_port}</my_replica>
                     </macros>
-                </yandex>
+                </clickhouse>
                 """
         for cluster_shard, data_dir, tcp_port, http_port, interserver_http_port in zip(
             cluster_shards, data_dirs, tcp_ports, http_ports, interserver_http_ports
