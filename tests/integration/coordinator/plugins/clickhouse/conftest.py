@@ -21,7 +21,7 @@ from astacus.coordinator.plugins.clickhouse.plugin import ClickHousePlugin
 from astacus.coordinator.plugins.zookeeper_config import ZooKeeperConfiguration, ZooKeeperNode
 from astacus.node.config import NodeConfig
 from pathlib import Path
-from tests.conftest import CLICKHOUSE_PATH_OPTION
+from tests.conftest import CLICKHOUSE_PATH_OPTION, CLICKHOUSE_RESTORE_PATH_OPTION
 from tests.integration.conftest import get_command_path, Ports, run_process_and_wait_for_pattern, Service, ServiceCluster
 from tests.system.conftest import background_process, wait_url_up
 from tests.utils import CONSTANT_TEST_RSA_PRIVATE_KEY, CONSTANT_TEST_RSA_PUBLIC_KEY
@@ -77,6 +77,18 @@ async def fixture_clickhouse_command(request: FixtureRequest) -> ClickHouseComma
         clickhouse_path = await get_command_path("clickhouse-server")
     if clickhouse_path is None:
         pytest.skip("clickhouse installation not found")
+    return get_clickhouse_command(clickhouse_path)
+
+
+@pytest.fixture(scope="module", name="clickhouse_restore_command")
+def fixture_clickhouse_restore_command(request: FixtureRequest, clickhouse_command: ClickHouseCommand) -> ClickHouseCommand:
+    clickhouse_restore_path = request.config.getoption(CLICKHOUSE_RESTORE_PATH_OPTION)
+    if clickhouse_restore_path is None:
+        return clickhouse_command
+    return get_clickhouse_command(clickhouse_restore_path)
+
+
+def get_clickhouse_command(clickhouse_path: Path) -> ClickHouseCommand:
     return [clickhouse_path] if clickhouse_path.name.endswith("-server") else [clickhouse_path, "server"]
 
 

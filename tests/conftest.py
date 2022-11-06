@@ -10,6 +10,7 @@ import platform
 import pytest
 
 CLICKHOUSE_PATH_OPTION = "--clickhouse-path"
+CLICKHOUSE_RESTORE_PATH_OPTION = "--clickhouse-restore-path"
 
 
 def pytest_addoption(parser: Parser) -> None:
@@ -19,6 +20,13 @@ def pytest_addoption(parser: Parser) -> None:
         type=checked_path_to_file,
         default=None,
         help="Path to the ClickHouse binary used in integration tests (default: auto-detected)",
+    )
+    parser.addoption(
+        CLICKHOUSE_RESTORE_PATH_OPTION,
+        action="store",
+        type=checked_path_to_file,
+        default=None,
+        help="Path to the ClickHouse binary used for restoring in integration tests (default: use the same as for backup)",
     )
 
 

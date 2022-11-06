@@ -65,11 +65,13 @@ async def fixture_restored_cluster(
     restorable_cluster: Path,
     ports: Ports,
     request: SubRequest,
-    clickhouse_command: ClickHouseCommand,
+    clickhouse_restore_command: ClickHouseCommand,
 ) -> AsyncIterable[Sequence[ClickHouseClient]]:
     stop_after_step: str = request.param
     async with create_zookeeper(ports) as zookeeper:
-        async with create_clickhouse_cluster(zookeeper, ports, ("s1", "s1", "s2"), clickhouse_command) as clickhouse_cluster:
+        async with create_clickhouse_cluster(
+            zookeeper, ports, ("s1", "s1", "s2"), clickhouse_restore_command
+        ) as clickhouse_cluster:
             clients = [get_clickhouse_client(service) for service in clickhouse_cluster.services]
             async with create_astacus_cluster(restorable_cluster, zookeeper, clickhouse_cluster, ports) as astacus_cluster:
                 # To test if we can survive transient failures during an entire restore operation,
