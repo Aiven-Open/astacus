@@ -50,7 +50,7 @@ async def fixture_restorable_cluster(ports: Ports) -> AsyncIterator[Path]:
             async with create_clickhouse_cluster(zookeeper, ports, ("s1", "s1", "s2")) as clickhouse_cluster:
                 async with create_astacus_cluster(storage_path, zookeeper, clickhouse_cluster, ports) as astacus_cluster:
                     clients = [get_clickhouse_client(service) for service in clickhouse_cluster.services]
-                    await setup_cluster_content(clients)
+                    await setup_cluster_content(clients, clickhouse_cluster.use_named_collections)
                     await setup_cluster_users(clients)
                     run_astacus_command(astacus_cluster, "backup")
         # We have destroyed everything except the backup storage dir
@@ -80,12 +80,16 @@ async def fixture_restored_cluster(
                 yield clients
 
 
-async def setup_cluster_content(clients: List[HttpClickHouseClient]) -> None:
+async def setup_cluster_content(clients: List[HttpClickHouseClient], use_named_collections: bool) -> None:
     for client in clients:
         await client.execute(b"DROP DATABASE default SYNC")
         await client.execute(
             b"CREATE DATABASE default ENGINE = Replicated('/clickhouse/databases/thebase', '{my_shard}', '{my_replica}') "
-            b"SETTINGS cluster_username='default', cluster_password='secret'"
+            + (
+                b"SETTINGS collection_name='default_cluster'"
+                if use_named_collections
+                else b"SETTINGS cluster_username='default', cluster_password='secret'"
+            )
         )
     # table creation is auto-replicated so we only do it once :
     await clients[0].execute(

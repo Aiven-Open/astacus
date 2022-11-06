@@ -104,7 +104,7 @@ async def create_clickhouse_cluster(
     with tempfile.TemporaryDirectory(prefix=f"clickhouse_{joined_http_ports}_") as base_data_dir:
         data_dirs = [Path(base_data_dir) / f"clickhouse_{http_port}" for http_port in http_ports]
         configs = create_clickhouse_configs(
-            cluster_shards, zookeeper, data_dirs, tcp_ports, http_ports, interserver_http_ports
+            cluster_shards, zookeeper, data_dirs, tcp_ports, http_ports, interserver_http_ports, use_named_collections
         )
         for config, data_dir in zip(configs, data_dirs):
             data_dir.mkdir()
@@ -129,7 +129,7 @@ async def create_clickhouse_cluster(
 
 @contextlib.asynccontextmanager
 async def create_astacus_cluster(
-    storage_path: Path, zookeeper: Service, clickhouse_cluster: ServiceCluster, ports: Ports
+    storage_path: Path, zookeeper: Service, clickhouse_cluster: ClickHouseServiceCluster, ports: Ports
 ) -> AsyncIterator[ServiceCluster]:
     configs = create_astacus_configs(zookeeper, clickhouse_cluster, ports, Path(storage_path))
     async with contextlib.AsyncExitStack() as stack:
@@ -145,6 +145,7 @@ def create_clickhouse_configs(
     tcp_ports: List[int],
     http_ports: List[int],
     interserver_http_ports: List[int],
+    use_named_collections: bool,
 ):
     replicas = "\n".join(
         f"""
@@ -155,6 +156,17 @@ def create_clickhouse_configs(
         </replica>
         """
         for tcp_port in tcp_ports
+    )
+    named_collections = (
+        """
+        <named_collections>
+            <default_cluster>
+                <cluster_secret>secret</cluster_secret>
+            </default_cluster>
+        </named_collections>
+        """
+        if use_named_collections
+        else ""
     )
     return [
         f"""
@@ -192,6 +204,7 @@ def create_clickhouse_configs(
                             </shard>
                         </defaultcluster>
                     </remote_servers>
+                    {named_collections}
                     <default_replica_path>/clickhouse/tables/{{uuid}}/{{my_shard}}</default_replica_path>
                     <default_replica_name>{{my_replica}}</default_replica_name>
                     <macros>
@@ -242,7 +255,7 @@ def run_astacus_command(astacus_cluster: ServiceCluster, *args: str) -> None:
 
 def create_astacus_configs(
     zookeeper: Service,
-    clickhouse_cluster: ServiceCluster,
+    clickhouse_cluster: ClickHouseServiceCluster,
     ports: Ports,
     storage_path: Path,
 ) -> List[GlobalConfig]:
@@ -270,6 +283,10 @@ def create_astacus_configs(
                         ],
                     ),
                     replicated_databases_settings=ReplicatedDatabaseSettings(
+                        collection_name="default_cluster",
+                    )
+                    if clickhouse_cluster.use_named_collections
+                    else ReplicatedDatabaseSettings(
                         cluster_username=clickhouse_cluster.services[0].username,
                         cluster_password=clickhouse_cluster.services[0].password,
                     ),
