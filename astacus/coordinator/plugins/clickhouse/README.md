@@ -49,7 +49,8 @@
     "wait_entry_commited_timeout_sec": 3600,
     "cluster_username": "distributed_user",
     "cluster_password": "distributed_user_password",
-    "cluster_secret": "the secret"
+    "cluster_secret": "the secret",
+    "collection_name": null
   },
   "freeze_name": "astacus",
   "sync_timeout": 3600

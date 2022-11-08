@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+from _pytest.fixtures import FixtureRequest
 from astacus.client import create_client_parsers
 from astacus.common.ipc import Plugin
 from astacus.common.rohmustorage import (
@@ -20,16 +21,19 @@ from astacus.coordinator.plugins.clickhouse.plugin import ClickHousePlugin
 from astacus.coordinator.plugins.zookeeper_config import ZooKeeperConfiguration, ZooKeeperNode
 from astacus.node.config import NodeConfig
 from pathlib import Path
+from tests.conftest import CLICKHOUSE_PATH_OPTION, CLICKHOUSE_RESTORE_PATH_OPTION
 from tests.integration.conftest import get_command_path, Ports, run_process_and_wait_for_pattern, Service, ServiceCluster
 from tests.system.conftest import background_process, wait_url_up
 from tests.utils import CONSTANT_TEST_RSA_PRIVATE_KEY, CONSTANT_TEST_RSA_PUBLIC_KEY
-from typing import AsyncIterator, Awaitable, List, Optional, Sequence, Union
+from typing import AsyncIterator, Awaitable, List, Sequence, Union
 
 import argparse
 import asyncio
 import contextlib
+import dataclasses
 import logging
 import pytest
+import subprocess
 import sys
 import tempfile
 
@@ -37,8 +41,15 @@ logger = logging.getLogger(__name__)
 
 pytestmark = [pytest.mark.clickhouse, pytest.mark.x86_64]
 
+
+@dataclasses.dataclass
+class ClickHouseServiceCluster(ServiceCluster):
+    use_named_collections: bool
+    expands_uuid_in_zookeeper_path: bool
+
+
 USER_CONFIG = """
-    <yandex>
+    <clickhouse>
         <users>
             <default>
                 <password>secret</password>
@@ -51,21 +62,44 @@ USER_CONFIG = """
             </default>
         </profiles>
         <quotas><default></default></quotas>
-    </yandex>
+    </clickhouse>
 """
+
+ClickHouseCommand = List[Union[str, Path]]
+
+
+@pytest.fixture(scope="module", name="clickhouse_command")
+async def fixture_clickhouse_command(request: FixtureRequest) -> ClickHouseCommand:
+    clickhouse_path = request.config.getoption(CLICKHOUSE_PATH_OPTION)
+    if clickhouse_path is None:
+        clickhouse_path = await get_command_path("clickhouse")
+    if clickhouse_path is None:
+        clickhouse_path = await get_command_path("clickhouse-server")
+    if clickhouse_path is None:
+        pytest.skip("clickhouse installation not found")
+    return get_clickhouse_command(clickhouse_path)
+
+
+@pytest.fixture(scope="module", name="clickhouse_restore_command")
+def fixture_clickhouse_restore_command(request: FixtureRequest, clickhouse_command: ClickHouseCommand) -> ClickHouseCommand:
+    clickhouse_restore_path = request.config.getoption(CLICKHOUSE_RESTORE_PATH_OPTION)
+    if clickhouse_restore_path is None:
+        return clickhouse_command
+    return get_clickhouse_command(clickhouse_restore_path)
+
+
+def get_clickhouse_command(clickhouse_path: Path) -> ClickHouseCommand:
+    return [clickhouse_path] if clickhouse_path.name.endswith("-server") else [clickhouse_path, "server"]
 
 
 @pytest.fixture(scope="module", name="clickhouse")
-async def fixture_clickhouse(ports: Ports) -> AsyncIterator[Service]:
-    async with create_clickhouse_service(ports) as service:
+async def fixture_clickhouse(ports: Ports, clickhouse_command: ClickHouseCommand) -> AsyncIterator[Service]:
+    async with create_clickhouse_service(ports, clickhouse_command) as service:
         yield service
 
 
 @contextlib.asynccontextmanager
-async def create_clickhouse_service(ports: Ports) -> AsyncIterator[Service]:
-    command = await get_clickhouse_command()
-    if command is None:
-        pytest.skip("clickhouse installation not found")
+async def create_clickhouse_service(ports: Ports, command: ClickHouseCommand) -> AsyncIterator[Service]:
     http_port = ports.allocate()
     with tempfile.TemporaryDirectory(prefix=f"clickhouse_{http_port}_") as data_dir_str:
         data_dir = Path(data_dir_str)
@@ -79,11 +113,13 @@ async def create_clickhouse_cluster(
     zookeeper: Service,
     ports: Ports,
     cluster_shards: Sequence[str],
-) -> AsyncIterator[ServiceCluster]:
+    command: ClickHouseCommand,
+) -> AsyncIterator[ClickHouseServiceCluster]:
     cluster_size = len(cluster_shards)
-    command = await get_clickhouse_command()
-    if command is None:
-        pytest.skip("clickhouse installation not found")
+    raw_clickhouse_version = subprocess.check_output([*command, "--version"]).strip().partition(b"version")[2]
+    clickhouse_version = tuple(int(part) for part in raw_clickhouse_version.split(b".") if part)
+    use_named_collections = clickhouse_version >= (22, 4)
+    expands_uuid_in_zookeeper_path = clickhouse_version < (22, 4)
     tcp_ports = [ports.allocate() for _ in range(cluster_size)]
     http_ports = [ports.allocate() for _ in range(cluster_size)]
     interserver_http_ports = [ports.allocate() for _ in range(cluster_size)]
@@ -91,7 +127,7 @@ async def create_clickhouse_cluster(
     with tempfile.TemporaryDirectory(prefix=f"clickhouse_{joined_http_ports}_") as base_data_dir:
         data_dirs = [Path(base_data_dir) / f"clickhouse_{http_port}" for http_port in http_ports]
         configs = create_clickhouse_configs(
-            cluster_shards, zookeeper, data_dirs, tcp_ports, http_ports, interserver_http_ports
+            cluster_shards, zookeeper, data_dirs, tcp_ports, http_ports, interserver_http_ports, use_named_collections
         )
         for config, data_dir in zip(configs, data_dirs):
             data_dir.mkdir()
@@ -104,17 +140,19 @@ async def create_clickhouse_cluster(
                 )
                 for data_dir in data_dirs
             ]
-            yield ServiceCluster(
+            yield ClickHouseServiceCluster(
                 services=[
                     Service(process=process, port=http_port, username="default", password="secret", data_dir=data_dir)
                     for process, http_port, data_dir in zip(processes, http_ports, data_dirs)
-                ]
+                ],
+                use_named_collections=use_named_collections,
+                expands_uuid_in_zookeeper_path=expands_uuid_in_zookeeper_path,
             )
 
 
 @contextlib.asynccontextmanager
 async def create_astacus_cluster(
-    storage_path: Path, zookeeper: Service, clickhouse_cluster: ServiceCluster, ports: Ports
+    storage_path: Path, zookeeper: Service, clickhouse_cluster: ClickHouseServiceCluster, ports: Ports
 ) -> AsyncIterator[ServiceCluster]:
     configs = create_astacus_configs(zookeeper, clickhouse_cluster, ports, Path(storage_path))
     async with contextlib.AsyncExitStack() as stack:
@@ -130,6 +168,7 @@ def create_clickhouse_configs(
     tcp_ports: List[int],
     http_ports: List[int],
     interserver_http_ports: List[int],
+    use_named_collections: bool,
 ):
     replicas = "\n".join(
         f"""
@@ -141,9 +180,20 @@ def create_clickhouse_configs(
         """
         for tcp_port in tcp_ports
     )
+    named_collections = (
+        """
+        <named_collections>
+            <default_cluster>
+                <cluster_secret>secret</cluster_secret>
+            </default_cluster>
+        </named_collections>
+        """
+        if use_named_collections
+        else ""
+    )
     return [
         f"""
-                <yandex>
+                <clickhouse>
                     <path>{str(data_dir)}</path>
                     <logger>
                         <level>debug</level>
@@ -177,26 +227,19 @@ def create_clickhouse_configs(
                             </shard>
                         </defaultcluster>
                     </remote_servers>
+                    {named_collections}
                     <default_replica_path>/clickhouse/tables/{{uuid}}/{{my_shard}}</default_replica_path>
                     <default_replica_name>{{my_replica}}</default_replica_name>
                     <macros>
                         <my_shard>{cluster_shard}</my_shard>
                         <my_replica>r{http_port}</my_replica>
                     </macros>
-                </yandex>
+                </clickhouse>
                 """
         for cluster_shard, data_dir, tcp_port, http_port, interserver_http_port in zip(
             cluster_shards, data_dirs, tcp_ports, http_ports, interserver_http_ports
         )
     ]
-
-
-async def get_clickhouse_command() -> Optional[List[Union[str, Path]]]:
-    for command_name in "clickhouse", "clickhouse-server":
-        path = await get_command_path(command_name)
-        if path:
-            return [path] if path.name.endswith("-server") else [path, "server"]
-    return None
 
 
 @contextlib.asynccontextmanager
@@ -227,7 +270,7 @@ def run_astacus_command(astacus_cluster: ServiceCluster, *args: str) -> None:
 
 def create_astacus_configs(
     zookeeper: Service,
-    clickhouse_cluster: ServiceCluster,
+    clickhouse_cluster: ClickHouseServiceCluster,
     ports: Ports,
     storage_path: Path,
 ) -> List[GlobalConfig]:
@@ -255,6 +298,10 @@ def create_astacus_configs(
                         ],
                     ),
                     replicated_databases_settings=ReplicatedDatabaseSettings(
+                        collection_name="default_cluster",
+                    )
+                    if clickhouse_cluster.use_named_collections
+                    else ReplicatedDatabaseSettings(
                         cluster_username=clickhouse_cluster.services[0].username,
                         cluster_password=clickhouse_cluster.services[0].password,
                     ),

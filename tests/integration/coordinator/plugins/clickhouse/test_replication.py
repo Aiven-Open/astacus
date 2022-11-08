@@ -4,7 +4,11 @@ See LICENSE for details
 """
 from astacus.coordinator.plugins.clickhouse.replication import get_shard_and_replica
 from tests.integration.conftest import create_zookeeper, Ports
-from tests.integration.coordinator.plugins.clickhouse.conftest import create_clickhouse_cluster, get_clickhouse_client
+from tests.integration.coordinator.plugins.clickhouse.conftest import (
+    ClickHouseCommand,
+    create_clickhouse_cluster,
+    get_clickhouse_client,
+)
 
 import pytest
 
@@ -15,9 +19,9 @@ pytestmark = [
 
 
 @pytest.mark.asyncio
-async def test_get_shard_and_replica(ports: Ports) -> None:
+async def test_get_shard_and_replica(ports: Ports, clickhouse_command: ClickHouseCommand) -> None:
     async with create_zookeeper(ports) as zookeeper:
-        async with create_clickhouse_cluster(zookeeper, ports, cluster_shards=["s1"]) as clickhouse_cluster:
+        async with create_clickhouse_cluster(zookeeper, ports, ["s1"], clickhouse_command) as clickhouse_cluster:
             clickhouse = clickhouse_cluster.services[0]
             client = get_clickhouse_client(clickhouse)
             await client.execute(

@@ -27,6 +27,7 @@ class ReplicatedDatabaseSettings(AstacusModel):
     cluster_username: Optional[str]
     cluster_password: Optional[str]
     cluster_secret: Optional[str]
+    collection_name: Optional[str]
 
 
 def get_zookeeper_client(configuration: ZooKeeperConfiguration) -> ZooKeeperClient:
