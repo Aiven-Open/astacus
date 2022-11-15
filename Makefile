@@ -19,6 +19,9 @@ ZOOKEEPER_HASH = 87e555869211cc3dc5f3cdfe7c22124b62605dac50a14e6c84e7e66b583c4eb
 
 default: $(GENERATED)
 
+venv: default
+	$(PYTHON) -m venv venv && source venv/bin/activate && pip install -U pip && pip install -r requirements.txt
+
 clean:
 	rm -rf rpm/ $(GENERATED)
 
