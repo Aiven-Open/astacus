@@ -25,7 +25,7 @@ import logging
 import os
 import sentry_sdk
 import subprocess
-import uvicorn  # type:ignore
+import uvicorn
 
 logger = logging.getLogger(__name__)
 

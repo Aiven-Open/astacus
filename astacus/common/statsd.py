@@ -17,7 +17,7 @@ This is combination of:
 from .utils import AstacusModel
 from contextlib import asynccontextmanager, contextmanager
 from enum import Enum
-from typing import Dict, Optional, Union
+from typing import Optional, Union
 
 import socket
 import time
@@ -28,7 +28,7 @@ class MessageFormat(str, Enum):
     telegraf = "telegraf"
 
 
-Tags = Dict[str, Union[int, str, None]]
+Tags = dict[str, Union[int, str, None]]
 
 
 class StatsdConfig(AstacusModel):
@@ -110,7 +110,7 @@ class StatsClient:
                 parts.append(pattern.format(separator, tag, val).encode("utf-8"))
         elif self._message_format == MessageFormat.telegraf:
             for tag, val in send_tags.items():
-                parts.insert(1, ",{}={}".format(tag, val).encode("utf-8"))
+                parts.insert(1, f",{tag}={val}".encode("utf-8"))
         else:
             raise NotImplementedError("Unsupported message format")
 

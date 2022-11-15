@@ -126,9 +126,11 @@ def print_list_result(result):
             ssize += b.upload_stored_size
 
         if tsize:
-            gtable[0]["pchanged"] = "%.2f%%" % (100.0 * usize / tsize)
+            pchanged = 100.0 * usize / tsize
+            gtable[0]["pchanged"] = f"{pchanged:.2f}%"
         if usize:
-            gtable[0]["csaving"] = "%.2f%%" % (100.0 - 100.0 * ssize / usize)
+            csaving = 100.0 - 100.0 * ssize / usize
+            gtable[0]["csaving"] = f"{csaving:.2f}%"
 
         if i:
             print()

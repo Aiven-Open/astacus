@@ -76,8 +76,7 @@ def test_group_files_into_parts_collects_parts_from_selected_tables() -> None:
         assert part.snapshot_files == original_files
         assert part.total_size == 1120
         assert part.servers == {0, 1}
-    assert other_files[0] == []
-    assert other_files[1] == []
+    assert other_files == [[], []]
 
 
 def test_group_files_into_parts_does_not_merge_unreplicated_parts_within_shard() -> None:
