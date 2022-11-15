@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v2.5.0
+    rev: v4.3.0
     hooks:
       - id: trailing-whitespace
         exclude: ^vendor/|^tests/.*/fixtures/.*
@@ -16,12 +16,12 @@ repos:
         exclude: ^vendor/
 
   - repo: https://github.com/psf/black
-    rev: 22.3.0
+    rev: 22.10.0
     hooks:
       - id: black
 
-  - repo: https://gitlab.com/pycqa/flake8
-    rev: 3.8.2
+  - repo: https://github.com/pycqa/flake8
+    rev: 5.0.4
     hooks:
       - id: flake8
         files: \.py$
