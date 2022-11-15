@@ -9,7 +9,7 @@ from astacus.common.dependencies import get_request_url
 from astacus.common.magic import ErrorCode
 from astacus.common.progress import Progress
 from astacus.common.rohmustorage import MultiRohmuStorage
-from astacus.common.statsd import StatsClient
+from astacus.common.statsd import StatsClient, Tags
 from astacus.common.storage import JsonStorage, MultiFileStorage, MultiStorage
 from astacus.common.utils import AsyncSleeper
 from astacus.coordinator.cluster import Cluster, LockResult, WaitResultError
@@ -269,7 +269,7 @@ class SteppedCoordinatorOp(LockedCoordinatorOp):
             for attempt in range(1, self.attempts + 1):
                 logger.debug("%s - attempt #%d/%d", name, attempt, self.attempts)
                 context = StepsContext(attempt=attempt)
-                stats_tags = {"op": name, "attempt": str(attempt)}
+                stats_tags: Tags = {"op": name, "attempt": str(attempt)}
                 async with self.stats.async_timing_manager("astacus_attempt_duration", stats_tags):
                     try:
                         if await self.try_run(cluster, context):

@@ -2,6 +2,8 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+from __future__ import annotations
+
 from .client import ClickHouseClient, escape_sql_identifier, escape_sql_string
 from .config import ClickHouseConfiguration, ReplicatedDatabaseSettings
 from .dependencies import access_entities_sorted_by_dependencies, tables_sorted_by_dependencies
@@ -24,7 +26,7 @@ from astacus.coordinator.plugins.base import BackupManifestStep, SnapshotStep, S
 from astacus.coordinator.plugins.zookeeper import ChangeWatch, TransactionError, ZooKeeperClient
 from base64 import b64decode
 from pathlib import Path
-from typing import Any, cast, Dict, List, Mapping, Sequence, Tuple
+from typing import Any, cast, Dict, List, Mapping, Sequence, Tuple, TypeVar
 
 import asyncio
 import dataclasses
@@ -53,6 +55,12 @@ WHERE
 ORDER BY (system.databases.name,system.tables.name)
 SETTINGS show_table_uuid_in_table_create_query_if_not_nil=true
 """
+_T = TypeVar("_T")
+
+
+def get_setting_repr(setting_name: str, value: _T) -> str:
+    escaped_value = escape_sql_string(value.encode()) if isinstance(value, str) else value
+    return f"{setting_name}={escaped_value}"
 
 
 @dataclasses.dataclass
@@ -420,15 +428,14 @@ class RestoreReplicatedDatabasesStep(Step[None]):
                 for client in self.clients
             ],
         )
+
         settings = [
-            "{}={}".format(
-                setting_name,
-                escape_sql_string(value.encode()) if isinstance(value, str) else value,
-            )
+            get_setting_repr(setting_name, value)
             for setting_name, value in self.replicated_database_settings.dict().items()
             if value is not None
         ]
-        settings_clause = " SETTINGS {}".format(", ".join(settings)) if settings else ""
+        settings_str = ", ".join(settings)
+        settings_clause = f" SETTINGS {settings_str}" if settings else ""
         create_queries = []
         for database in manifest.replicated_databases:
             database_znode_name = escape_for_file_name(database.name)
