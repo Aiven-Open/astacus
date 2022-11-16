@@ -4,15 +4,15 @@ on: pull_request
 
 jobs:
   lint:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Install dependencies
         run: make build-dep-ubuntu
 
       - name: Set up Python 3.10 with caching
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v4
         with:
           python-version: '3.10'
           cache: 'pip'
@@ -24,9 +24,9 @@ jobs:
         run: make lint
 
   copyright:
-      runs-on: ubuntu-latest
+      runs-on: ubuntu-22.04
       steps:
-        - uses: actions/checkout@master
+        - uses: actions/checkout@v3
 
         - name: Enforce copyright headers
           run: make copyright
