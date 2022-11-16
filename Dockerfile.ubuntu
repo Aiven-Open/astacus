@@ -1,6 +1,6 @@
 # -*- dockerfile -*-
 
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 MAINTAINER "Markus Stenberg <mstenber@aiven.io>"
 
 RUN apt-get update
