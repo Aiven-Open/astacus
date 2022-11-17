@@ -25,6 +25,3 @@ typing_extensions>=3.10.0
 requests>=2.28.1
 
 respx==0.16.3
-
-# convenience things that don't actually matter which version they are
-pip-outdated>=0.5.0

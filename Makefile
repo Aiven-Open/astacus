@@ -109,7 +109,7 @@ podman-test-ubuntu:
 
 .PHONY: pip-outdated
 pip-outdated:
-	pip-outdated setup.cfg requirements.testing.txt
+	pip list --outdated
 
 
 # For development purposes, run server with the default astacus conf
