@@ -2,7 +2,7 @@
 pre-commit>=2.20.0
 
 # pre-commit tasks in Makefile need these
-anyio==3.3.1
+anyio==3.5.0
 pylint==2.15.5
 pytest-asyncio==0.14.0
 pytest-cov==3.0.0
@@ -10,18 +10,14 @@ pytest-mock==3.3.1
 pytest-order==1.0.0
 pytest-timeout==1.4.2
 pytest-watch==4.2.0
-pytest==6.2.4
+pytest==6.2.5
 
 # pinning mypy to the same version as pre-commit
-mypy==0.910
+mypy==0.991
 # types for things that don't seem to have them
 types-PyYAML>=6.0.12.2
-types-requests>=2.28.11.5
 types-tabulate>=0.9.0.0
 types-urllib3>=1.26.25.4
-typing_extensions>=3.10.0
+typing_extensions>=4.4.0
 
-# fastapi testclient needs this yet does not depend on it, gnn
-requests>=2.28.1
-
-respx==0.16.3
+respx==0.20.1
