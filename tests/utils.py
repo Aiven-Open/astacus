@@ -2,9 +2,12 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
-
 from astacus.common.rohmustorage import RohmuConfig
 from pathlib import Path
+from typing import List, Sequence, Union
+
+import re
+import subprocess
 
 # These test keys are from copied from pghoard
 
@@ -68,3 +71,16 @@ def create_rohmu_config(tmpdir, *, compression=True, encryption=True):
             }
         )
     return RohmuConfig.parse_obj(config)
+
+
+def parse_clickhouse_version(command_output: bytes) -> Sequence[int]:
+    version_match = re.search(r"([\d.]+\d)", command_output.decode())
+    if not version_match:
+        raise ValueError(f"Unable to parse version from command output: {command_output}")
+    version_tuple = tuple(int(part) for part in version_match.group(0).split(".") if part)
+    return version_tuple
+
+
+def get_clickhouse_version(command: List[Union[str, Path]]) -> Sequence[int]:
+    version_command_output = subprocess.check_output([*command, "--version"])
+    return parse_clickhouse_version(version_command_output)
