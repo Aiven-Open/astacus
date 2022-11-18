@@ -125,7 +125,10 @@ class SnapshotResult(NodeResult):
     start: datetime = Field(default_factory=now)
     end: Optional[datetime]
 
-    # should be passed opaquely to restore
+    # The state is optional because it's written by the Snapshotter post-initialization.
+    # If the backup failed, the related manifest doesn't exist: the state and the
+    # summary attributes below will be set to none and their default values respectively.
+    # Should be passed opaquely to restore.
     state: Optional[SnapshotState] = Field(default_factory=SnapshotState)
 
     # Summary data for manifest use
@@ -259,6 +262,11 @@ class ListSingleBackup(AstacusModel):
     total_size: int
     upload_size: int
     upload_stored_size: int
+    # Number of cluster files and total cluster data size
+    # The two fields are computed from deduplicated files across nodes but not within nodes,
+    # using the files' hexdigest as key. As such, they are *not* sourced from BackupManifest.
+    cluster_files: int
+    cluster_data_size: int
 
 
 class ListForStorage(AstacusModel):
