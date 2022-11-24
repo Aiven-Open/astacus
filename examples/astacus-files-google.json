@@ -1,69 +1,69 @@
 {
-    "coordinator": {
-        "nodes": [{"url": "http://localhost:5515/node"}],
-        "object_storage_cache": "/tmp/astacus/cache",
-        "plugin": "files",
-        "plugin_config": {
-            "root_globs": ["*"]
-        }
-    },
-    "node": {
-        "root": "/tmp/astacus/src",
-        "root_link": "/tmp/astacus/src-link"
-    },
-    "object_storage": {
-        "temporary_directory": "/tmp/astacus/backup-tmp",
-        "default_storage": "x",
-        "compression": {
-            "algorithm": "zstd"
-        },
-        "storages": {
-            "x": {
-                "bucket_name": "REDACTED",
-                "credentials": {
-                    "token_uri": "https://accounts.google.com/o/oauth2/token",
-                    "type": "service_account"
-                },
-                "prefix": "REDACTED",
-                "project_id": "REDACTED",
-                "storage_type": "google"
-            },
-            "x-proxy": {
-                "bucket_name": "REDACTED",
-                "credentials": {
-                    "token_uri": "https://accounts.google.com/o/oauth2/token",
-                    "type": "service_account"
-                },
-                "prefix": "REDACTED",
-                "project_id": "REDACTED",
-                "storage_type": "google",
-                "proxy_info": {
-                    "type": "socks5",
-                    "host": "localhost",
-                    "port": 1080,
-                    "user": "REDACTED",
-                    "pass": "REDACTED"
-                }
-            },
-            "x-proxy-no-userpass": {
-                "bucket_name": "REDACTED",
-                "credentials": {
-                    "token_uri": "https://accounts.google.com/o/oauth2/token",
-                    "type": "service_account"
-                },
-                "prefix": "REDACTED",
-                "project_id": "REDACTED",
-                "storage_type": "google",
-                "proxy_info": {
-                    "type": "socks5",
-                    "host": "localhost",
-                    "port": 1080
-                }
-            }
-        }
-    },
-    "uvicorn": {
-        "log_level": "debug",
-        "reload": true
+  "coordinator": {
+    "nodes": [{ "url": "http://localhost:5515/node" }],
+    "object_storage_cache": "/tmp/astacus/cache",
+    "plugin": "files",
+    "plugin_config": {
+      "root_globs": ["*"]
     }
+  },
+  "node": {
+    "root": "/tmp/astacus/src",
+    "root_link": "/tmp/astacus/src-link"
+  },
+  "object_storage": {
+    "temporary_directory": "/tmp/astacus/backup-tmp",
+    "default_storage": "x",
+    "compression": {
+      "algorithm": "zstd"
+    },
+    "storages": {
+      "x": {
+        "bucket_name": "REDACTED",
+        "credentials": {
+          "token_uri": "https://accounts.google.com/o/oauth2/token",
+          "type": "service_account"
+        },
+        "prefix": "REDACTED",
+        "project_id": "REDACTED",
+        "storage_type": "google"
+      },
+      "x-proxy": {
+        "bucket_name": "REDACTED",
+        "credentials": {
+          "token_uri": "https://accounts.google.com/o/oauth2/token",
+          "type": "service_account"
+        },
+        "prefix": "REDACTED",
+        "project_id": "REDACTED",
+        "storage_type": "google",
+        "proxy_info": {
+          "type": "socks5",
+          "host": "localhost",
+          "port": 1080,
+          "user": "REDACTED",
+          "pass": "REDACTED"
+        }
+      },
+      "x-proxy-no-userpass": {
+        "bucket_name": "REDACTED",
+        "credentials": {
+          "token_uri": "https://accounts.google.com/o/oauth2/token",
+          "type": "service_account"
+        },
+        "prefix": "REDACTED",
+        "project_id": "REDACTED",
+        "storage_type": "google",
+        "proxy_info": {
+          "type": "socks5",
+          "host": "localhost",
+          "port": 1080
+        }
+      }
+    }
+  },
+  "uvicorn": {
+    "log_level": "debug",
+    "reload": true
+  }
 }

@@ -1,4 +1,4 @@
-# Overview of Astacus design #
+# Overview of Astacus design
 
 While more thorough documentation would be welcome, time constraints are
 what they are, so here's very brief overview of the Astacus design.
@@ -16,7 +16,6 @@ two parts:
   required by users that apply to the current operation being performed. A
   lot of it is implemented as synchronus REST endpoints to be used
   internally by the coordinator.
-
 
 Additionally, the project also contains `astacus.common` which contains
 code shared by `astacus.coordinator` and `astacus.node`.

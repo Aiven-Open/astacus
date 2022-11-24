@@ -1,4 +1,4 @@
-# Cassandra backup/restore mechanics #
+# Cassandra backup/restore mechanics
 
 There is a large number of existing projects that implement Cassandra
 backups, but none of them fit quite the criteria we wanted:
@@ -21,6 +21,7 @@ Cassandra snapshot of all nodes being backed up and back that up using the
 generic Astacus mechanism.
 
 References in the code:
+
 - astacus/common/ipc.py (Generic backup manifest)
 - astacus/coordinator/plugins/cassandra/ (Cassandra plugin specific parts)
 

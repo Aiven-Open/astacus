@@ -1,79 +1,79 @@
 {
-    "coordinator": {
-        "nodes": [
-            {
-                "az": "europe-west1-d",
-                "url": "http://localhost:5515/node"
-            }
-        ],
-        "object_storage_cache": "/tmp/astacus/storage-cache",
-        "plugin": "m3db",
-        "plugin_config": {
-            "environment": "default_env",
-            "etcd_url": "http://localhost:2379/v3beta",
-            "placement_nodes": [
-                {
-                    "endpoint": "node1.local:9000",
-                    "hostname": "node1",
-                    "node_id": "node1"
-                }
-            ]
-        },
-        "retention": {
-            "keep_days": 0,
-            "maximum_backups": 2,
-            "minimum_backups": 2
-        }
-    },
-    "node": {
+  "coordinator": {
+    "nodes": [
+      {
         "az": "europe-west1-d",
-        "parallel": {
-            "downloads": 2,
-            "uploads": 2
-        },
-        "root": "/tmp/astacus/m3"
+        "url": "http://localhost:5515/node"
+      }
+    ],
+    "object_storage_cache": "/tmp/astacus/storage-cache",
+    "plugin": "m3db",
+    "plugin_config": {
+      "environment": "default_env",
+      "etcd_url": "http://localhost:2379/v3beta",
+      "placement_nodes": [
+        {
+          "endpoint": "node1.local:9000",
+          "hostname": "node1",
+          "node_id": "node1"
+        }
+      ]
     },
-    "object_storage": {
-        "compression": {
-            "algorithm": "zstd"
-        },
-        "default_storage": "storage1",
-        "encryption_key_id": "key1",
-        "encryption_keys": {
-            "key1": {
-                "private": "-----BEGIN PRIVATE KEY-----\nREDACTED-----END PRIVATE KEY-----\n",
-                "public": "-----BEGIN PUBLIC KEY-----\nREDACTED\n-----END PUBLIC KEY-----\n"
-            }
-        },
-        "storages": {
-            "storage1": {
-                "bucket_name": "bucket1",
-                "credentials": {
-                    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "client_email": "REDACTED",
-                    "client_id": "1234567890",
-                    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/REDACTED",
-                    "private_key": "-----BEGIN PRIVATE KEY-----\nREDACTED\n-----END PRIVATE KEY-----\n",
-                    "private_key_id": "REDACTED",
-                    "project_id": "project1",
-                    "token_uri": "https://accounts.google.com/o/oauth2/token",
-                    "type": "service_account"
-                },
-                "prefix": "storage1",
-                "project_id": "project1",
-                "storage_type": "google"
-            }
-        },
-        "temporary_directory": "/tmp/astacus/storage-tmp"
-    },
-    "sentry_dsn": "https://REDACTED@sentry.io/1234567890",
-    "statsd": {
-        "host": "localhost",
-        "port": 8125
-    },
-    "uvicorn": {
-        "host": "localhost",
-        "log_level": "info"
+    "retention": {
+      "keep_days": 0,
+      "maximum_backups": 2,
+      "minimum_backups": 2
     }
+  },
+  "node": {
+    "az": "europe-west1-d",
+    "parallel": {
+      "downloads": 2,
+      "uploads": 2
+    },
+    "root": "/tmp/astacus/m3"
+  },
+  "object_storage": {
+    "compression": {
+      "algorithm": "zstd"
+    },
+    "default_storage": "storage1",
+    "encryption_key_id": "key1",
+    "encryption_keys": {
+      "key1": {
+        "private": "-----BEGIN PRIVATE KEY-----\nREDACTED-----END PRIVATE KEY-----\n",
+        "public": "-----BEGIN PUBLIC KEY-----\nREDACTED\n-----END PUBLIC KEY-----\n"
+      }
+    },
+    "storages": {
+      "storage1": {
+        "bucket_name": "bucket1",
+        "credentials": {
+          "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+          "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+          "client_email": "REDACTED",
+          "client_id": "1234567890",
+          "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/REDACTED",
+          "private_key": "-----BEGIN PRIVATE KEY-----\nREDACTED\n-----END PRIVATE KEY-----\n",
+          "private_key_id": "REDACTED",
+          "project_id": "project1",
+          "token_uri": "https://accounts.google.com/o/oauth2/token",
+          "type": "service_account"
+        },
+        "prefix": "storage1",
+        "project_id": "project1",
+        "storage_type": "google"
+      }
+    },
+    "temporary_directory": "/tmp/astacus/storage-tmp"
+  },
+  "sentry_dsn": "https://REDACTED@sentry.io/1234567890",
+  "statsd": {
+    "host": "localhost",
+    "port": 8125
+  },
+  "uvicorn": {
+    "host": "localhost",
+    "log_level": "info"
+  }
 }

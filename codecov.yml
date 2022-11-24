@@ -1,11 +1,11 @@
- coverage:
+coverage:
   status:
     project:
       default:
         # basic
         target: auto
         threshold: 0%
-       # advanced settings
+        # advanced settings
         if_ci_failed: error #success, failure, error, ignore
         informational: true
         only_pulls: false

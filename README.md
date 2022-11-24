@@ -6,7 +6,7 @@ multiple open-source cluster databases, such as
 [Apache Cassandra](https://cassandra.apache.org).
 
 _My name is Maximus Backupus Astacus, Co-ordinator of the Backups of the
-Cluster, Master  of the Storage Availability, loyal servant to the true
+Cluster, Master of the Storage Availability, loyal servant to the true
 emperor, Prunus Aivenius. Father to a failed backup, husband to a corrupted
 data. And I will have my restore, in this runtime or the next._
 
@@ -17,9 +17,9 @@ data. And I will have my restore, in this runtime or the next._
 - Product-specific code with simple, testable API
 
 - Complexities to deal with e.g. reuse of blobs with same value in the
-shared code
-    - It is needed to accomplish e.g. fast non-incremental M3 backups that are
-    essentially incremental as only commit logs change frequently
+  shared code
+
+  - It is needed to accomplish e.g. fast non-incremental M3 backups that are essentially incremental as only commit logs change frequently
 
 - Support list of object storage backup site locations -> Facilitate
   migration from old to new during service cloud migration
@@ -27,7 +27,7 @@ shared code
 - Have most of the code covered by unit tests
 
 - Can be open sourced without feeling too bad about it
-    - Open source from the get go, no proprietary legacy dependencies
+  - Open source from the get go, no proprietary legacy dependencies
 
 # See also
 
@@ -42,11 +42,10 @@ examples, but here are the current ones:
 ## Optional features
 
 - cassandra can be added with 'cassandra' optional:
+
 ```
 sudo pip3 install -e '.[cassandra]'
 ```
-
-
 
 ## Fedora 34
 
@@ -69,7 +68,6 @@ make build-dep-ubuntu
 sudo python3 ./setup.py install
 ```
 
-
 # Configuration
 
 Create astacus.conf, which specifies which database to back up, and where.
@@ -82,7 +80,6 @@ this time, but there are some examples of file backups to
 [local directory (YAML)](examples/astacus-files-local.yaml), [Amazon S3](examples/astacus-files-s3.json), or
 [Google GCS](examples/astacus-files-gcs.json). There is even one example of
 [backing up M3 to GCS](examples/astacus-m3-gcs.json).
-
 
 # Usage
 
@@ -100,7 +97,6 @@ doesn't really matter as only one operation can run at a time):
 
 - `astacus backup` or
 - HTTP POST to http://server-address:5515/backup
-
 
 ## Restore backups
 
@@ -122,7 +118,6 @@ To clean up backups based on the configured retention policy,
 
 - use `astacus cleanup` (from cronjob or CLI), or
 - HTTP POST to http://server-address:5515/cleanup
-
 
 # TODO
 

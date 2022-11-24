@@ -1,18 +1,17 @@
-# List of things that need to be implemented #
-
+# List of things that need to be implemented
 
 ## Short-term
 
 - document
-    - (better) README
-    - the design
-    - user-visible UI etc
+
+  - (better) README
+  - the design
+  - user-visible UI etc
 
 - measure, improve test code coverage
 
 - more metrics endpoints - think on what is really needed
-    - perhaps backup/snapshot/restore sizes and file counts? copy from *hoard?
-
+  - perhaps backup/snapshot/restore sizes and file counts? copy from \*hoard?
 
 ## Eventually
 
@@ -23,13 +22,13 @@
 
 - Cassandra specific table restore support; we should then pick more
   carefully where exactly we are restoring things:
+
   - get table ids for freshly created tables (during restore when Cassandra
     is up from system_schema.tables)
   - pass the keyspace+table+table id tuples to the actual restore Cassandra
     step
     - clear the directory
     - move files to it
-
 
 - package (or have someone do it?) this for distros
 
@@ -43,7 +42,6 @@
 - we should have some sort of packfile format for small files - right now,
   the embed-in-manifest kind of works, but is not pretty, and doesn't work
   for still trivial sized files
-
 
 ## Maybe not - known design choice for now
 

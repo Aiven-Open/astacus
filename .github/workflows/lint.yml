@@ -14,8 +14,8 @@ jobs:
       - name: Set up Python 3.10 with caching
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
-          cache: 'pip'
+          python-version: "3.10"
+          cache: "pip"
 
       - name: Install requirements
         run: pip install -r requirements.txt
@@ -24,9 +24,9 @@ jobs:
         run: make lint
 
   copyright:
-      runs-on: ubuntu-22.04
-      steps:
-        - uses: actions/checkout@v3
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
 
-        - name: Enforce copyright headers
-          run: make copyright
+      - name: Enforce copyright headers
+        run: make copyright

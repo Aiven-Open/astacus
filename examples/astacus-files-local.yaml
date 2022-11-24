@@ -1,29 +1,29 @@
 coordinator:
- nodes:
- - url: http://localhost:5515/node
- object_storage_cache: /tmp/astacus/cache
- plugin: files
- plugin_config:
-  root_globs: ["*"]
+  nodes:
+    - url: http://localhost:5515/node
+  object_storage_cache: /tmp/astacus/cache
+  plugin: files
+  plugin_config:
+    root_globs: ["*"]
 
 node:
- root: /tmp/astacus/src
- root_link: /tmp/astacus/src-link
- parallel:
-  downloads: 4
-  hashes: 4
-  uploads: 4
+  root: /tmp/astacus/src
+  root_link: /tmp/astacus/src-link
+  parallel:
+    downloads: 4
+    hashes: 4
+    uploads: 4
 
 object_storage:
- temporary_directory: /tmp/astacus/backup-tmp
- default_storage: x
- compression:
-  algorithm: zstd
- storages:
-  x:
-   storage_type: local
-   directory: /tmp/astacus/backup
+  temporary_directory: /tmp/astacus/backup-tmp
+  default_storage: x
+  compression:
+    algorithm: zstd
+  storages:
+    x:
+      storage_type: local
+      directory: /tmp/astacus/backup
 
 uvicorn:
- log_level: debug
- reload: true
+  log_level: debug
+  reload: true

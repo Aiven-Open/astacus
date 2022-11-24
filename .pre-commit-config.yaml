@@ -53,3 +53,8 @@ repos:
           - types-urllib3>=1.26.25.4
           - typing_extensions>=3.10.0
           - pydantic==1.7.4
+
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: "v3.0.0-alpha.4"
+    hooks:
+      - id: prettier
