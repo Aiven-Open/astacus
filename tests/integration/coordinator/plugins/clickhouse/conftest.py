@@ -24,7 +24,7 @@ from pathlib import Path
 from tests.conftest import CLICKHOUSE_PATH_OPTION, CLICKHOUSE_RESTORE_PATH_OPTION
 from tests.integration.conftest import get_command_path, Ports, run_process_and_wait_for_pattern, Service, ServiceCluster
 from tests.system.conftest import background_process, wait_url_up
-from tests.utils import CONSTANT_TEST_RSA_PRIVATE_KEY, CONSTANT_TEST_RSA_PUBLIC_KEY
+from tests.utils import CONSTANT_TEST_RSA_PRIVATE_KEY, CONSTANT_TEST_RSA_PUBLIC_KEY, get_clickhouse_version
 from typing import AsyncIterator, Awaitable, List, Sequence, Union
 
 import argparse
@@ -33,7 +33,6 @@ import contextlib
 import dataclasses
 import logging
 import pytest
-import subprocess
 import sys
 import tempfile
 
@@ -116,8 +115,7 @@ async def create_clickhouse_cluster(
     command: ClickHouseCommand,
 ) -> AsyncIterator[ClickHouseServiceCluster]:
     cluster_size = len(cluster_shards)
-    raw_clickhouse_version = subprocess.check_output([*command, "--version"]).strip().partition(b"version")[2]
-    clickhouse_version = tuple(int(part) for part in raw_clickhouse_version.split(b".") if part)
+    clickhouse_version = get_clickhouse_version(command)
     use_named_collections = clickhouse_version >= (22, 4)
     expands_uuid_in_zookeeper_path = clickhouse_version < (22, 4)
     tcp_ports = [ports.allocate() for _ in range(cluster_size)]
