@@ -12,7 +12,7 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from pydantic import Field, root_validator
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 import functools
 import socket
@@ -51,6 +51,11 @@ class NodeResult(AstacusModel):
     hostname: str = Field(default_factory=socket.gethostname)
     az: str = ""
     progress: Progress = Field(default_factory=Progress)
+
+
+class MetadataResult(AstacusModel):
+    version: str
+    features: Sequence[str] = Field(default=list)
 
 
 # node.snapshot

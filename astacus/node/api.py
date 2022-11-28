@@ -9,6 +9,7 @@ from .node import Node
 from .snapshot import SnapshotOp, UploadOp
 from .state import node_state, NodeState
 from astacus.common import ipc
+from astacus.version import __version__
 from enum import Enum
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Union
@@ -24,6 +25,18 @@ class OpName(str, Enum):
     download = "download"
     snapshot = "snapshot"
     upload = "upload"
+
+
+class Features(Enum):
+    pass
+
+
+@router.get("/metadata")
+def metadata() -> ipc.MetadataResult:
+    return ipc.MetadataResult(
+        version=__version__,
+        features=[feature.value for feature in Features],
+    )
 
 
 @router.post("/lock")
