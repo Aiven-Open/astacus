@@ -13,6 +13,7 @@ from astacus.common.utils import AstacusModel
 from astacus.coordinator.cluster import Cluster, Result
 from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.manifest import download_backup_manifest
+from astacus.node.api import Features
 from collections import Counter
 from typing import Any, Counter as TCounter, Dict, Generic, List, Optional, Set, Type, TypeVar
 
@@ -119,6 +120,7 @@ class UploadBlocksStep(Step[List[ipc.SnapshotUploadResult]]):
     """
 
     storage_name: str
+    validate_file_hashes: bool = True
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> List[ipc.SnapshotUploadResult]:
         node_index_datas = build_node_index_datas(
@@ -126,7 +128,12 @@ class UploadBlocksStep(Step[List[ipc.SnapshotUploadResult]]):
             snapshots=context.get_result(SnapshotStep),
             node_indices=list(range(len(cluster.nodes))),
         )
-        return await upload_node_index_datas(cluster, self.storage_name, node_index_datas)
+        return await upload_node_index_datas(
+            cluster,
+            self.storage_name,
+            node_index_datas,
+            validate_file_hashes=self.validate_file_hashes,
+        )
 
 
 @dataclasses.dataclass
@@ -392,11 +399,19 @@ def build_node_index_datas(
     return [data for data in node_index_datas if data.sshashes]
 
 
-async def upload_node_index_datas(cluster: Cluster, storage_name: str, node_index_datas: List[NodeIndexData]):
+async def upload_node_index_datas(
+    cluster: Cluster, storage_name: str, node_index_datas: List[NodeIndexData], validate_file_hashes: bool
+):
     logger.debug("upload_node_index_datas")
     start_results: List[Optional[Result]] = []
+    nodes_metadata = await get_nodes_metadata(cluster)
     for data in node_index_datas:
-        req = ipc.SnapshotUploadRequest(hashes=data.sshashes, storage=storage_name)
+        if Features.validate_file_hashes.value in nodes_metadata[data.node_index].features:
+            req: ipc.NodeRequest = ipc.SnapshotUploadRequestV20221129(
+                hashes=data.sshashes, storage=storage_name, validate_file_hashes=validate_file_hashes
+            )
+        else:
+            req = ipc.SnapshotUploadRequest(hashes=data.sshashes, storage=storage_name)
         start_result = await cluster.request_from_nodes(
             "upload", caller="upload_node_index_datas", method="post", req=req, nodes=[cluster.nodes[data.node_index]]
         )
@@ -404,3 +419,11 @@ async def upload_node_index_datas(cluster: Cluster, storage_name: str, node_inde
             raise StepFailedError("upload failed")
         start_results.extend(start_result)
     return await cluster.wait_successful_results(start_results=start_results, result_class=ipc.SnapshotUploadResult)
+
+
+async def get_nodes_metadata(cluster: Cluster) -> list[ipc.MetadataResult]:
+    metadata_responses = await cluster.request_from_nodes("metadata", caller="get_nodes_metadata", method="get")
+    return [
+        ipc.MetadataResult(version="", features=[]) if response is None else ipc.MetadataResult.parse_obj(response)
+        for response in metadata_responses
+    ]
