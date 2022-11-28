@@ -43,8 +43,8 @@ def init_app():
     config_path = os.environ.get("ASTACUS_CONFIG")
     assert config_path
     api = FastAPI()
-    api.include_router(coordinator_router, tags=["coordinator"])
     api.include_router(node_router, prefix="/node", tags=["node"])
+    api.include_router(coordinator_router, tags=["coordinator"])
 
     @api.on_event("shutdown")
     async def _shutdown_event():
