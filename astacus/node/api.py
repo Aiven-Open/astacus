@@ -28,7 +28,8 @@ class OpName(str, Enum):
 
 
 class Features(Enum):
-    pass
+    # Added on 2022-11-29, this can be assumed to be supported everywhere after 1 or 2 years
+    validate_file_hashes = "validate_file_hashes"
 
 
 @router.get("/metadata")
@@ -84,7 +85,7 @@ def snapshot_result(*, op_id: int, n: Node = Depends()):
 
 
 @router.post("/upload")
-def upload(req: ipc.SnapshotUploadRequest, n: Node = Depends()):
+def upload(req: ipc.SnapshotUploadRequestV20221129, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
     return UploadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats).start(req=req)

@@ -17,7 +17,14 @@ logger = logging.getLogger(__name__)
 
 class Uploader(ThreadLocalStorage):
     def write_hashes_to_storage(
-        self, *, snapshotter: Snapshotter, hashes, parallel: int, progress: Progress, still_running_callback=lambda: True
+        self,
+        *,
+        snapshotter: Snapshotter,
+        hashes,
+        parallel: int,
+        progress: Progress,
+        still_running_callback=lambda: True,
+        validate_file_hashes: bool = True
     ):
         todo = set(hash.hexdigest for hash in hashes)
         progress.start(len(todo))
@@ -33,11 +40,12 @@ class Uploader(ThreadLocalStorage):
                 if not path.is_file():
                     logger.warning("%s disappeared post-snapshot", path)
                     continue
-                with snapshotfile.open_for_reading(snapshotter.dst) as f:
-                    current_hexdigest = hash_hexdigest_readable(f)
-                if current_hexdigest != snapshotfile.hexdigest:
-                    logger.info("Hash of %s changed before upload", snapshotfile.relative_path)
-                    continue
+                if validate_file_hashes:
+                    with snapshotfile.open_for_reading(snapshotter.dst) as f:
+                        current_hexdigest = hash_hexdigest_readable(f)
+                    if current_hexdigest != snapshotfile.hexdigest:
+                        logger.info("Hash of %s changed before upload", snapshotfile.relative_path)
+                        continue
                 try:
                     with snapshotfile.open_for_reading(snapshotter.dst) as f:
                         upload_result = storage.upload_hexdigest_from_file(hexdigest, f)
@@ -49,12 +57,13 @@ class Uploader(ThreadLocalStorage):
                     # Report failure - whole step will be retried later
                     logger.exception("Exception uploading %r", path)
                     return progress.upload_failure, 0, 0
-                with snapshotfile.open_for_reading(snapshotter.dst) as f:
-                    current_hexdigest = hash_hexdigest_readable(f)
-                if current_hexdigest != snapshotfile.hexdigest:
-                    logger.info("Hash of %s changed after upload", snapshotfile.relative_path)
-                    storage.delete_hexdigest(hexdigest)
-                    continue
+                if validate_file_hashes:
+                    with snapshotfile.open_for_reading(snapshotter.dst) as f:
+                        current_hexdigest = hash_hexdigest_readable(f)
+                    if current_hexdigest != snapshotfile.hexdigest:
+                        logger.info("Hash of %s changed after upload", snapshotfile.relative_path)
+                        storage.delete_hexdigest(hexdigest)
+                        continue
                 return progress.upload_success, upload_result.size, upload_result.stored_size
 
             # We didn't find single file with the matching hexdigest.
