@@ -28,7 +28,7 @@ def fixture_mstorage(tmpdir):
 
 
 @pytest.fixture(name="populated_mstorage")
-def fixture_populated_mstorage(mstorage):
+def fixture_populated_mstorage(mstorage: MultiRohmuStorage) -> MultiRohmuStorage:
     x = mstorage.get_storage("x")
     x.upload_json("backup-1", BACKUP_MANIFEST)
     x.upload_json("backup-2", BACKUP_MANIFEST)
