@@ -11,6 +11,7 @@ from astacus.common.ipc import SnapshotHash
 from astacus.common.statsd import StatsClient
 from astacus.coordinator.api import OpName
 from astacus.coordinator.plugins.base import build_node_index_datas, NodeIndexData
+from astacus.node.api import metadata
 from unittest.mock import patch
 
 import itertools
@@ -25,6 +26,7 @@ def test_backup(fail_at, app, client, storage):
     nodes = app.state.coordinator_config.nodes
     with respx.mock:
         for node in nodes:
+            respx.get(f"{node.url}/metadata").respond(json=metadata().jsondict())
             respx.post(f"{node.url}/unlock?locker=x&ttl=0").respond(json={"locked": False})
             # Failure point 1: Lock fails
             respx.post(f"{node.url}/lock?locker=x&ttl=60").respond(json={"locked": fail_at != 1})
@@ -160,6 +162,7 @@ def test_backup_stats(mock_time, app, client):
     nodes = app.state.coordinator_config.nodes
     with respx.mock:
         for node in nodes:
+            respx.get(f"{node.url}/metadata").respond(json=metadata().jsondict())
             respx.post(f"{node.url}/unlock?locker=x&ttl=0").respond(json={"locked": False})
             respx.post(f"{node.url}/lock?locker=x&ttl=60").respond(json={"locked": True})
             respx.post(f"{node.url}/snapshot").respond(json={"op_id": 42, "status_url": f"{node.url}/snapshot/result"})

@@ -76,7 +76,7 @@ class ClickHousePlugin(CoordinatorPlugin):
             # Then snapshot and backup all frozen table parts
             SnapshotStep(snapshot_root_globs=[get_frozen_parts_pattern(self.freeze_name)]),
             ListHexdigestsStep(hexdigest_storage=context.hexdigest_storage),
-            UploadBlocksStep(storage_name=context.storage_name),
+            UploadBlocksStep(storage_name=context.storage_name, validate_file_hashes=False),
             # Cleanup frozen parts
             UnfreezeTablesStep(clients=clickhouse_clients, freeze_name=self.freeze_name),
             # Prepare the manifest for restore

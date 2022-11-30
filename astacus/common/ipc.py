@@ -12,7 +12,7 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from pydantic import Field, root_validator
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 import functools
 import socket
@@ -51,6 +51,11 @@ class NodeResult(AstacusModel):
     hostname: str = Field(default_factory=socket.gethostname)
     az: str = ""
     progress: Progress = Field(default_factory=Progress)
+
+
+class MetadataResult(AstacusModel):
+    version: str
+    features: Sequence[str] = Field(default=list)
 
 
 # node.snapshot
@@ -113,6 +118,15 @@ class SnapshotUploadRequest(NodeRequest):
 
     # which (sub)object storage entry should be used
     storage: str
+
+
+# Added on 2022-11-29, the previous version should be removable after 1 or 2 years.
+class SnapshotUploadRequestV20221129(SnapshotUploadRequest):
+    # Whether we should check if the file hash has changed since the snapshot
+    # Should be False only for plugins where the database is known to never
+    # change the files that we are reading: for instance because the database
+    # itself created a snapshot and Astacus is reading from that snapshot.
+    validate_file_hashes: bool = True
 
 
 class SnapshotUploadResult(NodeResult):

@@ -31,7 +31,7 @@ def test_snapshot(snapshotter, uploader):
         hashes = snapshotter.get_snapshot_hashes()
         assert len(hashes) == 1
         assert hashes == [
-            ipc.SnapshotHash(hexdigest="326827fe6fd23503bf16eed91861766df522748794814a1bf46d479d9feae1a0", size=600)
+            ipc.SnapshotHash(hexdigest="72f4e28aa8b614a3525309004d2a2281f04d5081141bdf12dc14bc3706f62c8c", size=1200)
         ]
 
         while True:

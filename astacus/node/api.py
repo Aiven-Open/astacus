@@ -9,6 +9,7 @@ from .node import Node
 from .snapshot import SnapshotOp, UploadOp
 from .state import node_state, NodeState
 from astacus.common import ipc
+from astacus.version import __version__
 from enum import Enum
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Union
@@ -24,6 +25,19 @@ class OpName(str, Enum):
     download = "download"
     snapshot = "snapshot"
     upload = "upload"
+
+
+class Features(Enum):
+    # Added on 2022-11-29, this can be assumed to be supported everywhere after 1 or 2 years
+    validate_file_hashes = "validate_file_hashes"
+
+
+@router.get("/metadata")
+def metadata() -> ipc.MetadataResult:
+    return ipc.MetadataResult(
+        version=__version__,
+        features=[feature.value for feature in Features],
+    )
 
 
 @router.post("/lock")
@@ -71,7 +85,7 @@ def snapshot_result(*, op_id: int, n: Node = Depends()):
 
 
 @router.post("/upload")
-def upload(req: ipc.SnapshotUploadRequest, n: Node = Depends()):
+def upload(req: ipc.SnapshotUploadRequestV20221129, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
     return UploadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats).start(req=req)
