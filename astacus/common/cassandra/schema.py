@@ -84,6 +84,12 @@ class CassandraUserType(CassandraNamed):
         self.restore_if_needed(cas, keyspace_metadata.user_types)
 
 
+def _get_field_repr(arg_name_type: tuple[str, str]) -> str:
+    arg_name, arg_type = arg_name_type
+    protected_name = cm.protect_name(arg_name)
+    return f"{protected_name} {arg_type}"
+
+
 class CassandraFunction(CassandraNamed):
     argument_types: List[str]
 
@@ -107,10 +113,8 @@ class CassandraFunction(CassandraNamed):
         sep = " "
         keyspace = cm.protect_name(metadata.keyspace)
         name = cm.protect_name(metadata.name)
-        arg_list = ", ".join(
-            "{} {}".format(cm.protect_name(arg_name), arg_type)
-            for arg_name, arg_type in zip(metadata.argument_names, metadata.argument_types)
-        )
+
+        arg_list = ", ".join(map(_get_field_repr, zip(metadata.argument_names, metadata.argument_types)))
         typ = metadata.return_type
         lang = metadata.language
         body = metadata.body
@@ -136,11 +140,8 @@ class CassandraFunction(CassandraNamed):
         return keyspace_metadata.functions
 
     def restore_in_keyspace(self, cas: CassandraSession, keyspace_metadata: cm.KeyspaceMetadata) -> None:
-        pretty_name = "{}.{}({})".format(
-            keyspace_metadata.name,
-            self.name,
-            ", ".join(self.argument_types),
-        )
+        argument_types_str = ", ".join(self.argument_types)
+        pretty_name = f"{keyspace_metadata.name}.{self.name}({argument_types_str})"
         for funcagg_metadata in self.get_metadata_dict(keyspace_metadata).values():
             if funcagg_metadata.name == self.name and funcagg_metadata.argument_types == self.argument_types:
                 logger.info("%s %s already exists, not creating it", self.__class__.__name__, pretty_name)
@@ -163,7 +164,8 @@ class CassandraAggregate(CassandraFunction):
         ret = f"CREATE AGGREGATE {keyspace}.{name}({type_list}){sep}" f"SFUNC {state_func}{sep}" f"STYPE {state_type}"
 
         if metadata.final_func:
-            ret += "{}FINALFUNC {}".format(sep, cm.protect_name(metadata.final_func))
+            final_func = cm.protect_name(metadata.final_func)
+            ret += f"{sep}FINALFUNC {final_func}"
         if metadata.initial_condition:
             ret += f"{sep}INITCOND {metadata.initial_condition}"
 

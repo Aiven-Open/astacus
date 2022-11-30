@@ -1,22 +1,17 @@
-[MASTER]
-string-quote=double-avoid-escape
-triple-quote=double
-docstring-quote=double
-
 [MESSAGES CONTROL]
 disable=
-    bad-continuation,
-    duplicate-code,                # the checker in 2.9.6 fails with parallelism
-    invalid-name,                  # fastapi conventions break this
+    duplicate-code,                          # the checker in 2.9.6 fails with parallelism
+    invalid-name,                            # fastapi conventions break this
     missing-docstring,
-    no-member,                     # broken with pydantic + inheritance
-    no-self-use,                   # annoying when fullfilling some API
-    too-few-public-methods,        # some pydantic models have 0 and it is fine
+    no-member,                               # broken with pydantic + inheritance
+    too-few-public-methods,                  # some pydantic models have 0 and it is fine
     too-many-arguments,
-    too-many-instance-attributes,  # give me a break, <= 7
-    too-many-locals,               # locals make the code more readable
-    unused-argument,               # annoying when fullfilling some API
-    wrong-import-order,            # we use isort anyway
+    too-many-instance-attributes,            # give me a break, <= 7
+    too-many-locals,                         # locals make the code more readable
+    unused-argument,                         # annoying when fullfilling some API
+    use-implicit-booleaness-not-comparison,  # leads to unclear code
+    unspecified-encoding,                    # irrelevant since the library is linux-specific
+    wrong-import-order,                      # we use isort anyway
 
 [FORMAT]
 max-line-length=125

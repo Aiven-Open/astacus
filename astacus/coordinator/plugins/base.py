@@ -24,7 +24,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
-StepResult = TypeVar("StepResult", covariant=True)
+StepResult_co = TypeVar("StepResult_co", covariant=True)
 
 
 class CoordinatorPlugin(AstacusModel):
@@ -42,8 +42,8 @@ class OperationContext:
     hexdigest_storage: AsyncHexDigestStorage
 
 
-class Step(Generic[StepResult]):
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> StepResult:
+class Step(Generic[StepResult_co]):
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> StepResult_co:
         raise NotImplementedError
 
 

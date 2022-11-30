@@ -8,6 +8,8 @@ See LICENSE for details
 Shared utilities (between coordinator and node)
 
 """
+from __future__ import annotations
+
 from abc import ABC
 from contextlib import contextmanager
 from multiprocessing.dummy import Pool  # fastapi + fork = bad idea
@@ -274,11 +276,12 @@ def timedelta_as_short_str(delta):
     return " ".join(f"{v}{u}" for v, u in [(delta.days, "d"), (h, "h"), (m, "m"), (s, "s")] if v)
 
 
-def size_as_short_str(s):
-    for u, m in [("T", 1e12), ("G", 1e9), ("M", 1e6), ("K", 1e3)]:
-        if s >= m:
-            return "%.1f %sB" % (s / m, u)
-    return f"{s} B"
+def size_as_short_str(size: int | float) -> str:
+    for unit, multiplier in [("T", 1e12), ("G", 1e9), ("M", 1e6), ("K", 1e3)]:
+        if size >= multiplier:
+            unit_size = size / multiplier
+            return f"{unit_size:.1f} {unit}B"
+    return f"{size} B"
 
 
 def parallel_map_to(*, fun, iterable, result_callback, n=None) -> bool:

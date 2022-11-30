@@ -8,6 +8,7 @@ Minimal etcdv3 client library on top of httpx
 """
 
 from .utils import AstacusModel, httpx_request
+from typing import Optional
 
 import base64
 import json
@@ -38,7 +39,7 @@ class ETCDClient:
         url = f"{self.url}/{url}"
         return await httpx_request(url, caller=caller, method="post", data=json.dumps(data))
 
-    async def kv_deleterange(self, *, key: bytes, range_end: bytes = None):
+    async def kv_deleterange(self, *, key: bytes, range_end: Optional[bytes] = None):
         data = {"key": b64encode_to_str(key)}
         if range_end:
             data["range_end"] = b64encode_to_str(range_end)
@@ -46,7 +47,7 @@ class ETCDClient:
         result = await self._request("kv/deleterange", data, caller="ETCDClient.delete_range")
         return result
 
-    async def kv_range(self, *, key: bytes, range_end: bytes = None):
+    async def kv_range(self, *, key: bytes, range_end: Optional[bytes] = None):
         data = {"key": b64encode_to_str(key)}
         if range_end:
             data["range_end"] = b64encode_to_str(range_end)

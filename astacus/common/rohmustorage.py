@@ -12,8 +12,7 @@ from .utils import AstacusModel
 from astacus.common import exceptions
 from enum import Enum
 from pydantic import DirectoryPath, Field
-from rohmu import rohmufile  # type: ignore
-from rohmu import errors
+from rohmu import errors, rohmufile
 from typing import Dict, Optional, Union
 from typing_extensions import Literal
 
