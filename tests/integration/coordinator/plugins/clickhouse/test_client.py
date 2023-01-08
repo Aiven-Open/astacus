@@ -70,3 +70,13 @@ async def test_client_execute_timeout_can_be_customized_per_query(clickhouse: Se
         await client.execute(b"SELECT 1,sleepEachRow(3)", timeout=1)
     elapsed_time = time.monotonic() - start_time
     assert 1.0 <= elapsed_time < 3.0
+
+
+@pytest.mark.asyncio
+async def test_client_execute_error_returns_status_and_exception_code(clickhouse: Service) -> None:
+    unknown_table_exception_code = 60
+    client = get_clickhouse_client(clickhouse)
+    with pytest.raises(ClickHouseClientQueryError) as raised:
+        await client.execute(b"SELECT * FROM default.does_not_exist", timeout=1)
+    assert raised.value.status_code == 404
+    assert raised.value.exception_code == unknown_table_exception_code
