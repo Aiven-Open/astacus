@@ -102,6 +102,13 @@ async def setup_cluster_content(clients: List[HttpClickHouseClient], use_named_c
         b"CREATE TABLE default.replicated_merge_tree  (thekey UInt32, thedata String)  "
         b"ENGINE = ReplicatedMergeTree ORDER BY (thekey)"
     )
+    # test that we can re-create a table requiring custom global settings.
+    await clients[0].execute(
+        b"CREATE TABLE default.with_experimental_types (thekey UInt32, thedata JSON) "
+        b"ENGINE = ReplicatedMergeTree ORDER BY (thekey) "
+        b"SETTINGS index_granularity=8192 "
+        b"SETTINGS allow_experimental_object_type=1"
+    )
     await clients[0].execute(
         b"CREATE VIEW default.simple_view AS SELECT toInt32(thekey * 2) as thekey2 FROM default.replicated_merge_tree"
     )
@@ -115,6 +122,10 @@ async def setup_cluster_content(clients: List[HttpClickHouseClient], use_named_c
     await clients[0].execute(b"INSERT INTO default.replicated_merge_tree VALUES (123, 'foo')")
     await clients[1].execute(b"INSERT INTO default.replicated_merge_tree VALUES (456, 'bar')")
     await clients[2].execute(b"INSERT INTO default.replicated_merge_tree VALUES (789, 'baz')")
+    # Same with the table with the experimental data type
+    await clients[0].execute(b"INSERT INTO default.with_experimental_types VALUES (123, '{\"a\":1}')")
+    await clients[1].execute(b"INSERT INTO default.with_experimental_types VALUES (456, '{\"b\":2}')")
+    await clients[2].execute(b"INSERT INTO default.with_experimental_types VALUES (789, '{\"c\":3}')")
     # This won't be backed up
     await clients[0].execute(b"INSERT INTO default.memory VALUES (123, 'foo')")
 
@@ -159,6 +170,18 @@ async def test_restores_replicated_merge_tree_tables_data(restored_cluster: List
     cluster_data = [s1_data, s1_data, s2_data]
     for client, expected_data in zip(restored_cluster, cluster_data):
         response = await client.execute(b"SELECT thekey, thedata FROM default.replicated_merge_tree ORDER BY thekey")
+        assert response == expected_data
+
+
+@pytest.mark.asyncio
+async def test_restores_table_with_experimental_types(restored_cluster: List[ClickHouseClient]) -> None:
+    # The JSON type merges the keys in the response,
+    # hence the extra zero-valued entries we don't see in the insert queries.
+    s1_data = [[123, {"a": 1, "b": 0}], [456, {"a": 0, "b": 2}]]
+    s2_data = [[789, {"c": 3}]]
+    cluster_data = [s1_data, s1_data, s2_data]
+    for client, expected_data in zip(restored_cluster, cluster_data):
+        response = await client.execute(b"SELECT thekey, thedata FROM default.with_experimental_types ORDER BY thekey")
         assert response == expected_data
 
 

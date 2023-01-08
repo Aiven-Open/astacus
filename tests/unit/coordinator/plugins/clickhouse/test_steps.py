@@ -733,6 +733,9 @@ async def test_creates_all_replicated_databases_and_tables_in_manifest() -> None
         b"SET receive_timeout=10.0",
         b"CREATE DATABASE `db-two` UUID '00000000-0000-0000-0000-000000000012'"
         b" ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{my_shard}', '{my_replica}')",
+        b"SET allow_experimental_geo_types=true",
+        b"SET allow_experimental_object_type=true",
+        b"SET allow_suspicious_low_cardinality_types=true",
         b"CREATE TABLE db-one.table-uno ...",
         b"CREATE TABLE db-one.table-dos ...",
         b"CREATE TABLE db-two.table-eins ...",
@@ -786,6 +789,9 @@ async def test_creates_all_replicated_databases_and_tables_in_manifest_with_cust
         b"CREATE DATABASE `db-two` UUID '00000000-0000-0000-0000-000000000012'"
         b" ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{my_shard}', '{my_replica}') "
         b"SETTINGS cluster_username='alice', cluster_password='alice_secret'",
+        b"SET allow_experimental_geo_types=true",
+        b"SET allow_experimental_object_type=true",
+        b"SET allow_suspicious_low_cardinality_types=true",
         b"CREATE TABLE db-one.table-uno ...",
         b"CREATE TABLE db-one.table-dos ...",
         b"CREATE TABLE db-two.table-eins ...",
@@ -831,6 +837,9 @@ async def test_drops_each_database_on_all_servers_before_recreating_it() -> None
         b"SET receive_timeout=10.0",
         b"CREATE DATABASE `db-two` UUID '00000000-0000-0000-0000-000000000012'"
         b" ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{my_shard}', '{my_replica}')",
+        b"SET allow_experimental_geo_types=true",
+        b"SET allow_experimental_object_type=true",
+        b"SET allow_suspicious_low_cardinality_types=true",
         b"CREATE TABLE db-one.table-uno ...",
         b"CREATE TABLE db-one.table-dos ...",
         b"CREATE TABLE db-two.table-eins ...",

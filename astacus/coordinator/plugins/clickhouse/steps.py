@@ -4,7 +4,7 @@ See LICENSE for details
 """
 from __future__ import annotations
 
-from .client import ClickHouseClient, escape_sql_identifier, escape_sql_string
+from .client import ClickHouseClient, ClickHouseClientQueryError, escape_sql_identifier, escape_sql_string
 from .config import ClickHouseConfiguration, ReplicatedDatabaseSettings
 from .dependencies import access_entities_sorted_by_dependencies, tables_sorted_by_dependencies
 from .escaping import escape_for_file_name, unescape_from_file_name
@@ -464,6 +464,25 @@ class RestoreReplicatedDatabasesStep(Step[None]):
         # Tables creation is not parallelized with gather since they can depend on each other
         # (although, we could use graphlib more subtly and parallelize what we can).
 
+        # If any table was initially created with custom global settings,
+        # we need to re-enable these custom global settings when creating the table again.
+        # We can enable these settings unconditionally because they are harmless
+        # for tables not needing them.
+        session_id = secrets.token_hex()
+        for query in [
+            b"SET allow_experimental_geo_types=true",
+            b"SET allow_experimental_object_type=true",
+            b"SET allow_suspicious_low_cardinality_types=true",
+        ]:
+            try:
+                await self.clients[0].execute(query, session_id=session_id)
+            except ClickHouseClientQueryError as error:
+                if error.exception_code == error.SETTING_CONSTRAINT_VIOLATION:
+                    # If we can't set the option, that's fine, either it's not needed or it will fail later anyway
+                    pass
+                else:
+                    raise
+
         # If any known table depends on an unknown table that was inside a non-replicated
         # database engine, then this will crash. See comment in `RetrieveReplicatedDatabasesStep`.
         for table in tables_sorted_by_dependencies(manifest.tables):
@@ -472,7 +491,7 @@ class RestoreReplicatedDatabasesStep(Step[None]):
             # them manually. We will need to restore their data parts however.
             if not table.name.startswith(b".inner_id."):
                 # Create on the first client and let replication do its thing
-                await self.clients[0].execute(table.create_query)
+                await self.clients[0].execute(table.create_query, session_id=session_id)
 
 
 DatabasesReplicas = Mapping[bytes, Sequence[DatabaseReplica]]
