@@ -24,7 +24,21 @@ class ClickHouseClient:
 
 
 class ClickHouseClientQueryError(Exception):
-    pass
+    # If we have to handle more error types, we might consider adding proper
+    # rich error types and not display numeric values to the end user.
+    SETTING_CONSTRAINT_VIOLATION = 452
+
+    def __init__(
+        self, query: bytes, host: str, port: int, *, status_code: Optional[int] = None, exception_code: Optional[int] = None
+    ) -> None:
+        super().__init__(
+            f"Query failed: {query!r} on {host}:{port}: status_code={status_code}, exception_code={exception_code}"
+        )
+        self.query = query
+        self.host = host
+        self.port = port
+        self.status_code = status_code
+        self.exception_code = exception_code
 
 
 class HttpClickHouseClient(ClickHouseClient):
@@ -76,11 +90,20 @@ class HttpClickHouseClient(ClickHouseClient):
             caller="ClickHouseClient",
             headers=headers,
             timeout=self.timeout if timeout is None else timeout,
+            ignore_status_code=True,
         )
         assert not isinstance(response, dict)
         if response is None:
             # We should find a better way to handler failure than the None from httpx_request
-            raise ClickHouseClientQueryError(f"Query failed: {query!r} on {self.host}:{self.port}")
+            raise ClickHouseClientQueryError(query, self.host, self.port)
+        if response.is_error:
+            exception_code = None
+            raw_exception_code = response.headers.get("x-clickhouse-exception-code")
+            if isinstance(raw_exception_code, str) and re.match(r"\d+", raw_exception_code):
+                exception_code = int(raw_exception_code)
+            raise ClickHouseClientQueryError(
+                query, self.host, self.port, status_code=response.status_code, exception_code=exception_code
+            )
         if response.content:
             # Beware: large ints (Int64, UInt64, and larger) will be returned as strings
             decoded_response = response.json()
