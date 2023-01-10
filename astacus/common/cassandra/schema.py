@@ -229,9 +229,6 @@ class CassandraTable(CassandraNamed):
 
 
 class CassandraKeyspace(CassandraNamed):
-    # CQL to create everything
-    cql_create_all: str
-
     aggregates: List[CassandraAggregate]
     functions: List[CassandraFunction]
     tables: List[CassandraTable]
@@ -244,7 +241,6 @@ class CassandraKeyspace(CassandraNamed):
             name=metadata.name,
             cql_create_self=metadata.as_cql_query(),
             # CassandraKeyspace
-            cql_create_all=metadata.export_as_string(),
             aggregates=sorted(
                 CassandraAggregate.from_cassandra_metadata(metadata) for metadata in metadata.aggregates.values()
             ),

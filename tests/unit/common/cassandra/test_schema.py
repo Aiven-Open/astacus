@@ -36,7 +36,6 @@ def test_schema(schema, mocker):
 
     cks = schema.CassandraKeyspace(
         name="cks",
-        cql_create_all="CREATE-KEYSPACE-ALL",
         cql_create_self="CREATE-KEYSPACE",
         aggregates=[cagg],
         functions=[cfunction],
@@ -46,7 +45,6 @@ def test_schema(schema, mocker):
 
     cks_system = schema.CassandraKeyspace(
         name="system",
-        cql_create_all="CREATE-SYSTEM-KEYSPACE-ALL",
         cql_create_self="CREATE-SYSTEM-KEYSPACE",
         aggregates=[],
         functions=[],
@@ -74,7 +72,6 @@ def test_schema_keyspace_iterate_user_types_in_restore_order(schema):
     ut4 = schema.CassandraUserType(name="ut4", cql_create_self="", field_types=["something"])
     ks = schema.CassandraKeyspace(
         name="unused",
-        cql_create_all="unused",
         cql_create_self="unused",
         aggregates=[],
         functions=[],
