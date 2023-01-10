@@ -4,8 +4,8 @@ See LICENSE for details
 """
 
 from astacus.common.cassandra.config import CassandraClientConfiguration
-import astacus.common.cassandra.client as client_module
 
+import astacus.common.cassandra.client as client_module
 import pytest
 
 

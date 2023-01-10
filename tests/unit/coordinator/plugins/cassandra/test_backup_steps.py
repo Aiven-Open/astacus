@@ -9,8 +9,9 @@ from astacus.common.cassandra.schema import CassandraSchema
 from astacus.coordinator.plugins.cassandra import backup_steps
 from astacus.coordinator.plugins.cassandra.model import CassandraConfigurationNode
 from dataclasses import dataclass
+from tests.unit.coordinator.plugins.cassandra.builders import build_keyspace
 from types import SimpleNamespace
-from typing import Optional
+from typing import Mapping, Optional
 from uuid import UUID
 
 import pytest
@@ -78,7 +79,22 @@ def test_retrieve_manifest_from_cassandra(mocker, case):
         nodes.append(cnode)
     if case.expected_error:
         with pytest.raises(case.expected_error):
-            backup_steps._retrieve_manifest_from_cassandra(cas, nodes)
+            backup_steps._retrieve_manifest_from_cassandra(cas, nodes, datacenter=None)
         return
-    manifest = backup_steps._retrieve_manifest_from_cassandra(cas, nodes)
+    manifest = backup_steps._retrieve_manifest_from_cassandra(cas, nodes, datacenter=None)
     assert len(manifest.nodes) == len(nodes)
+
+
+@pytest.mark.parametrize("dcs", [{}, {"other_dc": "4"}])
+def test_datacenter_filtering_raises_when_dc_is_missing(dcs: Mapping[str, str]) -> None:
+    keyspace = build_keyspace("empty_keyspace").with_network_topology_strategy_dcs(dcs)
+    with pytest.raises(ValueError):
+        backup_steps._remove_other_datacenters(keyspace, "my_dc")
+    assert keyspace.network_topology_strategy_dcs == dcs
+
+
+@pytest.mark.parametrize("dcs", [{"my_dc": "7"}, {"other_dc": "8", "my_dc": "7"}])
+def test_datacenter_filtering_leaves_only_one_dc(dcs: Mapping[str, str]) -> None:
+    keyspace = build_keyspace("my_keyspace").with_network_topology_strategy_dcs(dcs)
+    backup_steps._remove_other_datacenters(keyspace, "my_dc")
+    assert keyspace.network_topology_strategy_dcs == {"my_dc": "7"}

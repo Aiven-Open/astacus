@@ -8,6 +8,7 @@ from astacus.common.cassandra.schema import CassandraSchema
 from astacus.coordinator.plugins import base
 from astacus.coordinator.plugins.cassandra import restore_steps
 from astacus.coordinator.plugins.cassandra.model import CassandraManifest, CassandraManifestNode
+from tests.unit.coordinator.plugins.cassandra.builders import build_keyspace
 from types import SimpleNamespace
 
 import datetime
@@ -94,3 +95,17 @@ async def test_step_wait_cassandra_up(mocker, steps, success):
     else:
         with pytest.raises(base.StepFailedError):
             await step.run_step(cluster, context)
+
+
+def test_rewrite_datacenters() -> None:
+    pre_rewrite_cql = "create me, please"
+    keyspaces = [
+        build_keyspace("remains_unchanged").with_cql_create_self(pre_rewrite_cql).with_network_topology_strategy_dcs({}),
+        build_keyspace("needs_rewrite")
+        .with_cql_create_self(pre_rewrite_cql)
+        .with_network_topology_strategy_dcs({"new_dc": "3"}),
+    ]
+    restore_steps._rewrite_datacenters(keyspaces)  # pylint: disable=protected-access
+    unchanged_keyspace, rewritten_keyspace = keyspaces[0], keyspaces[1]
+    assert unchanged_keyspace.cql_create_self == pre_rewrite_cql
+    assert "'new_dc': '3'" in rewritten_keyspace.cql_create_self

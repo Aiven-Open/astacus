@@ -49,6 +49,7 @@ class ValidateConfigurationStep(Step[None]):
 class CassandraPlugin(CoordinatorPlugin):
     client: CassandraClientConfiguration
     nodes: Optional[List[CassandraConfigurationNode]]
+    datacenter: Optional[str]
     restore_start_timeout: int = 3600
 
     def get_backup_steps(self, *, context: OperationContext) -> List[Step]:
@@ -65,7 +66,7 @@ class CassandraPlugin(CoordinatorPlugin):
         return [
             ValidateConfigurationStep(nodes=nodes),
             backup_steps.RetrieveSchemaHashStep(),
-            backup_steps.PrepareCassandraManifestStep(client=client, nodes=nodes),
+            backup_steps.PrepareCassandraManifestStep(client=client, nodes=nodes, datacenter=self.datacenter),
             CassandraSubOpStep(op=ipc.CassandraSubOp.remove_snapshot),
             CassandraSubOpStep(op=ipc.CassandraSubOp.take_snapshot),
             backup_steps.AssertSchemaUnchanged(),
