@@ -134,6 +134,8 @@ def cassandra(req: Union[ipc.NodeRequest, ipc.CassandraStartRequest], subop: ipc
         raise HTTPException(status_code=501, detail="Cassandra support is not installed")
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
+    if not n.config.cassandra:
+        raise HTTPException(status_code=409, detail="Cassandra node configuration not found")
 
     if subop == ipc.CassandraSubOp.get_schema_hash:
         return CassandraGetSchemaHashOp(n=n, op_id=n.allocate_op_id(), stats=n.stats).start(req=req)
