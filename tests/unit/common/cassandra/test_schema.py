@@ -3,18 +3,14 @@ Copyright (c) 2022 Aiven Ltd
 See LICENSE for details
 """
 
+from astacus.common.cassandra import schema
+
 import pytest
 
 # pylint: disable=protected-access
 
 
-@pytest.fixture(name="schema", scope="session")
-def fixture_schema():
-    return pytest.importorskip("astacus.common.cassandra.schema", reason="Cassandra driver is not available")
-
-
-def test_schema(schema, mocker):
-
+def test_schema(mocker):
     cut = schema.CassandraUserType(name="cut", cql_create_self="CREATE-USER-TYPE", field_types=["type1", "type2"])
     cfunction = schema.CassandraFunction(name="cf", cql_create_self="CREATE-FUNCTION", argument_types=["atype1", "atype2"])
 
@@ -65,7 +61,7 @@ def test_schema(schema, mocker):
     cs.restore_post_data(cas)
 
 
-def test_schema_keyspace_iterate_user_types_in_restore_order(schema):
+def test_schema_keyspace_iterate_user_types_in_restore_order():
     ut1 = schema.CassandraUserType(name="ut1", cql_create_self="", field_types=[])
     ut2 = schema.CassandraUserType(name="ut2", cql_create_self="", field_types=["ut3", "map<str,frozen<ut1>>"])
     ut3 = schema.CassandraUserType(name="ut3", cql_create_self="", field_types=["ut4"])
@@ -98,6 +94,6 @@ def test_schema_keyspace_iterate_user_types_in_restore_order(schema):
         ('"q""u""o""t""e""d"', ['q"u"o"t"e"d']),
     ],
 )
-def test_iterate_identifiers_in_cql_type_definition(schema, definition, identifiers):
+def test_iterate_identifiers_in_cql_type_definition(definition, identifiers):
     got_identifiers = list(schema._iterate_identifiers_in_cql_type_definition(definition))
     assert got_identifiers == identifiers

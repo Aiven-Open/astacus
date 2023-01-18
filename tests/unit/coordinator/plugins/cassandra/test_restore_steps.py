@@ -4,7 +4,10 @@ See LICENSE for details
 """
 
 from astacus.common import ipc
+from astacus.common.cassandra.schema import CassandraSchema
 from astacus.coordinator.plugins import base
+from astacus.coordinator.plugins.cassandra import restore_steps
+from astacus.coordinator.plugins.cassandra.model import CassandraManifest, CassandraManifestNode
 from types import SimpleNamespace
 
 import datetime
@@ -16,16 +19,10 @@ import pytest
 @pytest.mark.parametrize("override_tokens", [False, True])
 @pytest.mark.asyncio
 async def test_step_start_cassandra(mocker, override_tokens):
-    restore_steps = pytest.importorskip("astacus.coordinator.plugins.cassandra.model.restore_steps")
-    cassandra_schema = pytest.importorskip("astacus.common.cassandra.schema")
-    plugin_model = pytest.importorskip("astacus.coordinator.plugins.cassandra.model")
-
-    schema = cassandra_schema.CassandraSchema(keyspaces=[])
-
-    plugin_manifest = plugin_model.CassandraManifest(
-        cassandra_schema=schema,
+    plugin_manifest = CassandraManifest(
+        cassandra_schema=CassandraSchema(keyspaces=[]),
         nodes=[
-            plugin_model.CassandraManifestNode(
+            CassandraManifestNode(
                 address="127.0.0.1",
                 host_id="12345678123456781234567812345678",
                 listen_address="::1",
@@ -78,7 +75,6 @@ class AsyncIterableWrapper:
 @pytest.mark.parametrize("steps,success", [([True], True), ([False, True], True), ([False], False)])
 @pytest.mark.asyncio
 async def test_step_wait_cassandra_up(mocker, steps, success):
-    restore_steps = pytest.importorskip("astacus.coordinator.plugins.cassandra.model.restore_steps")
     get_schema_steps = steps[:]
 
     async def get_schema_hash(cluster):

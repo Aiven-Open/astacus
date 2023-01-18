@@ -6,6 +6,7 @@ from astacus.common.rohmustorage import RohmuConfig
 from pathlib import Path
 from typing import List, Sequence, Union
 
+import importlib
 import re
 import subprocess
 
@@ -84,3 +85,7 @@ def parse_clickhouse_version(command_output: bytes) -> Sequence[int]:
 def get_clickhouse_version(command: List[Union[str, Path]]) -> Sequence[int]:
     version_command_output = subprocess.check_output([*command, "--version"])
     return parse_clickhouse_version(version_command_output)
+
+
+def is_cassandra_driver_importable() -> bool:
+    return importlib.util.find_spec("cassandra") is not None

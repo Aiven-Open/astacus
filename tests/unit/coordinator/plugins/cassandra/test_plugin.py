@@ -5,6 +5,7 @@ See LICENSE for details
 
 from astacus.common import ipc
 from astacus.coordinator.plugins.base import StepFailedError
+from astacus.coordinator.plugins.cassandra import plugin
 from tests.unit.node.test_node_cassandra import CassandraTestConfig
 from types import SimpleNamespace
 
@@ -13,14 +14,12 @@ import pytest
 
 @pytest.fixture(name="cplugin")
 def fixture_cplugin(mocker, tmpdir):
-    plugin = pytest.importorskip("astacus.coordinator.plugins.cassandra.plugin")
     ctc = CassandraTestConfig(mocker=mocker, tmpdir=tmpdir)
     yield plugin.CassandraPlugin(client=ctc.cassandra_client_config)
 
 
 @pytest.mark.asyncio
 async def test_step_cassandrasubop(mocker):
-    plugin = pytest.importorskip("astacus.coordinator.plugins.cassandra.plugin")
     mocker.patch.object(plugin, "run_subop")
 
     step = plugin.CassandraSubOpStep(op=ipc.CassandraSubOp.stop_cassandra)
@@ -33,7 +32,6 @@ async def test_step_cassandrasubop(mocker):
 @pytest.mark.parametrize("success", [False, True])
 @pytest.mark.asyncio
 async def test_step_cassandra_validate_configuration(mocker, success):
-    plugin = pytest.importorskip("astacus.coordinator.plugins.cassandra.plugin")
     step = plugin.ValidateConfigurationStep(nodes=[])
     context = None
     if success:

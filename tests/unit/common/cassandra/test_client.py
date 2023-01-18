@@ -4,16 +4,12 @@ See LICENSE for details
 """
 
 from astacus.common.cassandra.config import CassandraClientConfiguration
+import astacus.common.cassandra.client as client_module
 
 import pytest
 
 
-@pytest.fixture(name="client_module", scope="session")
-def fixture_client_module():
-    return pytest.importorskip("astacus.common.cassandra.client", reason="Cassandra driver is not available")
-
-
-def test_cassandra_session(client_module, mocker):
+def test_cassandra_session(mocker):
     ccluster = mocker.MagicMock()
     csession = mocker.MagicMock()
     session = client_module.CassandraSession(cluster=ccluster, session=csession)
@@ -36,7 +32,7 @@ second!;
     assert len(csession.execute.mock_calls) == 2
 
 
-def create_client(client_module, mocker, ssl=False):
+def create_client(mocker, ssl=False):
     mocker.patch.object(client_module, "Cluster")
     mocker.patch.object(client_module, "WhiteListRoundRobinPolicy")
 
@@ -51,15 +47,15 @@ def create_client(client_module, mocker, ssl=False):
 
 
 @pytest.mark.parametrize("ssl", [False, True])
-def test_cassandra_client(client_module, mocker, ssl):
-    client: client_module.CassandraClient = create_client(client_module, mocker, ssl=ssl)
+def test_cassandra_client(mocker, ssl):
+    client: client_module.CassandraClient = create_client(mocker, ssl=ssl)
     with client.connect() as session:
         assert isinstance(session, client_module.CassandraSession)
 
 
 @pytest.mark.asyncio
-async def test_cassandra_client_run(client_module, mocker):
-    client = create_client(client_module, mocker)
+async def test_cassandra_client_run(mocker):
+    client = create_client(mocker)
 
     def test_fun(cas):
         return 42

@@ -5,6 +5,9 @@ See LICENSE for details
 
 # pylint: disable=protected-access
 
+from astacus.common.cassandra.schema import CassandraSchema
+from astacus.coordinator.plugins.cassandra import backup_steps
+from astacus.coordinator.plugins.cassandra.model import CassandraConfigurationNode
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Optional
@@ -42,15 +45,7 @@ class RetrieveTestCase:
     ids=str,
 )
 def test_retrieve_manifest_from_cassandra(mocker, case):
-    backup_steps = pytest.importorskip("astacus.coordinator.plugins.cassandra.model.backup_steps")
-    plugin_model = pytest.importorskip("astacus.coordinator.plugins.cassandra.model")
-    cassandra_schema = pytest.importorskip("astacus.common.cassandra.schema")
-    mocker.patch.object(
-        cassandra_schema.CassandraSchema,
-        "from_cassandra_session",
-        return_value=cassandra_schema.CassandraSchema(keyspaces=[]),
-    )
-
+    mocker.patch.object(CassandraSchema, "from_cassandra_session", return_value=CassandraSchema(keyspaces=[]))
     cassandra_nodes = [
         SimpleNamespace(
             host_id=UUID(f"1234567812345678123456781234567{node}"),
@@ -73,7 +68,7 @@ def test_retrieve_manifest_from_cassandra(mocker, case):
 
     nodes = []
     for cassandra_node in cassandra_nodes:
-        cnode = plugin_model.CassandraConfigurationNode()
+        cnode = CassandraConfigurationNode()
         # Note: 'tokens' is bit awkward to to test and unlikely to be really used so not tested here.
         if case.field:
             if case.field == "listen_address":
