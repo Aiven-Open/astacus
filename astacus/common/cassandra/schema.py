@@ -10,7 +10,7 @@ from .client import CassandraSession
 from .utils import is_system_keyspace
 from astacus.common.utils import AstacusModel
 from cassandra import metadata as cm
-from typing import Any, Iterator, List, Set
+from typing import Any, Dict, Iterator, List, Set
 
 import hashlib
 import itertools
@@ -228,9 +228,16 @@ class CassandraTable(CassandraNamed):
                 resource.restore_if_needed(cas, resource_map)
 
 
+def _extract_dcs(metadata: cm.KeyspaceMetadata) -> Dict[str, str]:
+    strategy = metadata.replication_strategy
+    if isinstance(strategy, cm.NetworkTopologyStrategy):
+        return {dc: str(full_replicas) for dc, full_replicas in strategy.dc_replication_factors.items()}
+    return {}
+
+
 class CassandraKeyspace(CassandraNamed):
-    # CQL to create everything
-    cql_create_all: str
+    network_topology_strategy_dcs: Dict[str, str]  # not [str, int] because of transient replication
+    durable_writes: bool
 
     aggregates: List[CassandraAggregate]
     functions: List[CassandraFunction]
@@ -244,7 +251,8 @@ class CassandraKeyspace(CassandraNamed):
             name=metadata.name,
             cql_create_self=metadata.as_cql_query(),
             # CassandraKeyspace
-            cql_create_all=metadata.export_as_string(),
+            network_topology_strategy_dcs=_extract_dcs(metadata),
+            durable_writes=metadata.durable_writes if metadata.durable_writes is not None else True,
             aggregates=sorted(
                 CassandraAggregate.from_cassandra_metadata(metadata) for metadata in metadata.aggregates.values()
             ),

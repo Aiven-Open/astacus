@@ -4,6 +4,7 @@ disable=
     invalid-name,                            # fastapi conventions break this
     missing-docstring,
     no-member,                               # broken with pydantic + inheritance
+    no-self-use,                             # sometimes overriden methods don't use self
     too-few-public-methods,                  # some pydantic models have 0 and it is fine
     too-many-arguments,
     too-many-instance-attributes,            # give me a break, <= 7

@@ -3,18 +3,16 @@ Copyright (c) 2022 Aiven Ltd
 See LICENSE for details
 """
 
+from astacus.common.cassandra import schema
+from cassandra import metadata as cm
+from typing import Mapping
+
 import pytest
 
 # pylint: disable=protected-access
 
 
-@pytest.fixture(name="schema", scope="session")
-def fixture_schema():
-    return pytest.importorskip("astacus.common.cassandra.schema", reason="Cassandra driver is not available")
-
-
-def test_schema(schema, mocker):
-
+def test_schema(mocker):
     cut = schema.CassandraUserType(name="cut", cql_create_self="CREATE-USER-TYPE", field_types=["type1", "type2"])
     cfunction = schema.CassandraFunction(name="cf", cql_create_self="CREATE-FUNCTION", argument_types=["atype1", "atype2"])
 
@@ -35,8 +33,9 @@ def test_schema(schema, mocker):
     )
 
     cks = schema.CassandraKeyspace(
+        network_topology_strategy_dcs={},
+        durable_writes=True,
         name="cks",
-        cql_create_all="CREATE-KEYSPACE-ALL",
         cql_create_self="CREATE-KEYSPACE",
         aggregates=[cagg],
         functions=[cfunction],
@@ -45,8 +44,9 @@ def test_schema(schema, mocker):
     )
 
     cks_system = schema.CassandraKeyspace(
+        network_topology_strategy_dcs={},
+        durable_writes=True,
         name="system",
-        cql_create_all="CREATE-SYSTEM-KEYSPACE-ALL",
         cql_create_self="CREATE-SYSTEM-KEYSPACE",
         aggregates=[],
         functions=[],
@@ -58,7 +58,7 @@ def test_schema(schema, mocker):
 
     # If the content above changes - or something in the schema hash
     # calculation side changes, this hash needs to be updated:
-    assert cs.calculate_hash() == "ec6042f45aedddb79fbe6245c32f2c4fcbf0b0674242a1bbf15d5a9a2b9c26bc"
+    assert cs.calculate_hash() == "8c7d7295be6cfd3440cc65d53ac025a0338c4387a9d28309547844cc40c1a5b4"
 
     # TBD: Better verification of results.
     # For now we just exercise codepaths but with magicmock target they may supply almost anything
@@ -67,14 +67,44 @@ def test_schema(schema, mocker):
     cs.restore_post_data(cas)
 
 
-def test_schema_keyspace_iterate_user_types_in_restore_order(schema):
+@pytest.mark.parametrize(
+    "strategy_class,strategy_options,expected_dcs",
+    [
+        ("SimpleStrategy", {"replication_factor": "2"}, {}),
+        ("NetworkTopologyStrategy", {"dc1": 2, "dc2": "3"}, {"dc1": "2", "dc2": "3"}),
+    ],
+)
+def test_schema_keyspace_from_metadata(
+    strategy_class: str,
+    strategy_options: Mapping[str, str],
+    expected_dcs: Mapping[str, str],
+) -> None:
+    metadata = cm.KeyspaceMetadata(
+        name="test_keyspace",
+        durable_writes=False,
+        strategy_class=strategy_class,
+        strategy_options=strategy_options,
+    )
+    keyspace = schema.CassandraKeyspace.from_cassandra_metadata(metadata)
+    assert keyspace.name == metadata.name
+    assert keyspace.cql_create_self == metadata.as_cql_query()
+    assert keyspace.network_topology_strategy_dcs == expected_dcs
+    assert keyspace.durable_writes is False
+    assert keyspace.aggregates == []
+    assert keyspace.functions == []
+    assert keyspace.tables == []
+    assert keyspace.user_types == []
+
+
+def test_schema_keyspace_iterate_user_types_in_restore_order():
     ut1 = schema.CassandraUserType(name="ut1", cql_create_self="", field_types=[])
     ut2 = schema.CassandraUserType(name="ut2", cql_create_self="", field_types=["ut3", "map<str,frozen<ut1>>"])
     ut3 = schema.CassandraUserType(name="ut3", cql_create_self="", field_types=["ut4"])
     ut4 = schema.CassandraUserType(name="ut4", cql_create_self="", field_types=["something"])
     ks = schema.CassandraKeyspace(
+        network_topology_strategy_dcs={},
+        durable_writes=True,
         name="unused",
-        cql_create_all="unused",
         cql_create_self="unused",
         aggregates=[],
         functions=[],
@@ -101,6 +131,6 @@ def test_schema_keyspace_iterate_user_types_in_restore_order(schema):
         ('"q""u""o""t""e""d"', ['q"u"o"t"e"d']),
     ],
 )
-def test_iterate_identifiers_in_cql_type_definition(schema, definition, identifiers):
+def test_iterate_identifiers_in_cql_type_definition(definition, identifiers):
     got_identifiers = list(schema._iterate_identifiers_in_cql_type_definition(definition))
     assert got_identifiers == identifiers

@@ -5,9 +5,13 @@ See LICENSE for details
 
 # pylint: disable=protected-access
 
+from astacus.common.cassandra.schema import CassandraSchema
+from astacus.coordinator.plugins.cassandra import backup_steps
+from astacus.coordinator.plugins.cassandra.model import CassandraConfigurationNode
 from dataclasses import dataclass
+from tests.unit.coordinator.plugins.cassandra.builders import build_keyspace
 from types import SimpleNamespace
-from typing import Optional
+from typing import Mapping, Optional
 from uuid import UUID
 
 import pytest
@@ -42,15 +46,7 @@ class RetrieveTestCase:
     ids=str,
 )
 def test_retrieve_manifest_from_cassandra(mocker, case):
-    backup_steps = pytest.importorskip("astacus.coordinator.plugins.cassandra.model.backup_steps")
-    plugin_model = pytest.importorskip("astacus.coordinator.plugins.cassandra.model")
-    cassandra_schema = pytest.importorskip("astacus.common.cassandra.schema")
-    mocker.patch.object(
-        cassandra_schema.CassandraSchema,
-        "from_cassandra_session",
-        return_value=cassandra_schema.CassandraSchema(keyspaces=[]),
-    )
-
+    mocker.patch.object(CassandraSchema, "from_cassandra_session", return_value=CassandraSchema(keyspaces=[]))
     cassandra_nodes = [
         SimpleNamespace(
             host_id=UUID(f"1234567812345678123456781234567{node}"),
@@ -73,7 +69,7 @@ def test_retrieve_manifest_from_cassandra(mocker, case):
 
     nodes = []
     for cassandra_node in cassandra_nodes:
-        cnode = plugin_model.CassandraConfigurationNode()
+        cnode = CassandraConfigurationNode()
         # Note: 'tokens' is bit awkward to to test and unlikely to be really used so not tested here.
         if case.field:
             if case.field == "listen_address":
@@ -83,7 +79,22 @@ def test_retrieve_manifest_from_cassandra(mocker, case):
         nodes.append(cnode)
     if case.expected_error:
         with pytest.raises(case.expected_error):
-            backup_steps._retrieve_manifest_from_cassandra(cas, nodes)
+            backup_steps._retrieve_manifest_from_cassandra(cas, nodes, datacenter=None)
         return
-    manifest = backup_steps._retrieve_manifest_from_cassandra(cas, nodes)
+    manifest = backup_steps._retrieve_manifest_from_cassandra(cas, nodes, datacenter=None)
     assert len(manifest.nodes) == len(nodes)
+
+
+@pytest.mark.parametrize("dcs", [{}, {"other_dc": "4"}])
+def test_datacenter_filtering_raises_when_dc_is_missing(dcs: Mapping[str, str]) -> None:
+    keyspace = build_keyspace("empty_keyspace").with_network_topology_strategy_dcs(dcs)
+    with pytest.raises(ValueError):
+        backup_steps._remove_other_datacenters(keyspace, "my_dc")
+    assert keyspace.network_topology_strategy_dcs == dcs
+
+
+@pytest.mark.parametrize("dcs", [{"my_dc": "7"}, {"other_dc": "8", "my_dc": "7"}])
+def test_datacenter_filtering_leaves_only_one_dc(dcs: Mapping[str, str]) -> None:
+    keyspace = build_keyspace("my_keyspace").with_network_topology_strategy_dcs(dcs)
+    backup_steps._remove_other_datacenters(keyspace, "my_dc")
+    assert keyspace.network_topology_strategy_dcs == {"my_dc": "7"}

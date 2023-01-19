@@ -9,6 +9,7 @@ from .model import CassandraManifest
 from .utils import get_schema_hash, run_subop
 from astacus.common import ipc, utils
 from astacus.common.cassandra.client import CassandraClient
+from astacus.common.cassandra.schema import CassandraKeyspace
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins.base import (
@@ -18,19 +19,38 @@ from astacus.coordinator.plugins.base import (
     StepFailedError,
     StepsContext,
 )
+from cassandra import metadata as cm
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Iterable, List, Optional
 
 import logging
 
 logger = logging.getLogger(__name__)
 
 
+def _create_network_topology_strategy_cql(keyspace: CassandraKeyspace) -> str:
+    keyspace_metadata = cm.KeyspaceMetadata(
+        name=keyspace.name,
+        durable_writes=keyspace.durable_writes,
+        strategy_class="NetworkTopologyStrategy",
+        strategy_options=keyspace.network_topology_strategy_dcs,
+    )
+    return keyspace_metadata.as_cql_query()
+
+
+def _rewrite_datacenters(keyspaces: Iterable[CassandraKeyspace]) -> None:
+    for keyspace in keyspaces:
+        if keyspace.network_topology_strategy_dcs:
+            keyspace.cql_create_self = _create_network_topology_strategy_cql(keyspace)
+
+
 @dataclass
 class ParsePluginManifestStep(Step[CassandraManifest]):
     async def run_step(self, cluster: Cluster, context: StepsContext) -> CassandraManifest:
         backup_manifest = context.get_result(BackupManifestStep)
-        return CassandraManifest.parse_obj(backup_manifest.plugin_data)
+        cassandra_manifest = CassandraManifest.parse_obj(backup_manifest.plugin_data)
+        _rewrite_datacenters(cassandra_manifest.cassandra_schema.keyspaces)
+        return cassandra_manifest
 
 
 @dataclass

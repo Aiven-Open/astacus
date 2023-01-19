@@ -9,11 +9,11 @@ from .model import CassandraConfigurationNode, CassandraManifest, CassandraManif
 from .utils import get_schema_hash
 from astacus.common import exceptions
 from astacus.common.cassandra.client import CassandraClient, CassandraSession
-from astacus.common.cassandra.schema import CassandraSchema
+from astacus.common.cassandra.schema import CassandraKeyspace, CassandraSchema
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import Step, StepFailedError, StepsContext
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import logging
 
@@ -24,11 +24,27 @@ class CassandraSchemaRetrievalFailureException(exceptions.TransientException):
     pass
 
 
+def _remove_other_datacenters(keyspace: CassandraKeyspace, datacenter: str) -> None:
+    remaining_dc_rf = keyspace.network_topology_strategy_dcs.get(datacenter)
+    if not remaining_dc_rf:
+        # Could be intentional, but most likely is a typo in configuration => raise.
+        raise ValueError(f"Keyspace {keyspace.name} not replicated in configured DC {datacenter}")
+    keyspace.network_topology_strategy_dcs = {datacenter: remaining_dc_rf}
+
+
 def _retrieve_manifest_from_cassandra(
-    cas: CassandraSession, config_nodes: List[CassandraConfigurationNode]
+    cas: CassandraSession, config_nodes: List[CassandraConfigurationNode], *, datacenter: Optional[str]
 ) -> CassandraManifest:
     host_id_to_node: Dict[str, CassandraManifestNode] = {}
     for token, host in cas.cluster_metadata.token_map.token_to_host_owner.items():
+        if datacenter and host.datacenter != datacenter:
+            logger.debug(
+                "Skipping host %s, because its datacenter %s doesn't match configured %s",
+                host.host_id,
+                host.datacenter,
+                datacenter,
+            )
+            continue
         node = host_id_to_node.get(host.host_id)
         if node is None:
             # host.listen_address is for the local host in system.local
@@ -69,6 +85,10 @@ def _retrieve_manifest_from_cassandra(
         raise ValueError(f"Incorrect node count: {len(nodes)} <> {len(host_id_to_node)}")
 
     schema = CassandraSchema.from_cassandra_session(cas)
+    if datacenter:
+        for keyspace in schema.keyspaces:
+            if keyspace.network_topology_strategy_dcs:
+                _remove_other_datacenters(keyspace, datacenter)
     return CassandraManifest(cassandra_schema=schema, nodes=nodes)
 
 
@@ -95,8 +115,9 @@ class AssertSchemaUnchanged(Step[None]):
 class PrepareCassandraManifestStep(Step[Dict]):
     client: CassandraClient
     nodes: List[CassandraConfigurationNode]
+    datacenter: Optional[str]
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> Dict:
-        result = await self.client.run_sync(_retrieve_manifest_from_cassandra, self.nodes)
+        result = await self.client.run_sync(_retrieve_manifest_from_cassandra, self.nodes, datacenter=self.datacenter)
         assert result
         return result.dict()
