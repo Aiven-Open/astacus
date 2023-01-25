@@ -84,7 +84,7 @@ def http_request(url, *, caller, method="get", timeout=10, ignore_status_code: b
     """
     # TBD: may need to redact url in future, if we actually wind up
     # using passwords in urls here.
-    logger.debug("request %s %s by %s", method, url, caller)
+    logger.info("request %s %s by %s", method, url, caller)
     try:
         r = requests.request(method, url, timeout=timeout, **kw)
         if r.ok:
@@ -113,7 +113,7 @@ async def httpx_request(
     r = None
     # TBD: may need to redact url in future, if we actually wind up
     # using passwords in urls here.
-    logger.debug("async-request %s %s by %s", method, url, caller)
+    logger.info("async-request %s %s by %s", method, url, caller)
     async with httpx.AsyncClient() as client:
         try:
             r = await client.request(method, url, timeout=timeout, **kw)
@@ -206,7 +206,7 @@ def exponential_backoff(
                 time_left_after_sleep = (self.initial + duration) - time_now - delay
                 if time_left_after_sleep < 0:
                     return None
-            logger.debug("exponential_backoff waiting %.2f seconds (retry %d%s)", delay, self.retry, retries_text)
+            logger.info("exponential_backoff waiting %.2f seconds (retry %d%s)", delay, self.retry, retries_text)
             return delay
 
         async def __anext__(self):

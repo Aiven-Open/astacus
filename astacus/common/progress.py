@@ -51,7 +51,7 @@ class Progress(AstacusModel):
     def start(self, n):
         "Optional 'first' step, just for logic handling state (e.g. no progress object reuse desired)"
         assert not self.total
-        logger.debug("start")
+        logger.info("start")
         self.add_total(n)
 
     def add_total(self, n):
@@ -60,7 +60,7 @@ class Progress(AstacusModel):
         old_total = self.total
         self.total += n
         if increase_worth_reporting(old_total, self.total):
-            logger.debug("add_total %r -> %r", n, self)
+            logger.info("add_total %r -> %r", n, self)
         assert not self.final
 
     def add_fail(self, n=1, *, info="add_fail"):
@@ -68,7 +68,7 @@ class Progress(AstacusModel):
         old_failed = self.failed
         self.failed += n
         if increase_worth_reporting(old_failed, self.failed):
-            logger.debug("%s %r -> %r", info, n, self)
+            logger.info("%s %r -> %r", info, n, self)
         assert not self.final
 
     def add_success(self, n=1, *, info="add_success"):
@@ -77,7 +77,7 @@ class Progress(AstacusModel):
         self.handled += n
         assert self.handled <= self.total
         if increase_worth_reporting(old_handled, self.handled, total=self.total):
-            logger.debug("%s %r -> %r", info, n, self)
+            logger.info("%s %r -> %r", info, n, self)
         assert not self.final
 
     def download_success(self, size):
@@ -96,7 +96,7 @@ class Progress(AstacusModel):
         assert self.total is not None and self.handled <= self.total
         assert not self.final
         self.final = True
-        logger.debug("done %r", self)
+        logger.info("done %r", self)
 
     @property
     def finished_successfully(self):

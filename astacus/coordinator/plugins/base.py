@@ -161,7 +161,7 @@ class UploadManifestStep(Step[None]):
             plugin=self.plugin,
             plugin_data=plugin_data,
         )
-        logger.debug("Storing backup manifest %s", context.backup_name)
+        logger.info("Storing backup manifest %s", context.backup_name)
         await self.json_storage.upload_json(context.backup_name, manifest)
 
 
@@ -402,7 +402,7 @@ def build_node_index_datas(
 async def upload_node_index_datas(
     cluster: Cluster, storage_name: str, node_index_datas: List[NodeIndexData], validate_file_hashes: bool
 ):
-    logger.debug("upload_node_index_datas")
+    logger.info("upload_node_index_datas")
     start_results: List[Optional[Result]] = []
     nodes_metadata = await get_nodes_metadata(cluster)
     for data in node_index_datas:

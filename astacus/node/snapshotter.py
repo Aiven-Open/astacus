@@ -111,14 +111,14 @@ class Snapshotter:
             except FileNotFoundError:
                 lost += 1
                 if increase_worth_reporting(lost):
-                    logger.debug("#%d. lost - %s disappeared before stat, ignoring", lost, self.src / relative_path)
+                    logger.info("#%d. lost - %s disappeared before stat, ignoring", lost, self.src / relative_path)
                 continue
             if old_snapshotfile and old_snapshotfile.underlying_file_is_the_same(new_snapshotfile):
                 new_snapshotfile.hexdigest = old_snapshotfile.hexdigest
                 new_snapshotfile.content_b64 = old_snapshotfile.content_b64
                 same += 1
                 if increase_worth_reporting(same):
-                    logger.debug("#%d. same - %r in %s is same", same, old_snapshotfile, relative_path)
+                    logger.info("#%d. same - %r in %s is same", same, old_snapshotfile, relative_path)
                 continue
 
             yield new_snapshotfile
@@ -139,7 +139,7 @@ class Snapshotter:
             dst_path = self.dst / relative_dir
             dst_path.mkdir(parents=True, exist_ok=True)
             if increase_worth_reporting(i):
-                logger.debug("#%d. new directory: %r", i, relative_dir)
+                logger.info("#%d. new directory: %r", i, relative_dir)
             changes += 1
         return changes
 
@@ -152,7 +152,7 @@ class Snapshotter:
                 self._remove_snapshotfile(snapshotfile)
             dst_path.unlink()
             if increase_worth_reporting(i):
-                logger.debug("#%d. extra file: %r", i, relative_path)
+                logger.info("#%d. extra file: %r", i, relative_path)
             changes += 1
         return changes
 
@@ -172,15 +172,15 @@ class Snapshotter:
                 # exceptions not handled.
                 existing += 1
                 if increase_worth_reporting(existing):
-                    logger.debug("#%d. %s already existed, ignoring", existing, src_path)
+                    logger.info("#%d. %s already existed, ignoring", existing, src_path)
                 continue
             except FileNotFoundError:
                 disappeared += 1
                 if increase_worth_reporting(disappeared):
-                    logger.debug("#%d. %s disappeared before linking, ignoring", disappeared, src_path)
+                    logger.info("#%d. %s disappeared before linking, ignoring", disappeared, src_path)
                 continue
             if increase_worth_reporting(i - disappeared):
-                logger.debug("#%d. new file: %r", i - disappeared, relative_path)
+                logger.info("#%d. new file: %r", i - disappeared, relative_path)
             changes += 1
         return changes
 

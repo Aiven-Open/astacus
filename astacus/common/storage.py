@@ -119,12 +119,12 @@ class FileStorage(Storage):
 
     @file_error_wrapper
     def delete_hexdigest(self, hexdigest):
-        logger.debug("delete_hexdigest %r", hexdigest)
+        logger.info("delete_hexdigest %r", hexdigest)
         self._hexdigest_to_path(hexdigest).unlink()
 
     def _list(self, suffix):
         results = [p.stem for p in self.path.iterdir() if p.suffix == suffix]
-        logger.debug("_list %s => %d", suffix, len(results))
+        logger.info("_list %s => %d", suffix, len(results))
         return results
 
     def list_hexdigests(self):
@@ -132,13 +132,13 @@ class FileStorage(Storage):
 
     @file_error_wrapper
     def download_hexdigest_to_file(self, hexdigest, f) -> bool:
-        logger.debug("download_hexdigest_to_file %r", hexdigest)
+        logger.info("download_hexdigest_to_file %r", hexdigest)
         path = self._hexdigest_to_path(hexdigest)
         f.write(path.read_bytes())
         return True
 
     def upload_hexdigest_from_file(self, hexdigest, f) -> StorageUploadResult:
-        logger.debug("upload_hexdigest_from_file %r", hexdigest)
+        logger.info("upload_hexdigest_from_file %r", hexdigest)
         path = self._hexdigest_to_path(hexdigest)
         data = f.read()
         path.write_bytes(data)
@@ -146,12 +146,12 @@ class FileStorage(Storage):
 
     @file_error_wrapper
     def delete_json(self, name: str):
-        logger.debug("delete_json %r", name)
+        logger.info("delete_json %r", name)
         self._json_to_path(name).unlink()
 
     @file_error_wrapper
     def download_json(self, name: str):
-        logger.debug("download_json %r", name)
+        logger.info("download_json %r", name)
         path = self._json_to_path(name)
         with open(path) as f:
             return json.load(f)
@@ -160,7 +160,7 @@ class FileStorage(Storage):
         return self._list(self.json_suffix)
 
     def upload_json_str(self, name: str, data: str):
-        logger.debug("upload_json_str %r", name)
+        logger.info("upload_json_str %r", name)
         path = self._json_to_path(name)
         with path.open(mode="w") as f:
             f.write(data)

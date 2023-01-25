@@ -66,7 +66,7 @@ class Op:
             return False
         if self.info.op_status == status:
             return False
-        logger.debug("%s.%d status %s -> %s", self.info.op_name, self.info.op_id, self.info.op_status, status)
+        logger.info("%s.%d status %s -> %s", self.info.op_name, self.info.op_id, self.info.op_status, status)
         self.info.op_status = status
         return True
 
