@@ -102,7 +102,7 @@ def _run_server(args) -> bool:
             "formatters": {
                 "default": {
                     "()": "uvicorn.logging.DefaultFormatter",
-                    "fmt": "%(levelprefix)s %(message)s",
+                    "fmt": "%(levelname)s\t%(name)s\t%(message)s",
                     "use_colors": None,
                 },
                 "access": {
