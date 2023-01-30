@@ -118,7 +118,7 @@ class DownloadOp(NodeOp):
     def start(self, *, req: ipc.SnapshotDownloadRequest):
         self.req = req
         self.snapshotter = self.get_or_create_snapshotter(req.root_globs)
-        logger.debug("start_download %r", req)
+        logger.info("start_download %r", req)
         return self.start_op(op_name="download", op=self, fun=self.download)
 
     def download(self):

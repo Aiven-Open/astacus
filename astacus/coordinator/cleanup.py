@@ -52,9 +52,9 @@ class CleanupOp(LockedCoordinatorOp):
         await self.delete_dangling_hexdigests()
 
     async def delete_dangling_hexdigests(self):
-        logger.debug("delete_dangling_hexdigests - downloading backup list")
+        logger.info("delete_dangling_hexdigests - downloading backup list")
         backups = await self._list_backups()
-        logger.debug("downloading backup manifests")
+        logger.info("downloading backup manifests")
         manifests = await self._download_backup_manifests(backups)
         kept_hexdigests = set()
         for manifest in manifests:
@@ -66,7 +66,7 @@ class CleanupOp(LockedCoordinatorOp):
         extra_hexdigests = set(all_hexdigests).difference(kept_hexdigests)
         if not extra_hexdigests:
             return
-        logger.debug("deleting %d hexdigests from object storage", len(extra_hexdigests))
+        logger.info("deleting %d hexdigests from object storage", len(extra_hexdigests))
         for i, hexdigest in enumerate(extra_hexdigests, 1):
             # Due to rate limiting, it might be better to not do this in parallel
             await self.context.hexdigest_storage.delete_hexdigest(hexdigest)

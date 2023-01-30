@@ -134,7 +134,7 @@ class RewriteEtcdStep(Step[Optional[ETCDDump]]):
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> Optional[ETCDDump]:
         if self.partial_restore_nodes:
-            logger.debug("Skipping etcd rewrite due to partial backup restoration")
+            logger.info("Skipping etcd rewrite due to partial backup restoration")
             return None
         backup_manifest = context.get_result(BackupManifestStep)
         node_to_backup_index = get_node_to_backup_index(
@@ -165,7 +165,7 @@ class RestoreEtcdStep(Step[None]):
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         if self.partial_restore_nodes:
-            logger.debug("Skipping etcd rewrite due to partial backup restoration")
+            logger.info("Skipping etcd rewrite due to partial backup restoration")
         dump = context.get_result(RewriteEtcdStep)
         if dump is not None:
             if not await restore_etcd_dump(client=self.etcd_client, dump=dump):

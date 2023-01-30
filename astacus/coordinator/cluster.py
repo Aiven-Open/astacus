@@ -125,7 +125,7 @@ class Cluster:
             nodes=nodes,
             caller="Cluster._request_lock_call_from_nodes",
         )
-        logger.debug("%s results: %r", call, results)
+        logger.info("%s results: %r", call, results)
         if call in [LockCall.lock, LockCall.relock]:
             expected_result = {"locked": True}
         elif call in [LockCall.unlock]:
@@ -217,7 +217,7 @@ class Cluster:
             if not any(True for result in results if result is None or not result.progress.final):
                 break
         else:
-            logger.debug("wait_successful_results timed out")
+            logger.info("wait_successful_results timed out")
             raise WaitResultError("timed out")
         # The case is valid because we get there when all results are not None
         return cast(List[NR], results)

@@ -51,7 +51,7 @@ class Uploader(ThreadLocalStorage):
                         upload_result = storage.upload_hexdigest_from_file(hexdigest, f)
                 except exceptions.TransientException as ex:
                     # Do not pollute logs with transient exceptions
-                    logger.debug("Transient exception uploading %r: %r", path, ex)
+                    logger.info("Transient exception uploading %r: %r", path, ex)
                     return progress.upload_failure, 0, 0
                 except exceptions.AstacusException:
                     # Report failure - whole step will be retried later

@@ -267,7 +267,7 @@ class SteppedCoordinatorOp(LockedCoordinatorOp):
         name = self.__class__.__name__
         try:
             for attempt in range(1, self.attempts + 1):
-                logger.debug("%s - attempt #%d/%d", name, attempt, self.attempts)
+                logger.info("%s - attempt #%d/%d", name, attempt, self.attempts)
                 context = StepsContext(attempt=attempt)
                 stats_tags: Tags = {"op": name, "attempt": str(attempt)}
                 async with self.stats.async_timing_manager("astacus_attempt_duration", stats_tags):
@@ -287,7 +287,7 @@ class SteppedCoordinatorOp(LockedCoordinatorOp):
             if self.state.shutting_down:
                 logger.info("Step %s not even started due to shutdown", step_name)
                 return False
-            logger.debug("Step %d/%d: %s", i, len(self.steps), step_name)
+            logger.info("Step %d/%d: %s", i, len(self.steps), step_name)
             async with self.stats.async_timing_manager("astacus_step_duration", {"op": op_name, "step": step_name}):
                 with self._progress_handler(cluster, step):
                     try:
