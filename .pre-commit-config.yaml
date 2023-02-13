@@ -16,12 +16,12 @@ repos:
         exclude: ^vendor/
 
   - repo: https://github.com/psf/black
-    rev: 22.12.0
+    rev: 23.1.0
     hooks:
       - id: black
 
   - repo: https://github.com/pycqa/flake8
-    rev: 5.0.4
+    rev: 6.0.0
     hooks:
       - id: flake8
         files: \.py$
@@ -42,7 +42,7 @@ repos:
           - --rcfile=.pylintrc
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v0.910
+    rev: v1.0.0
     hooks:
       - id: mypy
         exclude: ^setup.py|^tests/|^vendor/|^astacus/proto/

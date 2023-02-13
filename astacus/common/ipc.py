@@ -10,7 +10,6 @@ from .magic import StrEnum
 from .progress import Progress
 from .utils import AstacusModel, now, SizeLimitedFile
 from datetime import datetime
-from enum import Enum
 from pathlib import Path
 from pydantic import Field, root_validator
 from typing import List, Optional, Sequence
@@ -56,7 +55,7 @@ class NodeResult(AstacusModel):
 
 class MetadataResult(AstacusModel):
     version: str
-    features: Sequence[str] = Field(default=list)
+    features: Sequence[str] = Field(default=list)  # type: ignore
 
 
 # node.snapshot

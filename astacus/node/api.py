@@ -11,6 +11,7 @@ from .state import node_state, NodeState
 from astacus.common import ipc
 from astacus.common.magic import StrEnum
 from astacus.version import __version__
+from enum import Enum
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Union
 
