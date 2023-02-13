@@ -8,12 +8,12 @@ Root-level astacus configuration, which includes
 - node configuration
 """
 from astacus.common import magic
+from astacus.common.magic import StrEnum
 from astacus.common.rohmustorage import RohmuConfig
 from astacus.common.statsd import StatsdConfig
 from astacus.common.utils import AstacusModel
 from astacus.coordinator.config import APP_KEY as COORDINATOR_CONFIG_KEY, CoordinatorConfig
 from astacus.node.config import APP_KEY as NODE_CONFIG_KEY, NodeConfig
-from enum import Enum
 from fastapi import FastAPI, Request
 from pathlib import Path
 from typing import Optional, Tuple, Union
@@ -27,7 +27,7 @@ APP_HASH_KEY = "global_config_hash"
 
 
 class UvicornConfig(AstacusModel):
-    class HTTPMode(str, Enum):
+    class HTTPMode(StrEnum):
         auto = "auto"  # default, but sometimes leads to httptools
         h11 = "h11"
         httptools = "httptools"  # crashy on Fedora 31 at least

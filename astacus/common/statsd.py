@@ -14,16 +14,16 @@ This is combination of:
 - pydantic configuration + async_timing_manager + explicit typing
 
 """
+from .magic import StrEnum
 from .utils import AstacusModel
 from contextlib import asynccontextmanager, contextmanager
-from enum import Enum
 from typing import Optional, Union
 
 import socket
 import time
 
 
-class MessageFormat(str, Enum):
+class MessageFormat(StrEnum):
     datadog = "datadog"
     telegraf = "telegraf"
 

@@ -7,12 +7,22 @@ Test that StatsClient works as advertised.
 This could be broader, but at least minimal functionality is tested here.
 
 """
+from __future__ import annotations
 
 from astacus.common import statsd
+from typing import Any
 
 import asyncio
 import pytest
 import socket
+
+
+class _Protocol(asyncio.DatagramProtocol):
+    def __init__(self, queue: asyncio.Queue):
+        self.received_queue = queue
+
+    def datagram_received(self, data: bytes, addr: tuple[str | Any, int]) -> None:
+        self.received_queue.put_nowait(data)
 
 
 @pytest.mark.asyncio
@@ -20,19 +30,11 @@ async def test_statsd():
     loop = asyncio.get_running_loop()
     received = asyncio.Queue()
 
-    class _Protocol:
-        def connection_made(self, x):
-            pass
-
-        def datagram_received(self, data, _):
-            received.put_nowait(data)
-
-    def _protocol_factory():
-        return _Protocol()
-
-    transport, _ = await loop.create_datagram_endpoint(_protocol_factory, family=socket.AF_INET)
-    sock = transport.get_extra_info("socket")
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(("", 0))
+
+    transport, _ = await loop.create_datagram_endpoint(lambda: _Protocol(received), sock=sock)
+    sock = transport.get_extra_info("socket")
     port = sock.getsockname()[-1]
 
     # Ensure that no config = no action
