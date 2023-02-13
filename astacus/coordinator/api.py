@@ -10,10 +10,10 @@ from .lockops import LockOps
 from .state import CachedListResponse
 from astacus import config
 from astacus.common import ipc
+from astacus.common.magic import StrEnum
 from astacus.common.op import Op
 from astacus.config import APP_HASH_KEY, get_config_content_and_hash
 from asyncio import to_thread
-from enum import Enum
 from fastapi import APIRouter, Depends, HTTPException, Request
 from urllib.parse import urljoin
 
@@ -26,7 +26,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-class OpName(str, Enum):
+class OpName(StrEnum):
     """(Long-running) operations defined in this API (for coordinator)"""
 
     backup = "backup"

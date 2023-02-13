@@ -13,13 +13,18 @@ ASTACUS_TMPDIR = ".astacus"
 EMBEDDED_FILE_SIZE = 200
 
 
-class LockCall(str, Enum):
+class StrEnum(str, Enum):
+    def __str__(self) -> str:
+        return str(self.value)
+
+
+class LockCall(StrEnum):
     lock = "lock"
     relock = "relock"
     unlock = "unlock"
 
 
-class ErrorCode(str, Enum):
+class ErrorCode(StrEnum):
     cluster_lock_unavailable = "cluster_lock_unavailable"
     operation_id_mismatch = "operation_id_mismatch"
 

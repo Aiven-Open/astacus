@@ -7,6 +7,7 @@ Rohmu-specific actual object storage implementation
 
 """
 
+from .magic import StrEnum
 from .storage import MultiStorage, Storage, StorageUploadResult
 from .utils import AstacusModel
 from astacus.common import exceptions
@@ -26,7 +27,7 @@ import tempfile
 logger = logging.getLogger(__name__)
 
 
-class RohmuStorageType(str, Enum):
+class RohmuStorageType(StrEnum):
     """Embodies what is detected in rohmu.get_class_for_transfer"""
 
     azure = "azure"
@@ -44,7 +45,7 @@ class RohmuModel(AstacusModel):
         use_enum_values = True
 
 
-class RohmuProxyType(str, Enum):
+class RohmuProxyType(StrEnum):
     socks5 = "socks5"
     http = "http"
 

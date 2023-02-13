@@ -6,6 +6,7 @@ See LICENSE for details
 # pydantic validators are class methods in disguise
 # pylint: disable=no-self-argument
 
+from .magic import StrEnum
 from .progress import Progress
 from .utils import AstacusModel, now, SizeLimitedFile
 from datetime import datetime
@@ -20,7 +21,7 @@ import socket
 
 # These are the database plugins we support; list is intentionally
 # enum here, as dynamically adding them isn't priority (for now)
-class Plugin(str, Enum):
+class Plugin(StrEnum):
     cassandra = "cassandra"
     clickhouse = "clickhouse"
     files = "files"
@@ -177,7 +178,7 @@ class SnapshotClearRequest(NodeRequest):
 # node.cassandra
 
 
-class CassandraSubOp(str, Enum):
+class CassandraSubOp(StrEnum):
     get_schema_hash = "get-schema-hash"
     remove_snapshot = "remove-snapshot"
     restore_snapshot = "restore-snapshot"
