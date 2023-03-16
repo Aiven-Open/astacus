@@ -408,24 +408,24 @@ async def _test_freeze_unfreezes_all_mergetree_tables_listed_in_manifest(
     *, step_class: Union[Type[FreezeTablesStep], Type[UnfreezeTablesStep]], operation: str
 ) -> None:
     first_client, second_client = mock_clickhouse_client(), mock_clickhouse_client()
-    step = step_class(clients=[first_client, second_client], freeze_name="Äs`t:/.././@c'_'s")
+    step = step_class(clients=[first_client, second_client], freeze_name="Äs`t:/.././@c'_'s", freeze_unfreeze_timeout=3600.0)
 
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
     context.set_result(RetrieveDatabasesAndTablesStep, (SAMPLE_DATABASES, SAMPLE_TABLES))
     await step.run_step(cluster, context)
-    if operation == "FREEZE":
-        assert first_client.mock_calls == [
-            mock.call.execute(b"ALTER TABLE `db-one`.`table-uno` FREEZE WITH NAME '\\xc3\\x84s`t:/.././@c\\'_\\'s'"),
-            mock.call.execute(b"ALTER TABLE `db-one`.`table-dos` FREEZE WITH NAME '\\xc3\\x84s`t:/.././@c\\'_\\'s'"),
-            mock.call.execute(b"ALTER TABLE `db-two`.`table-eins` FREEZE WITH NAME '\\xc3\\x84s`t:/.././@c\\'_\\'s'"),
-        ]
-    else:
-        assert first_client.mock_calls == [
-            mock.call.execute(b"ALTER TABLE `db-one`.`table-uno` UNFREEZE WITH NAME '\\xc3\\x84s`t:/.././@c\\'_\\'s'"),
-            mock.call.execute(b"ALTER TABLE `db-one`.`table-dos` UNFREEZE WITH NAME '\\xc3\\x84s`t:/.././@c\\'_\\'s'"),
-            mock.call.execute(b"ALTER TABLE `db-two`.`table-eins` UNFREEZE WITH NAME '\\xc3\\x84s`t:/.././@c\\'_\\'s'"),
-        ]
+    first_client_queries = [
+        b"SET receive_timeout=3600.0",
+        b"ALTER TABLE `db-one`.`table-uno` " + operation.encode() + b" WITH NAME '\\xc3\\x84s`t:/.././@c\\'_\\'s'"
+        b" SETTINGS distributed_ddl_task_timeout=3600.0",
+        b"SET receive_timeout=3600.0",
+        b"ALTER TABLE `db-one`.`table-dos` " + operation.encode() + b" WITH NAME '\\xc3\\x84s`t:/.././@c\\'_\\'s'"
+        b" SETTINGS distributed_ddl_task_timeout=3600.0",
+        b"SET receive_timeout=3600.0",
+        b"ALTER TABLE `db-two`.`table-eins` " + operation.encode() + b" WITH NAME '\\xc3\\x84s`t:/.././@c\\'_\\'s'"
+        b" SETTINGS distributed_ddl_task_timeout=3600.0",
+    ]
+    assert [call.args[0] for call in first_client.execute.mock_calls] == first_client_queries
     # The operation is replicated, so we'll only do it on the first client
     assert second_client.mock_calls == []
 
