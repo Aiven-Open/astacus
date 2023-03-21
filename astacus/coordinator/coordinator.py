@@ -7,6 +7,7 @@ from astacus.common import asyncstorage, exceptions, ipc, op, statsd, utils
 from astacus.common.cachingjsonstorage import MultiCachingJsonStorage
 from astacus.common.dependencies import get_request_url
 from astacus.common.magic import ErrorCode
+from astacus.common.op import Op
 from astacus.common.progress import Progress
 from astacus.common.rohmustorage import MultiRohmuStorage
 from astacus.common.statsd import StatsClient, Tags
@@ -93,6 +94,9 @@ class Coordinator(op.OpMixin):
     def get_json_storage(self, storage_name: str) -> asyncstorage.AsyncJsonStorage:
         storage = CacheClearingJsonStorage(state=self.state, storage=self.json_mstorage.get_storage(storage_name))
         return asyncstorage.AsyncJsonStorage(storage)
+
+    def is_busy(self) -> bool:
+        return bool(self.state.op and self.state.op_info.op_status in (Op.Status.running.value, Op.Status.starting.value))
 
 
 class CacheClearingJsonStorage(JsonStorage):

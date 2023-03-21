@@ -18,7 +18,7 @@ import pytest
 
 
 @pytest.fixture(name="app")
-def fixture_app(tmpdir):
+def fixture_app(tmpdir) -> FastAPI:
     app = FastAPI()
     app.include_router(node_router, prefix="/node", tags=["node"])
     root = Path(tmpdir) / "root"
@@ -51,7 +51,7 @@ def fixture_app(tmpdir):
 
 
 @pytest.fixture(name="client")
-def fixture_client(app):
+def fixture_client(app) -> TestClient:
     yield TestClient(app)
 
 

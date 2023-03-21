@@ -139,3 +139,8 @@ async def op_sub_result(*, op_name: OpName, op_id: int, c: Coordinator = Depends
     if not op.subresult_sleeper:
         return
     op.subresult_sleeper.wakeup()
+
+
+@router.get("/busy")
+async def is_busy(*, c: Coordinator = Depends()) -> bool:
+    return c.is_busy()
