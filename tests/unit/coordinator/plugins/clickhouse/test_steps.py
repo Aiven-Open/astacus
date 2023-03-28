@@ -374,7 +374,12 @@ async def test_create_clickhouse_manifest() -> None:
 
 @pytest.mark.asyncio
 async def test_remove_frozen_tables_step() -> None:
-    step = RemoveFrozenTablesStep(freeze_name="some-thing+special")
+    step = RemoveFrozenTablesStep(
+        clients=[mock_clickhouse_client()],
+        freeze_name="some-thing+special",
+        use_system_unfreeze=False,
+        unfreeze_timeout=3600.0,
+    )
     cluster = Cluster(nodes=[CoordinatorNode(url="http://node1/node"), CoordinatorNode(url="http://node2/node")])
     with respx.mock:
         respx.post("http://node1/node/clear").respond(
@@ -392,6 +397,22 @@ async def test_remove_frozen_tables_step() -> None:
                 request: httpx.Request = call[0]
                 if request.url in {"http://node1/node/clear", "http://node2/node/clear"}:
                     assert json.loads(request.read())["root_globs"] == ["shadow/some%2Dthing%2Bspecial/store/**/*"]
+
+
+@pytest.mark.asyncio
+async def test_remove_frozen_tables_step_using_system_unfreeze() -> None:
+    first_client, second_client = mock_clickhouse_client(), mock_clickhouse_client()
+    step = RemoveFrozenTablesStep(
+        clients=[first_client, second_client],
+        freeze_name="some-thing+special",
+        use_system_unfreeze=True,
+        unfreeze_timeout=3600.0,
+    )
+    cluster = Cluster(nodes=[CoordinatorNode(url="http://node1/node"), CoordinatorNode(url="http://node2/node")])
+    await step.run_step(cluster, StepsContext())
+    client_queries = [b"SET receive_timeout=3600.0", b"SYSTEM UNFREEZE WITH NAME 'some-thing+special'"]
+    assert [call.args[0] for call in first_client.execute.mock_calls] == client_queries
+    assert [call.args[0] for call in second_client.execute.mock_calls] == client_queries
 
 
 @pytest.mark.asyncio

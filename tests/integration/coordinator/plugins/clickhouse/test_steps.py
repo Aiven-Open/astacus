@@ -16,7 +16,6 @@ import pytest
 pytestmark = [
     pytest.mark.clickhouse,
     pytest.mark.order("second_to_last"),
-    pytest.mark.x86_64,
 ]
 
 

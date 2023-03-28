@@ -227,17 +227,28 @@ class PrepareClickHouseManifestStep(Step[Dict[str, Any]]):
 class RemoveFrozenTablesStep(Step[None]):
     """
     Removes traces of previous backups that might have failed.
+    When the system unfreeze flag is enabled, clears frozen parts from all disks in a single go.
     """
 
+    clients: List[ClickHouseClient]
     freeze_name: str
+    use_system_unfreeze: bool
+    unfreeze_timeout: float
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
-        root_globs = get_frozen_parts_pattern(self.freeze_name)
-        node_request = ipc.SnapshotClearRequest(root_globs=[root_globs])
-        start_results = await cluster.request_from_nodes(
-            "clear", caller="RemoveFrozenTablesStep", method="post", req=node_request
-        )
-        await cluster.wait_successful_results(start_results=start_results, result_class=ipc.NodeResult)
+        if self.use_system_unfreeze:
+            escaped_freeze_name = escape_sql_string(self.freeze_name.encode())
+            unfreeze_statement = f"SYSTEM UNFREEZE WITH NAME {escaped_freeze_name}".encode()
+            await asyncio.gather(
+                *[execute_with_timeout(client, self.unfreeze_timeout, unfreeze_statement) for client in self.clients]
+            )
+        else:
+            root_globs = get_frozen_parts_pattern(self.freeze_name)
+            node_request = ipc.SnapshotClearRequest(root_globs=[root_globs])
+            start_results = await cluster.request_from_nodes(
+                "clear", caller="RemoveFrozenTablesStep", method="post", req=node_request
+            )
+            await cluster.wait_successful_results(start_results=start_results, result_class=ipc.NodeResult)
 
 
 @dataclasses.dataclass
@@ -291,6 +302,7 @@ class FreezeTablesStep(FreezeUnfreezeTablesStepBase):
         return "FREEZE"
 
 
+@dataclasses.dataclass
 class UnfreezeTablesStep(FreezeUnfreezeTablesStepBase):
     """
     Removes the frozen parts after we're done uploading them.

@@ -7,6 +7,7 @@ disable=
     too-few-public-methods,                  # some pydantic models have 0 and it is fine
     too-many-arguments,
     too-many-instance-attributes,            # give me a break, <= 7
+    too-many-lines,
     too-many-locals,                         # locals make the code more readable
     unused-argument,                         # annoying when fullfilling some API
     use-implicit-booleaness-not-comparison,  # leads to unclear code

@@ -26,7 +26,6 @@ import tempfile
 pytestmark = [
     pytest.mark.clickhouse,
     pytest.mark.order("last"),
-    pytest.mark.x86_64,
 ]
 
 
@@ -43,15 +42,24 @@ def get_restore_steps_names() -> List[str]:
     return [step.__class__.__name__ for step in steps]
 
 
-@pytest.fixture(scope="module", name="restorable_cluster")
-async def fixture_restorable_cluster(ports: Ports, clickhouse_command: ClickHouseCommand) -> AsyncIterator[Path]:
+def _remove_frozen_tables_method(flag: bool) -> str:
+    return "SystemUnfreeze" if flag else "SnapshotClear"
+
+
+@pytest.fixture(scope="module", name="restorable_cluster", params=[True, False], ids=_remove_frozen_tables_method)
+async def fixture_restorable_cluster(
+    ports: Ports, request: SubRequest, clickhouse_command: ClickHouseCommand
+) -> AsyncIterator[Path]:
+    use_system_unfreeze: bool = request.param
     with tempfile.TemporaryDirectory(prefix="storage_") as storage_path_str:
         storage_path = Path(storage_path_str)
         async with create_zookeeper(ports) as zookeeper:
             async with create_clickhouse_cluster(
                 zookeeper, ports, ("s1", "s1", "s2"), clickhouse_command
             ) as clickhouse_cluster:
-                async with create_astacus_cluster(storage_path, zookeeper, clickhouse_cluster, ports) as astacus_cluster:
+                async with create_astacus_cluster(
+                    storage_path, zookeeper, clickhouse_cluster, ports, use_system_unfreeze=use_system_unfreeze
+                ) as astacus_cluster:
                     clients = [get_clickhouse_client(service) for service in clickhouse_cluster.services]
                     await setup_cluster_content(clients, clickhouse_cluster.use_named_collections)
                     await setup_cluster_users(clients)
@@ -73,7 +81,9 @@ async def fixture_restored_cluster(
             zookeeper, ports, ("s1", "s1", "s2"), clickhouse_restore_command
         ) as clickhouse_cluster:
             clients = [get_clickhouse_client(service) for service in clickhouse_cluster.services]
-            async with create_astacus_cluster(restorable_cluster, zookeeper, clickhouse_cluster, ports) as astacus_cluster:
+            async with create_astacus_cluster(
+                restorable_cluster, zookeeper, clickhouse_cluster, ports, use_system_unfreeze=False
+            ) as astacus_cluster:
                 # To test if we can survive transient failures during an entire restore operation,
                 # we first run a partial restore that stops after one of the restore steps,
                 # then we run the full restore, on the same ClickHouse cluster,
