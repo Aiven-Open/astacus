@@ -18,7 +18,7 @@ def _run():
 
     setuptools.setup(
         version=version_for_setup_py,
-        packages=setuptools.find_packages(exclude=["test"]),
+        packages=setuptools.find_packages(exclude=["tests"]),
         extras_require={
             "cassandra": ["cassandra-driver==3.20.2"],
         },
