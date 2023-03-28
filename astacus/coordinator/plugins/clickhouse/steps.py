@@ -244,6 +244,7 @@ class RemoveFrozenTablesStep(Step[None]):
 class FreezeUnfreezeTablesStepBase(Step[None]):
     clients: List[ClickHouseClient]
     freeze_name: str
+    freeze_unfreeze_timeout: float
 
     @property
     def operation(self) -> str:
@@ -255,11 +256,14 @@ class FreezeUnfreezeTablesStepBase(Step[None]):
         for table in tables:
             if table.requires_freezing:
                 # We only run it on the first client because the `ALTER TABLE (UN)FREEZE` is replicated
-                await self.clients[0].execute(
+                await execute_with_timeout(
+                    self.clients[0],
+                    self.freeze_unfreeze_timeout,
                     (
                         f"ALTER TABLE {table.escaped_sql_identifier} "
                         f"{self.operation} WITH NAME {escape_sql_string(self.freeze_name.encode())}"
-                    ).encode()
+                        f" SETTINGS distributed_ddl_task_timeout={self.freeze_unfreeze_timeout}"
+                    ).encode(),
                 )
 
 

@@ -56,6 +56,8 @@ class ClickHousePlugin(CoordinatorPlugin):
     max_concurrent_attach: int = 100
     sync_tables_timeout: float = 3600.0
     max_concurrent_sync: int = 100
+    freeze_timeout: float = 3600.0
+    unfreeze_timeout: float = 3600.0
 
     def get_backup_steps(self, *, context: OperationContext) -> List[Step]:
         zookeeper_client = get_zookeeper_client(self.zookeeper)
@@ -72,13 +74,17 @@ class ClickHousePlugin(CoordinatorPlugin):
             RetrieveDatabasesAndTablesStep(clients=clickhouse_clients),
             RetrieveMacrosStep(clients=clickhouse_clients),
             # Then freeze all tables
-            FreezeTablesStep(clients=clickhouse_clients, freeze_name=self.freeze_name),
+            FreezeTablesStep(
+                clients=clickhouse_clients, freeze_name=self.freeze_name, freeze_unfreeze_timeout=self.freeze_timeout
+            ),
             # Then snapshot and backup all frozen table parts
             SnapshotStep(snapshot_root_globs=[get_frozen_parts_pattern(self.freeze_name)]),
             ListHexdigestsStep(hexdigest_storage=context.hexdigest_storage),
             UploadBlocksStep(storage_name=context.storage_name, validate_file_hashes=False),
             # Cleanup frozen parts
-            UnfreezeTablesStep(clients=clickhouse_clients, freeze_name=self.freeze_name),
+            UnfreezeTablesStep(
+                clients=clickhouse_clients, freeze_name=self.freeze_name, freeze_unfreeze_timeout=self.unfreeze_timeout
+            ),
             # Prepare the manifest for restore
             MoveFrozenPartsStep(freeze_name=self.freeze_name),
             DistributeReplicatedPartsStep(),
