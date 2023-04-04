@@ -63,8 +63,8 @@ def test_api_cassandra_subop(app, ctenv, mocker, subop):
     ctenv.lock()
 
     # No Cassandra configuration in node_config yet -> should fail
-    with pytest.raises(AssertionError):
-        response = ctenv.post(subop=subop, json=req_json)
+    response = ctenv.post(subop=subop, json=req_json)
+    assert response.status_code == 409, response.json()
 
     ctenv.setup_cassandra_node_config()
     subprocess_run = mocker.patch.object(subprocess, "run")
