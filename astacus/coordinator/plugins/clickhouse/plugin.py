@@ -58,6 +58,7 @@ class ClickHousePlugin(CoordinatorPlugin):
     max_concurrent_sync: int = 100
     freeze_timeout: float = 3600.0
     unfreeze_timeout: float = 3600.0
+    use_system_unfreeze: bool = False
 
     def get_backup_steps(self, *, context: OperationContext) -> List[Step]:
         zookeeper_client = get_zookeeper_client(self.zookeeper)
@@ -65,7 +66,12 @@ class ClickHousePlugin(CoordinatorPlugin):
         return [
             ValidateConfigStep(clickhouse=self.clickhouse),
             # Cleanup old frozen parts from failed backup attempts
-            RemoveFrozenTablesStep(freeze_name=self.freeze_name),
+            RemoveFrozenTablesStep(
+                clients=clickhouse_clients,
+                freeze_name=self.freeze_name,
+                use_system_unfreeze=self.use_system_unfreeze,
+                unfreeze_timeout=self.unfreeze_timeout,
+            ),
             # Collect the users, database and tables
             RetrieveAccessEntitiesStep(
                 zookeeper_client=zookeeper_client,
