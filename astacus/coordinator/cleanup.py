@@ -39,8 +39,8 @@ class CleanupOp(LockedCoordinatorOp):
         return set(b for b in await self.context.json_storage.list_jsons() if b.startswith(magic.JSON_BACKUP_PREFIX))
 
     async def _download_backup_manifests(self, backups):
-        # Due to rate limiting, it might be better to not do this in parallel
-        return [await download_backup_manifest(self.context.json_storage, backup) for backup in backups]
+        for backup in backups:
+            yield await download_backup_manifest(self.context.json_storage, backup)
 
     async def delete_backups(self, backups):
         if not backups:
@@ -55,9 +55,9 @@ class CleanupOp(LockedCoordinatorOp):
         logger.info("delete_dangling_hexdigests - downloading backup list")
         backups = await self._list_backups()
         logger.info("downloading backup manifests")
-        manifests = await self._download_backup_manifests(backups)
         kept_hexdigests = set()
-        for manifest in manifests:
+
+        async for manifest in self._download_backup_manifests(backups):
             for result in manifest.snapshot_results:
                 assert result.hashes is not None
                 kept_hexdigests = kept_hexdigests | set(h.hexdigest for h in result.hashes if h.hexdigest)
@@ -78,7 +78,12 @@ class CleanupOp(LockedCoordinatorOp):
         if retention.minimum_backups is not None and retention.minimum_backups >= len(backups):
             return backups
         now = utils.now()
-        manifests = sorted(await self._download_backup_manifests(backups), key=lambda manifest: manifest.start, reverse=True)
+
+        aux = []
+        async for m in self._download_backup_manifests(backups):
+            aux.append((m.start, m.end, m.filename))
+
+        manifests = sorted(aux, reverse=True)
         while manifests:
             if retention.maximum_backups is not None:
                 if retention.maximum_backups < len(manifests):
@@ -94,10 +99,10 @@ class CleanupOp(LockedCoordinatorOp):
 
             if retention.keep_days is not None:
                 manifest = manifests[-1]
-                if (now - manifest.end).days > retention.keep_days:
+                if (now - manifest[1]).days > retention.keep_days:
                     manifests.pop()
                     continue
             # We don't have any other criteria to filter the backup manifests with
             break
 
-        return set(manifest.filename for manifest in manifests)
+        return set(manifest[2] for manifest in manifests)
