@@ -39,14 +39,6 @@ def update_project_version(version_file):
         if save_version(new_ver=git_ver, old_ver=file_ver, version_file=version_file):
             return git_ver
 
-    makefile = os.path.join(os.path.dirname(__file__), "Makefile")
-    if os.path.exists(makefile):
-        with open(makefile, "r") as file_handle:
-            lines = file_handle.readlines()
-        short_ver = [line.split("=", 1)[1].strip() for line in lines if line.startswith("short_ver")][0]
-        if save_version(new_ver=short_ver, old_ver=file_ver, version_file=version_file):
-            return short_ver
-
     if not file_ver:
         raise Exception(f"version not available from git or from file {version_file!r}")
 
