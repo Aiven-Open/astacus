@@ -57,10 +57,8 @@ class CassandraPlugin(CoordinatorPlugin):
         client = CassandraClient(self.client)
         # first *: keyspace name; second *: table name
         snapshot_groups = [
-            SnapshotGroup(root_glob=f"data/*/*/snapshots/{SNAPSHOT_NAME}/manifest.json"),
             SnapshotGroup(root_glob=f"data/*/*/snapshots/{SNAPSHOT_NAME}/*.db"),
             SnapshotGroup(root_glob=f"data/*/*/snapshots/{SNAPSHOT_NAME}/*.txt"),
-            SnapshotGroup(root_glob=f"data/*/*/snapshots/{SNAPSHOT_NAME}/*.cql"),
         ]
 
         return [
