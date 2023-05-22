@@ -17,7 +17,8 @@ https://github.com/samuelcolvin/pydantic/issues/3376
 """
 
 from astacus.common.utils import AstacusModel
-from pydantic import FilePath, root_validator
+from pathlib import Path
+from pydantic import root_validator
 from typing import List, Optional
 
 import yaml
@@ -26,7 +27,7 @@ SNAPSHOT_NAME = "astacus-backup"
 
 
 class CassandraClientConfiguration(AstacusModel):
-    config_path: Optional[FilePath]
+    config_path: Optional[Path]
 
     # WhiteListRoundRobinPolicy contact points
     hostnames: Optional[List[str]]
