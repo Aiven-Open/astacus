@@ -5,7 +5,7 @@ cassandra backup/restore plugin steps
 
 """
 
-from .model import CassandraManifest
+from .model import CassandraConfigurationNode, CassandraManifest, CassandraManifestNode
 from .utils import get_schema_hash, run_subop
 from astacus.common import ipc, utils
 from astacus.common.cassandra.client import CassandraClient
@@ -48,9 +48,40 @@ class ParsePluginManifestStep(Step[CassandraManifest]):
 
 
 @dataclass
-class StartCassandraStep(Step[None]):
+class StopReplacedNodesStep(Step[None]):
     partial_restore_nodes: Optional[List[ipc.PartialRestoreRequestNode]]
+    cassandra_nodes: List[CassandraConfigurationNode]
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
+        node_to_backup_index = context.get_result(MapNodesStep)
+        cassandra_manifest = context.get_result(ParsePluginManifestStep)
+
+        nodes_to_stop = []
+        for backup_index in node_to_backup_index:
+            if backup_index is None:
+                continue
+            backup_node = cassandra_manifest.nodes[backup_index]
+            node_index = self.find_matching_cassandra_index(backup_node)
+            if node_index is None:
+                logger.warning("Failed to match backup node %s, assuming no longer in cluster -> not stopping it")
+                continue
+            nodes_to_stop.append(cluster.nodes[node_index])
+
+        if nodes_to_stop:
+            await run_subop(cluster, ipc.CassandraSubOp.stop_cassandra, nodes=nodes_to_stop, result_class=ipc.NodeResult)
+
+    def find_matching_cassandra_index(self, backup_node: CassandraManifestNode) -> Optional[int]:
+        for cassandra_index, cassandra_node in enumerate(self.cassandra_nodes):
+            if backup_node.matches_configuration_node(cassandra_node):
+                return cassandra_index
+        return None
+
+
+@dataclass
+class StartCassandraStep(Step[None]):
     override_tokens: bool
+    cassandra_nodes: List[CassandraConfigurationNode]
+    replace_backup_nodes: bool = False
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         node_to_backup_index = context.get_result(MapNodesStep)
@@ -61,11 +92,25 @@ class StartCassandraStep(Step[None]):
         for node_index, backup_index in enumerate(node_to_backup_index):
             if backup_index is None:
                 continue
-            nodes.append(cluster.nodes[node_index])
+            coordinator = cluster.nodes[node_index]
+            backup_node = plugin_manifest.nodes[backup_index]
+            nodes.append(coordinator)
             tokens: Optional[List[str]] = None
+            replace_address_first_boot: Optional[str] = None
+            skip_bootstrap_streaming: Optional[bool] = None
             if self.override_tokens:
-                tokens = plugin_manifest.nodes[backup_index].tokens
-            reqs.append(ipc.CassandraStartRequest(tokens=tokens))
+                tokens = backup_node.tokens
+            backup_node_in_cluster = any(n for n in self.cassandra_nodes if backup_node.matches_configuration_node(n))
+            if self.replace_backup_nodes and backup_node_in_cluster:
+                replace_address_first_boot = backup_node.listen_address
+                skip_bootstrap_streaming = True
+            reqs.append(
+                ipc.CassandraStartRequest(
+                    tokens=tokens,
+                    replace_address_first_boot=replace_address_first_boot,
+                    skip_bootstrap_streaming=skip_bootstrap_streaming,
+                )
+            )
 
         await run_subop(cluster, ipc.CassandraSubOp.start_cassandra, nodes=nodes, reqs=reqs, result_class=ipc.NodeResult)
 

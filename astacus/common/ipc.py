@@ -204,6 +204,8 @@ class CassandraSubOp(StrEnum):
 
 class CassandraStartRequest(NodeRequest):
     tokens: Optional[List[str]]
+    replace_address_first_boot: Optional[str]
+    skip_bootstrap_streaming: Optional[bool]
 
 
 class CassandraGetSchemaHashResult(NodeResult):
