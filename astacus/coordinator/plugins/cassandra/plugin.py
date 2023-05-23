@@ -12,7 +12,14 @@ from astacus.common.cassandra.config import CassandraClientConfiguration, SNAPSH
 from astacus.common.snapshot import SnapshotGroup
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins import base
-from astacus.coordinator.plugins.base import CoordinatorPlugin, OperationContext, Step, StepFailedError, StepsContext
+from astacus.coordinator.plugins.base import (
+    CoordinatorPlugin,
+    MapNodesStep,
+    OperationContext,
+    Step,
+    StepFailedError,
+    StepsContext,
+)
 from astacus.coordinator.plugins.cassandra import backup_steps, restore_steps
 from dataclasses import dataclass
 from typing import List, Optional
@@ -95,6 +102,7 @@ class CassandraPlugin(CoordinatorPlugin):
             base.BackupNameStep(json_storage=context.json_storage, requested_name=req.name),
             base.BackupManifestStep(json_storage=context.json_storage),
             restore_steps.ParsePluginManifestStep(),
+            base.MapNodesStep(partial_restore_nodes=req.partial_restore_nodes),
         ] + cluster_restore_steps
 
     def get_restore_schema_from_snapshot_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> List[Step]:

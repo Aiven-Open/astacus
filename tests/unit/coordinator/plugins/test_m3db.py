@@ -13,7 +13,7 @@ from astacus.common.storage import MultiStorage
 from astacus.coordinator.config import CoordinatorConfig
 from astacus.coordinator.coordinator import Coordinator, SteppedCoordinatorOp
 from astacus.coordinator.plugins import m3db
-from astacus.coordinator.plugins.base import BackupManifestStep, StepsContext
+from astacus.coordinator.plugins.base import BackupManifestStep, MapNodesStep, StepsContext
 from astacus.coordinator.plugins.m3db import (
     get_etcd_prefixes,
     InitStep,
@@ -134,7 +134,7 @@ class RestoreTest:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("rt", [RestoreTest(fail_at=i) for i in range(3)] + [RestoreTest(), RestoreTest(partial=True)])
+@pytest.mark.parametrize("rt", [RestoreTest(fail_at=i) for i in range(3)] + [RestoreTest()])
 async def test_m3_restore(coordinator: Coordinator, plugin: M3DBPlugin, etcd_client: ETCDClient, rt: RestoreTest):
     partial_restore_nodes: Optional[List[ipc.PartialRestoreRequestNode]] = None
     if rt.partial:
@@ -143,6 +143,7 @@ async def test_m3_restore(coordinator: Coordinator, plugin: M3DBPlugin, etcd_cli
         c=coordinator,
         attempts=1,
         steps=[
+            MapNodesStep(partial_restore_nodes=partial_restore_nodes),
             RewriteEtcdStep(placement_nodes=plugin.placement_nodes, partial_restore_nodes=partial_restore_nodes),
             RestoreEtcdStep(etcd_client=etcd_client, partial_restore_nodes=partial_restore_nodes),
         ],

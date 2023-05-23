@@ -12,8 +12,8 @@ from .base import (
     BackupManifestStep,
     BackupNameStep,
     CoordinatorPlugin,
-    get_node_to_backup_index,
     ListHexdigestsStep,
+    MapNodesStep,
     OperationContext,
     RestoreStep,
     SnapshotStep,
@@ -77,6 +77,7 @@ class M3DBPlugin(CoordinatorPlugin):
             BackupManifestStep(json_storage=context.json_storage),
             RewriteEtcdStep(placement_nodes=self.placement_nodes, partial_restore_nodes=req.partial_restore_nodes),
             RestoreEtcdStep(etcd_client=etcd_client, partial_restore_nodes=req.partial_restore_nodes),
+            MapNodesStep(partial_restore_nodes=req.partial_restore_nodes),
             RestoreStep(storage_name=context.storage_name, partial_restore_nodes=req.partial_restore_nodes),
         ]
 
@@ -138,11 +139,7 @@ class RewriteEtcdStep(Step[Optional[ETCDDump]]):
             logger.info("Skipping etcd rewrite due to partial backup restoration")
             return None
         backup_manifest = context.get_result(BackupManifestStep)
-        node_to_backup_index = get_node_to_backup_index(
-            partial_restore_nodes=None,
-            snapshot_results=backup_manifest.snapshot_results,
-            nodes=cluster.nodes,
-        )
+        node_to_backup_index = context.get_result(MapNodesStep)
         plugin_manifest = M3DBManifest.parse_obj(backup_manifest.plugin_data)
         etcd = plugin_manifest.etcd.copy(deep=True)
         for prefix in etcd.prefixes:

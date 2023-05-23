@@ -12,13 +12,7 @@ from astacus.common.cassandra.client import CassandraClient
 from astacus.common.cassandra.schema import CassandraKeyspace
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
-from astacus.coordinator.plugins.base import (
-    BackupManifestStep,
-    get_node_to_backup_index,
-    Step,
-    StepFailedError,
-    StepsContext,
-)
+from astacus.coordinator.plugins.base import BackupManifestStep, MapNodesStep, Step, StepFailedError, StepsContext
 from cassandra import metadata as cm
 from dataclasses import dataclass
 from typing import Iterable, List, Optional
@@ -59,13 +53,7 @@ class StartCassandraStep(Step[None]):
     override_tokens: bool
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
-        backup_manifest = context.get_result(BackupManifestStep)
-
-        node_to_backup_index = get_node_to_backup_index(
-            partial_restore_nodes=self.partial_restore_nodes,
-            snapshot_results=backup_manifest.snapshot_results,
-            nodes=cluster.nodes,
-        )
+        node_to_backup_index = context.get_result(MapNodesStep)
 
         reqs: List[ipc.NodeRequest] = []
         nodes: List[CoordinatorNode] = []

@@ -42,11 +42,15 @@ async def test_step_start_cassandra(mocker, override_tokens):
         plugin_data=plugin_manifest.dict(),
     )
 
+    node_to_backup_index = [0]
+
     def get_result(cl):
         if cl == base.BackupManifestStep:
             return backup_manifest
         if cl == restore_steps.ParsePluginManifestStep:
             return plugin_manifest
+        if cl == base.MapNodesStep:
+            return node_to_backup_index
         raise NotImplementedError(cl)
 
     mocker.patch.object(restore_steps, "run_subop")
