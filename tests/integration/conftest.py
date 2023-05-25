@@ -12,6 +12,7 @@ import contextlib
 import dataclasses
 import logging
 import pytest
+import socket
 import subprocess
 import tempfile
 import threading
@@ -114,13 +115,24 @@ class ServiceCluster:
 
 
 class Ports:
-    def __init__(self, start: int = 50000):
+    def __init__(self, start: int = 15000):
         self.start = start
 
     def allocate(self) -> int:
+        while port_is_listening("127.0.0.1", self.start):
+            self.start += 1
         allocated = self.start
         self.start += 1
         return allocated
+
+
+def port_is_listening(hostname: str, port: int, timeout: float = 0.5) -> bool:
+    try:
+        connection = socket.create_connection((hostname, port), timeout)
+        connection.close()
+        return True
+    except socket.error:
+        return False
 
 
 @pytest.fixture(scope="session", name="ports")
