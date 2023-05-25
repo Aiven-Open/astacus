@@ -165,7 +165,9 @@ async def test_restores_access_entities(restored_cluster: List[ClickHouseClient]
             b"SELECT base64Encode(name) FROM system.users WHERE storage = 'replicated' ORDER BY name"
         ) == [[_b64_str(b"alice")], [_b64_str(b"z_\x80_enjoyer")]]
         assert await client.execute(b"SELECT name FROM system.roles WHERE storage = 'replicated' ORDER BY name") == [["bob"]]
-        assert await client.execute(b"SELECT user_name,role_name FROM system.grants ORDER BY user_name,role_name") == [
+        assert await client.execute(
+            b"SELECT DISTINCT user_name,role_name FROM system.grants ORDER BY user_name,role_name"
+        ) == [
             ["alice", None],
             ["default", None],
             [None, "bob"],
