@@ -14,6 +14,7 @@ from tests.integration.coordinator.plugins.clickhouse.conftest import (
     create_astacus_cluster,
     create_clickhouse_cluster,
     get_clickhouse_client,
+    MinioBucket,
     run_astacus_command,
 )
 from typing import AsyncIterable, AsyncIterator, List, Sequence
@@ -48,14 +49,17 @@ def _remove_frozen_tables_method(flag: bool) -> str:
 
 @pytest.fixture(scope="module", name="restorable_cluster", params=[True, False], ids=_remove_frozen_tables_method)
 async def fixture_restorable_cluster(
-    ports: Ports, request: SubRequest, clickhouse_command: ClickHouseCommand
+    ports: Ports,
+    request: SubRequest,
+    clickhouse_command: ClickHouseCommand,
+    minio_bucket: MinioBucket,
 ) -> AsyncIterator[Path]:
     use_system_unfreeze: bool = request.param
     with tempfile.TemporaryDirectory(prefix="storage_") as storage_path_str:
         storage_path = Path(storage_path_str)
         async with create_zookeeper(ports) as zookeeper:
             async with create_clickhouse_cluster(
-                zookeeper, ports, ("s1", "s1", "s2"), clickhouse_command
+                zookeeper, minio_bucket, ports, ("s1", "s1", "s2"), clickhouse_command
             ) as clickhouse_cluster:
                 async with create_astacus_cluster(
                     storage_path, zookeeper, clickhouse_cluster, ports, use_system_unfreeze=use_system_unfreeze
@@ -74,11 +78,12 @@ async def fixture_restored_cluster(
     ports: Ports,
     request: SubRequest,
     clickhouse_restore_command: ClickHouseCommand,
+    minio_bucket: MinioBucket,
 ) -> AsyncIterable[Sequence[ClickHouseClient]]:
     stop_after_step: str = request.param
     async with create_zookeeper(ports) as zookeeper:
         async with create_clickhouse_cluster(
-            zookeeper, ports, ("s1", "s1", "s2"), clickhouse_restore_command
+            zookeeper, minio_bucket, ports, ("s1", "s1", "s2"), clickhouse_restore_command
         ) as clickhouse_cluster:
             clients = [get_clickhouse_client(service) for service in clickhouse_cluster.services]
             async with create_astacus_cluster(

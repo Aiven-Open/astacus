@@ -13,6 +13,7 @@ from astacus.common.rohmustorage import (
     RohmuLocalStorageConfig,
     RohmuStorageType,
 )
+from astacus.common.utils import build_netloc
 from astacus.config import GlobalConfig, UvicornConfig
 from astacus.coordinator.config import CoordinatorConfig, CoordinatorNode
 from astacus.coordinator.plugins.clickhouse.client import HttpClickHouseClient
@@ -25,16 +26,20 @@ from tests.conftest import CLICKHOUSE_PATH_OPTION, CLICKHOUSE_RESTORE_PATH_OPTIO
 from tests.integration.conftest import get_command_path, Ports, run_process_and_wait_for_pattern, Service, ServiceCluster
 from tests.system.conftest import background_process, wait_url_up
 from tests.utils import CONSTANT_TEST_RSA_PRIVATE_KEY, CONSTANT_TEST_RSA_PUBLIC_KEY, get_clickhouse_version
-from typing import AsyncIterator, Awaitable, List, Sequence, Union
+from typing import AsyncIterator, Awaitable, Iterator, List, Optional, Sequence, Union
 
 import argparse
 import asyncio
+import botocore.client
+import botocore.session
 import contextlib
 import dataclasses
 import logging
 import pytest
+import secrets
 import sys
 import tempfile
+import urllib.parse
 
 logger = logging.getLogger(__name__)
 
@@ -107,9 +112,123 @@ async def create_clickhouse_service(ports: Ports, command: ClickHouseCommand) ->
             yield Service(process=process, port=http_port, data_dir=data_dir)
 
 
+@dataclasses.dataclass(frozen=True)
+class MinioBucket:
+    endpoint_url: str
+    access_key_id: str
+    secret_access_key: str
+
+
+@dataclasses.dataclass(frozen=True)
+class MinioService:
+    process: asyncio.subprocess.Process
+    data_dir: Path
+    host: str
+    server_port: int
+    console_port: int
+    root_user: str
+    root_password: str = dataclasses.field(repr=False)
+
+    @property
+    def netloc(self) -> str:
+        return build_netloc(self.host, self.server_port)
+
+    @property
+    def endpoint_url(self) -> str:
+        return urllib.parse.urlunsplit(("http", self.netloc, "", "", ""))
+
+    @contextlib.contextmanager
+    def get_client(self, access_key: str, secret_key: str) -> Iterator[botocore.client.BaseClient]:
+        boto_config = botocore.client.Config(
+            s3={"addressing_style": "path"},
+            signature_version="s3v4",
+            connect_timeout=30,
+            read_timeout=30,
+            retries={"max_attempts": 2},
+        )
+        botocore_session = botocore.session.get_session()
+        s3_client = botocore_session.create_client(
+            "s3",
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            config=boto_config,
+            endpoint_url=self.endpoint_url,
+            use_ssl=False,
+            verify=False,
+        )
+        try:
+            yield s3_client
+        finally:
+            s3_client.close()
+
+    @contextlib.contextmanager
+    def bucket(self, *, bucket_name: str) -> Iterator[MinioBucket]:
+        with self.get_client(access_key=self.root_user, secret_key=self.root_password) as s3_client:
+            s3_client.create_bucket(Bucket=bucket_name, ACL="private")
+            yield MinioBucket(
+                endpoint_url=f"{self.endpoint_url}/{bucket_name}/",
+                access_key_id=self.root_user,
+                secret_access_key=self.root_password,
+            )
+            response = s3_client.list_objects_v2(Bucket=bucket_name)
+            if response["KeyCount"] > 0:
+                s3_client.delete_objects(
+                    Bucket=bucket_name,
+                    Delete={"Objects": [{"Key": content["Key"]} for content in response["Contents"]]},
+                )
+            s3_client.delete_bucket(Bucket=bucket_name)
+
+
+@pytest.fixture(scope="module", name="minio")
+async def fixture_minio(ports: Ports) -> AsyncIterator[MinioService]:
+    async with create_minio_service(ports) as service:
+        yield service
+
+
+@pytest.fixture(scope="module", name="minio_bucket")
+async def fixture_minio_bucket(minio: MinioService) -> AsyncIterator[MinioBucket]:
+    with minio.bucket(bucket_name="clickhouse-bucket") as bucket:
+        yield bucket
+
+
+@contextlib.asynccontextmanager
+async def create_minio_service(ports: Ports) -> AsyncIterator[MinioService]:
+    server_port = ports.allocate()
+    console_port = ports.allocate()
+    host = "::1"
+    server_netloc = build_netloc(host, server_port)
+    console_netloc = build_netloc(host, console_port)
+    root_user = "minio_root"
+    root_password = secrets.token_hex()
+    with tempfile.TemporaryDirectory(prefix=f"minio_{server_port}_") as data_dir_str:
+        data_dir = Path(data_dir_str)
+        env = {
+            "HOME": data_dir_str,
+            "MINIO_ROOT_USER": root_user,
+            "MINIO_ROOT_PASSWORD": root_password,
+        }
+        command = ["/usr/bin/minio", "server", data_dir, "--address", server_netloc, "--console-address", console_netloc]
+        async with run_process_and_wait_for_pattern(
+            args=command,
+            cwd=data_dir,
+            pattern="1 Online",
+            env=env,
+        ) as process:
+            yield MinioService(
+                process=process,
+                data_dir=data_dir,
+                host=host,
+                server_port=server_port,
+                console_port=console_port,
+                root_user=root_user,
+                root_password=root_password,
+            )
+
+
 @contextlib.asynccontextmanager
 async def create_clickhouse_cluster(
     zookeeper: Service,
+    minio_bucket: MinioBucket,
     ports: Ports,
     cluster_shards: Sequence[str],
     command: ClickHouseCommand,
@@ -125,7 +244,14 @@ async def create_clickhouse_cluster(
     with tempfile.TemporaryDirectory(prefix=f"clickhouse_{joined_http_ports}_") as base_data_dir:
         data_dirs = [Path(base_data_dir) / f"clickhouse_{http_port}" for http_port in http_ports]
         configs = create_clickhouse_configs(
-            cluster_shards, zookeeper, data_dirs, tcp_ports, http_ports, interserver_http_ports, use_named_collections
+            cluster_shards,
+            zookeeper,
+            data_dirs,
+            tcp_ports,
+            http_ports,
+            interserver_http_ports,
+            use_named_collections,
+            minio_bucket=minio_bucket,
         )
         for config, data_dir in zip(configs, data_dirs):
             data_dir.mkdir()
@@ -172,6 +298,7 @@ def create_clickhouse_configs(
     http_ports: List[int],
     interserver_http_ports: List[int],
     use_named_collections: bool,
+    minio_bucket: Optional[MinioBucket] = None,
 ):
     replicas = "\n".join(
         f"""
@@ -192,6 +319,39 @@ def create_clickhouse_configs(
         </named_collections>
         """
         if use_named_collections
+        else ""
+    )
+    storage_configuration = (
+        f"""
+        <storage_configuration>
+            <disks>
+                <default>
+                    <type>local</type>
+                </default>
+                <remote>
+                    <type>s3</type>
+                    <endpoint>{minio_bucket.endpoint_url}prefix/</endpoint>
+                    <access_key_id>{minio_bucket.access_key_id}</access_key_id>
+                    <secret_access_key>{minio_bucket.secret_access_key}</secret_access_key>
+                    <support_batch_delete>true</support_batch_delete>
+                    <skip_access_check>true</skip_access_check>
+                </remote>
+            </disks>
+            <policies>
+                <default>
+                    <volumes>
+                        <default><disk>default</disk></default>
+                    </volumes>
+                </default>
+                <remote>
+                    <volumes>
+                        <remote><disk>remote</disk></remote>
+                    </volumes>
+                </remote>
+            </policies>
+        </storage_configuration>
+        """
+        if minio_bucket is not None
         else ""
     )
     return [
@@ -238,6 +398,7 @@ def create_clickhouse_configs(
                         <my_shard>{cluster_shard}</my_shard>
                         <my_replica>r{http_port}</my_replica>
                     </macros>
+                    {storage_configuration}
                 </clickhouse>
                 """
         for cluster_shard, data_dir, tcp_port, http_port, interserver_http_port in zip(

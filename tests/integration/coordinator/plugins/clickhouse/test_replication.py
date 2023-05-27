@@ -8,6 +8,7 @@ from tests.integration.coordinator.plugins.clickhouse.conftest import (
     ClickHouseCommand,
     create_clickhouse_cluster,
     get_clickhouse_client,
+    MinioBucket,
 )
 
 import pytest
@@ -19,9 +20,11 @@ pytestmark = [
 
 
 @pytest.mark.asyncio
-async def test_get_shard_and_replica(ports: Ports, clickhouse_command: ClickHouseCommand) -> None:
+async def test_get_shard_and_replica(ports: Ports, clickhouse_command: ClickHouseCommand, minio_bucket: MinioBucket) -> None:
     async with create_zookeeper(ports) as zookeeper:
-        async with create_clickhouse_cluster(zookeeper, ports, ["s1"], clickhouse_command) as clickhouse_cluster:
+        async with create_clickhouse_cluster(
+            zookeeper, minio_bucket, ports, ["s1"], clickhouse_command
+        ) as clickhouse_cluster:
             clickhouse = clickhouse_cluster.services[0]
             client = get_clickhouse_client(clickhouse)
             await client.execute(
