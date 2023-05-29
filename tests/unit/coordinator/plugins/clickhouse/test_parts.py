@@ -21,6 +21,7 @@ from typing import List
 from uuid import UUID
 
 import copy
+import dataclasses
 import hashlib
 import pytest
 
@@ -234,7 +235,7 @@ def test_get_part_servers_succeeds_on_valid_parts() -> None:
 
 def test_get_part_servers_fails_on_inconsistent_servers_set() -> None:
     part_files = [PartFile(snapshot_file=file, servers={0, 1}) for file in TABLE_1_PART_1]
-    part_files[1].servers = {0, 1, 2}
+    part_files[1] = dataclasses.replace(part_files[1], servers={0, 1, 2})
     with pytest.raises(ValueError):
         get_part_servers(part_files)
 

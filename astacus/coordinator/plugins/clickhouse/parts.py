@@ -12,31 +12,31 @@ from .manifest import Table
 from .replication import DatabaseReplica
 from astacus.common.ipc import SnapshotFile, SnapshotResult
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import AbstractSet, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 import dataclasses
 import re
 import uuid
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True, slots=True)
 class PartFile:
     snapshot_file: SnapshotFile
-    servers: Set[int]
+    servers: AbstractSet[int]
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class PartKey:
     table_uuid: uuid.UUID
     shard_name: str
     part_name: str
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class Part:
     table_uuid: uuid.UUID
     part_name: str
-    servers: Set[int]
+    servers: AbstractSet[int]
     snapshot_files: Sequence[SnapshotFile]
     total_size: int
 
@@ -118,7 +118,7 @@ def add_file_to_parts(
     if part_file is None:
         part_files[snapshot_file.relative_path] = PartFile(snapshot_file=snapshot_file, servers={server_index})
     elif part_file.snapshot_file.equals_excluding_mtime(snapshot_file):
-        part_file.servers.add(server_index)
+        part_files[snapshot_file.relative_path] = dataclasses.replace(part_file, servers=part_file.servers | {server_index})
     else:
         raise ValueError(
             f"Inconsistent part file {snapshot_file.relative_path} of part {part_key} "
@@ -129,13 +129,13 @@ def add_file_to_parts(
     return True
 
 
-def get_part_servers(part_files: Iterable[PartFile]) -> Set[int]:
+def get_part_servers(part_files: Iterable[PartFile]) -> AbstractSet[int]:
     """
     Return the list of server indices where the part made of all these files is present.
 
     Raises a ValueError if not all servers contain all files.
     """
-    part_servers: Optional[Set[int]] = None
+    part_servers: Optional[AbstractSet[int]] = None
     for part_file in part_files:
         if part_servers is None:
             part_servers = part_file.servers
