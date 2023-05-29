@@ -7,6 +7,7 @@ from astacus.coordinator.plugins.zookeeper import (
     FakeZooKeeperClient,
     NodeExistsError,
     NoNodeError,
+    NotEmptyError,
     RolledBackError,
     RuntimeInconsistency,
     TransactionError,
@@ -68,6 +69,46 @@ async def test_fake_zookeeper_client_set_missing_node_fails() -> None:
     async with client.connect() as connection:
         with pytest.raises(NoNodeError):
             await connection.set("/path/to_key", b"content")
+
+
+@pytest.mark.asyncio
+async def test_fake_zookeeper_client_delete() -> None:
+    client = FakeZooKeeperClient()
+    async with client.connect() as connection:
+        await connection.create("/path/to_key", b"content")
+        await connection.delete("/path/to_key")
+        assert not await connection.exists("/path/to_key")
+
+
+@pytest.mark.asyncio
+async def test_fake_zookeeper_client_delete_fails_if_not_exist() -> None:
+    client = FakeZooKeeperClient()
+    async with client.connect() as connection:
+        with pytest.raises(NoNodeError):
+            await connection.delete("/path/to_key")
+
+
+@pytest.mark.asyncio
+async def test_fake_zookeeper_client_delete_fails_if_has_children() -> None:
+    client = FakeZooKeeperClient()
+    async with client.connect() as connection:
+        await connection.create("/path/to_key", b"content")
+        await connection.create("/path/to_key/sub1", b"content")
+        with pytest.raises(NotEmptyError):
+            await connection.delete("/path/to_key")
+
+
+@pytest.mark.asyncio
+async def test_fake_zookeeper_client_delete_recursive() -> None:
+    client = FakeZooKeeperClient()
+    async with client.connect() as connection:
+        await connection.create("/path/to_key", b"content")
+        await connection.create("/path/to_key/sub1", b"content")
+        await connection.create("/path/to_key/sub2", b"content")
+        await connection.delete("/path/to_key", recursive=True)
+        assert not await connection.exists("/path/to_key")
+        assert not await connection.exists("/path/to_key/sub1")
+        assert not await connection.exists("/path/to_key/sub2")
 
 
 @pytest.mark.asyncio
