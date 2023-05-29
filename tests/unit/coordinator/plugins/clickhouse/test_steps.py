@@ -6,7 +6,7 @@ from astacus.common.exceptions import TransientException
 from astacus.common.ipc import BackupManifest, Plugin, SnapshotFile, SnapshotResult, SnapshotState
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
-from astacus.coordinator.plugins.base import BackupManifestStep, SnapshotStep, StepFailedError, StepsContext
+from astacus.coordinator.plugins.base import BackupManifestStep, StepFailedError, StepsContext
 from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, StubClickHouseClient
 from astacus.coordinator.plugins.clickhouse.config import ClickHouseConfiguration, ClickHouseNode, ReplicatedDatabaseSettings
 from astacus.coordinator.plugins.clickhouse.disks import DiskPaths
@@ -22,7 +22,6 @@ from astacus.coordinator.plugins.clickhouse.replication import DatabaseReplica
 from astacus.coordinator.plugins.clickhouse.steps import (
     AttachMergeTreePartsStep,
     ClickHouseManifestStep,
-    DistributeReplicatedPartsStep,
     FreezeTablesStep,
     ListDatabaseReplicasStep,
     PrepareClickHouseManifestStep,
@@ -432,107 +431,6 @@ async def _test_freeze_unfreezes_all_mergetree_tables_listed_in_manifest(
     assert [call.args[0] for call in first_client.execute.mock_calls] == first_client_queries
     # The operation is replicated, so we'll only do it on the first client
     assert second_client.mock_calls == []
-
-
-@pytest.mark.asyncio
-async def test_distribute_parts_of_replicated_tables() -> None:
-    step = DistributeReplicatedPartsStep()
-    context = StepsContext()
-    context.set_result(
-        SnapshotStep,
-        [
-            SnapshotResult(
-                state=SnapshotState(
-                    root_globs=[],
-                    files=[
-                        SnapshotFile(
-                            relative_path=Path("store/000/00000000-0000-0000-0000-100000000001/detached/all_0_0_0/data.bin"),
-                            file_size=1000,
-                            mtime_ns=0,
-                            hexdigest="0001",
-                        ),
-                        SnapshotFile(
-                            relative_path=Path("store/000/00000000-0000-0000-0000-100000000001/detached/all_1_1_0/data.bin"),
-                            file_size=1000,
-                            mtime_ns=0,
-                            hexdigest="0002",
-                        ),
-                        SnapshotFile(
-                            relative_path=Path("store/000/00000000-0000-0000-0000-100000000002/detached/all_0_0_0/data.bin"),
-                            file_size=1000,
-                            mtime_ns=0,
-                            hexdigest="0003",
-                        ),
-                    ],
-                ),
-            ),
-            SnapshotResult(
-                state=SnapshotState(
-                    root_globs=[],
-                    files=[
-                        SnapshotFile(
-                            relative_path=Path("store/000/00000000-0000-0000-0000-100000000001/detached/all_0_0_0/data.bin"),
-                            file_size=1000,
-                            mtime_ns=0,
-                            hexdigest="0001",
-                        ),
-                        SnapshotFile(
-                            relative_path=Path("store/000/00000000-0000-0000-0000-100000000001/detached/all_1_1_0/data.bin"),
-                            file_size=1000,
-                            mtime_ns=0,
-                            hexdigest="0002",
-                        ),
-                        SnapshotFile(
-                            relative_path=Path("store/000/00000000-0000-0000-0000-100000000002/detached/all_0_0_0/data.bin"),
-                            file_size=1000,
-                            mtime_ns=0,
-                            hexdigest="0004",
-                        ),
-                    ],
-                ),
-            ),
-        ],
-    )
-    context.set_result(RetrieveDatabasesAndTablesStep, (SAMPLE_DATABASES, SAMPLE_TABLES))
-    context.set_result(
-        RetrieveMacrosStep,
-        [
-            Macros.from_mapping({b"my_shard": b"shard_1", b"my_replica": b"replica_1"}),
-            Macros.from_mapping({b"my_shard": b"shard_1", b"my_replica": b"replica_2"}),
-        ],
-    )
-    await step.run_step(Cluster(nodes=[]), context)
-    snapshot_results = context.get_result(SnapshotStep)
-    # On the ReplicatedMergeTree table (uuid ending in 0001), each server has only half the parts now
-    # On the MergeTree table (uuid ending in 0002), each server has kept its own part (same name but different digest)
-    assert sorted(snapshot_results[0].state.files) == [
-        SnapshotFile(
-            relative_path=Path("store/000/00000000-0000-0000-0000-100000000001/detached/all_0_0_0/data.bin"),
-            file_size=1000,
-            mtime_ns=0,
-            hexdigest="0001",
-        ),
-        SnapshotFile(
-            relative_path=Path("store/000/00000000-0000-0000-0000-100000000002/detached/all_0_0_0/data.bin"),
-            file_size=1000,
-            mtime_ns=0,
-            hexdigest="0003",
-        ),
-    ]
-    assert sorted(snapshot_results[1].state.files) == [
-        SnapshotFile(
-            relative_path=Path("store/000/00000000-0000-0000-0000-100000000001/detached/all_1_1_0/data.bin"),
-            file_size=1000,
-            mtime_ns=0,
-            hexdigest="0002",
-        ),
-        SnapshotFile(
-            relative_path=Path("store/000/00000000-0000-0000-0000-100000000002/detached/all_0_0_0/data.bin"),
-            file_size=1000,
-            mtime_ns=0,
-            hexdigest="0004",
-        ),
-    ]
 
 
 def b64_str(b: bytes) -> str:

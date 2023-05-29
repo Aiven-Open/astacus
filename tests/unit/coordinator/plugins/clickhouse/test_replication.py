@@ -3,8 +3,8 @@ Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
 from astacus.coordinator.plugins.clickhouse.macros import Macros
-from astacus.coordinator.plugins.clickhouse.manifest import ReplicatedDatabase, Table
-from astacus.coordinator.plugins.clickhouse.replication import DatabaseReplica, get_databases_replicas, get_tables_replicas
+from astacus.coordinator.plugins.clickhouse.manifest import ReplicatedDatabase
+from astacus.coordinator.plugins.clickhouse.replication import DatabaseReplica, get_databases_replicas
 from uuid import UUID
 
 
@@ -24,46 +24,6 @@ def test_get_databases_replicas() -> None:
             DatabaseReplica(shard_name="all", replica_name="r2"),
         ],
         b"sharded_db": [
-            DatabaseReplica(shard_name="s1", replica_name="r1"),
-            DatabaseReplica(shard_name="s2", replica_name="r2"),
-        ],
-    }
-
-
-def test_get_tables_replicas() -> None:
-    replicated_tables = [
-        Table(
-            database=b"default_db",
-            name=b"table_one",
-            engine="ReplicatedMergeTree",
-            uuid=UUID(int=3),
-            create_query=b"CREATE ...",
-        ),
-        Table(
-            database=b"sharded_db",
-            name=b"table_two",
-            engine="ReplicatedMergeTree",
-            uuid=UUID(int=4),
-            create_query=b"CREATE ...",
-        ),
-    ]
-    databases_replicas = {
-        b"default_db": [
-            DatabaseReplica(shard_name="all", replica_name="r1"),
-            DatabaseReplica(shard_name="all", replica_name="r2"),
-        ],
-        b"sharded_db": [
-            DatabaseReplica(shard_name="s1", replica_name="r1"),
-            DatabaseReplica(shard_name="s2", replica_name="r2"),
-        ],
-    }
-    tables_replicas = get_tables_replicas(replicated_tables, databases_replicas)
-    assert tables_replicas == {
-        UUID(int=3): [
-            DatabaseReplica(shard_name="all", replica_name="r1"),
-            DatabaseReplica(shard_name="all", replica_name="r2"),
-        ],
-        UUID(int=4): [
             DatabaseReplica(shard_name="s1", replica_name="r1"),
             DatabaseReplica(shard_name="s2", replica_name="r2"),
         ],

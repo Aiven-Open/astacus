@@ -11,14 +11,8 @@ from .disks import DiskPaths
 from .escaping import escape_for_file_name, unescape_from_file_name
 from .macros import fetch_server_macros, Macros
 from .manifest import AccessEntity, ClickHouseBackupVersion, ClickHouseManifest, ReplicatedDatabase, Table
-from .parts import distribute_parts_to_servers, group_files_into_parts, list_parts_to_attach
-from .replication import (
-    DatabaseReplica,
-    get_databases_replicas,
-    get_shard_and_replica,
-    get_tables_replicas,
-    sync_replicated_database,
-)
+from .parts import list_parts_to_attach
+from .replication import DatabaseReplica, get_databases_replicas, get_shard_and_replica, sync_replicated_database
 from astacus.common import ipc
 from astacus.common.exceptions import TransientException
 from astacus.common.limiter import gather_limited
@@ -343,39 +337,6 @@ class MoveFrozenPartsStep(Step[None]):
             for snapshot_file in snapshot_result.state.files:
                 parsed_path = self.disk_paths.parse_part_file_path(snapshot_file.relative_path)
                 snapshot_file.relative_path = dataclasses.replace(parsed_path, freeze_name=None, detached=False).to_path()
-
-
-@dataclasses.dataclass
-class DistributeReplicatedPartsStep(Step[None]):
-    """
-    Distribute replicated parts of table using the Replicated family of table engines.
-
-    To avoid duplicating data during restoration, we must attach each replicated part
-    to only on one server of each shard and let the replication do its work.
-
-    This also serve as a performance and cost optimisation. Instead of fetching
-    the same part from backup storage once for each server, we can fetch it only
-    once for each shard and then let the cluster exchange parts internally.
-
-    This step must be run after `MoveFrozenPartsStep` to find the correct paths
-    in the snapshot.
-    """
-
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
-        snapshot_results = context.get_result(SnapshotStep)
-        snapshot_files = [
-            snapshot_result.state.files for snapshot_result in snapshot_results if snapshot_result.state is not None
-        ]
-        replicated_databases, tables = context.get_result(RetrieveDatabasesAndTablesStep)
-        replicated_tables = [table for table in tables if table.is_replicated]
-        server_macros = context.get_result(RetrieveMacrosStep)
-        databases_replicas = get_databases_replicas(replicated_databases, server_macros)
-        tables_replicas = get_tables_replicas(replicated_tables, databases_replicas)
-        parts, server_files = group_files_into_parts(snapshot_files, tables_replicas)
-        distribute_parts_to_servers(parts, server_files)
-        for files, snapshot_result in zip(server_files, snapshot_results):
-            assert snapshot_result.state is not None
-            snapshot_result.state.files = files
 
 
 @dataclasses.dataclass
