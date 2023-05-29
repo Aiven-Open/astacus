@@ -69,7 +69,6 @@ class ClickHousePlugin(CoordinatorPlugin):
             RemoveFrozenTablesStep(
                 clients=clickhouse_clients,
                 freeze_name=self.freeze_name,
-                use_system_unfreeze=self.use_system_unfreeze,
                 unfreeze_timeout=self.unfreeze_timeout,
             ),
             # Collect the users, database and tables

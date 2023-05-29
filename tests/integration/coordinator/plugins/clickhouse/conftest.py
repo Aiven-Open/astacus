@@ -280,10 +280,8 @@ async def create_astacus_cluster(
     zookeeper: Service,
     clickhouse_cluster: ClickHouseServiceCluster,
     ports: Ports,
-    *,
-    use_system_unfreeze: bool,
 ) -> AsyncIterator[ServiceCluster]:
-    configs = create_astacus_configs(zookeeper, clickhouse_cluster, ports, Path(storage_path), use_system_unfreeze)
+    configs = create_astacus_configs(zookeeper, clickhouse_cluster, ports, Path(storage_path))
     async with contextlib.AsyncExitStack() as stack:
         astacus_services_coro: List[Awaitable] = [stack.enter_async_context(_astacus(config=config)) for config in configs]
         astacus_services = list(await asyncio.gather(*astacus_services_coro))
@@ -438,7 +436,6 @@ def create_astacus_configs(
     clickhouse_cluster: ClickHouseServiceCluster,
     ports: Ports,
     storage_path: Path,
-    use_system_unfreeze: bool,
 ) -> List[GlobalConfig]:
     storage_tmp_path = storage_path / "tmp"
     storage_tmp_path.mkdir(exist_ok=True)
@@ -473,7 +470,6 @@ def create_astacus_configs(
                     ),
                     sync_databases_timeout=10.0,
                     sync_tables_timeout=30.0,
-                    use_system_unfreeze=use_system_unfreeze,
                 ).jsondict(),
             ),
             node=NodeConfig(

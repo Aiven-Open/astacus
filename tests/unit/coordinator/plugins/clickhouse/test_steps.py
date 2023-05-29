@@ -3,9 +3,7 @@ Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
 from astacus.common.exceptions import TransientException
-from astacus.common.ipc import BackupManifest, NodeResult, Plugin, SnapshotFile, SnapshotResult, SnapshotState
-from astacus.common.op import Op
-from astacus.common.progress import Progress
+from astacus.common.ipc import BackupManifest, Plugin, SnapshotFile, SnapshotResult, SnapshotState
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins.base import BackupManifestStep, SnapshotStep, StepFailedError, StepsContext
@@ -42,10 +40,7 @@ from unittest.mock import _Call as MockCall  # pylint: disable=protected-access
 
 import asyncio
 import datetime
-import httpx
-import json
 import pytest
-import respx
 import sys
 import uuid
 
@@ -373,39 +368,11 @@ async def test_create_clickhouse_manifest() -> None:
 
 
 @pytest.mark.asyncio
-async def test_remove_frozen_tables_step() -> None:
-    step = RemoveFrozenTablesStep(
-        clients=[mock_clickhouse_client()],
-        freeze_name="some-thing+special",
-        use_system_unfreeze=False,
-        unfreeze_timeout=3600.0,
-    )
-    cluster = Cluster(nodes=[CoordinatorNode(url="http://node1/node"), CoordinatorNode(url="http://node2/node")])
-    with respx.mock:
-        respx.post("http://node1/node/clear").respond(
-            json=Op.StartResult(op_id=123, status_url="http://node1/clear/123").jsondict()
-        )
-        respx.post("http://node2/node/clear").respond(
-            json=Op.StartResult(op_id=456, status_url="http://node2/clear/456").jsondict()
-        )
-        respx.get("http://node1/clear/123").respond(json=NodeResult(progress=Progress(final=True)).jsondict())
-        respx.get("http://node2/clear/456").respond(json=NodeResult(progress=Progress(final=True)).jsondict())
-        try:
-            await step.run_step(cluster, StepsContext())
-        finally:
-            for call in respx.calls:
-                request: httpx.Request = call[0]
-                if request.url in {"http://node1/node/clear", "http://node2/node/clear"}:
-                    assert json.loads(request.read())["root_globs"] == ["shadow/some%2Dthing%2Bspecial/store/**/*"]
-
-
-@pytest.mark.asyncio
 async def test_remove_frozen_tables_step_using_system_unfreeze() -> None:
     first_client, second_client = mock_clickhouse_client(), mock_clickhouse_client()
     step = RemoveFrozenTablesStep(
         clients=[first_client, second_client],
         freeze_name="some-thing+special",
-        use_system_unfreeze=True,
         unfreeze_timeout=3600.0,
     )
     cluster = Cluster(nodes=[CoordinatorNode(url="http://node1/node"), CoordinatorNode(url="http://node2/node")])

@@ -10,7 +10,7 @@ from .dependencies import access_entities_sorted_by_dependencies, tables_sorted_
 from .escaping import escape_for_file_name, unescape_from_file_name
 from .macros import fetch_server_macros, Macros
 from .manifest import AccessEntity, ClickHouseManifest, ReplicatedDatabase, Table
-from .parts import distribute_parts_to_servers, get_frozen_parts_pattern, group_files_into_parts, list_parts_to_attach
+from .parts import distribute_parts_to_servers, group_files_into_parts, list_parts_to_attach
 from .replication import (
     DatabaseReplica,
     get_databases_replicas,
@@ -232,23 +232,14 @@ class RemoveFrozenTablesStep(Step[None]):
 
     clients: List[ClickHouseClient]
     freeze_name: str
-    use_system_unfreeze: bool
     unfreeze_timeout: float
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
-        if self.use_system_unfreeze:
-            escaped_freeze_name = escape_sql_string(self.freeze_name.encode())
-            unfreeze_statement = f"SYSTEM UNFREEZE WITH NAME {escaped_freeze_name}".encode()
-            await asyncio.gather(
-                *[execute_with_timeout(client, self.unfreeze_timeout, unfreeze_statement) for client in self.clients]
-            )
-        else:
-            root_globs = get_frozen_parts_pattern(self.freeze_name)
-            node_request = ipc.SnapshotClearRequest(root_globs=[root_globs])
-            start_results = await cluster.request_from_nodes(
-                "clear", caller="RemoveFrozenTablesStep", method="post", req=node_request
-            )
-            await cluster.wait_successful_results(start_results=start_results, result_class=ipc.NodeResult)
+        escaped_freeze_name = escape_sql_string(self.freeze_name.encode())
+        unfreeze_statement = f"SYSTEM UNFREEZE WITH NAME {escaped_freeze_name}".encode()
+        await asyncio.gather(
+            *[execute_with_timeout(client, self.unfreeze_timeout, unfreeze_statement) for client in self.clients]
+        )
 
 
 @dataclasses.dataclass
