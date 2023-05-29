@@ -2,18 +2,25 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
-from .config import ClickHouseConfiguration, get_clickhouse_clients, get_zookeeper_client, ReplicatedDatabaseSettings
-from .parts import get_frozen_parts_pattern
+from .config import (
+    ClickHouseConfiguration,
+    DiskConfiguration,
+    DiskType,
+    get_clickhouse_clients,
+    get_zookeeper_client,
+    ReplicatedDatabaseSettings,
+)
+from .disks import DiskPaths
 from .steps import (
     AttachMergeTreePartsStep,
     ClickHouseManifestStep,
-    DistributeReplicatedPartsStep,
     FreezeTablesStep,
     ListDatabaseReplicasStep,
     MoveFrozenPartsStep,
     PrepareClickHouseManifestStep,
     RemoveFrozenTablesStep,
     RestoreAccessEntitiesStep,
+    RestoreReplicaStep,
     RestoreReplicatedDatabasesStep,
     RetrieveAccessEntitiesStep,
     RetrieveDatabasesAndTablesStep,
@@ -37,7 +44,8 @@ from astacus.coordinator.plugins.base import (
     UploadManifestStep,
 )
 from astacus.coordinator.plugins.zookeeper_config import ZooKeeperConfiguration
-from typing import List
+from pathlib import Path
+from typing import List, Sequence
 
 
 class ClickHousePlugin(CoordinatorPlugin):
@@ -47,22 +55,29 @@ class ClickHousePlugin(CoordinatorPlugin):
     replicated_databases_zookeeper_path: str = "/clickhouse/databases"
     replicated_databases_settings: ReplicatedDatabaseSettings = ReplicatedDatabaseSettings()
     freeze_name: str = "astacus"
+    disks: Sequence[DiskConfiguration] = [DiskConfiguration(type=DiskType.local, path=Path(""), name="default")]
     drop_databases_timeout: float = 300.0
     max_concurrent_drop_databases: int = 100
     create_databases_timeout: float = 60.0
     max_concurrent_create_databases: int = 100
     sync_databases_timeout: float = 60.0
+    restart_replica_timeout: float = 300.0
+    max_concurrent_restart_replica: int = 100
+    restore_replica_timeout: float = 300.0
+    max_concurrent_restore_replica: int = 100
+    freeze_timeout: float = 3600.0
+    unfreeze_timeout: float = 3600.0
+    # Deprecated parameter, ignored
     attach_timeout: float = 300.0
     max_concurrent_attach: int = 100
     sync_tables_timeout: float = 3600.0
     max_concurrent_sync: int = 100
-    freeze_timeout: float = 3600.0
-    unfreeze_timeout: float = 3600.0
-    use_system_unfreeze: bool = False
+    use_system_unfreeze: bool = True
 
     def get_backup_steps(self, *, context: OperationContext) -> List[Step]:
         zookeeper_client = get_zookeeper_client(self.zookeeper)
         clickhouse_clients = get_clickhouse_clients(self.clickhouse)
+        disk_paths = DiskPaths.from_disk_paths([disk.path for disk in self.disks])
         return [
             ValidateConfigStep(clickhouse=self.clickhouse),
             # Cleanup old frozen parts from failed backup attempts
@@ -83,7 +98,9 @@ class ClickHousePlugin(CoordinatorPlugin):
                 clients=clickhouse_clients, freeze_name=self.freeze_name, freeze_unfreeze_timeout=self.freeze_timeout
             ),
             # Then snapshot and backup all frozen table parts
-            SnapshotStep(snapshot_root_globs=[get_frozen_parts_pattern(self.freeze_name)]),
+            SnapshotStep(
+                snapshot_root_globs=disk_paths.get_frozen_parts_patterns(self.freeze_name),
+            ),
             ListHexdigestsStep(hexdigest_storage=context.hexdigest_storage),
             UploadBlocksStep(storage_name=context.storage_name, validate_file_hashes=False),
             # Cleanup frozen parts
@@ -91,8 +108,7 @@ class ClickHousePlugin(CoordinatorPlugin):
                 clients=clickhouse_clients, freeze_name=self.freeze_name, freeze_unfreeze_timeout=self.unfreeze_timeout
             ),
             # Prepare the manifest for restore
-            MoveFrozenPartsStep(freeze_name=self.freeze_name),
-            DistributeReplicatedPartsStep(),
+            MoveFrozenPartsStep(disk_paths=disk_paths),
             PrepareClickHouseManifestStep(),
             UploadManifestStep(
                 json_storage=context.json_storage,
@@ -112,6 +128,7 @@ class ClickHousePlugin(CoordinatorPlugin):
             raise NotImplementedError
         zookeeper_client = get_zookeeper_client(self.zookeeper)
         clients = get_clickhouse_clients(self.clickhouse)
+        disk_paths = DiskPaths.from_disk_paths([disk.path for disk in self.disks])
         return [
             ValidateConfigStep(clickhouse=self.clickhouse),
             BackupNameStep(json_storage=context.json_storage, requested_name=req.name),
@@ -136,6 +153,7 @@ class ClickHousePlugin(CoordinatorPlugin):
             RestoreStep(storage_name=context.storage_name, partial_restore_nodes=req.partial_restore_nodes),
             AttachMergeTreePartsStep(
                 clients=clients,
+                disk_paths=disk_paths,
                 attach_timeout=self.attach_timeout,
                 max_concurrent_attach=self.max_concurrent_attach,
             ),
@@ -143,6 +161,15 @@ class ClickHousePlugin(CoordinatorPlugin):
                 clients=clients,
                 sync_timeout=self.sync_tables_timeout,
                 max_concurrent_sync=self.max_concurrent_sync,
+            ),
+            RestoreReplicaStep(
+                zookeeper_client=zookeeper_client,
+                clients=clients,
+                disk_paths=disk_paths,
+                restart_timeout=self.restart_replica_timeout,
+                max_concurrent_restart=self.max_concurrent_restart_replica,
+                restore_timeout=self.restore_replica_timeout,
+                max_concurrent_restore=self.max_concurrent_restore_replica,
             ),
             # Keeping this step last avoids access from non-admin users while we are still restoring
             RestoreAccessEntitiesStep(

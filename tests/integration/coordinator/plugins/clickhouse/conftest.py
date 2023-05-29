@@ -17,7 +17,13 @@ from astacus.common.utils import build_netloc
 from astacus.config import GlobalConfig, UvicornConfig
 from astacus.coordinator.config import CoordinatorConfig, CoordinatorNode
 from astacus.coordinator.plugins.clickhouse.client import HttpClickHouseClient
-from astacus.coordinator.plugins.clickhouse.config import ClickHouseConfiguration, ClickHouseNode, ReplicatedDatabaseSettings
+from astacus.coordinator.plugins.clickhouse.config import (
+    ClickHouseConfiguration,
+    ClickHouseNode,
+    DiskConfiguration,
+    DiskType,
+    ReplicatedDatabaseSettings,
+)
 from astacus.coordinator.plugins.clickhouse.plugin import ClickHousePlugin
 from astacus.coordinator.plugins.zookeeper_config import ZooKeeperConfiguration, ZooKeeperNode
 from astacus.node.config import NodeConfig
@@ -468,6 +474,10 @@ def create_astacus_configs(
                         cluster_username=clickhouse_cluster.services[0].username,
                         cluster_password=clickhouse_cluster.services[0].password,
                     ),
+                    disks=[
+                        DiskConfiguration(type=DiskType.local, path=Path(""), name="default"),
+                        DiskConfiguration(type=DiskType.object_storage, path=Path("disks/remote"), name="remote"),
+                    ],
                     sync_databases_timeout=10.0,
                     sync_tables_timeout=30.0,
                 ).jsondict(),

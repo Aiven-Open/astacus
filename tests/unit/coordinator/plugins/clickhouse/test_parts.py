@@ -3,6 +3,7 @@ Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
 from astacus.common.ipc import SnapshotFile, SnapshotResult, SnapshotState
+from astacus.coordinator.plugins.clickhouse.disks import DiskPaths
 from astacus.coordinator.plugins.clickhouse.manifest import Table
 from astacus.coordinator.plugins.clickhouse.parts import (
     add_file_to_parts,
@@ -44,7 +45,7 @@ def create_part_files(*, table_uuid: UUID, part_name: str, digest_seed: str) -> 
 def create_part_from_part_files(snapshot_files: List[SnapshotFile]) -> Part:
     return Part(
         table_uuid=T1_UUID,
-        part_name="all_0_0_0",
+        part_name=b"all_0_0_0",
         servers={0, 1},
         snapshot_files=snapshot_files,
         total_size=sum(snapshot_file.file_size for snapshot_file in snapshot_files),
@@ -169,7 +170,7 @@ def test_add_file_to_parts_adds_file() -> None:
     tables_replicas = {T1_UUID: [DatabaseReplica(shard_name="shard_1", replica_name="node_1")]}
     added = add_file_to_parts(snapshot_file=file_a, server_index=0, tables_replicas=tables_replicas, parts_files=parts_files)
     assert added is True
-    part_files = parts_files[PartKey(table_uuid=T1_UUID, shard_name="shard_1", part_name="all_0_0_0")]
+    part_files = parts_files[PartKey(table_uuid=T1_UUID, shard_name="shard_1", part_name=b"all_0_0_0")]
     assert part_files == {file_a.relative_path: PartFile(snapshot_file=file_a, servers={0})}
 
 
@@ -192,7 +193,7 @@ def test_add_file_to_parts_collects_all_servers() -> None:
         add_file_to_parts(
             snapshot_file=file_a, server_index=server_index, tables_replicas=tables_replicas, parts_files=parts
         )
-    part_files = parts[PartKey(table_uuid=T1_UUID, shard_name="shard_1", part_name="all_0_0_0")]
+    part_files = parts[PartKey(table_uuid=T1_UUID, shard_name="shard_1", part_name=b"all_0_0_0")]
     part_file = part_files[file_a.relative_path]
     assert part_file.servers == {0, 1, 2}
 
@@ -269,6 +270,7 @@ def test_get_frozen_parts_pattern_escapes_backup_name() -> None:
 def test_list_parts_to_attach() -> None:
     parts_to_attach = list_parts_to_attach(
         SnapshotResult(state=SnapshotState(files=TABLE_1_PART_1 + TABLE_1_PART_2)),
+        DiskPaths(),
         {
             T1_UUID: Table(
                 database=b"default",

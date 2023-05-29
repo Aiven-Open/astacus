@@ -2,7 +2,13 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
-from astacus.coordinator.plugins.clickhouse.manifest import AccessEntity, ClickHouseManifest, ReplicatedDatabase, Table
+from astacus.coordinator.plugins.clickhouse.manifest import (
+    AccessEntity,
+    ClickHouseBackupVersion,
+    ClickHouseManifest,
+    ReplicatedDatabase,
+    Table,
+)
 from base64 import b64encode
 
 import pytest
@@ -118,12 +124,30 @@ def test_table_from_plugin_data() -> None:
 def test_clickhouse_manifest_from_plugin_data() -> None:
     manifest = ClickHouseManifest.from_plugin_data(
         {
+            "version": "v2",
             "access_entities": [SERIALIZED_ACCESS_ENTITY],
             "replicated_databases": [SERIALIZED_DATABASE],
             "tables": [SERIALIZED_TABLE],
         }
     )
     assert manifest == ClickHouseManifest(
+        version=ClickHouseBackupVersion.V2,
+        access_entities=[SAMPLE_ACCESS_ENTITY],
+        replicated_databases=[SAMPLE_DATABASE],
+        tables=[SAMPLE_TABLE],
+    )
+
+
+def test_clickhouse_manifest_from_v1_plugin_data() -> None:
+    manifest = ClickHouseManifest.from_plugin_data(
+        {
+            "access_entities": [SERIALIZED_ACCESS_ENTITY],
+            "replicated_databases": [SERIALIZED_DATABASE],
+            "tables": [SERIALIZED_TABLE],
+        }
+    )
+    assert manifest == ClickHouseManifest(
+        version=ClickHouseBackupVersion.V1,
         access_entities=[SAMPLE_ACCESS_ENTITY],
         replicated_databases=[SAMPLE_DATABASE],
         tables=[SAMPLE_TABLE],
@@ -132,11 +156,13 @@ def test_clickhouse_manifest_from_plugin_data() -> None:
 
 def test_clickhouse_manifest_to_plugin_data() -> None:
     serialized_manifest = ClickHouseManifest(
+        version=ClickHouseBackupVersion.V2,
         access_entities=[SAMPLE_ACCESS_ENTITY],
         replicated_databases=[SAMPLE_DATABASE],
         tables=[SAMPLE_TABLE],
     ).to_plugin_data()
     assert serialized_manifest == {
+        "version": "v2",
         "access_entities": [SERIALIZED_ACCESS_ENTITY],
         "replicated_databases": [SERIALIZED_DATABASE],
         "tables": [SERIALIZED_TABLE],

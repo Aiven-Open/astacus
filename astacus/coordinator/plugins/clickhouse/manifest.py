@@ -8,6 +8,7 @@ from base64 import b64decode, b64encode
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
 
+import enum
 import uuid
 
 
@@ -87,7 +88,17 @@ class Table(AstacusModel):
         )
 
 
+class ClickHouseBackupVersion(enum.Enum):
+    V1 = "v1"
+    # Version 2 supports object storage disks and does not distribute parts among replicas
+    V2 = "v2"
+
+
 class ClickHouseManifest(AstacusModel):
+    class Config:
+        use_enum_values = False
+
+    version: ClickHouseBackupVersion
     access_entities: List[AccessEntity] = []
     replicated_databases: List[ReplicatedDatabase] = []
     tables: List[Table] = []
@@ -98,6 +109,7 @@ class ClickHouseManifest(AstacusModel):
     @classmethod
     def from_plugin_data(cls, data: Dict[str, Any]) -> "ClickHouseManifest":
         return ClickHouseManifest(
+            version=ClickHouseBackupVersion(data.get("version", ClickHouseBackupVersion.V1.value)),
             access_entities=[AccessEntity.from_plugin_data(item) for item in data["access_entities"]],
             replicated_databases=[ReplicatedDatabase.from_plugin_data(item) for item in data["replicated_databases"]],
             tables=[Table.from_plugin_data(item) for item in data["tables"]],
@@ -111,6 +123,8 @@ def encode_manifest_data(data: Any) -> Any:
         return [encode_manifest_data(item) for item in data]
     if isinstance(data, bytes):
         return b64encode(data).decode()
+    if isinstance(data, enum.Enum):
+        return encode_manifest_data(data.value)
     if isinstance(data, UUID):
         return str(data)
     return data

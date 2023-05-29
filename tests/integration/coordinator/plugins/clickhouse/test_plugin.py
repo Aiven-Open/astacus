@@ -114,6 +114,12 @@ async def setup_cluster_content(clients: List[HttpClickHouseClient], use_named_c
         b"SETTINGS index_granularity=8192 "
         b"SETTINGS allow_experimental_object_type=1"
     )
+    # add a table with data in object storage
+    await clients[0].execute(
+        b"CREATE TABLE default.in_object_storage (thekey UInt32, thedata String) "
+        b"ENGINE = ReplicatedMergeTree ORDER BY (thekey) "
+        b"SETTINGS storage_policy='remote'"
+    )
     await clients[0].execute(
         b"CREATE VIEW default.simple_view AS SELECT toInt32(thekey * 2) as thekey2 FROM default.replicated_merge_tree"
     )
@@ -131,6 +137,10 @@ async def setup_cluster_content(clients: List[HttpClickHouseClient], use_named_c
     await clients[0].execute(b"INSERT INTO default.with_experimental_types VALUES (123, '{\"a\":1}')")
     await clients[1].execute(b"INSERT INTO default.with_experimental_types VALUES (456, '{\"b\":2}')")
     await clients[2].execute(b"INSERT INTO default.with_experimental_types VALUES (789, '{\"c\":3}')")
+    # And some object storage data
+    await clients[0].execute(b"INSERT INTO default.in_object_storage VALUES (123, 'foo')")
+    await clients[1].execute(b"INSERT INTO default.in_object_storage VALUES (456, 'bar')")
+    await clients[2].execute(b"INSERT INTO default.in_object_storage VALUES (789, 'baz')")
     # This won't be backed up
     await clients[0].execute(b"INSERT INTO default.memory VALUES (123, 'foo')")
 
@@ -189,6 +199,16 @@ async def test_restores_table_with_experimental_types(restored_cluster: List[Cli
     cluster_data = [s1_data, s1_data, s2_data]
     for client, expected_data in zip(restored_cluster, cluster_data):
         response = await client.execute(b"SELECT thekey, thedata FROM default.with_experimental_types ORDER BY thekey")
+        assert response == expected_data
+
+
+@pytest.mark.asyncio
+async def test_restores_object_storage_data(restored_cluster: List[ClickHouseClient]) -> None:
+    s1_data = [[123, "foo"], [456, "bar"]]
+    s2_data = [[789, "baz"]]
+    cluster_data = [s1_data, s1_data, s2_data]
+    for client, expected_data in zip(restored_cluster, cluster_data):
+        response = await client.execute(b"SELECT thekey, thedata FROM default.in_object_storage ORDER BY thekey")
         assert response == expected_data
 
 

@@ -7,6 +7,7 @@ Replicated family of table engines.
 
 This does not support shards, but this is the right place to add support for them.
 """
+from .disks import DiskPaths
 from .escaping import escape_for_file_name, unescape_from_file_name
 from .manifest import Table
 from .replication import DatabaseReplica
@@ -29,13 +30,13 @@ class PartFile:
 class PartKey:
     table_uuid: uuid.UUID
     shard_name: str
-    part_name: str
+    part_name: bytes
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class Part:
     table_uuid: uuid.UUID
-    part_name: str
+    part_name: bytes
     servers: AbstractSet[int]
     snapshot_files: Sequence[SnapshotFile]
     total_size: int
@@ -112,7 +113,7 @@ def add_file_to_parts(
     if table_uuid not in tables_replicas:
         return False
     shard_name = tables_replicas[table_uuid][server_index].shard_name
-    part_key = PartKey(table_uuid=table_uuid, shard_name=shard_name, part_name=path_parts[4])
+    part_key = PartKey(table_uuid=table_uuid, shard_name=shard_name, part_name=unescape_from_file_name(path_parts[4]))
     part_files = parts_files.setdefault(part_key, {})
     part_file = part_files.get(snapshot_file.relative_path)
     if part_file is None:
@@ -174,6 +175,7 @@ def get_frozen_parts_pattern(freeze_name: str) -> str:
 
 def list_parts_to_attach(
     snapshot_result: SnapshotResult,
+    disk_paths: DiskPaths,
     tables_by_uuid: Mapping[uuid.UUID, Table],
 ) -> Sequence[Tuple[str, bytes]]:
     """
@@ -182,9 +184,8 @@ def list_parts_to_attach(
     parts_to_attach: Set[Tuple[str, bytes]] = set()
     assert snapshot_result.state is not None
     for snapshot_file in snapshot_result.state.files:
-        table_uuid = uuid.UUID(snapshot_file.relative_path.parts[2])
-        table = tables_by_uuid.get(table_uuid)
+        parsed_path = disk_paths.parse_part_file_path(snapshot_file.relative_path)
+        table = tables_by_uuid.get(parsed_path.table_uuid)
         if table is not None:
-            part_name = unescape_from_file_name(snapshot_file.relative_path.parts[4])
-            parts_to_attach.add((table.escaped_sql_identifier, part_name))
+            parts_to_attach.add((table.escaped_sql_identifier, parsed_path.part_name))
     return sorted(parts_to_attach)

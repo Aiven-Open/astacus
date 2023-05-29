@@ -6,7 +6,10 @@ from .client import ClickHouseClient, HttpClickHouseClient
 from astacus.common.utils import AstacusModel, build_netloc
 from astacus.coordinator.plugins.zookeeper import KazooZooKeeperClient, ZooKeeperClient
 from astacus.coordinator.plugins.zookeeper_config import ZooKeeperConfiguration
+from pathlib import Path
 from typing import List, Optional
+
+import enum
 
 
 class ClickHouseNode(AstacusModel):
@@ -28,6 +31,17 @@ class ReplicatedDatabaseSettings(AstacusModel):
     cluster_password: Optional[str]
     cluster_secret: Optional[str]
     collection_name: Optional[str]
+
+
+class DiskType(enum.Enum):
+    local = "local"
+    object_storage = "object_storage"
+
+
+class DiskConfiguration(AstacusModel):
+    type: DiskType
+    path: Path
+    name: str
 
 
 def get_zookeeper_client(configuration: ZooKeeperConfiguration) -> ZooKeeperClient:
