@@ -3,26 +3,31 @@ Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
 from astacus.common.exceptions import TransientException
-from astacus.common.ipc import BackupManifest, NodeResult, Plugin, SnapshotFile, SnapshotResult, SnapshotState
-from astacus.common.op import Op
-from astacus.common.progress import Progress
+from astacus.common.ipc import BackupManifest, Plugin, SnapshotFile, SnapshotResult, SnapshotState
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
-from astacus.coordinator.plugins.base import BackupManifestStep, SnapshotStep, StepFailedError, StepsContext
+from astacus.coordinator.plugins.base import BackupManifestStep, StepFailedError, StepsContext
 from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, StubClickHouseClient
 from astacus.coordinator.plugins.clickhouse.config import ClickHouseConfiguration, ClickHouseNode, ReplicatedDatabaseSettings
+from astacus.coordinator.plugins.clickhouse.disks import DiskPaths
 from astacus.coordinator.plugins.clickhouse.macros import Macros, MACROS_LIST_QUERY
-from astacus.coordinator.plugins.clickhouse.manifest import AccessEntity, ClickHouseManifest, ReplicatedDatabase, Table
+from astacus.coordinator.plugins.clickhouse.manifest import (
+    AccessEntity,
+    ClickHouseBackupVersion,
+    ClickHouseManifest,
+    ReplicatedDatabase,
+    Table,
+)
 from astacus.coordinator.plugins.clickhouse.replication import DatabaseReplica
 from astacus.coordinator.plugins.clickhouse.steps import (
     AttachMergeTreePartsStep,
     ClickHouseManifestStep,
-    DistributeReplicatedPartsStep,
     FreezeTablesStep,
     ListDatabaseReplicasStep,
     PrepareClickHouseManifestStep,
     RemoveFrozenTablesStep,
     RestoreAccessEntitiesStep,
+    RestoreReplicaStep,
     RestoreReplicatedDatabasesStep,
     RetrieveAccessEntitiesStep,
     RetrieveDatabasesAndTablesStep,
@@ -42,10 +47,7 @@ from unittest.mock import _Call as MockCall  # pylint: disable=protected-access
 
 import asyncio
 import datetime
-import httpx
-import json
 import pytest
-import respx
 import sys
 import uuid
 
@@ -88,7 +90,15 @@ SAMPLE_TABLES = [
     ),
 ]
 
+SAMPLE_MANIFEST_V1 = ClickHouseManifest(
+    version=ClickHouseBackupVersion.V1,
+    access_entities=SAMPLE_ENTITIES,
+    replicated_databases=SAMPLE_DATABASES,
+    tables=SAMPLE_TABLES,
+)
+
 SAMPLE_MANIFEST = ClickHouseManifest(
+    version=ClickHouseBackupVersion.V2,
     access_entities=SAMPLE_ENTITIES,
     replicated_databases=SAMPLE_DATABASES,
     tables=SAMPLE_TABLES,
@@ -373,39 +383,11 @@ async def test_create_clickhouse_manifest() -> None:
 
 
 @pytest.mark.asyncio
-async def test_remove_frozen_tables_step() -> None:
-    step = RemoveFrozenTablesStep(
-        clients=[mock_clickhouse_client()],
-        freeze_name="some-thing+special",
-        use_system_unfreeze=False,
-        unfreeze_timeout=3600.0,
-    )
-    cluster = Cluster(nodes=[CoordinatorNode(url="http://node1/node"), CoordinatorNode(url="http://node2/node")])
-    with respx.mock:
-        respx.post("http://node1/node/clear").respond(
-            json=Op.StartResult(op_id=123, status_url="http://node1/clear/123").jsondict()
-        )
-        respx.post("http://node2/node/clear").respond(
-            json=Op.StartResult(op_id=456, status_url="http://node2/clear/456").jsondict()
-        )
-        respx.get("http://node1/clear/123").respond(json=NodeResult(progress=Progress(final=True)).jsondict())
-        respx.get("http://node2/clear/456").respond(json=NodeResult(progress=Progress(final=True)).jsondict())
-        try:
-            await step.run_step(cluster, StepsContext())
-        finally:
-            for call in respx.calls:
-                request: httpx.Request = call[0]
-                if request.url in {"http://node1/node/clear", "http://node2/node/clear"}:
-                    assert json.loads(request.read())["root_globs"] == ["shadow/some%2Dthing%2Bspecial/store/**/*"]
-
-
-@pytest.mark.asyncio
 async def test_remove_frozen_tables_step_using_system_unfreeze() -> None:
     first_client, second_client = mock_clickhouse_client(), mock_clickhouse_client()
     step = RemoveFrozenTablesStep(
         clients=[first_client, second_client],
         freeze_name="some-thing+special",
-        use_system_unfreeze=True,
         unfreeze_timeout=3600.0,
     )
     cluster = Cluster(nodes=[CoordinatorNode(url="http://node1/node"), CoordinatorNode(url="http://node2/node")])
@@ -451,107 +433,6 @@ async def _test_freeze_unfreezes_all_mergetree_tables_listed_in_manifest(
     assert second_client.mock_calls == []
 
 
-@pytest.mark.asyncio
-async def test_distribute_parts_of_replicated_tables() -> None:
-    step = DistributeReplicatedPartsStep()
-    context = StepsContext()
-    context.set_result(
-        SnapshotStep,
-        [
-            SnapshotResult(
-                state=SnapshotState(
-                    root_globs=[],
-                    files=[
-                        SnapshotFile(
-                            relative_path=Path("store/000/00000000-0000-0000-0000-100000000001/detached/all_0_0_0/data.bin"),
-                            file_size=1000,
-                            mtime_ns=0,
-                            hexdigest="0001",
-                        ),
-                        SnapshotFile(
-                            relative_path=Path("store/000/00000000-0000-0000-0000-100000000001/detached/all_1_1_0/data.bin"),
-                            file_size=1000,
-                            mtime_ns=0,
-                            hexdigest="0002",
-                        ),
-                        SnapshotFile(
-                            relative_path=Path("store/000/00000000-0000-0000-0000-100000000002/detached/all_0_0_0/data.bin"),
-                            file_size=1000,
-                            mtime_ns=0,
-                            hexdigest="0003",
-                        ),
-                    ],
-                ),
-            ),
-            SnapshotResult(
-                state=SnapshotState(
-                    root_globs=[],
-                    files=[
-                        SnapshotFile(
-                            relative_path=Path("store/000/00000000-0000-0000-0000-100000000001/detached/all_0_0_0/data.bin"),
-                            file_size=1000,
-                            mtime_ns=0,
-                            hexdigest="0001",
-                        ),
-                        SnapshotFile(
-                            relative_path=Path("store/000/00000000-0000-0000-0000-100000000001/detached/all_1_1_0/data.bin"),
-                            file_size=1000,
-                            mtime_ns=0,
-                            hexdigest="0002",
-                        ),
-                        SnapshotFile(
-                            relative_path=Path("store/000/00000000-0000-0000-0000-100000000002/detached/all_0_0_0/data.bin"),
-                            file_size=1000,
-                            mtime_ns=0,
-                            hexdigest="0004",
-                        ),
-                    ],
-                ),
-            ),
-        ],
-    )
-    context.set_result(RetrieveDatabasesAndTablesStep, (SAMPLE_DATABASES, SAMPLE_TABLES))
-    context.set_result(
-        RetrieveMacrosStep,
-        [
-            Macros.from_mapping({b"my_shard": b"shard_1", b"my_replica": b"replica_1"}),
-            Macros.from_mapping({b"my_shard": b"shard_1", b"my_replica": b"replica_2"}),
-        ],
-    )
-    await step.run_step(Cluster(nodes=[]), context)
-    snapshot_results = context.get_result(SnapshotStep)
-    # On the ReplicatedMergeTree table (uuid ending in 0001), each server has only half the parts now
-    # On the MergeTree table (uuid ending in 0002), each server has kept its own part (same name but different digest)
-    assert sorted(snapshot_results[0].state.files) == [
-        SnapshotFile(
-            relative_path=Path("store/000/00000000-0000-0000-0000-100000000001/detached/all_0_0_0/data.bin"),
-            file_size=1000,
-            mtime_ns=0,
-            hexdigest="0001",
-        ),
-        SnapshotFile(
-            relative_path=Path("store/000/00000000-0000-0000-0000-100000000002/detached/all_0_0_0/data.bin"),
-            file_size=1000,
-            mtime_ns=0,
-            hexdigest="0003",
-        ),
-    ]
-    assert sorted(snapshot_results[1].state.files) == [
-        SnapshotFile(
-            relative_path=Path("store/000/00000000-0000-0000-0000-100000000001/detached/all_1_1_0/data.bin"),
-            file_size=1000,
-            mtime_ns=0,
-            hexdigest="0002",
-        ),
-        SnapshotFile(
-            relative_path=Path("store/000/00000000-0000-0000-0000-100000000002/detached/all_0_0_0/data.bin"),
-            file_size=1000,
-            mtime_ns=0,
-            hexdigest="0004",
-        ),
-    ]
-
-
 def b64_str(b: bytes) -> str:
     return b64encode(b).decode()
 
@@ -570,6 +451,7 @@ async def test_parse_clickhouse_manifest() -> None:
             upload_results=[],
             plugin=Plugin.clickhouse,
             plugin_data={
+                "version": "v2",
                 "access_entities": [
                     {
                         "name": b64_str(b"default_\x80"),
@@ -601,6 +483,7 @@ async def test_parse_clickhouse_manifest() -> None:
     )
     clickhouse_manifest = await step.run_step(Cluster(nodes=[]), context)
     assert clickhouse_manifest == ClickHouseManifest(
+        version=ClickHouseBackupVersion.V2,
         access_entities=[
             AccessEntity(type="U", uuid=uuid.UUID(int=2), name=b"default_\x80", attach_query=b"ATTACH USER \x80 ...")
         ],
@@ -621,10 +504,11 @@ async def test_list_database_replicas_step() -> None:
     context.set_result(
         ClickHouseManifestStep,
         ClickHouseManifest(
+            version=ClickHouseBackupVersion.V2,
             replicated_databases=[
                 ReplicatedDatabase(name=b"db-one", shard=b"pre_{shard_group_a}", replica=b"{replica}"),
                 ReplicatedDatabase(name=b"db-two", shard=b"{shard_group_b}", replica=b"{replica}_suf"),
-            ]
+            ],
         ),
     )
     context.set_result(
@@ -664,9 +548,10 @@ async def test_list_database_replicas_step_fails_on_missing_macro(missing_macro:
     context.set_result(
         ClickHouseManifestStep,
         ClickHouseManifest(
+            version=ClickHouseBackupVersion.V2,
             replicated_databases=[
                 ReplicatedDatabase(name=b"db-one", shard=b"{shard}", replica=b"{replica}"),
-            ]
+            ],
         ),
     )
     context.set_result(RetrieveMacrosStep, [server_1_macros, server_2_macros])
@@ -695,9 +580,10 @@ async def test_list_sync_database_replicas_step() -> None:
     context.set_result(
         ClickHouseManifestStep,
         ClickHouseManifest(
+            version=ClickHouseBackupVersion.V2,
             replicated_databases=[
                 ReplicatedDatabase(name=b"db-one", uuid=uuid.UUID(int=16), shard=b"{my_shard}", replica=b"{my_replica}")
-            ]
+            ],
         ),
     )
     context.set_result(
@@ -918,11 +804,52 @@ async def check_restored_entities(client: ZooKeeperClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_restore_replica() -> None:
+    zookeeper_client = FakeZooKeeperClient()
+    client_1 = mock_clickhouse_client()
+    client_2 = mock_clickhouse_client()
+    clients = [client_1, client_2]
+    step = RestoreReplicaStep(
+        zookeeper_client=zookeeper_client,
+        clients=clients,
+        disk_paths=DiskPaths(),
+        restart_timeout=30,
+        max_concurrent_restart=20,
+        restore_timeout=60,
+        max_concurrent_restore=10,
+    )
+    context = StepsContext()
+    context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
+    cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
+    async with zookeeper_client.connect() as connection:
+        await connection.create("/clickhouse/tables/00000000-0000-0000-0000-100000000001", b"")
+        await connection.create("/clickhouse/tables/00000000-0000-0000-0000-100000000001/thing", b"")
+        await connection.create("/clickhouse/tables/00000000-0000-0000-0000-200000000001", b"")
+        await connection.create("/clickhouse/tables/00000000-0000-0000-0000-200000000001/thing", b"")
+    await step.run_step(cluster, context)
+    async with zookeeper_client.connect() as connection:
+        assert not await connection.exists("/clickhouse/tables/00000000-0000-0000-0000-100000000001")
+        assert not await connection.exists("/clickhouse/tables/00000000-0000-0000-0000-200000000001")
+    for client in clients:
+        assert client.mock_calls == [
+            mock.call.execute(b"SET receive_timeout=30", session_id=mock.ANY),
+            mock.call.execute(b"SYSTEM RESTART REPLICA `db-one`.`table-uno`", session_id=mock.ANY, timeout=30),
+            mock.call.execute(b"SET receive_timeout=30", session_id=mock.ANY),
+            mock.call.execute(b"SYSTEM RESTART REPLICA `db-two`.`table-eins`", session_id=mock.ANY, timeout=30),
+            mock.call.execute(b"SET receive_timeout=60", session_id=mock.ANY),
+            mock.call.execute(b"SYSTEM RESTORE REPLICA `db-one`.`table-uno`", session_id=mock.ANY, timeout=60),
+            mock.call.execute(b"SET receive_timeout=60", session_id=mock.ANY),
+            mock.call.execute(b"SYSTEM RESTORE REPLICA `db-two`.`table-eins`", session_id=mock.ANY, timeout=60),
+        ]
+        check_each_pair_of_calls_has_the_same_session_id(client.mock_calls)
+
+
+@pytest.mark.asyncio
 async def test_attaches_all_mergetree_parts_in_manifest() -> None:
     client_1 = mock_clickhouse_client()
     client_2 = mock_clickhouse_client()
     clients = [client_1, client_2]
-    step = AttachMergeTreePartsStep(clients, attach_timeout=60, max_concurrent_attach=10)
+    step = AttachMergeTreePartsStep(clients, disk_paths=DiskPaths(), attach_timeout=60, max_concurrent_attach=10)
 
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
@@ -973,7 +900,7 @@ async def test_attaches_all_mergetree_parts_in_manifest() -> None:
             plugin=Plugin.clickhouse,
         ),
     )
-    context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
+    context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST_V1)
     await step.run_step(cluster, context)
     # Note: parts list is different for each client
     # however, we can have identically named parts which are not the same file
@@ -999,7 +926,7 @@ async def test_sync_replicas_for_replicated_mergetree_tables() -> None:
     step = SyncTableReplicasStep(clients, sync_timeout=180, max_concurrent_sync=10)
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
-    context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
+    context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST_V1)
     await step.run_step(cluster, context)
     for client_index, client in enumerate(clients):
         assert client.mock_calls == [

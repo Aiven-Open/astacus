@@ -14,6 +14,7 @@ from tests.integration.coordinator.plugins.clickhouse.conftest import (
     create_astacus_cluster,
     create_clickhouse_cluster,
     get_clickhouse_client,
+    MinioBucket,
     run_astacus_command,
 )
 from typing import AsyncIterable, AsyncIterator, List, Sequence
@@ -42,24 +43,19 @@ def get_restore_steps_names() -> List[str]:
     return [step.__class__.__name__ for step in steps]
 
 
-def _remove_frozen_tables_method(flag: bool) -> str:
-    return "SystemUnfreeze" if flag else "SnapshotClear"
-
-
-@pytest.fixture(scope="module", name="restorable_cluster", params=[True, False], ids=_remove_frozen_tables_method)
+@pytest.fixture(scope="module", name="restorable_cluster")
 async def fixture_restorable_cluster(
-    ports: Ports, request: SubRequest, clickhouse_command: ClickHouseCommand
+    ports: Ports,
+    clickhouse_command: ClickHouseCommand,
+    minio_bucket: MinioBucket,
 ) -> AsyncIterator[Path]:
-    use_system_unfreeze: bool = request.param
     with tempfile.TemporaryDirectory(prefix="storage_") as storage_path_str:
         storage_path = Path(storage_path_str)
         async with create_zookeeper(ports) as zookeeper:
             async with create_clickhouse_cluster(
-                zookeeper, ports, ("s1", "s1", "s2"), clickhouse_command
+                zookeeper, minio_bucket, ports, ("s1", "s1", "s2"), clickhouse_command
             ) as clickhouse_cluster:
-                async with create_astacus_cluster(
-                    storage_path, zookeeper, clickhouse_cluster, ports, use_system_unfreeze=use_system_unfreeze
-                ) as astacus_cluster:
+                async with create_astacus_cluster(storage_path, zookeeper, clickhouse_cluster, ports) as astacus_cluster:
                     clients = [get_clickhouse_client(service) for service in clickhouse_cluster.services]
                     await setup_cluster_content(clients, clickhouse_cluster.use_named_collections)
                     await setup_cluster_users(clients)
@@ -74,16 +70,15 @@ async def fixture_restored_cluster(
     ports: Ports,
     request: SubRequest,
     clickhouse_restore_command: ClickHouseCommand,
+    minio_bucket: MinioBucket,
 ) -> AsyncIterable[Sequence[ClickHouseClient]]:
     stop_after_step: str = request.param
     async with create_zookeeper(ports) as zookeeper:
         async with create_clickhouse_cluster(
-            zookeeper, ports, ("s1", "s1", "s2"), clickhouse_restore_command
+            zookeeper, minio_bucket, ports, ("s1", "s1", "s2"), clickhouse_restore_command
         ) as clickhouse_cluster:
             clients = [get_clickhouse_client(service) for service in clickhouse_cluster.services]
-            async with create_astacus_cluster(
-                restorable_cluster, zookeeper, clickhouse_cluster, ports, use_system_unfreeze=False
-            ) as astacus_cluster:
+            async with create_astacus_cluster(restorable_cluster, zookeeper, clickhouse_cluster, ports) as astacus_cluster:
                 # To test if we can survive transient failures during an entire restore operation,
                 # we first run a partial restore that stops after one of the restore steps,
                 # then we run the full restore, on the same ClickHouse cluster,
@@ -119,6 +114,12 @@ async def setup_cluster_content(clients: List[HttpClickHouseClient], use_named_c
         b"SETTINGS index_granularity=8192 "
         b"SETTINGS allow_experimental_object_type=1"
     )
+    # add a table with data in object storage
+    await clients[0].execute(
+        b"CREATE TABLE default.in_object_storage (thekey UInt32, thedata String) "
+        b"ENGINE = ReplicatedMergeTree ORDER BY (thekey) "
+        b"SETTINGS storage_policy='remote'"
+    )
     await clients[0].execute(
         b"CREATE VIEW default.simple_view AS SELECT toInt32(thekey * 2) as thekey2 FROM default.replicated_merge_tree"
     )
@@ -136,6 +137,10 @@ async def setup_cluster_content(clients: List[HttpClickHouseClient], use_named_c
     await clients[0].execute(b"INSERT INTO default.with_experimental_types VALUES (123, '{\"a\":1}')")
     await clients[1].execute(b"INSERT INTO default.with_experimental_types VALUES (456, '{\"b\":2}')")
     await clients[2].execute(b"INSERT INTO default.with_experimental_types VALUES (789, '{\"c\":3}')")
+    # And some object storage data
+    await clients[0].execute(b"INSERT INTO default.in_object_storage VALUES (123, 'foo')")
+    await clients[1].execute(b"INSERT INTO default.in_object_storage VALUES (456, 'bar')")
+    await clients[2].execute(b"INSERT INTO default.in_object_storage VALUES (789, 'baz')")
     # This won't be backed up
     await clients[0].execute(b"INSERT INTO default.memory VALUES (123, 'foo')")
 
@@ -160,7 +165,9 @@ async def test_restores_access_entities(restored_cluster: List[ClickHouseClient]
             b"SELECT base64Encode(name) FROM system.users WHERE storage = 'replicated' ORDER BY name"
         ) == [[_b64_str(b"alice")], [_b64_str(b"z_\x80_enjoyer")]]
         assert await client.execute(b"SELECT name FROM system.roles WHERE storage = 'replicated' ORDER BY name") == [["bob"]]
-        assert await client.execute(b"SELECT user_name,role_name FROM system.grants ORDER BY user_name,role_name") == [
+        assert await client.execute(
+            b"SELECT DISTINCT user_name,role_name FROM system.grants ORDER BY user_name,role_name"
+        ) == [
             ["alice", None],
             ["default", None],
             [None, "bob"],
@@ -192,6 +199,16 @@ async def test_restores_table_with_experimental_types(restored_cluster: List[Cli
     cluster_data = [s1_data, s1_data, s2_data]
     for client, expected_data in zip(restored_cluster, cluster_data):
         response = await client.execute(b"SELECT thekey, thedata FROM default.with_experimental_types ORDER BY thekey")
+        assert response == expected_data
+
+
+@pytest.mark.asyncio
+async def test_restores_object_storage_data(restored_cluster: List[ClickHouseClient]) -> None:
+    s1_data = [[123, "foo"], [456, "bar"]]
+    s2_data = [[789, "baz"]]
+    cluster_data = [s1_data, s1_data, s2_data]
+    for client, expected_data in zip(restored_cluster, cluster_data):
+        response = await client.execute(b"SELECT thekey, thedata FROM default.in_object_storage ORDER BY thekey")
         assert response == expected_data
 
 

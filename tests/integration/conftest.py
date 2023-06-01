@@ -5,13 +5,15 @@ See LICENSE for details
 from astacus.common.utils import build_netloc
 from astacus.coordinator.plugins.zookeeper import KazooZooKeeperClient
 from pathlib import Path
-from typing import AsyncIterator, Dict, Iterator, List, Optional, Union
+from types import MappingProxyType
+from typing import AsyncIterator, Iterator, List, Mapping, Optional, Union
 
 import asyncio
 import contextlib
 import dataclasses
 import logging
 import pytest
+import socket
 import subprocess
 import tempfile
 import threading
@@ -64,19 +66,19 @@ async def run_process_and_wait_for_pattern(
     cwd: Path,
     pattern: str,
     fail_pattern: Optional[str] = None,
+    env: Mapping[str, str] = MappingProxyType({}),
     timeout: float = 10.0,
 ) -> AsyncIterator[asyncio.subprocess.Process]:
     # This stringification is a workaround for a bug in pydev (pydev_monkey.py:111)
     str_args = [str(arg) for arg in args]
-    env: Dict[str, str] = {}
     pattern_found = asyncio.Event()
     loop = asyncio.get_running_loop()
-    with subprocess.Popen(str_args, cwd=cwd, env=env, stderr=subprocess.PIPE) as process:
+    with subprocess.Popen(str_args, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as process:
 
         def read_logs() -> None:
-            assert process.stderr is not None
+            assert process.stdout is not None
             while process.poll() is None:
-                for line in process.stderr:
+                for line in process.stdout:
                     line = line.rstrip(b"\n")
                     decoded_line = line.rstrip(b"\n").decode(encoding="utf-8", errors="replace")
                     logger.debug("%d: %s", process.pid, decoded_line)
@@ -114,13 +116,24 @@ class ServiceCluster:
 
 
 class Ports:
-    def __init__(self, start: int = 50000):
+    def __init__(self, start: int = 15000):
         self.start = start
 
     def allocate(self) -> int:
+        while port_is_listening("127.0.0.1", self.start):
+            self.start += 1
         allocated = self.start
         self.start += 1
         return allocated
+
+
+def port_is_listening(hostname: str, port: int, timeout: float = 0.5) -> bool:
+    try:
+        connection = socket.create_connection((hostname, port), timeout)
+        connection.close()
+        return True
+    except socket.error:
+        return False
 
 
 @pytest.fixture(scope="session", name="ports")

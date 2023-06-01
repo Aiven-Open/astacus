@@ -90,7 +90,7 @@ class SnapshotState(AstacusModel):
 
 class SnapshotRequest(NodeRequest):
     # list of globs, e.g. ["**/*.dat"] we want to back up from root
-    root_globs: List[str]
+    root_globs: Sequence[str]
 
 
 class SnapshotHash(AstacusModel):

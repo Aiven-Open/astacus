@@ -7,17 +7,12 @@ from __future__ import annotations
 from .client import ClickHouseClient, ClickHouseClientQueryError, escape_sql_identifier, escape_sql_string
 from .config import ClickHouseConfiguration, ReplicatedDatabaseSettings
 from .dependencies import access_entities_sorted_by_dependencies, tables_sorted_by_dependencies
+from .disks import DiskPaths
 from .escaping import escape_for_file_name, unescape_from_file_name
 from .macros import fetch_server_macros, Macros
-from .manifest import AccessEntity, ClickHouseManifest, ReplicatedDatabase, Table
-from .parts import distribute_parts_to_servers, get_frozen_parts_pattern, group_files_into_parts, list_parts_to_attach
-from .replication import (
-    DatabaseReplica,
-    get_databases_replicas,
-    get_shard_and_replica,
-    get_tables_replicas,
-    sync_replicated_database,
-)
+from .manifest import AccessEntity, ClickHouseBackupVersion, ClickHouseManifest, ReplicatedDatabase, Table
+from .parts import list_parts_to_attach
+from .replication import DatabaseReplica, get_databases_replicas, get_shard_and_replica, sync_replicated_database
 from astacus.common import ipc
 from astacus.common.exceptions import TransientException
 from astacus.common.limiter import gather_limited
@@ -25,7 +20,6 @@ from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import BackupManifestStep, SnapshotStep, Step, StepFailedError, StepsContext
 from astacus.coordinator.plugins.zookeeper import ChangeWatch, TransactionError, ZooKeeperClient
 from base64 import b64decode
-from pathlib import Path
 from typing import Any, cast, Dict, List, Mapping, Sequence, Tuple, TypeVar
 
 import asyncio
@@ -216,6 +210,7 @@ class PrepareClickHouseManifestStep(Step[Dict[str, Any]]):
     async def run_step(self, cluster: Cluster, context: StepsContext) -> Dict[str, Any]:
         databases, tables = context.get_result(RetrieveDatabasesAndTablesStep)
         manifest = ClickHouseManifest(
+            version=ClickHouseBackupVersion.V2,
             access_entities=context.get_result(RetrieveAccessEntitiesStep),
             replicated_databases=databases,
             tables=tables,
@@ -232,23 +227,14 @@ class RemoveFrozenTablesStep(Step[None]):
 
     clients: List[ClickHouseClient]
     freeze_name: str
-    use_system_unfreeze: bool
     unfreeze_timeout: float
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
-        if self.use_system_unfreeze:
-            escaped_freeze_name = escape_sql_string(self.freeze_name.encode())
-            unfreeze_statement = f"SYSTEM UNFREEZE WITH NAME {escaped_freeze_name}".encode()
-            await asyncio.gather(
-                *[execute_with_timeout(client, self.unfreeze_timeout, unfreeze_statement) for client in self.clients]
-            )
-        else:
-            root_globs = get_frozen_parts_pattern(self.freeze_name)
-            node_request = ipc.SnapshotClearRequest(root_globs=[root_globs])
-            start_results = await cluster.request_from_nodes(
-                "clear", caller="RemoveFrozenTablesStep", method="post", req=node_request
-            )
-            await cluster.wait_successful_results(start_results=start_results, result_class=ipc.NodeResult)
+        escaped_freeze_name = escape_sql_string(self.freeze_name.encode())
+        unfreeze_statement = f"SYSTEM UNFREEZE WITH NAME {escaped_freeze_name}".encode()
+        await asyncio.gather(
+            *[execute_with_timeout(client, self.unfreeze_timeout, unfreeze_statement) for client in self.clients]
+        )
 
 
 @dataclasses.dataclass
@@ -338,7 +324,7 @@ class MoveFrozenPartsStep(Step[None]):
     only identifies files by their hash, it doesn't care about their original, or modified, path.
     """
 
-    freeze_name: str
+    disk_paths: DiskPaths
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         # Note: we could also do that on restore, but this way we can erase the ClickHouse `FREEZE`
@@ -346,58 +332,11 @@ class MoveFrozenPartsStep(Step[None]):
         # I do not like mutating an existing result, we should making this more visible
         # by returning a mutated copy and use that in other steps
         snapshot_results: List[ipc.SnapshotResult] = context.get_result(SnapshotStep)
-        escaped_freeze_name = escape_for_file_name(self.freeze_name.encode())
-        shadow_store_path = "shadow", escaped_freeze_name, "store"
         for snapshot_result in snapshot_results:
             assert snapshot_result.state is not None
             for snapshot_file in snapshot_result.state.files:
-                file_path_parts = snapshot_file.relative_path.parts
-                # The original path starts with something like that :
-                # shadow/astacus/store/123/12345678-1234-1234-1234-12345678abcd/all_1_1_0
-                # where "astacus" is the freeze_name, the uuid is from the table (the folder before that is
-                # the first 3 digits of the uuid), then "all_1_1_0" is the part name.
-                # We transform it into :
-                # store/123/12345678-1234-1234-1234-12345678abcd/detached/all_1_1_0
-                # The "shadow/astacus" prefix is removed and the part folder is inside a "detached" folder.
-                # The rest of the path, after the part folder, can contain anything and isn't modified.
-                if file_path_parts[:3] == shadow_store_path and len(file_path_parts) >= 6:
-                    # This is the uuid of the table containing that part
-                    uuid_head, uuid_full, part_name, *rest = file_path_parts[3:]
-                    part_path = Path(f"store/{uuid_head}/{uuid_full}/detached/{part_name}")
-                    snapshot_file.relative_path = part_path.joinpath(*rest)
-
-
-@dataclasses.dataclass
-class DistributeReplicatedPartsStep(Step[None]):
-    """
-    Distribute replicated parts of table using the Replicated family of table engines.
-
-    To avoid duplicating data during restoration, we must attach each replicated part
-    to only on one server of each shard and let the replication do its work.
-
-    This also serve as a performance and cost optimisation. Instead of fetching
-    the same part from backup storage once for each server, we can fetch it only
-    once for each shard and then let the cluster exchange parts internally.
-
-    This step must be run after `MoveFrozenPartsStep` to find the correct paths
-    in the snapshot.
-    """
-
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
-        snapshot_results = context.get_result(SnapshotStep)
-        snapshot_files = [
-            snapshot_result.state.files for snapshot_result in snapshot_results if snapshot_result.state is not None
-        ]
-        replicated_databases, tables = context.get_result(RetrieveDatabasesAndTablesStep)
-        replicated_tables = [table for table in tables if table.is_replicated]
-        server_macros = context.get_result(RetrieveMacrosStep)
-        databases_replicas = get_databases_replicas(replicated_databases, server_macros)
-        tables_replicas = get_tables_replicas(replicated_tables, databases_replicas)
-        parts, server_files = group_files_into_parts(snapshot_files, tables_replicas)
-        distribute_parts_to_servers(parts, server_files)
-        for files, snapshot_result in zip(server_files, snapshot_results):
-            assert snapshot_result.state is not None
-            snapshot_result.state.files = files
+                parsed_path = self.disk_paths.parse_part_file_path(snapshot_file.relative_path)
+                snapshot_file.relative_path = dataclasses.replace(parsed_path, freeze_name=None, detached=False).to_path()
 
 
 @dataclasses.dataclass
@@ -590,6 +529,53 @@ class RestoreAccessEntitiesStep(Step[None]):
 
 
 @dataclasses.dataclass
+class RestoreReplicaStep(Step[None]):
+    """
+    Restore data on all tables by using `SYSTEM RESTORE REPLICA... `.
+    """
+
+    zookeeper_client: ZooKeeperClient
+    clients: List[ClickHouseClient]
+    disk_paths: DiskPaths
+    restart_timeout: float
+    max_concurrent_restart: int
+    restore_timeout: float
+    max_concurrent_restore: int
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
+        clickhouse_manifest = context.get_result(ClickHouseManifestStep)
+        if clickhouse_manifest.version == ClickHouseBackupVersion.V1:
+            return
+        replicated_tables = [table for table in clickhouse_manifest.tables if table.is_replicated]
+        # Before doing the restore, drop the ZooKeeper data and restart the replica.
+        # Because the ZooKeeper data was removed, the restart will put the table in read-only mode,
+        # this is a requirement to be allowed to run restore replica.
+        async with self.zookeeper_client.connect() as connection:
+            for table in replicated_tables:
+                await connection.delete(f"/clickhouse/tables/{str(table.uuid)}", recursive=True)
+        await gather_limited(
+            self.max_concurrent_restart,
+            [
+                execute_with_timeout(
+                    client, self.restart_timeout, f"SYSTEM RESTART REPLICA {table.escaped_sql_identifier}".encode()
+                )
+                for table in replicated_tables
+                for client in self.clients
+            ],
+        )
+        await gather_limited(
+            self.max_concurrent_restore,
+            [
+                execute_with_timeout(
+                    client, self.restore_timeout, f"SYSTEM RESTORE REPLICA {table.escaped_sql_identifier}".encode()
+                )
+                for table in replicated_tables
+                for client in self.clients
+            ],
+        )
+
+
+@dataclasses.dataclass
 class AttachMergeTreePartsStep(Step[None]):
     """
     Restore data to all tables by using `ALTER TABLE ... ATTACH`.
@@ -600,12 +586,15 @@ class AttachMergeTreePartsStep(Step[None]):
     """
 
     clients: List[ClickHouseClient]
+    disk_paths: DiskPaths
     attach_timeout: float
     max_concurrent_attach: int
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         backup_manifest = context.get_result(BackupManifestStep)
         clickhouse_manifest = context.get_result(ClickHouseManifestStep)
+        if clickhouse_manifest.version != ClickHouseBackupVersion.V1:
+            return
         tables_by_uuid = {table.uuid: table for table in clickhouse_manifest.tables}
         await gather_limited(
             self.max_concurrent_attach,
@@ -616,7 +605,7 @@ class AttachMergeTreePartsStep(Step[None]):
                     f"ALTER TABLE {table_identifier} ATTACH PART {escape_sql_string(part_name)}".encode(),
                 )
                 for client, snapshot_result in zip(self.clients, backup_manifest.snapshot_results)
-                for table_identifier, part_name in list_parts_to_attach(snapshot_result, tables_by_uuid)
+                for table_identifier, part_name in list_parts_to_attach(snapshot_result, self.disk_paths, tables_by_uuid)
             ],
         )
 
@@ -634,6 +623,8 @@ class SyncTableReplicasStep(Step[None]):
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         manifest = context.get_result(ClickHouseManifestStep)
+        if manifest.version != ClickHouseBackupVersion.V1:
+            return
         await gather_limited(
             self.max_concurrent_sync,
             [

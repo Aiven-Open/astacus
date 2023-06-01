@@ -15,7 +15,7 @@ from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.manifest import download_backup_manifest
 from astacus.node.api import Features
 from collections import Counter
-from typing import Any, Counter as TCounter, Dict, Generic, List, Optional, Set, Type, TypeVar
+from typing import Any, Counter as TCounter, Dict, Generic, List, Optional, Sequence, Set, Type, TypeVar
 
 import dataclasses
 import datetime
@@ -81,7 +81,7 @@ class SnapshotStep(Step[List[ipc.SnapshotResult]]):
     see `SnapshotFile` for details.
     """
 
-    snapshot_root_globs: List[str]
+    snapshot_root_globs: Sequence[str]
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> List[ipc.SnapshotResult]:
         req = ipc.SnapshotRequest(root_globs=self.snapshot_root_globs)

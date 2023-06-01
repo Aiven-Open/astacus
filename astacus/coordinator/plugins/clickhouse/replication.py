@@ -4,7 +4,7 @@ See LICENSE for details
 """
 from .client import ClickHouseClient, escape_sql_identifier, unescape_sql_string
 from .macros import MacroExpansionError, Macros
-from .manifest import ReplicatedDatabase, Table
+from .manifest import ReplicatedDatabase
 from .sql import chain_of, named_group, one_of, TokenType
 from astacus.coordinator.plugins.base import StepFailedError
 from astacus.coordinator.plugins.zookeeper import ZooKeeperConnection
@@ -14,7 +14,6 @@ from typing import Mapping, Optional, Sequence
 import asyncio
 import dataclasses
 import re
-import uuid
 
 
 @dataclasses.dataclass(frozen=True)
@@ -132,18 +131,3 @@ def get_databases_replicas(
                 raise StepFailedError(f"Error in macro of server {server_index}: {e}") from e
         databases_replicas[database.name] = replicas
     return databases_replicas
-
-
-def get_tables_replicas(
-    replicated_tables: Sequence[Table], databases_replicas: Mapping[bytes, Sequence[DatabaseReplica]]
-) -> Mapping[uuid.UUID, Sequence[DatabaseReplica]]:
-    """
-    Get the list of replicas for each Table.
-
-    This maps the database of each table to the replicas of each database.
-
-    This is only correct for clusters where the database and the tables inside
-    that database use the same sharding strategy, which should be the case
-    for Replicated databases.
-    """
-    return {table.uuid: databases_replicas[table.database] for table in replicated_tables}

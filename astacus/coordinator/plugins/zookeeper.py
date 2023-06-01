@@ -5,7 +5,6 @@ See LICENSE for details
 from astacus.common.exceptions import TransientException
 from asyncio import to_thread
 from kazoo.client import EventType, KazooClient, KeeperState, TransactionRequest, WatchedEvent
-from kazoo.protocol.states import ZnodeStat
 from kazoo.retry import KazooRetry
 from typing import AsyncIterator, Callable, Collection, Dict, List, Optional, Tuple, Type, Union
 
@@ -102,7 +101,17 @@ class ZooKeeperConnection:
         """
         raise NotImplementedError
 
-    async def exists(self, path: str) -> Optional[ZnodeStat]:
+    async def delete(self, path: str, *, recursive: bool = False) -> None:
+        """
+        Delete the node with the specified `path` and optionally its children.
+
+        Raises `NotEmptyError` if the node has children, unless `recursive` is True.
+
+        Raises `NoNodeError` if the node does not exist.
+        """
+        raise NotImplementedError
+
+    async def exists(self, path: str) -> bool:
         """
         Check if specified node exists.
         """
@@ -136,6 +145,12 @@ class NodeExistsError(TransientException):
     def __init__(self, path: str) -> None:
         super().__init__(path)
         self.message = f"Zookeeper node already exists: {path}"
+
+
+class NotEmptyError(TransientException):
+    def __init__(self, path: str) -> None:
+        super().__init__(path)
+        self.message = f"Zookeeper node not empty: {path}"
 
 
 class TransactionError(TransientException):
@@ -234,8 +249,15 @@ class KazooZooKeeperConnection(ZooKeeperConnection):
         except kazoo.exceptions.NoNodeError as e:
             raise NoNodeError(path) from e
 
-    async def exists(self, path) -> Optional[ZnodeStat]:
-        return await to_thread(self.client.retry, self.client.exists, path)
+    async def delete(self, path: str, *, recursive: bool = False) -> None:
+        try:
+            await to_thread(self.client.retry, self.client.delete, path, recursive=recursive)
+        except kazoo.exceptions.NoNodeError as e:
+            raise NoNodeError(path) from e
+
+    async def exists(self, path) -> bool:
+        maybe_znode_stat = await to_thread(self.client.retry, self.client.exists, path)
+        return maybe_znode_stat is not None
 
     def transaction(self) -> KazooZooKeeperTransaction:
         return KazooZooKeeperTransaction(request=self.client.transaction())
@@ -364,7 +386,14 @@ class FakeZooKeeperConnection(ZooKeeperConnection):
             storage[parts] = value
         await self.client.trigger(parts, event)
 
-    async def exists(self, path: str) -> Optional[ZnodeStat]:
+    async def delete(self, path: str, *, recursive: bool = False) -> None:
+        assert self in self.client.connections
+        async with self.client.get_storage() as storage:
+            parts_and_events = delete_locked(path, storage, recursive=recursive)
+        for parts, event in parts_and_events:
+            await self.client.trigger(parts, event)
+
+    async def exists(self, path: str) -> bool:
         async with self.client.get_storage() as storage:
             return parse_path(path) in storage
 
@@ -403,3 +432,32 @@ def create_locked(
             raise NoNodeError("/".join(parent_parts))
     event = WatchedEvent(type=EventType.CREATED, state=KeeperState.CONNECTED, path="/".join(parent_parts))
     return parent_parts, event
+
+
+def delete_locked(
+    path: str, storage: Dict[Tuple[str, ...], bytes], *, recursive: bool
+) -> list[tuple[tuple[str, ...], WatchedEvent]]:
+    parts = parse_path(path)
+    deleted_items = [existing_parts for existing_parts in sorted(storage.keys()) if existing_parts[: len(parts)] == parts]
+    if len(deleted_items) == 0:
+        raise NoNodeError(path)
+    if len(deleted_items) > 1 and not recursive:
+        raise NotEmptyError(path)
+    for existing_parts in deleted_items:
+        del storage[existing_parts]
+    parts_and_events = [
+        (item, WatchedEvent(type=EventType.DELETED, state=KeeperState.CONNECTED, path="/".join(item)))
+        for item in deleted_items
+    ]
+    parent_items = sorted(set(deleted_item[:-1] for deleted_item in deleted_items))
+    parts_and_events += [
+        (item, WatchedEvent(type=EventType.CHILD, state=KeeperState.CONNECTED, path="/".join(item))) for item in parent_items
+    ]
+    return sorted(parts_and_events, key=delete_sort_key)
+
+
+def delete_sort_key(pair: tuple[tuple[str, ...], WatchedEvent]) -> tuple[int, int]:
+    # Sorting key such that events with longest path are first
+    # And for the same path, the child event is before the delete event
+    parts, event = pair
+    return -len(parts), 0 if event.type == EventType.CHILD else 1
