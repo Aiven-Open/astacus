@@ -37,8 +37,7 @@ class SimpleCassandraSubOp(NodeOp[ipc.NodeRequest, ipc.NodeResult]):
     def create_result(self) -> ipc.NodeResult:
         return ipc.NodeResult()
 
-    def start(self, *, req: ipc.NodeRequest, subop: ipc.CassandraSubOp) -> NodeOp.StartResult:
-        self.req = req
+    def start(self, subop: ipc.CassandraSubOp) -> NodeOp.StartResult:
         assert self.config.cassandra
         return self.start_op(
             op_name="cassandra",
@@ -135,8 +134,7 @@ class CassandraStartOp(NodeOp[ipc.CassandraStartRequest, ipc.NodeResult]):
     def create_result(self) -> ipc.NodeResult:
         return ipc.NodeResult()
 
-    def start(self, *, req: ipc.CassandraStartRequest) -> NodeOp.StartResult:
-        self.req = req
+    def start(self) -> NodeOp.StartResult:
         return self.start_op(op_name="cassandra", op=self, fun=self.start_cassandra)
 
     def start_cassandra(self) -> None:
@@ -168,8 +166,7 @@ class CassandraStartOp(NodeOp[ipc.CassandraStartRequest, ipc.NodeResult]):
 
 
 class CassandraGetSchemaHashOp(NodeOp[ipc.NodeRequest, ipc.CassandraGetSchemaHashResult]):
-    def start(self, *, req: ipc.NodeRequest) -> NodeOp.StartResult:
-        self.req = req
+    def start(self) -> NodeOp.StartResult:
         assert self.config.cassandra
         return self.start_op(op_name="cassandra", op=self, fun=self.get_schema_hash)
 

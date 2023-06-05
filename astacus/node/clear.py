@@ -25,10 +25,9 @@ class ClearOp(NodeOp[ipc.SnapshotClearRequest, ipc.NodeResult]):
     def create_result(self) -> ipc.NodeResult:
         return ipc.NodeResult()
 
-    def start(self, *, req: ipc.SnapshotClearRequest) -> NodeOp.StartResult:
-        self.req = req
-        self.snapshotter = self.get_or_create_snapshotter(req.root_globs)
-        logger.info("start_clear %r", req)
+    def start(self) -> NodeOp.StartResult:
+        self.snapshotter = self.get_or_create_snapshotter(self.req.root_globs)
+        logger.info("start_clear %r", self.req)
         return self.start_op(op_name="clear", op=self, fun=self.clear)
 
     def clear(self) -> None:

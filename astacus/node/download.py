@@ -125,21 +125,18 @@ class DownloadOp(NodeOp[ipc.SnapshotDownloadRequest, ipc.NodeResult]):
 
     @property
     def storage(self) -> RohmuStorage:
-        assert self.req is not None
         assert self.config.object_storage is not None
         return RohmuStorage(self.config.object_storage, storage=self.req.storage)
 
     def create_result(self) -> ipc.NodeResult:
         return ipc.NodeResult()
 
-    def start(self, *, req: ipc.SnapshotDownloadRequest) -> NodeOp.StartResult:
-        self.req = req
-        self.snapshotter = self.get_or_create_snapshotter(req.root_globs)
-        logger.info("start_download %r", req)
+    def start(self) -> NodeOp.StartResult:
+        self.snapshotter = self.get_or_create_snapshotter(self.req.root_globs)
+        logger.info("start_download %r", self.req)
         return self.start_op(op_name="download", op=self, fun=self.download)
 
     def download(self) -> None:
-        assert self.req is not None
         assert self.snapshotter
         # Actual 'restore from backup'
         manifest = ipc.BackupManifest.parse_obj(self.storage.download_json(self.req.backup_name))

@@ -31,10 +31,9 @@ class SnapshotOp(NodeOp[ipc.SnapshotRequest, ipc.SnapshotResult]):
     def create_result(self) -> ipc.SnapshotResult:
         return ipc.SnapshotResult()
 
-    def start(self, *, req: ipc.SnapshotRequest):
-        self.req = req
-        logger.info("start_snapshot %r", req)
-        self.snapshotter = self.get_or_create_snapshotter(req.root_globs)
+    def start(self) -> NodeOp.StartResult:
+        logger.info("start_snapshot %r", self.req)
+        self.snapshotter = self.get_or_create_snapshotter(self.req.root_globs)
         return self.start_op(op_name="snapshot", op=self, fun=self.snapshot)
 
     def snapshot(self) -> None:
@@ -58,20 +57,17 @@ class SnapshotOp(NodeOp[ipc.SnapshotRequest, ipc.SnapshotResult]):
 class UploadOp(NodeOp[ipc.SnapshotUploadRequestV20221129, ipc.SnapshotUploadResult]):
     @property
     def storage(self) -> RohmuStorage:
-        assert self.req is not None
         assert self.config.object_storage is not None
         return RohmuStorage(self.config.object_storage, storage=self.req.storage)
 
     def create_result(self) -> ipc.SnapshotUploadResult:
         return ipc.SnapshotUploadResult()
 
-    def start(self, *, req: ipc.SnapshotUploadRequestV20221129) -> NodeOp.StartResult:
-        self.req = req
-        logger.info("start_upload %r", req)
+    def start(self) -> NodeOp.StartResult:
+        logger.info("start_upload %r", self.req)
         return self.start_op(op_name="upload", op=self, fun=self.upload)
 
     def upload(self) -> None:
-        assert self.req is not None
         uploader = Uploader(storage=self.storage)
         snapshotter = self.get_snapshotter()
         # 'snapshotter' is global; ensure we have sole access to it

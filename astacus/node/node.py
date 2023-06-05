@@ -24,14 +24,13 @@ Result = TypeVar("Result", bound=ipc.NodeResult)
 
 
 class NodeOp(op.Op, Generic[Request, Result]):
-    req: Optional[Request] = None  # Provided by subclass
-
-    def __init__(self, *, n: "Node", op_id: int, stats: StatsClient) -> None:
+    def __init__(self, *, n: "Node", op_id: int, req: Request, stats: StatsClient) -> None:
         super().__init__(info=n.state.op_info, op_id=op_id, stats=stats)
         self.start_op = n.start_op
         self.config = n.config
         self._still_locked_callback = n.state.still_locked_callback
         self._sent_result_json: Optional[str] = None
+        self.req = req
         self.result = self.create_result()
         self.result.az = self.config.az
         self.get_or_create_snapshotter = n.get_or_create_snapshotter
