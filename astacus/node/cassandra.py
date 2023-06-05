@@ -26,13 +26,16 @@ logger = logging.getLogger(__name__)
 SNAPSHOT_GLOB = f"data/*/*/snapshots/{SNAPSHOT_NAME}"
 
 
-class SimpleCassandraSubOp(NodeOp):
+class SimpleCassandraSubOp(NodeOp[ipc.NodeRequest, ipc.NodeResult]):
     """
     Generic class to handle no arguments in + no output out case subops.
 
     Due to that, it does not (really) care about request, and as far
     as result goes it only cares about progress.
     """
+
+    def create_result(self) -> ipc.NodeResult:
+        return ipc.NodeResult()
 
     def start(self, *, req: ipc.NodeRequest, subop: ipc.CassandraSubOp) -> NodeOp.StartResult:
         self.req = req
@@ -128,14 +131,16 @@ class SimpleCassandraSubOp(NodeOp):
         self.result.progress.done()
 
 
-class CassandraStartOp(NodeOp):
-    req: ipc.CassandraStartRequest
+class CassandraStartOp(NodeOp[ipc.CassandraStartRequest, ipc.NodeResult]):
+    def create_result(self) -> ipc.NodeResult:
+        return ipc.NodeResult()
 
     def start(self, *, req: ipc.CassandraStartRequest) -> NodeOp.StartResult:
         self.req = req
         return self.start_op(op_name="cassandra", op=self, fun=self.start_cassandra)
 
     def start_cassandra(self) -> None:
+        assert self.req is not None
         progress = self.result.progress
         progress.add_total(3)
 
@@ -162,7 +167,7 @@ class CassandraStartOp(NodeOp):
         progress.done()
 
 
-class CassandraGetSchemaHashOp(NodeOp):
+class CassandraGetSchemaHashOp(NodeOp[ipc.NodeRequest, ipc.CassandraGetSchemaHashResult]):
     def start(self, *, req: ipc.NodeRequest) -> NodeOp.StartResult:
         self.req = req
         assert self.config.cassandra

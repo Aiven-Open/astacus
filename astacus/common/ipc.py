@@ -69,23 +69,23 @@ class SnapshotFile(AstacusModel):
     hexdigest: str = ""
     content_b64: Optional[str]
 
-    def __lt__(self, o):
+    def __lt__(self, o: "SnapshotFile") -> bool:
         # In our use case, paths uniquely identify files we care about
         return self.relative_path < o.relative_path
 
-    def underlying_file_is_the_same(self, o):
+    def underlying_file_is_the_same(self, o: "SnapshotFile") -> bool:
         return self.mtime_ns == o.mtime_ns and self.relative_path == o.relative_path and self.file_size == o.file_size
 
-    def equals_excluding_mtime(self, o):
+    def equals_excluding_mtime(self, o: "SnapshotFile") -> bool:
         return self.copy(update={"mtime_ns": 0}) == o.copy(update={"mtime_ns": 0})
 
-    def open_for_reading(self, root_path):
+    def open_for_reading(self, root_path: Path) -> SizeLimitedFile:
         return SizeLimitedFile(path=root_path / self.relative_path, file_size=self.file_size)
 
 
 class SnapshotState(AstacusModel):
-    root_globs: List[str] = []
-    files: List[SnapshotFile] = []
+    root_globs: Sequence[str] = []
+    files: Sequence[SnapshotFile] = []
 
 
 class SnapshotRequest(NodeRequest):
@@ -166,12 +166,12 @@ class SnapshotDownloadRequest(NodeRequest):
     # this is used to configure snapshotter; it is needed in the main
     # thread of node, so due to that, it is included here and not
     # retrieved via backup manifest.
-    root_globs: List[str]
+    root_globs: Sequence[str]
 
 
 class SnapshotClearRequest(NodeRequest):
     # Files not matching this are not deleted
-    root_globs: List[str]
+    root_globs: Sequence[str]
 
 
 # node.cassandra

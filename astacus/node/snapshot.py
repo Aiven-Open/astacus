@@ -10,6 +10,7 @@ this module with proper parameters.
 
 """
 
+from ..common.rohmustorage import RohmuStorage
 from .node import NodeOp
 from .snapshotter import Snapshotter
 from .uploader import Uploader
@@ -24,10 +25,10 @@ _hash = hashlib.blake2s
 logger = logging.getLogger(__name__)
 
 
-class SnapshotOp(NodeOp):
+class SnapshotOp(NodeOp[ipc.SnapshotRequest, ipc.SnapshotResult]):
     snapshotter: Optional[Snapshotter] = None
 
-    def create_result(self):
+    def create_result(self) -> ipc.SnapshotResult:
         return ipc.SnapshotResult()
 
     def start(self, *, req: ipc.SnapshotRequest):
@@ -36,7 +37,8 @@ class SnapshotOp(NodeOp):
         self.snapshotter = self.get_or_create_snapshotter(req.root_globs)
         return self.start_op(op_name="snapshot", op=self, fun=self.snapshot)
 
-    def snapshot(self):
+    def snapshot(self) -> None:
+        assert self.snapshotter is not None
         # 'snapshotter' is global; ensure we have sole access to it
         with self.snapshotter.lock:
             self.check_op_id()
@@ -53,16 +55,23 @@ class SnapshotOp(NodeOp):
             self.result.progress.done()
 
 
-class UploadOp(NodeOp):
-    def create_result(self):
+class UploadOp(NodeOp[ipc.SnapshotUploadRequestV20221129, ipc.SnapshotUploadResult]):
+    @property
+    def storage(self) -> RohmuStorage:
+        assert self.req is not None
+        assert self.config.object_storage is not None
+        return RohmuStorage(self.config.object_storage, storage=self.req.storage)
+
+    def create_result(self) -> ipc.SnapshotUploadResult:
         return ipc.SnapshotUploadResult()
 
-    def start(self, *, req: ipc.SnapshotUploadRequest):
+    def start(self, *, req: ipc.SnapshotUploadRequestV20221129) -> NodeOp.StartResult:
         self.req = req
         logger.info("start_upload %r", req)
         return self.start_op(op_name="upload", op=self, fun=self.upload)
 
-    def upload(self):
+    def upload(self) -> None:
+        assert self.req is not None
         uploader = Uploader(storage=self.storage)
         snapshotter = self.get_snapshotter()
         # 'snapshotter' is global; ensure we have sole access to it
