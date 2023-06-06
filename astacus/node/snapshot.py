@@ -10,11 +10,12 @@ this module with proper parameters.
 
 """
 
-from ..common.rohmustorage import RohmuStorage
 from .node import NodeOp
 from .snapshotter import Snapshotter
 from .uploader import Uploader
 from astacus.common import ipc, utils
+from astacus.common.rohmustorage import RohmuStorage
+from astacus.common.snapshot import SnapshotGroup
 from typing import Optional
 
 import hashlib
@@ -25,7 +26,7 @@ _hash = hashlib.blake2s
 logger = logging.getLogger(__name__)
 
 
-class SnapshotOp(NodeOp[ipc.SnapshotRequest, ipc.SnapshotResult]):
+class SnapshotOp(NodeOp[ipc.SnapshotRequestV2, ipc.SnapshotResult]):
     snapshotter: Optional[Snapshotter] = None
 
     def create_result(self) -> ipc.SnapshotResult:
@@ -33,7 +34,18 @@ class SnapshotOp(NodeOp[ipc.SnapshotRequest, ipc.SnapshotResult]):
 
     def start(self) -> NodeOp.StartResult:
         logger.info("start_snapshot %r", self.req)
-        self.snapshotter = self.get_or_create_snapshotter(self.req.root_globs)
+        # We merge the list of groups and simple root_globs
+        # to handle backward compatibility if the controller is older than the nodes.
+        groups = [
+            SnapshotGroup(root_glob=group.root_glob, embedded_file_size_max=group.embedded_file_size_max)
+            for group in self.req.groups
+        ]
+        groups += [
+            SnapshotGroup(root_glob=root_glob)
+            for root_glob in self.req.root_globs
+            if not any(group.root_glob == root_glob for group in groups)
+        ]
+        self.snapshotter = self.get_or_create_snapshotter(groups)
         return self.start_op(op_name="snapshot", op=self, fun=self.snapshot)
 
     def snapshot(self) -> None:

@@ -31,6 +31,8 @@ class OpName(StrEnum):
 class Features(Enum):
     # Added on 2022-11-29, this can be assumed to be supported everywhere after 1 or 2 years
     validate_file_hashes = "validate_file_hashes"
+    # Added on 2023-06-07
+    snapshot_groups = "snapshot_groups"
 
 
 @router.get("/metadata")
@@ -73,7 +75,7 @@ def unlock(locker: str, state: NodeState = Depends(node_state)):
 
 
 @router.post("/snapshot")
-def snapshot(req: ipc.SnapshotRequest, n: Node = Depends()):
+def snapshot(req: ipc.SnapshotRequestV2, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
     return SnapshotOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start()

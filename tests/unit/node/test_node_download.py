@@ -6,7 +6,7 @@ See LICENSE for details
 from astacus.common import ipc, utils
 from astacus.common.progress import Progress
 from astacus.node.download import Downloader
-from astacus.node.snapshotter import Snapshotter
+from astacus.node.snapshotter import SnapshotGroup, Snapshotter
 from pathlib import Path
 
 
@@ -24,7 +24,7 @@ def test_download(snapshotter, uploader, storage, tmpdir):
 
     dst3 = Path(tmpdir / "dst3")
     dst3.mkdir()
-    snapshotter = Snapshotter(src=dst2, dst=dst3, globs=["*"], parallel=1)
+    snapshotter = Snapshotter(src=dst2, dst=dst3, groups=[SnapshotGroup(root_glob="*")], parallel=1)
     downloader = Downloader(storage=storage, snapshotter=snapshotter, dst=dst2, parallel=1)
     with snapshotter.lock:
         downloader.download_from_storage(progress=Progress(), snapshotstate=ss1)

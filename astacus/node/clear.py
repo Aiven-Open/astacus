@@ -11,6 +11,7 @@ from .node import NodeOp
 from .snapshotter import Snapshotter
 from astacus.common import ipc
 from astacus.common.progress import Progress
+from astacus.common.snapshot import SnapshotGroup
 from typing import Optional
 
 import contextlib
@@ -26,7 +27,9 @@ class ClearOp(NodeOp[ipc.SnapshotClearRequest, ipc.NodeResult]):
         return ipc.NodeResult()
 
     def start(self) -> NodeOp.StartResult:
-        self.snapshotter = self.get_or_create_snapshotter(self.req.root_globs)
+        self.snapshotter = self.get_or_create_snapshotter(
+            [SnapshotGroup(root_glob=root_glob) for root_glob in self.req.root_globs]
+        )
         logger.info("start_clear %r", self.req)
         return self.start_op(op_name="clear", op=self, fun=self.clear)
 

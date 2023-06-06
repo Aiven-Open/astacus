@@ -8,7 +8,7 @@ from astacus.common.progress import Progress
 from astacus.common.storage import FileStorage
 from astacus.node.api import router as node_router
 from astacus.node.config import NodeConfig
-from astacus.node.snapshotter import Snapshotter
+from astacus.node.snapshotter import SnapshotGroup, Snapshotter
 from astacus.node.uploader import Uploader
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -74,7 +74,7 @@ def fixture_snapshotter(tmpdir):
     src.mkdir()
     dst = Path(tmpdir) / "dst"
     dst.mkdir()
-    yield SnapshotterWithDefaults(src=src, dst=dst, globs=["*"], parallel=1)
+    yield SnapshotterWithDefaults(src=src, dst=dst, groups=[SnapshotGroup(root_glob="*")], parallel=1)
 
 
 @pytest.fixture(name="uploader")
