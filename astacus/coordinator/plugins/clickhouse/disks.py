@@ -2,9 +2,12 @@
 Copyright (c) 2023 Aiven Ltd
 See LICENSE for details
 """
+from .config import DiskConfiguration, DiskType
 from .escaping import escape_for_file_name, unescape_from_file_name
+from astacus.common.magic import DEFAULT_EMBEDDED_FILE_SIZE
+from astacus.common.snapshot import SnapshotGroup
 from pathlib import Path
-from typing import Sequence
+from typing import Optional, Sequence
 from uuid import UUID
 
 import dataclasses
@@ -16,9 +19,15 @@ class PartFilePathError(ValueError):
         super().__init__(f"Unexpected part file path {file_path}: {error}")
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, slots=True)
+class Disk:
+    type: DiskType
+    path_parts: tuple[str, ...]
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class ParsedPath:
-    disk_parts: tuple[str, ...]
+    disk: Disk
     freeze_name: bytes | None
     table_uuid: UUID
     detached: bool
@@ -37,20 +46,35 @@ class ParsedPath:
         if self.detached:
             parts.append("detached")
         parts.append(escape_for_file_name(self.part_name))
-        return Path(*self.disk_parts, *parts, *self.file_parts)
+        return Path(*self.disk.path_parts, *parts, *self.file_parts)
 
 
 @dataclasses.dataclass(frozen=True)
 class DiskPaths:
-    _disk_paths_parts: Sequence[tuple[str, ...]] = dataclasses.field(default_factory=lambda: [()])
+    _disks: Sequence[Disk] = dataclasses.field(default_factory=lambda: [Disk(type=DiskType.local, path_parts=())])
 
-    def get_frozen_parts_patterns(self, freeze_name: str) -> Sequence[str]:
+    def get_snapshot_groups(self, freeze_name: str) -> Sequence[SnapshotGroup]:
         """
-        Returns the glob patterns inside ClickHouse data dirs where frozen table parts are stored.
+        Returns the glob groups inside ClickHouse data dirs where frozen table parts are stored.
+
+        For local disk, the maximum embedded file size is the default one,
+        For remote disks the embedded file size is unlimited: we want to embed all metadata files.
         """
         escaped_freeze_name = escape_for_file_name(freeze_name.encode())
         frozen_parts_pattern = f"shadow/{escaped_freeze_name}/store/**/*"
-        return ["/".join((*disk_path_parts, frozen_parts_pattern)) for disk_path_parts in self._disk_paths_parts]
+        return [
+            SnapshotGroup(
+                root_glob="/".join((*disk.path_parts, frozen_parts_pattern)),
+                embedded_file_size_max=None if disk.type == DiskType.object_storage else DEFAULT_EMBEDDED_FILE_SIZE,
+            )
+            for disk in self._disks
+        ]
+
+    def _get_disk(self, path_parts: Sequence[str]) -> Optional[Disk]:
+        for disk in self._disks:
+            if path_parts[: len(disk.path_parts)] == disk.path_parts:
+                return disk
+        return None
 
     def parse_part_file_path(self, file_path: Path) -> ParsedPath:
         """
@@ -64,13 +88,10 @@ class DiskPaths:
             - [disk_path]/store/123/12345678-1234-1234-1234-12345678abcd/detached/all_1_1_0/[file.ext]
         """
         parts = file_path.parts
-        store_or_shadow_index = None
-        for disk_path_parts in self._disk_paths_parts:
-            if parts[: len(disk_path_parts)] == disk_path_parts:
-                store_or_shadow_index = len(disk_path_parts)
-                break
-        if store_or_shadow_index is None:
+        disk = self._get_disk(parts)
+        if disk is None:
             raise PartFilePathError(file_path, "should start with a disk path")
+        store_or_shadow_index = len(disk.path_parts)
         if parts[store_or_shadow_index] == "store":
             freeze_name = None
             uuid_index = store_or_shadow_index + 2
@@ -89,7 +110,7 @@ class DiskPaths:
         detached = parts[uuid_index + 1] == "detached"
         part_name_index = uuid_index + (2 if detached else 1)
         return ParsedPath(
-            disk_parts=parts[:store_or_shadow_index],
+            disk=disk,
             freeze_name=freeze_name,
             table_uuid=UUID(parts[uuid_index]),
             detached=detached,
@@ -98,5 +119,11 @@ class DiskPaths:
         )
 
     @classmethod
-    def from_disk_paths(cls, disk_paths: Sequence[Path]) -> "DiskPaths":
-        return DiskPaths(_disk_paths_parts=sorted([disk_path.parts for disk_path in disk_paths], key=len, reverse=True))
+    def from_disk_configs(cls, disk_configs: Sequence[DiskConfiguration]) -> "DiskPaths":
+        return DiskPaths(
+            _disks=sorted(
+                [Disk(type=disk_config.type, path_parts=disk_config.path.parts) for disk_config in disk_configs],
+                key=lambda disk: len(disk.path_parts),
+                reverse=True,
+            )
+        )

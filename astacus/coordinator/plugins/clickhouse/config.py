@@ -39,6 +39,9 @@ class DiskType(enum.Enum):
 
 
 class DiskConfiguration(AstacusModel):
+    class Config:
+        use_enum_values = False
+
     type: DiskType
     path: Path
     name: str

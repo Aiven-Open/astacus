@@ -77,7 +77,7 @@ class ClickHousePlugin(CoordinatorPlugin):
     def get_backup_steps(self, *, context: OperationContext) -> List[Step]:
         zookeeper_client = get_zookeeper_client(self.zookeeper)
         clickhouse_clients = get_clickhouse_clients(self.clickhouse)
-        disk_paths = DiskPaths.from_disk_paths([disk.path for disk in self.disks])
+        disk_paths = DiskPaths.from_disk_configs(self.disks)
         return [
             ValidateConfigStep(clickhouse=self.clickhouse),
             # Cleanup old frozen parts from failed backup attempts
@@ -99,7 +99,7 @@ class ClickHousePlugin(CoordinatorPlugin):
             ),
             # Then snapshot and backup all frozen table parts
             SnapshotStep(
-                snapshot_root_globs=disk_paths.get_frozen_parts_patterns(self.freeze_name),
+                snapshot_groups=disk_paths.get_snapshot_groups(self.freeze_name),
             ),
             ListHexdigestsStep(hexdigest_storage=context.hexdigest_storage),
             UploadBlocksStep(storage_name=context.storage_name, validate_file_hashes=False),
@@ -128,7 +128,7 @@ class ClickHousePlugin(CoordinatorPlugin):
             raise NotImplementedError
         zookeeper_client = get_zookeeper_client(self.zookeeper)
         clients = get_clickhouse_clients(self.clickhouse)
-        disk_paths = DiskPaths.from_disk_paths([disk.path for disk in self.disks])
+        disk_paths = DiskPaths.from_disk_configs(self.disks)
         return [
             ValidateConfigStep(clickhouse=self.clickhouse),
             BackupNameStep(json_storage=context.json_storage, requested_name=req.name),
