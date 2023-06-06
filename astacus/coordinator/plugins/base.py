@@ -91,6 +91,7 @@ class SnapshotStep(Step[List[ipc.SnapshotResult]]):
                 groups=[
                     ipc.SnapshotRequestGroup(
                         root_glob=group.root_glob,
+                        excluded_names=group.excluded_names,
                         embedded_file_size_max=group.embedded_file_size_max,
                     )
                     for group in self.snapshot_groups

@@ -37,7 +37,11 @@ class SnapshotOp(NodeOp[ipc.SnapshotRequestV2, ipc.SnapshotResult]):
         # We merge the list of groups and simple root_globs
         # to handle backward compatibility if the controller is older than the nodes.
         groups = [
-            SnapshotGroup(root_glob=group.root_glob, embedded_file_size_max=group.embedded_file_size_max)
+            SnapshotGroup(
+                root_glob=group.root_glob,
+                excluded_names=group.excluded_names,
+                embedded_file_size_max=group.embedded_file_size_max,
+            )
             for group in self.req.groups
         ]
         groups += [

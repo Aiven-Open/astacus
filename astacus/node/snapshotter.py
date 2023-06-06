@@ -77,6 +77,8 @@ class Snapshotter:
             for path in basepath.glob(group.root_glob):
                 if not path.is_file() or path.is_symlink():
                     continue
+                if path.name in group.excluded_names:
+                    continue
                 relpath = path.relative_to(basepath)
                 for parent in relpath.parents:
                     if parent.name == magic.ASTACUS_TMPDIR:
