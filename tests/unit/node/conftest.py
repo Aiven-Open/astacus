@@ -28,8 +28,8 @@ def fixture_app(tmpdir) -> FastAPI:
     root.mkdir()
     (root / "foo").write_text("foobar")
     (root / "foo2").write_text("foobar")
-    (root / "foobig").write_text("foobar" * magic.EMBEDDED_FILE_SIZE)
-    (root / "foobig2").write_text("foobar" * magic.EMBEDDED_FILE_SIZE)
+    (root / "foobig").write_text("foobar" * magic.DEFAULT_EMBEDDED_FILE_SIZE)
+    (root / "foobig2").write_text("foobar" * magic.DEFAULT_EMBEDDED_FILE_SIZE)
     app.state.node_config = NodeConfig.parse_obj(
         {
             "az": "testaz",
@@ -59,8 +59,8 @@ class SnapshotterWithDefaults(Snapshotter):
     def create_4foobar(self):
         (self.src / "foo").write_text("foobar")
         (self.src / "foo2").write_text("foobar")
-        (self.src / "foobig").write_text("foobar" * magic.EMBEDDED_FILE_SIZE)
-        (self.src / "foobig2").write_text("foobar" * magic.EMBEDDED_FILE_SIZE)
+        (self.src / "foobig").write_text("foobar" * magic.DEFAULT_EMBEDDED_FILE_SIZE)
+        (self.src / "foobig2").write_text("foobar" * magic.DEFAULT_EMBEDDED_FILE_SIZE)
         assert self.snapshot(progress=Progress()) > 0
         ss1 = self.get_snapshot_state()
         assert self.snapshot(progress=Progress()) == 0

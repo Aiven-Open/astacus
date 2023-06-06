@@ -6,7 +6,7 @@ See LICENSE for details
 # pydantic validators are class methods in disguise
 # pylint: disable=no-self-argument
 
-from .magic import StrEnum
+from .magic import DEFAULT_EMBEDDED_FILE_SIZE, StrEnum
 from .progress import Progress
 from .utils import AstacusModel, now, SizeLimitedFile
 from datetime import datetime

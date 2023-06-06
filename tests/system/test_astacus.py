@@ -20,8 +20,8 @@ A1_FILES_AND_CONTENTS = [
     ("empty", ""),
     ("file1", "content1"),
     ("file2", "content2"),
-    ("big1", "foobar" * magic.EMBEDDED_FILE_SIZE),
-    ("big2", "foobar" * magic.EMBEDDED_FILE_SIZE),
+    ("big1", "foobar" * magic.DEFAULT_EMBEDDED_FILE_SIZE),
+    ("big2", "foobar" * magic.DEFAULT_EMBEDDED_FILE_SIZE),
 ]
 
 

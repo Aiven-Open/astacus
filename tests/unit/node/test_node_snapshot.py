@@ -156,14 +156,14 @@ def test_api_snapshot_error(client, mocker):
 @pytest.mark.parametrize(
     "truncate_to,hashes_in_second_snapshot",
     [
-        (magic.EMBEDDED_FILE_SIZE - 1, 0),
-        (magic.EMBEDDED_FILE_SIZE + 1, 1),
+        (magic.DEFAULT_EMBEDDED_FILE_SIZE - 1, 0),
+        (magic.DEFAULT_EMBEDDED_FILE_SIZE + 1, 1),
     ],
 )
 def test_snapshot_file_size_changed(snapshotter, truncate_to, hashes_in_second_snapshot):
     path = snapshotter.src / "shrinky"
     with snapshotter.lock:
-        path.write_text("foobar" * magic.EMBEDDED_FILE_SIZE)
+        path.write_text("foobar" * magic.DEFAULT_EMBEDDED_FILE_SIZE)
         assert snapshotter.snapshot(progress=Progress()) > 0
 
         os.truncate(path, truncate_to)

@@ -227,7 +227,7 @@ class Snapshotter:
         def _cb(snapshotfile: SnapshotFile) -> SnapshotFile:
             # src may or may not be present; dst is present as it is in snapshot
             with snapshotfile.open_for_reading(self.dst) as f:
-                if snapshotfile.file_size <= magic.EMBEDDED_FILE_SIZE:
+                if snapshotfile.file_size <= magic.DEFAULT_EMBEDDED_FILE_SIZE:
                     snapshotfile.content_b64 = base64.b64encode(f.read()).decode()
                 else:
                     snapshotfile.hexdigest = hash_hexdigest_readable(f)
