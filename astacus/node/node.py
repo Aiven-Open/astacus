@@ -9,27 +9,28 @@ from .snapshotter import Snapshotter
 from .state import node_state, NodeState
 from astacus.common import ipc, magic, op, statsd, utils
 from astacus.common.dependencies import get_request_app_state, get_request_url
-from astacus.common.rohmustorage import RohmuStorage
 from astacus.common.statsd import StatsClient
 from fastapi import BackgroundTasks, Depends
 from starlette.datastructures import URL
-from typing import Optional
+from typing import Generic, Optional, Sequence, TypeVar
 
 import logging
 
 logger = logging.getLogger(__name__)
 SNAPSHOTTER_KEY = "node_snapshotter"
 
+Request = TypeVar("Request", bound=ipc.NodeRequest)
+Result = TypeVar("Result", bound=ipc.NodeResult)
 
-class NodeOp(op.Op):
-    req: Optional[ipc.NodeRequest] = None  # Provided by subclass
 
-    def __init__(self, *, n: "Node", op_id: int, stats: StatsClient):
+class NodeOp(op.Op, Generic[Request, Result]):
+    def __init__(self, *, n: "Node", op_id: int, req: Request, stats: StatsClient) -> None:
         super().__init__(info=n.state.op_info, op_id=op_id, stats=stats)
         self.start_op = n.start_op
         self.config = n.config
         self._still_locked_callback = n.state.still_locked_callback
-        self._sent_result_json = None
+        self._sent_result_json: Optional[str] = None
+        self.req = req
         self.result = self.create_result()
         self.result.az = self.config.az
         self.get_or_create_snapshotter = n.get_or_create_snapshotter
@@ -37,19 +38,15 @@ class NodeOp(op.Op):
         # TBD: Could start some worker thread to send the self.result periodically
         # (or to some local start method )
 
-    def create_result(self):
-        return ipc.NodeResult()
+    def create_result(self) -> Result:
+        raise NotImplementedError
 
-    @property
-    def storage(self):
-        return RohmuStorage(self.config.object_storage, storage=self.req.storage)
-
-    def still_running_callback(self):
+    def still_running_callback(self) -> bool:
         if self.info.op_id != self.op_id:
             return False
         return self._still_locked_callback()
 
-    def send_result(self):
+    def send_result(self) -> None:
         assert self.req and self.result, "subclass responsibility to set up req/result before send_result"
         if not self.req.result_url:
             logger.debug("send_result omitted - no result_url")
@@ -96,7 +93,7 @@ class Node(op.OpMixin):
         config: NodeConfig = Depends(node_config),
         state: NodeState = Depends(node_state),
         stats: statsd.StatsClient = Depends(node_stats)
-    ):
+    ) -> None:
         self.app_state = app_state
         self.request_url = request_url
         self.background_tasks = background_tasks
@@ -104,16 +101,14 @@ class Node(op.OpMixin):
         self.state = state
         self.stats = stats
 
-    def get_or_create_snapshotter(self, root_globs):
-        root_link = self.config.root_link
-        if not root_link:
-            root_link = self.config.root / magic.ASTACUS_TMPDIR
+    def get_or_create_snapshotter(self, root_globs: Sequence[str]) -> Snapshotter:
+        root_link = self.config.root_link if self.config.root_link is not None else self.config.root / magic.ASTACUS_TMPDIR
         root_link.mkdir(exist_ok=True)
 
-        def _create_snapshotter():
+        def _create_snapshotter() -> Snapshotter:
             return Snapshotter(src=self.config.root, dst=root_link, globs=root_globs, parallel=self.config.parallel.hashes)
 
         return utils.get_or_create_state(state=self.app_state, key=SNAPSHOTTER_KEY, factory=_create_snapshotter)
 
-    def get_snapshotter(self):
+    def get_snapshotter(self) -> Snapshotter:
         return getattr(self.app_state, SNAPSHOTTER_KEY)

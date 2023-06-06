@@ -9,12 +9,14 @@ The basic file restoration steps should be implementable by using the
 API of this module with proper parameters.
 
 """
-
 from .node import NodeOp
 from .snapshotter import Snapshotter
 from astacus.common import ipc, utils
+from astacus.common.progress import Progress
+from astacus.common.rohmustorage import RohmuStorage
 from astacus.common.storage import Storage, ThreadLocalStorage
-from typing import Dict, List, Optional
+from pathlib import Path
+from typing import Callable, Dict, List, Optional, Sequence
 
 import base64
 import contextlib
@@ -26,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class Downloader(ThreadLocalStorage):
-    def __init__(self, *, dst, snapshotter, parallel, storage: Storage):
+    def __init__(self, *, dst: Path, snapshotter: Snapshotter, parallel: int, storage: Storage) -> None:
         super().__init__(storage=storage)
         self.dst = dst
         self.snapshotter = snapshotter
@@ -35,9 +37,9 @@ class Downloader(ThreadLocalStorage):
     def _snapshotfile_already_exists(self, snapshotfile: ipc.SnapshotFile) -> bool:
         relative_path = snapshotfile.relative_path
         existing_snapshotfile = self.snapshotter.relative_path_to_snapshotfile.get(relative_path)
-        return existing_snapshotfile and existing_snapshotfile.equals_excluding_mtime(snapshotfile)
+        return existing_snapshotfile is not None and existing_snapshotfile.equals_excluding_mtime(snapshotfile)
 
-    def _download_snapshotfile(self, snapshotfile: ipc.SnapshotFile):
+    def _download_snapshotfile(self, snapshotfile: ipc.SnapshotFile) -> None:
         if self._snapshotfile_already_exists(snapshotfile):
             return
         relative_path = snapshotfile.relative_path
@@ -51,7 +53,7 @@ class Downloader(ThreadLocalStorage):
                 f.write(base64.b64decode(snapshotfile.content_b64))
         os.utime(download_path, ns=(snapshotfile.mtime_ns, snapshotfile.mtime_ns))
 
-    def _download_snapshotfiles_from_storage(self, snapshotfiles):
+    def _download_snapshotfiles_from_storage(self, snapshotfiles: Sequence[ipc.SnapshotFile]) -> None:
         self._download_snapshotfile(snapshotfiles[0])
 
         # We don't report progress for these, as local copying
@@ -59,7 +61,7 @@ class Downloader(ThreadLocalStorage):
         for snapshotfile in snapshotfiles[1:]:
             self._copy_snapshotfile(snapshotfiles[0], snapshotfile)
 
-    def _copy_snapshotfile(self, snapshotfile_src: ipc.SnapshotFile, snapshotfile: ipc.SnapshotFile):
+    def _copy_snapshotfile(self, snapshotfile_src: ipc.SnapshotFile, snapshotfile: ipc.SnapshotFile) -> None:
         if self._snapshotfile_already_exists(snapshotfile):
             return
         src_path = self.dst / snapshotfile_src.relative_path
@@ -68,7 +70,13 @@ class Downloader(ThreadLocalStorage):
         shutil.copy(src_path, dst_path)
         os.utime(dst_path, ns=(snapshotfile.mtime_ns, snapshotfile.mtime_ns))
 
-    def download_from_storage(self, *, progress, snapshotstate: ipc.SnapshotState, still_running_callback=lambda: True):
+    def download_from_storage(
+        self,
+        *,
+        progress: Progress,
+        snapshotstate: ipc.SnapshotState,
+        still_running_callback: Callable[[], bool] = lambda: True
+    ) -> None:
         hexdigest_to_snapshotfiles: Dict[str, List[ipc.SnapshotFile]] = {}
         valid_relative_path_set = set()
         for snapshotfile in snapshotstate.files:
@@ -76,7 +84,7 @@ class Downloader(ThreadLocalStorage):
             if snapshotfile.hexdigest:
                 hexdigest_to_snapshotfiles.setdefault(snapshotfile.hexdigest, []).append(snapshotfile)
 
-        self.snapshotter.snapshot()
+        self.snapshotter.snapshot(progress=Progress())
         # TBD: Error checking, what to do if we're told to restore to existing directory?
         progress.start(sum(1 + snapshotfile.file_size for snapshotfile in snapshotstate.files))
         for snapshotfile in snapshotstate.files:
@@ -85,7 +93,7 @@ class Downloader(ThreadLocalStorage):
                 progress.download_success(snapshotfile.file_size + 1)
         all_snapshotfiles = hexdigest_to_snapshotfiles.values()
 
-        def _cb(*, map_in, map_out):
+        def _cb(*, map_in: Sequence[ipc.SnapshotFile], map_out: Sequence[ipc.SnapshotFile]) -> bool:
             snapshotfiles = map_in
             progress.download_success((snapshotfiles[0].file_size + 1) * len(snapshotfiles))
             return still_running_callback()
@@ -112,20 +120,28 @@ class Downloader(ThreadLocalStorage):
         progress.done()
 
 
-class DownloadOp(NodeOp):
+class DownloadOp(NodeOp[ipc.SnapshotDownloadRequest, ipc.NodeResult]):
     snapshotter: Optional[Snapshotter] = None
 
-    def start(self, *, req: ipc.SnapshotDownloadRequest):
-        self.req = req
-        self.snapshotter = self.get_or_create_snapshotter(req.root_globs)
-        logger.info("start_download %r", req)
+    @property
+    def storage(self) -> RohmuStorage:
+        assert self.config.object_storage is not None
+        return RohmuStorage(self.config.object_storage, storage=self.req.storage)
+
+    def create_result(self) -> ipc.NodeResult:
+        return ipc.NodeResult()
+
+    def start(self) -> NodeOp.StartResult:
+        self.snapshotter = self.get_or_create_snapshotter(self.req.root_globs)
+        logger.info("start_download %r", self.req)
         return self.start_op(op_name="download", op=self, fun=self.download)
 
-    def download(self):
+    def download(self) -> None:
         assert self.snapshotter
         # Actual 'restore from backup'
         manifest = ipc.BackupManifest.parse_obj(self.storage.download_json(self.req.backup_name))
         snapshotstate = manifest.snapshot_results[self.req.snapshot_index].state
+        assert snapshotstate is not None
 
         # 'snapshotter' is global; ensure we have sole access to it
         with self.snapshotter.lock:

@@ -76,7 +76,7 @@ def unlock(locker: str, state: NodeState = Depends(node_state)):
 def snapshot(req: ipc.SnapshotRequest, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
-    return SnapshotOp(n=n, op_id=n.allocate_op_id(), stats=n.stats).start(req=req)
+    return SnapshotOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start()
 
 
 @router.get("/snapshot/{op_id}")
@@ -89,7 +89,7 @@ def snapshot_result(*, op_id: int, n: Node = Depends()):
 def upload(req: ipc.SnapshotUploadRequestV20221129, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
-    return UploadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats).start(req=req)
+    return UploadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start()
 
 
 @router.get("/upload/{op_id}")
@@ -102,7 +102,7 @@ def upload_result(*, op_id: int, n: Node = Depends()):
 def download(req: ipc.SnapshotDownloadRequest, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
-    return DownloadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats).start(req=req)
+    return DownloadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start()
 
 
 @router.get("/download/{op_id}")
@@ -115,7 +115,7 @@ def download_result(*, op_id: int, n: Node = Depends()):
 def clear(req: ipc.SnapshotClearRequest, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
-    return ClearOp(n=n, op_id=n.allocate_op_id(), stats=n.stats).start(req=req)
+    return ClearOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start()
 
 
 @router.get("/clear/{op_id}")
@@ -138,13 +138,13 @@ def cassandra(req: Union[ipc.NodeRequest, ipc.CassandraStartRequest], subop: ipc
         raise HTTPException(status_code=409, detail="Cassandra node configuration not found")
 
     if subop == ipc.CassandraSubOp.get_schema_hash:
-        return CassandraGetSchemaHashOp(n=n, op_id=n.allocate_op_id(), stats=n.stats).start(req=req)
+        return CassandraGetSchemaHashOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start()
 
     if subop == ipc.CassandraSubOp.start_cassandra:
         assert isinstance(req, ipc.CassandraStartRequest)
-        return CassandraStartOp(n=n, op_id=n.allocate_op_id(), stats=n.stats).start(req=req)
+        return CassandraStartOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start()
 
-    return SimpleCassandraSubOp(n=n, op_id=n.allocate_op_id(), stats=n.stats).start(req=req, subop=subop)
+    return SimpleCassandraSubOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(subop=subop)
 
 
 @router.get("/cassandra/{subop}/{op_id}")
