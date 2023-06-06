@@ -65,6 +65,7 @@ class DiskPaths:
         return [
             SnapshotGroup(
                 root_glob="/".join((*disk.path_parts, frozen_parts_pattern)),
+                excluded_names=("frozen_metadata.txt",) if disk.type == DiskType.object_storage else (),
                 embedded_file_size_max=None if disk.type == DiskType.object_storage else DEFAULT_EMBEDDED_FILE_SIZE,
             )
             for disk in self._disks

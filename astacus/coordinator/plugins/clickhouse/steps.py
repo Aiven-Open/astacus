@@ -5,12 +5,20 @@ See LICENSE for details
 from __future__ import annotations
 
 from .client import ClickHouseClient, ClickHouseClientQueryError, escape_sql_identifier, escape_sql_string
-from .config import ClickHouseConfiguration, ReplicatedDatabaseSettings
+from .config import ClickHouseConfiguration, DiskType, ReplicatedDatabaseSettings
 from .dependencies import access_entities_sorted_by_dependencies, tables_sorted_by_dependencies
 from .disks import DiskPaths
 from .escaping import escape_for_file_name, unescape_from_file_name
+from .file_metadata import FileMetadata, InvalidFileMetadata
 from .macros import fetch_server_macros, Macros
-from .manifest import AccessEntity, ClickHouseBackupVersion, ClickHouseManifest, ReplicatedDatabase, Table
+from .manifest import (
+    AccessEntity,
+    ClickHouseBackupVersion,
+    ClickHouseManifest,
+    ClickHouseObjectStorageFile,
+    ReplicatedDatabase,
+    Table,
+)
 from .parts import list_parts_to_attach
 from .replication import DatabaseReplica, get_databases_replicas, get_shard_and_replica, sync_replicated_database
 from astacus.common import ipc
@@ -20,9 +28,11 @@ from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import BackupManifestStep, SnapshotStep, Step, StepFailedError, StepsContext
 from astacus.coordinator.plugins.zookeeper import ChangeWatch, TransactionError, ZooKeeperClient
 from base64 import b64decode
+from pathlib import Path
 from typing import Any, cast, Dict, List, Mapping, Sequence, Tuple, TypeVar
 
 import asyncio
+import base64
 import dataclasses
 import logging
 import secrets
@@ -202,6 +212,36 @@ class RetrieveMacrosStep(Step[Sequence[Macros]]):
 
 
 @dataclasses.dataclass
+class CollectObjectStorageFilesStep(Step[list[ClickHouseObjectStorageFile]]):
+    """
+    Collects the list of files that are referenced by metadata files in the backup.
+    """
+
+    disk_paths: DiskPaths
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> list[ClickHouseObjectStorageFile]:
+        snapshot_results: Sequence[ipc.SnapshotResult] = context.get_result(SnapshotStep)
+        object_storage_files: set[Path] = set()
+        for snapshot_result in snapshot_results:
+            assert snapshot_result.state is not None
+            for snapshot_file in snapshot_result.state.files:
+                parsed_path = self.disk_paths.parse_part_file_path(snapshot_file.relative_path)
+                if parsed_path.disk.type == DiskType.object_storage:
+                    if snapshot_file.content_b64 is None:
+                        # This shouldn't happen because the snapshot glob will be configured to embed all files
+                        # when globbing on remote disks.
+                        raise StepFailedError("Metadata files should be embedded in the snapshot")
+                    content = base64.b64decode(snapshot_file.content_b64)
+                    try:
+                        file_metadata = FileMetadata.from_bytes(content)
+                    except InvalidFileMetadata as e:
+                        raise StepFailedError(f"Invalid file metadata in {snapshot_file.relative_path}: {e}") from e
+                    for object_metadata in file_metadata.objects:
+                        object_storage_files.add(object_metadata.relative_path)
+        return [ClickHouseObjectStorageFile(path=path) for path in sorted(object_storage_files)]
+
+
+@dataclasses.dataclass
 class PrepareClickHouseManifestStep(Step[Dict[str, Any]]):
     """
     Collects access entities, databases and tables from previous steps into an uploadable manifest.
@@ -214,6 +254,7 @@ class PrepareClickHouseManifestStep(Step[Dict[str, Any]]):
             access_entities=context.get_result(RetrieveAccessEntitiesStep),
             replicated_databases=databases,
             tables=tables,
+            object_storage_files=context.get_result(CollectObjectStorageFilesStep),
         )
         return manifest.to_plugin_data()
 
@@ -334,9 +375,18 @@ class MoveFrozenPartsStep(Step[None]):
         snapshot_results: List[ipc.SnapshotResult] = context.get_result(SnapshotStep)
         for snapshot_result in snapshot_results:
             assert snapshot_result.state is not None
-            for snapshot_file in snapshot_result.state.files:
-                parsed_path = self.disk_paths.parse_part_file_path(snapshot_file.relative_path)
-                snapshot_file.relative_path = dataclasses.replace(parsed_path, freeze_name=None, detached=False).to_path()
+            snapshot_result.state.files = [
+                snapshot_file.copy(
+                    update={
+                        "relative_path": dataclasses.replace(
+                            self.disk_paths.parse_part_file_path(snapshot_file.relative_path),
+                            freeze_name=None,
+                            detached=False,
+                        ).to_path()
+                    }
+                )
+                for snapshot_file in snapshot_result.state.files
+            ]
 
 
 @dataclasses.dataclass

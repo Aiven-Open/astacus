@@ -6,15 +6,22 @@ from astacus.common.exceptions import TransientException
 from astacus.common.ipc import BackupManifest, Plugin, SnapshotFile, SnapshotResult, SnapshotState
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
-from astacus.coordinator.plugins.base import BackupManifestStep, StepFailedError, StepsContext
+from astacus.coordinator.plugins.base import BackupManifestStep, SnapshotStep, StepFailedError, StepsContext
 from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, StubClickHouseClient
-from astacus.coordinator.plugins.clickhouse.config import ClickHouseConfiguration, ClickHouseNode, ReplicatedDatabaseSettings
+from astacus.coordinator.plugins.clickhouse.config import (
+    ClickHouseConfiguration,
+    ClickHouseNode,
+    DiskConfiguration,
+    DiskType,
+    ReplicatedDatabaseSettings,
+)
 from astacus.coordinator.plugins.clickhouse.disks import DiskPaths
 from astacus.coordinator.plugins.clickhouse.macros import Macros, MACROS_LIST_QUERY
 from astacus.coordinator.plugins.clickhouse.manifest import (
     AccessEntity,
     ClickHouseBackupVersion,
     ClickHouseManifest,
+    ClickHouseObjectStorageFile,
     ReplicatedDatabase,
     Table,
 )
@@ -22,8 +29,10 @@ from astacus.coordinator.plugins.clickhouse.replication import DatabaseReplica
 from astacus.coordinator.plugins.clickhouse.steps import (
     AttachMergeTreePartsStep,
     ClickHouseManifestStep,
+    CollectObjectStorageFilesStep,
     FreezeTablesStep,
     ListDatabaseReplicasStep,
+    MoveFrozenPartsStep,
     PrepareClickHouseManifestStep,
     RemoveFrozenTablesStep,
     RestoreAccessEntitiesStep,
@@ -46,6 +55,7 @@ from unittest import mock
 from unittest.mock import _Call as MockCall  # pylint: disable=protected-access
 
 import asyncio
+import base64
 import datetime
 import pytest
 import sys
@@ -90,6 +100,12 @@ SAMPLE_TABLES = [
     ),
 ]
 
+SAMPLE_OBJET_STORAGE_FILES = [
+    ClickHouseObjectStorageFile(path=Path("abc/defghi")),
+    ClickHouseObjectStorageFile(path=Path("jkl/mnopqr")),
+    ClickHouseObjectStorageFile(path=Path("stu/vwxyza")),
+]
+
 SAMPLE_MANIFEST_V1 = ClickHouseManifest(
     version=ClickHouseBackupVersion.V1,
     access_entities=SAMPLE_ENTITIES,
@@ -102,6 +118,7 @@ SAMPLE_MANIFEST = ClickHouseManifest(
     access_entities=SAMPLE_ENTITIES,
     replicated_databases=SAMPLE_DATABASES,
     tables=SAMPLE_TABLES,
+    object_storage_files=SAMPLE_OBJET_STORAGE_FILES,
 )
 
 SAMPLE_MANIFEST_ENCODED = SAMPLE_MANIFEST.to_plugin_data()
@@ -373,12 +390,122 @@ async def test_retrieve_macros() -> None:
     ]
 
 
+def create_remote_file(path: Path, remote_path: Path) -> SnapshotFile:
+    metadata = f"""3\n1\t100\n100\t{remote_path}\n1\n0\n""".encode()
+    return SnapshotFile(
+        relative_path=Path("disks/remote") / path,
+        file_size=len(metadata),
+        mtime_ns=1,
+        content_b64=base64.b64encode(metadata).decode(),
+    )
+
+
+@pytest.mark.asyncio
+async def test_collect_object_storage_file_steps() -> None:
+    disk_paths = DiskPaths.from_disk_configs(
+        [
+            DiskConfiguration(type=DiskType.local, path=Path(), name="default"),
+            DiskConfiguration(type=DiskType.object_storage, path=Path("disks/remote"), name="remote"),
+        ]
+    )
+    step = CollectObjectStorageFilesStep(disk_paths=disk_paths)
+    context = StepsContext()
+    table_uuid_parts = "000/00000000-0000-0000-0000-100000000001"
+    snapshot_results = [
+        SnapshotResult(
+            state=SnapshotState(
+                root_globs=["dont", "care"],
+                files=[
+                    create_remote_file(
+                        Path(f"store/{table_uuid_parts}/all_0_0_0/columns.txt"),
+                        Path("abc/defghi"),
+                    ),
+                    create_remote_file(
+                        Path(f"store/{table_uuid_parts}/all_0_0_0/data.bin"),
+                        Path("jkl/mnopqr"),
+                    ),
+                ],
+            )
+        ),
+        SnapshotResult(
+            state=SnapshotState(
+                root_globs=["dont", "care"],
+                files=[
+                    create_remote_file(
+                        Path(f"store/{table_uuid_parts}/all_0_0_0/columns.txt"),
+                        Path("abc/defghi"),
+                    ),
+                    create_remote_file(
+                        Path(f"store/{table_uuid_parts}/all_0_0_0/data.bin"),
+                        Path("stu/vwxyza"),
+                    ),
+                ],
+            )
+        ),
+    ]
+    context.set_result(SnapshotStep, snapshot_results)
+    assert await step.run_step(Cluster(nodes=[]), context) == SAMPLE_OBJET_STORAGE_FILES
+
+
+@pytest.mark.asyncio
+async def test_move_frozen_parts_steps() -> None:
+    disk_paths = DiskPaths.from_disk_configs(
+        [
+            DiskConfiguration(type=DiskType.local, path=Path(), name="default"),
+            DiskConfiguration(type=DiskType.object_storage, path=Path("disks/remote"), name="remote"),
+        ]
+    )
+    step = MoveFrozenPartsStep(disk_paths=disk_paths)
+    context = StepsContext()
+    table_uuid_parts = "000/00000000-0000-0000-0000-100000000001"
+    snapshot_results = [
+        SnapshotResult(
+            state=SnapshotState(
+                root_globs=["dont", "care"],
+                files=[
+                    SnapshotFile(
+                        relative_path=Path(f"shadow/astacus/store/{table_uuid_parts}/detached/all_0_0_0/columns.txt"),
+                        file_size=100,
+                        mtime_ns=1,
+                    ),
+                    SnapshotFile(
+                        relative_path=Path(
+                            f"disks/remote/shadow/astacus/store/{table_uuid_parts}/detached/all_0_0_0/data.bin"
+                        ),
+                        file_size=100,
+                        mtime_ns=1,
+                    ),
+                ],
+            )
+        ),
+    ]
+    context.set_result(SnapshotStep, snapshot_results)
+    await step.run_step(Cluster(nodes=[]), context)
+    # This step is mutating the snapshot
+    assert snapshot_results[0].state == SnapshotState(
+        root_globs=["dont", "care"],
+        files=[
+            SnapshotFile(
+                relative_path=Path(f"store/{table_uuid_parts}/all_0_0_0/columns.txt"),
+                file_size=100,
+                mtime_ns=1,
+            ),
+            SnapshotFile(
+                relative_path=Path(f"disks/remote/store/{table_uuid_parts}/all_0_0_0/data.bin"),
+                file_size=100,
+                mtime_ns=1,
+            ),
+        ],
+    )
+
+
 @pytest.mark.asyncio
 async def test_create_clickhouse_manifest() -> None:
     step = PrepareClickHouseManifestStep()
     context = StepsContext()
     context.set_result(RetrieveAccessEntitiesStep, SAMPLE_ENTITIES)
     context.set_result(RetrieveDatabasesAndTablesStep, (SAMPLE_DATABASES, SAMPLE_TABLES))
+    context.set_result(CollectObjectStorageFilesStep, SAMPLE_OBJET_STORAGE_FILES)
     assert await step.run_step(Cluster(nodes=[]), context) == SAMPLE_MANIFEST_ENCODED
 
 

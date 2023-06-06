@@ -14,6 +14,7 @@ from .disks import DiskPaths
 from .steps import (
     AttachMergeTreePartsStep,
     ClickHouseManifestStep,
+    CollectObjectStorageFilesStep,
     FreezeTablesStep,
     ListDatabaseReplicasStep,
     MoveFrozenPartsStep,
@@ -108,6 +109,7 @@ class ClickHousePlugin(CoordinatorPlugin):
                 clients=clickhouse_clients, freeze_name=self.freeze_name, freeze_unfreeze_timeout=self.unfreeze_timeout
             ),
             # Prepare the manifest for restore
+            CollectObjectStorageFilesStep(disk_paths=disk_paths),
             MoveFrozenPartsStep(disk_paths=disk_paths),
             PrepareClickHouseManifestStep(),
             UploadManifestStep(
