@@ -11,7 +11,7 @@ from astacus.common.op import Op
 from astacus.common.progress import Progress
 from astacus.common.rohmustorage import MultiRohmuStorage
 from astacus.common.statsd import StatsClient, Tags
-from astacus.common.storage import JsonStorage, MultiFileStorage, MultiStorage
+from astacus.common.storage import Json, JsonStorage, MultiFileStorage, MultiStorage
 from astacus.common.utils import AsyncSleeper
 from astacus.coordinator.cluster import Cluster, LockResult, WaitResultError
 from astacus.coordinator.config import coordinator_config, CoordinatorConfig, CoordinatorNode
@@ -20,7 +20,7 @@ from astacus.coordinator.state import coordinator_state, CoordinatorState
 from fastapi import BackgroundTasks, Depends, HTTPException
 from functools import cached_property
 from starlette.datastructures import URL
-from typing import Any, Awaitable, Callable, Dict, Iterator, List, Optional
+from typing import Awaitable, Callable, Dict, Iterator, List, Optional
 from urllib.parse import urlunsplit
 
 import asyncio
@@ -100,7 +100,7 @@ class Coordinator(op.OpMixin):
 
 
 class CacheClearingJsonStorage(JsonStorage):
-    def __init__(self, state: CoordinatorState, storage: JsonStorage):
+    def __init__(self, state: CoordinatorState, storage: JsonStorage) -> None:
         self.state = state
         self.storage = storage
 
@@ -110,13 +110,13 @@ class CacheClearingJsonStorage(JsonStorage):
         finally:
             self.state.cached_list_response = None
 
-    def download_json(self, name: str) -> Dict[str, Any]:
+    def download_json(self, name: str) -> Json:
         return self.storage.download_json(name)
 
-    def list_jsons(self) -> List[str]:
+    def list_jsons(self) -> list[str]:
         return self.storage.list_jsons()
 
-    def upload_json_str(self, name: str, data: str) -> None:
+    def upload_json_str(self, name: str, data: str) -> bool:
         try:
             return self.storage.upload_json_str(name, data)
         finally:
