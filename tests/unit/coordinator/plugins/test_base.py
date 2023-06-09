@@ -3,17 +3,28 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
-from astacus.common import ipc
+from astacus.common import ipc, utils
+from astacus.common.asyncstorage import AsyncJsonStorage
 from astacus.common.op import Op
 from astacus.common.progress import Progress
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
-from astacus.coordinator.plugins.base import ListHexdigestsStep, SnapshotStep, Step, StepsContext, UploadBlocksStep
+from astacus.coordinator.plugins.base import (
+    ComputeKeptBackupsStep,
+    ListBackupsStep,
+    ListHexdigestsStep,
+    SnapshotStep,
+    Step,
+    StepsContext,
+    UploadBlocksStep,
+)
 from astacus.node.api import Features
 from astacus.node.snapshotter import hash_hexdigest_readable
 from http import HTTPStatus
 from io import BytesIO
-from typing import Sequence
+from tests.unit.json_storage import MemoryJsonStorage
+from typing import AbstractSet, Sequence
+from unittest import mock
 
 import datetime
 import httpx
@@ -109,3 +120,86 @@ async def test_upload_step_uses_new_request_if_supported(
             ).jsondict()
         )
         await upload_step.run_step(cluster=cluster, context=context)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "retention,kept_backups",
+    [
+        (ipc.Retention(minimum_backups=1, maximum_backups=6, keep_days=6), {"b1", "b2", "b3", "b4", "b5"}),
+        (ipc.Retention(minimum_backups=1, maximum_backups=3, keep_days=6), {"b3", "b4", "b5"}),
+        (ipc.Retention(minimum_backups=1, maximum_backups=3, keep_days=2), {"b4", "b5"}),
+        (ipc.Retention(minimum_backups=1, maximum_backups=3, keep_days=1), {"b5"}),
+        (ipc.Retention(minimum_backups=1, maximum_backups=3, keep_days=0), {"b5"}),
+        (ipc.Retention(minimum_backups=0, maximum_backups=3, keep_days=0), set()),
+    ],
+)
+async def test_compute_kept_backups(retention: ipc.Retention, kept_backups: AbstractSet[str]) -> None:
+    async_json_storage = AsyncJsonStorage(
+        storage=MemoryJsonStorage(
+            items={
+                "b1": json.dumps(
+                    {
+                        "start": "2020-01-01T11:00Z",
+                        "end": "2020-01-01T13:00Z",
+                        "attempt": 1,
+                        "snapshot_results": [],
+                        "upload_results": [],
+                        "plugin": "clickhouse",
+                    }
+                ),
+                "b2": json.dumps(
+                    {
+                        "start": "2020-01-02T11:00Z",
+                        "end": "2020-01-02T13:00Z",
+                        "attempt": 1,
+                        "snapshot_results": [],
+                        "upload_results": [],
+                        "plugin": "clickhouse",
+                    }
+                ),
+                "b3": json.dumps(
+                    {
+                        "start": "2020-01-03T11:00Z",
+                        "end": "2020-01-03T13:00Z",
+                        "attempt": 1,
+                        "snapshot_results": [],
+                        "upload_results": [],
+                        "plugin": "clickhouse",
+                    }
+                ),
+                "b4": json.dumps(
+                    {
+                        "start": "2020-01-04T11:00Z",
+                        "end": "2020-01-04T13:00Z",
+                        "attempt": 1,
+                        "snapshot_results": [],
+                        "upload_results": [],
+                        "plugin": "clickhouse",
+                    }
+                ),
+                "b5": json.dumps(
+                    {
+                        "start": "2020-01-05T11:00Z",
+                        "end": "2020-01-05T13:00Z",
+                        "attempt": 1,
+                        "snapshot_results": [],
+                        "upload_results": [],
+                        "plugin": "clickhouse",
+                    }
+                ),
+            }
+        )
+    )
+    step = ComputeKeptBackupsStep(
+        json_storage=async_json_storage,
+        retention=retention,
+        explicit_delete=[],
+    )
+    cluster = Cluster(nodes=[CoordinatorNode(url="http://node_1")])
+    context = StepsContext()
+    context.set_result(ListBackupsStep, set(await async_json_storage.list_jsons()))
+    half_a_day_after_last_backup = datetime.datetime(2020, 1, 7, 5, 0, tzinfo=datetime.timezone.utc)
+    with mock.patch.object(utils, "now", lambda: half_a_day_after_last_backup):
+        result = await step.run_step(cluster=cluster, context=context)
+    assert result == kept_backups

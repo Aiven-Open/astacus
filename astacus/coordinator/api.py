@@ -115,7 +115,7 @@ async def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordina
 
 
 @router.post("/cleanup")
-async def cleanup(*, op: CleanupOp = Depends(), c: Coordinator = Depends()):
+async def cleanup(*, op: CleanupOp = Depends(CleanupOp.create), c: Coordinator = Depends()):
     runner = await op.acquire_cluster_lock()
     return c.start_op(op_name=OpName.cleanup, op=op, fun=runner)
 
