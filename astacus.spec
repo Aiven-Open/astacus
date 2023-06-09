@@ -17,6 +17,7 @@ BuildRequires:  python3-chardet
 BuildRequires:  python3-devel
 BuildRequires:  python3-pip
 BuildRequires:  python3-wheel
+BuildRequires:  snappy-devel
 BuildRequires:  which
 
 # These are used when actually running the package
