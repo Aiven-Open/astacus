@@ -9,6 +9,7 @@ from .snapshotter import Snapshotter
 from .state import node_state, NodeState
 from astacus.common import ipc, magic, op, statsd, utils
 from astacus.common.dependencies import get_request_app_state, get_request_url
+from astacus.common.snapshot import SnapshotGroup
 from astacus.common.statsd import StatsClient
 from fastapi import BackgroundTasks, Depends
 from starlette.datastructures import URL
@@ -101,12 +102,12 @@ class Node(op.OpMixin):
         self.state = state
         self.stats = stats
 
-    def get_or_create_snapshotter(self, root_globs: Sequence[str]) -> Snapshotter:
+    def get_or_create_snapshotter(self, groups: Sequence[SnapshotGroup]) -> Snapshotter:
         root_link = self.config.root_link if self.config.root_link is not None else self.config.root / magic.ASTACUS_TMPDIR
         root_link.mkdir(exist_ok=True)
 
         def _create_snapshotter() -> Snapshotter:
-            return Snapshotter(src=self.config.root, dst=root_link, globs=root_globs, parallel=self.config.parallel.hashes)
+            return Snapshotter(src=self.config.root, dst=root_link, groups=groups, parallel=self.config.parallel.hashes)
 
         return utils.get_or_create_state(state=self.app_state, key=SNAPSHOTTER_KEY, factory=_create_snapshotter)
 

@@ -4,12 +4,12 @@ See LICENSE for details
 cassandra backup/restore plugin
 
 """
-
 from .model import CassandraConfigurationNode
 from .utils import run_subop
 from astacus.common import ipc
 from astacus.common.cassandra.client import CassandraClient
 from astacus.common.cassandra.config import CassandraClientConfiguration, SNAPSHOT_NAME
+from astacus.common.snapshot import SnapshotGroup
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins import base
 from astacus.coordinator.plugins.base import CoordinatorPlugin, OperationContext, Step, StepFailedError, StepsContext
@@ -56,11 +56,11 @@ class CassandraPlugin(CoordinatorPlugin):
         nodes = self.nodes or [CassandraConfigurationNode(listen_address=self.client.get_listen_address())]
         client = CassandraClient(self.client)
         # first *: keyspace name; second *: table name
-        snapshot_root_globs = [
-            f"data/*/*/snapshots/{SNAPSHOT_NAME}/manifest.json",
-            f"data/*/*/snapshots/{SNAPSHOT_NAME}/*.db",
-            f"data/*/*/snapshots/{SNAPSHOT_NAME}/*.txt",
-            f"data/*/*/snapshots/{SNAPSHOT_NAME}/*.cql",
+        snapshot_groups = [
+            SnapshotGroup(root_glob=f"data/*/*/snapshots/{SNAPSHOT_NAME}/manifest.json"),
+            SnapshotGroup(root_glob=f"data/*/*/snapshots/{SNAPSHOT_NAME}/*.db"),
+            SnapshotGroup(root_glob=f"data/*/*/snapshots/{SNAPSHOT_NAME}/*.txt"),
+            SnapshotGroup(root_glob=f"data/*/*/snapshots/{SNAPSHOT_NAME}/*.cql"),
         ]
 
         return [
@@ -70,7 +70,7 @@ class CassandraPlugin(CoordinatorPlugin):
             CassandraSubOpStep(op=ipc.CassandraSubOp.remove_snapshot),
             CassandraSubOpStep(op=ipc.CassandraSubOp.take_snapshot),
             backup_steps.AssertSchemaUnchanged(),
-            base.SnapshotStep(snapshot_root_globs=snapshot_root_globs),
+            base.SnapshotStep(snapshot_groups=snapshot_groups),
             base.ListHexdigestsStep(hexdigest_storage=context.hexdigest_storage),
             base.UploadBlocksStep(storage_name=context.storage_name),
             CassandraSubOpStep(op=ipc.CassandraSubOp.remove_snapshot),

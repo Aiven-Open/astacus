@@ -166,4 +166,5 @@ def test_clickhouse_manifest_to_plugin_data() -> None:
         "access_entities": [SERIALIZED_ACCESS_ENTITY],
         "replicated_databases": [SERIALIZED_DATABASE],
         "tables": [SERIALIZED_TABLE],
+        "object_storage_files": [],
     }

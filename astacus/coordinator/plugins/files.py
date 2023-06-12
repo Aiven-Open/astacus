@@ -28,6 +28,7 @@ from .base import (
 )
 from astacus.common import ipc
 from astacus.common.ipc import Plugin
+from astacus.common.snapshot import SnapshotGroup
 from typing import List
 
 
@@ -37,7 +38,7 @@ class FilesPlugin(CoordinatorPlugin):
 
     def get_backup_steps(self, *, context: OperationContext) -> List[Step]:
         return [
-            SnapshotStep(snapshot_root_globs=self.root_globs),
+            SnapshotStep(snapshot_groups=[SnapshotGroup(root_glob) for root_glob in self.root_globs]),
             ListHexdigestsStep(hexdigest_storage=context.hexdigest_storage),
             UploadBlocksStep(storage_name=context.storage_name),
             UploadManifestStep(json_storage=context.json_storage, plugin=Plugin.files),

@@ -6,7 +6,7 @@ See LICENSE for details
 # pydantic validators are class methods in disguise
 # pylint: disable=no-self-argument
 
-from .magic import StrEnum
+from .magic import DEFAULT_EMBEDDED_FILE_SIZE, StrEnum
 from .progress import Progress
 from .utils import AstacusModel, now, SizeLimitedFile
 from datetime import datetime
@@ -90,7 +90,22 @@ class SnapshotState(AstacusModel):
 
 class SnapshotRequest(NodeRequest):
     # list of globs, e.g. ["**/*.dat"] we want to back up from root
-    root_globs: Sequence[str]
+    root_globs: Sequence[str] = ()
+
+
+class SnapshotRequestGroup(AstacusModel):
+    root_glob: str
+    # Exclude some file names that matched the glob
+    excluded_names: Sequence[str] = ()
+    # None means "no limit": all files matching the glob will be embedded
+    embedded_file_size_max: int | None = DEFAULT_EMBEDDED_FILE_SIZE
+
+
+class SnapshotRequestV2(NodeRequest):
+    # list of globs with extra options for each glob.
+    groups: Sequence[SnapshotRequestGroup] = ()
+    # Accept V1 request for backward compatibility if the controller is older
+    root_globs: Sequence[str] = ()
 
 
 class SnapshotHash(AstacusModel):

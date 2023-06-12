@@ -2,15 +2,17 @@
 Copyright (c) 2023 Aiven Ltd
 See LICENSE for details
 """
-from astacus.coordinator.plugins.clickhouse.disks import DiskPaths, ParsedPath
+from astacus.common.snapshot import SnapshotGroup
+from astacus.coordinator.plugins.clickhouse.config import DiskConfiguration, DiskType
+from astacus.coordinator.plugins.clickhouse.disks import Disk, DiskPaths, ParsedPath
 from pathlib import Path
 from uuid import UUID
 
 
-def test_get_frozen_parts_pattern_escapes_backup_name() -> None:
+def test_get_snapshot_groups_pattern_escapes_backup_name() -> None:
     disk_paths = DiskPaths()
-    assert disk_paths.get_frozen_parts_patterns("something+stra/../nge") == [
-        "shadow/something%2Bstra%2F%2E%2E%2Fnge/store/**/*"
+    assert disk_paths.get_snapshot_groups("something+stra/../nge") == [
+        SnapshotGroup(root_glob="shadow/something%2Bstra%2F%2E%2E%2Fnge/store/**/*")
     ]
 
 
@@ -20,7 +22,7 @@ def test_parse_part_file_path() -> None:
         Path("store/123/12345678-1234-1234-1234-12345678abcd/all_1_1_0/checksum.txt")
     )
     assert parsed_path == ParsedPath(
-        disk_parts=(),
+        disk=Disk(type=DiskType.local, path_parts=()),
         freeze_name=None,
         table_uuid=UUID("12345678-1234-1234-1234-12345678abcd"),
         detached=False,
@@ -35,7 +37,7 @@ def test_parse_detached_part_file_path() -> None:
         Path("store/123/12345678-1234-1234-1234-12345678abcd/detached/all_1_1_0/checksum.txt")
     )
     assert parsed_path == ParsedPath(
-        disk_parts=(),
+        disk=Disk(type=DiskType.local, path_parts=()),
         freeze_name=None,
         table_uuid=UUID("12345678-1234-1234-1234-12345678abcd"),
         detached=True,
@@ -50,7 +52,7 @@ def test_parse_shadow_part_file_path() -> None:
         Path("shadow/astacus/store/123/12345678-1234-1234-1234-12345678abcd/detached/all_1_1_0/checksum.txt")
     )
     assert parsed_path == ParsedPath(
-        disk_parts=(),
+        disk=Disk(type=DiskType.local, path_parts=()),
         freeze_name=b"astacus",
         table_uuid=UUID("12345678-1234-1234-1234-12345678abcd"),
         detached=True,
@@ -60,12 +62,17 @@ def test_parse_shadow_part_file_path() -> None:
 
 
 def test_parse_part_file_path_on_other_disk() -> None:
-    disk_paths = DiskPaths.from_disk_paths([Path(), Path("disks/secondary")])
+    disk_paths = DiskPaths.from_disk_configs(
+        [
+            DiskConfiguration(type=DiskType.local, path=Path(), name="default"),
+            DiskConfiguration(type=DiskType.object_storage, path=Path("disks/secondary"), name="secondary"),
+        ]
+    )
     parsed_path = disk_paths.parse_part_file_path(
         Path("disks/secondary/store/123/12345678-1234-1234-1234-12345678abcd/all_1_1_0/checksum.txt")
     )
     assert parsed_path == ParsedPath(
-        disk_parts=("disks", "secondary"),
+        disk=Disk(type=DiskType.object_storage, path_parts=("disks", "secondary")),
         freeze_name=None,
         table_uuid=UUID("12345678-1234-1234-1234-12345678abcd"),
         detached=False,
@@ -76,7 +83,7 @@ def test_parse_part_file_path_on_other_disk() -> None:
 
 def test_parsed_path_to_path() -> None:
     assert ParsedPath(
-        disk_parts=(),
+        disk=Disk(type=DiskType.local, path_parts=()),
         freeze_name=None,
         table_uuid=UUID("12345678-1234-1234-1234-12345678abcd"),
         detached=False,
@@ -87,7 +94,7 @@ def test_parsed_path_to_path() -> None:
 
 def test_detached_parsed_path_to_path() -> None:
     assert ParsedPath(
-        disk_parts=(),
+        disk=Disk(type=DiskType.local, path_parts=()),
         freeze_name=None,
         table_uuid=UUID("12345678-1234-1234-1234-12345678abcd"),
         detached=True,
@@ -98,7 +105,7 @@ def test_detached_parsed_path_to_path() -> None:
 
 def test_shadow_parsed_path_to_path() -> None:
     assert ParsedPath(
-        disk_parts=(),
+        disk=Disk(type=DiskType.local, path_parts=()),
         freeze_name=b"this/is\x80weird",
         table_uuid=UUID("12345678-1234-1234-1234-12345678abcd"),
         detached=False,
@@ -109,7 +116,7 @@ def test_shadow_parsed_path_to_path() -> None:
 
 def test_other_disk_parsed_path_to_path() -> None:
     assert ParsedPath(
-        disk_parts=("disks", "secondary"),
+        disk=Disk(type=DiskType.object_storage, path_parts=("disks", "secondary")),
         freeze_name=None,
         table_uuid=UUID("12345678-1234-1234-1234-12345678abcd"),
         detached=False,

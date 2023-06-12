@@ -10,7 +10,7 @@ ASTACUS_DEFAULT_PORT = 5515  # random port not assigned by IANA
 ASTACUS_TMPDIR = ".astacus"
 
 # Hexdigest is 32 bytes, so something orders of magnitude more at least
-EMBEDDED_FILE_SIZE = 200
+DEFAULT_EMBEDDED_FILE_SIZE = 200
 
 
 class StrEnum(str, Enum):

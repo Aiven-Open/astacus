@@ -27,6 +27,7 @@ from .etcd import ETCDDump, ETCDKey, get_etcd_dump, restore_etcd_dump
 from astacus.common import exceptions, ipc, m3placement
 from astacus.common.etcd import ETCDClient
 from astacus.common.ipc import Plugin
+from astacus.common.snapshot import SnapshotGroup
 from astacus.common.utils import AstacusModel
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
@@ -56,7 +57,7 @@ class M3DBPlugin(CoordinatorPlugin):
         return [
             InitStep(placement_nodes=self.placement_nodes),
             RetrieveEtcdStep(etcd_client=etcd_client, etcd_prefixes=etcd_prefixes),
-            SnapshotStep(snapshot_root_globs=["**/*.db"]),
+            SnapshotStep(snapshot_groups=[SnapshotGroup(root_glob="**/*.db")]),
             ListHexdigestsStep(hexdigest_storage=context.hexdigest_storage),
             UploadBlocksStep(storage_name=context.storage_name),
             RetrieveEtcdAgainStep(etcd_client=etcd_client, etcd_prefixes=etcd_prefixes),

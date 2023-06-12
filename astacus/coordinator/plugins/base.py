@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from astacus.common import exceptions, ipc, magic, utils
 from astacus.common.asyncstorage import AsyncHexDigestStorage, AsyncJsonStorage
+from astacus.common.snapshot import SnapshotGroup
 from astacus.common.utils import AstacusModel
 from astacus.coordinator.cluster import Cluster, Result
 from astacus.coordinator.config import CoordinatorNode
@@ -81,10 +82,26 @@ class SnapshotStep(Step[List[ipc.SnapshotResult]]):
     see `SnapshotFile` for details.
     """
 
-    snapshot_root_globs: Sequence[str]
+    snapshot_groups: Sequence[SnapshotGroup]
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> List[ipc.SnapshotResult]:
-        req = ipc.SnapshotRequest(root_globs=self.snapshot_root_globs)
+        nodes_metadata = await get_nodes_metadata(cluster)
+        if all(Features.snapshot_groups.value in node_metadata.features for node_metadata in nodes_metadata):
+            req: ipc.NodeRequest = ipc.SnapshotRequestV2(
+                groups=[
+                    ipc.SnapshotRequestGroup(
+                        root_glob=group.root_glob,
+                        excluded_names=group.excluded_names,
+                        embedded_file_size_max=group.embedded_file_size_max,
+                    )
+                    for group in self.snapshot_groups
+                ],
+            )
+        else:
+            # This is a lossy backward compatibility since the extra options are not passed
+            req = ipc.SnapshotRequest(
+                root_globs=[group.root_glob for group in self.snapshot_groups],
+            )
         start_results = await cluster.request_from_nodes("snapshot", method="post", caller="SnapshotStep", req=req)
         return await cluster.wait_successful_results(
             start_results=start_results, result_class=ipc.SnapshotResult, required_successes=len(start_results)

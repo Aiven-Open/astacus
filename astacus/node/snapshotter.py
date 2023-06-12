@@ -8,10 +8,12 @@ See LICENSE for details
 from astacus.common import magic, utils
 from astacus.common.ipc import SnapshotFile, SnapshotHash, SnapshotState
 from astacus.common.progress import increase_worth_reporting, Progress
+from astacus.common.snapshot import SnapshotGroup
 from pathlib import Path
-from typing import Iterator, Sequence
+from typing import Iterator, Mapping, Sequence
 
 import base64
+import dataclasses
 import hashlib
 import logging
 import os
@@ -30,6 +32,12 @@ def hash_hexdigest_readable(f, *, read_buffer: int = 1_000_000) -> str:
             break
         h.update(data)
     return h.hexdigest()
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class FoundFile:
+    relative_path: Path
+    group: SnapshotGroup
 
 
 class Snapshotter:
@@ -53,33 +61,42 @@ class Snapshotter:
     state during public API calls.
     """
 
-    def __init__(self, *, src: Path, dst: Path, globs: Sequence[str], parallel: int) -> None:
-        assert globs  # model has empty; either plugin or configuration must supply them
-        self.src = Path(src)
-        self.dst = Path(dst)
-        self.globs = globs
+    def __init__(self, *, src: Path, dst: Path, groups: Sequence[SnapshotGroup], parallel: int) -> None:
+        assert groups  # model has empty; either plugin or configuration must supply them
+        self.src = src
+        self.dst = dst
+        self.groups = groups
         self.relative_path_to_snapshotfile: dict[Path, SnapshotFile] = {}
         self.hexdigest_to_snapshotfiles: dict[str, list[SnapshotFile]] = {}
         self.parallel = parallel
         self.lock = threading.Lock()
 
-    def _list_files(self, basepath: Path) -> list[Path]:
+    def _list_files(self, basepath: Path) -> list[FoundFile]:
         result_files = set()
-        for glob in self.globs:
-            for path in basepath.glob(glob):
+        for group in self.groups:
+            for path in basepath.glob(group.root_glob):
                 if not path.is_file() or path.is_symlink():
+                    continue
+                if path.name in group.excluded_names:
                     continue
                 relpath = path.relative_to(basepath)
                 for parent in relpath.parents:
                     if parent.name == magic.ASTACUS_TMPDIR:
                         break
                 else:
-                    result_files.add(relpath)
-        return sorted(result_files)
+                    result_files.add(
+                        FoundFile(
+                            relative_path=relpath,
+                            group=SnapshotGroup(
+                                root_glob=group.root_glob, embedded_file_size_max=group.embedded_file_size_max
+                            ),
+                        )
+                    )
+        return sorted(result_files, key=lambda found_file: found_file.relative_path)
 
-    def _list_dirs_and_files(self, basepath: Path) -> tuple[list[Path], list[Path]]:
+    def _list_dirs_and_files(self, basepath: Path) -> tuple[list[Path], list[FoundFile]]:
         files = self._list_files(basepath)
-        dirs = {p.parent for p in files}
+        dirs = {p.relative_path.parent for p in files}
         return sorted(dirs), files
 
     def _add_snapshotfile(self, snapshotfile: SnapshotFile) -> None:
@@ -101,24 +118,26 @@ class Snapshotter:
         st = src_path.stat()
         return SnapshotFile(relative_path=relative_path, mtime_ns=st.st_mtime_ns, file_size=st.st_size)
 
-    def _get_snapshot_hash_list(self, relative_paths: Sequence[Path]) -> Iterator[SnapshotFile]:
+    def _get_snapshot_hash_list(self, found_files: Sequence[FoundFile]) -> Iterator[SnapshotFile]:
         same = 0
         lost = 0
-        for relative_path in relative_paths:
-            old_snapshotfile = self.relative_path_to_snapshotfile.get(relative_path)
+        for found_file in found_files:
+            old_snapshotfile = self.relative_path_to_snapshotfile.get(found_file.relative_path)
             try:
-                new_snapshotfile = self._snapshotfile_from_path(relative_path)
+                new_snapshotfile = self._snapshotfile_from_path(found_file.relative_path)
             except FileNotFoundError:
                 lost += 1
                 if increase_worth_reporting(lost):
-                    logger.info("#%d. lost - %s disappeared before stat, ignoring", lost, self.src / relative_path)
+                    logger.info(
+                        "#%d. lost - %s disappeared before stat, ignoring", lost, self.src / found_file.relative_path
+                    )
                 continue
             if old_snapshotfile and old_snapshotfile.underlying_file_is_the_same(new_snapshotfile):
                 new_snapshotfile.hexdigest = old_snapshotfile.hexdigest
                 new_snapshotfile.content_b64 = old_snapshotfile.content_b64
                 same += 1
                 if increase_worth_reporting(same):
-                    logger.info("#%d. same - %r in %s is same", same, old_snapshotfile, relative_path)
+                    logger.info("#%d. same - %r in %s is same", same, old_snapshotfile, found_file.relative_path)
                 continue
 
             yield new_snapshotfile
@@ -131,7 +150,9 @@ class Snapshotter:
 
     def get_snapshot_state(self) -> SnapshotState:
         assert self.lock.locked()
-        return SnapshotState(root_globs=self.globs, files=sorted(self.relative_path_to_snapshotfile.values()))
+        return SnapshotState(
+            root_globs=[group.root_glob for group in self.groups], files=sorted(self.relative_path_to_snapshotfile.values())
+        )
 
     def _snapshot_create_missing_directories(self, *, src_dirs: Sequence[Path], dst_dirs: Sequence[Path]) -> int:
         changes = 0
@@ -143,26 +164,26 @@ class Snapshotter:
             changes += 1
         return changes
 
-    def _snapshot_remove_extra_files(self, *, src_files: Sequence[Path], dst_files: Sequence[Path]) -> int:
+    def _snapshot_remove_extra_files(self, *, src_files: Sequence[FoundFile], dst_files: Sequence[FoundFile]) -> int:
         changes = 0
-        for i, relative_path in enumerate(set(dst_files).difference(src_files), start=1):
-            dst_path = self.dst / relative_path
-            snapshotfile = self.relative_path_to_snapshotfile.get(relative_path)
+        for i, found_file in enumerate(set(dst_files).difference(src_files), start=1):
+            dst_path = self.dst / found_file.relative_path
+            snapshotfile = self.relative_path_to_snapshotfile.get(found_file.relative_path)
             if snapshotfile:
                 self._remove_snapshotfile(snapshotfile)
             dst_path.unlink()
             if increase_worth_reporting(i):
-                logger.info("#%d. extra file: %r", i, relative_path)
+                logger.info("#%d. extra file: %r", i, found_file.relative_path)
             changes += 1
         return changes
 
-    def _snapshot_add_missing_files(self, *, src_files: Sequence[Path], dst_files: Sequence[Path]) -> int:
+    def _snapshot_add_missing_files(self, *, src_files: Sequence[FoundFile], dst_files: Sequence[FoundFile]) -> int:
         existing = 0
         disappeared = 0
         changes = 0
-        for i, relative_path in enumerate(set(src_files).difference(dst_files), start=1):
-            src_path = self.src / relative_path
-            dst_path = self.dst / relative_path
+        for i, found_file in enumerate(set(src_files).difference(dst_files), start=1):
+            src_path = self.src / found_file.relative_path
+            dst_path = self.dst / found_file.relative_path
             try:
                 os.link(src=src_path, dst=dst_path, follow_symlinks=False)
             except FileExistsError:
@@ -180,7 +201,7 @@ class Snapshotter:
                     logger.info("#%d. %s disappeared before linking, ignoring", disappeared, src_path)
                 continue
             if increase_worth_reporting(i - disappeared):
-                logger.info("#%d. new file: %r", i - disappeared, relative_path)
+                logger.info("#%d. new file: %r", i - disappeared, found_file.relative_path)
             changes += 1
         return changes
 
@@ -223,11 +244,13 @@ class Snapshotter:
 
         snapshotfiles = list(self._get_snapshot_hash_list(dst_files))
         progress.add_total(len(snapshotfiles))
+        path_to_group: Mapping[Path, SnapshotGroup] = {dst_file.relative_path: dst_file.group for dst_file in dst_files}
 
         def _cb(snapshotfile: SnapshotFile) -> SnapshotFile:
             # src may or may not be present; dst is present as it is in snapshot
             with snapshotfile.open_for_reading(self.dst) as f:
-                if snapshotfile.file_size <= magic.EMBEDDED_FILE_SIZE:
+                group = path_to_group[snapshotfile.relative_path]
+                if group.embedded_file_size_max is None or snapshotfile.file_size <= group.embedded_file_size_max:
                     snapshotfile.content_b64 = base64.b64encode(f.read()).decode()
                 else:
                     snapshotfile.hexdigest = hash_hexdigest_readable(f)

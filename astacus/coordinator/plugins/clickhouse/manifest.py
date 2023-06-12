@@ -5,6 +5,7 @@ See LICENSE for details
 from astacus.common.utils import AstacusModel
 from astacus.coordinator.plugins.clickhouse.client import escape_sql_identifier
 from base64 import b64decode, b64encode
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
 
@@ -94,6 +95,14 @@ class ClickHouseBackupVersion(enum.Enum):
     V2 = "v2"
 
 
+class ClickHouseObjectStorageFile(AstacusModel):
+    path: Path
+
+    @classmethod
+    def from_plugin_data(cls, data: dict[str, Any]) -> "ClickHouseObjectStorageFile":
+        return ClickHouseObjectStorageFile(path=Path(data["path"]))
+
+
 class ClickHouseManifest(AstacusModel):
     class Config:
         use_enum_values = False
@@ -102,6 +111,7 @@ class ClickHouseManifest(AstacusModel):
     access_entities: List[AccessEntity] = []
     replicated_databases: List[ReplicatedDatabase] = []
     tables: List[Table] = []
+    object_storage_files: list[ClickHouseObjectStorageFile] = []
 
     def to_plugin_data(self) -> Dict[str, Any]:
         return encode_manifest_data(self.dict())
@@ -113,6 +123,9 @@ class ClickHouseManifest(AstacusModel):
             access_entities=[AccessEntity.from_plugin_data(item) for item in data["access_entities"]],
             replicated_databases=[ReplicatedDatabase.from_plugin_data(item) for item in data["replicated_databases"]],
             tables=[Table.from_plugin_data(item) for item in data["tables"]],
+            object_storage_files=[
+                ClickHouseObjectStorageFile.from_plugin_data(item) for item in data.get("object_storage_files", [])
+            ],
         )
 
 
