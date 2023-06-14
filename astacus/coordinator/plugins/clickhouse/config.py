@@ -3,6 +3,7 @@ Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
 from .client import ClickHouseClient, HttpClickHouseClient
+from astacus.common.rohmustorage import RohmuStorageConfig
 from astacus.common.utils import AstacusModel, build_netloc
 from astacus.coordinator.plugins.zookeeper import KazooZooKeeperClient, ZooKeeperClient
 from astacus.coordinator.plugins.zookeeper_config import ZooKeeperConfiguration
@@ -38,6 +39,11 @@ class DiskType(enum.Enum):
     object_storage = "object_storage"
 
 
+class DiskObjectStorageConfiguration(AstacusModel):
+    default_storage: str
+    storages: dict[str, RohmuStorageConfig]
+
+
 class DiskConfiguration(AstacusModel):
     class Config:
         use_enum_values = False
@@ -45,6 +51,7 @@ class DiskConfiguration(AstacusModel):
     type: DiskType
     path: Path
     name: str
+    object_storage: Optional[DiskObjectStorageConfiguration] = None
 
 
 def get_zookeeper_client(configuration: ZooKeeperConfiguration) -> ZooKeeperClient:

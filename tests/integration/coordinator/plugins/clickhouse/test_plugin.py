@@ -55,7 +55,9 @@ async def fixture_restorable_cluster(
             async with create_clickhouse_cluster(
                 zookeeper, minio_bucket, ports, ("s1", "s1", "s2"), clickhouse_command
             ) as clickhouse_cluster:
-                async with create_astacus_cluster(storage_path, zookeeper, clickhouse_cluster, ports) as astacus_cluster:
+                async with create_astacus_cluster(
+                    storage_path, zookeeper, clickhouse_cluster, ports, minio_bucket
+                ) as astacus_cluster:
                     clients = [get_clickhouse_client(service) for service in clickhouse_cluster.services]
                     await setup_cluster_content(clients, clickhouse_cluster.use_named_collections)
                     await setup_cluster_users(clients)
@@ -78,7 +80,9 @@ async def fixture_restored_cluster(
             zookeeper, minio_bucket, ports, ("s1", "s1", "s2"), clickhouse_restore_command
         ) as clickhouse_cluster:
             clients = [get_clickhouse_client(service) for service in clickhouse_cluster.services]
-            async with create_astacus_cluster(restorable_cluster, zookeeper, clickhouse_cluster, ports) as astacus_cluster:
+            async with create_astacus_cluster(
+                restorable_cluster, zookeeper, clickhouse_cluster, ports, minio_bucket
+            ) as astacus_cluster:
                 # To test if we can survive transient failures during an entire restore operation,
                 # we first run a partial restore that stops after one of the restore steps,
                 # then we run the full restore, on the same ClickHouse cluster,
@@ -202,14 +206,18 @@ async def test_restores_table_with_experimental_types(restored_cluster: List[Cli
         assert response == expected_data
 
 
-@pytest.mark.asyncio
-async def test_restores_object_storage_data(restored_cluster: List[ClickHouseClient]) -> None:
+async def check_object_storage_data(cluster: List[ClickHouseClient]) -> None:
     s1_data = [[123, "foo"], [456, "bar"]]
     s2_data = [[789, "baz"]]
     cluster_data = [s1_data, s1_data, s2_data]
-    for client, expected_data in zip(restored_cluster, cluster_data):
+    for client, expected_data in zip(cluster, cluster_data):
         response = await client.execute(b"SELECT thekey, thedata FROM default.in_object_storage ORDER BY thekey")
         assert response == expected_data
+
+
+@pytest.mark.asyncio
+async def test_restores_object_storage_data(restored_cluster: List[ClickHouseClient]) -> None:
+    await check_object_storage_data(restored_cluster)
 
 
 @pytest.mark.asyncio
@@ -244,3 +252,40 @@ async def test_does_not_restore_log_tables_data(restored_cluster: List[ClickHous
     # We restored the table structure but not the data
     for client in restored_cluster:
         assert await client.execute(b"SELECT thekey, thedata FROM default.memory") == []
+
+
+@pytest.mark.asyncio
+async def test_cleanup_does_not_break_object_storage_disk_files(
+    ports: Ports,
+    clickhouse_command: ClickHouseCommand,
+    minio_bucket: MinioBucket,
+):
+    with tempfile.TemporaryDirectory(prefix="storage_") as storage_path_str:
+        storage_path = Path(storage_path_str)
+        async with create_zookeeper(ports) as zookeeper:
+            async with create_clickhouse_cluster(
+                zookeeper, minio_bucket, ports, ("s1", "s1", "s2"), clickhouse_command
+            ) as clickhouse_cluster:
+                async with create_astacus_cluster(
+                    storage_path, zookeeper, clickhouse_cluster, ports, minio_bucket
+                ) as astacus_cluster:
+                    clients = [get_clickhouse_client(service) for service in clickhouse_cluster.services]
+                    await setup_cluster_content(clients, clickhouse_cluster.use_named_collections)
+                    await setup_cluster_users(clients)
+                    run_astacus_command(astacus_cluster, "backup")
+                    run_astacus_command(astacus_cluster, "backup")
+                    run_astacus_command(astacus_cluster, "cleanup", "--maximum-backups", "1")
+                    # First check after the cleanup
+                    await check_object_storage_data(clients)
+        # We have destroyed everything except the backup storage dir and whatever is in minio
+        async with create_zookeeper(ports) as zookeeper:
+            async with create_clickhouse_cluster(
+                zookeeper, minio_bucket, ports, ("s1", "s1", "s2"), clickhouse_command
+            ) as clickhouse_cluster:
+                clients = [get_clickhouse_client(service) for service in clickhouse_cluster.services]
+                async with create_astacus_cluster(
+                    storage_path, zookeeper, clickhouse_cluster, ports, minio_bucket
+                ) as astacus_cluster:
+                    run_astacus_command(astacus_cluster, "restore")
+                # Then check again after a full restore
+                await check_object_storage_data(clients)

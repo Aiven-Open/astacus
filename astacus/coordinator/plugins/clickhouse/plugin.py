@@ -15,6 +15,7 @@ from .steps import (
     AttachMergeTreePartsStep,
     ClickHouseManifestStep,
     CollectObjectStorageFilesStep,
+    DeleteDanglingObjectStorageFilesStep,
     FreezeTablesStep,
     ListDatabaseReplicasStep,
     MoveFrozenPartsStep,
@@ -31,11 +32,16 @@ from .steps import (
     UnfreezeTablesStep,
     ValidateConfigStep,
 )
-from astacus.common.ipc import Plugin, RestoreRequest
+from astacus.common.ipc import Plugin, RestoreRequest, Retention
 from astacus.coordinator.plugins.base import (
     BackupManifestStep,
     BackupNameStep,
+    ComputeKeptBackupsStep,
     CoordinatorPlugin,
+    DeleteBackupManifestsStep,
+    DeleteDanglingHexdigestsStep,
+    DownloadKeptBackupManifestsStep,
+    ListBackupsStep,
     ListHexdigestsStep,
     OperationContext,
     RestoreStep,
@@ -177,4 +183,21 @@ class ClickHousePlugin(CoordinatorPlugin):
             RestoreAccessEntitiesStep(
                 zookeeper_client=zookeeper_client, access_entities_path=self.replicated_access_zookeeper_path
             ),
+        ]
+
+    def get_cleanup_steps(
+        self, *, context: OperationContext, retention: Retention, explicit_delete: Sequence[str]
+    ) -> List[Step]:
+        disk_paths = DiskPaths.from_disk_configs(self.disks)
+        return [
+            ListBackupsStep(json_storage=context.json_storage),
+            ComputeKeptBackupsStep(
+                json_storage=context.json_storage,
+                retention=retention,
+                explicit_delete=explicit_delete,
+            ),
+            DeleteBackupManifestsStep(json_storage=context.json_storage),
+            DownloadKeptBackupManifestsStep(json_storage=context.json_storage),
+            DeleteDanglingHexdigestsStep(hexdigest_storage=context.hexdigest_storage),
+            DeleteDanglingObjectStorageFilesStep(disk_paths=disk_paths),
         ]

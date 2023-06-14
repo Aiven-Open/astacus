@@ -6,7 +6,15 @@ from astacus.common.exceptions import TransientException
 from astacus.common.ipc import BackupManifest, Plugin, SnapshotFile, SnapshotResult, SnapshotState
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
-from astacus.coordinator.plugins.base import BackupManifestStep, SnapshotStep, StepFailedError, StepsContext
+from astacus.coordinator.plugins.base import (
+    BackupManifestStep,
+    ComputeKeptBackupsStep,
+    DownloadKeptBackupManifestsStep,
+    SnapshotStep,
+    StepFailedError,
+    StepsContext,
+)
+from astacus.coordinator.plugins.clickhouse.async_object_storage import MemoryAsyncObjectStorage, ObjectStorageItem
 from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, StubClickHouseClient
 from astacus.coordinator.plugins.clickhouse.config import (
     ClickHouseConfiguration,
@@ -15,13 +23,14 @@ from astacus.coordinator.plugins.clickhouse.config import (
     DiskType,
     ReplicatedDatabaseSettings,
 )
-from astacus.coordinator.plugins.clickhouse.disks import DiskPaths
+from astacus.coordinator.plugins.clickhouse.disks import Disk, DiskPaths
 from astacus.coordinator.plugins.clickhouse.macros import Macros, MACROS_LIST_QUERY
 from astacus.coordinator.plugins.clickhouse.manifest import (
     AccessEntity,
     ClickHouseBackupVersion,
     ClickHouseManifest,
     ClickHouseObjectStorageFile,
+    ClickHouseObjectStorageFiles,
     ReplicatedDatabase,
     Table,
 )
@@ -30,6 +39,7 @@ from astacus.coordinator.plugins.clickhouse.steps import (
     AttachMergeTreePartsStep,
     ClickHouseManifestStep,
     CollectObjectStorageFilesStep,
+    DeleteDanglingObjectStorageFilesStep,
     FreezeTablesStep,
     ListDatabaseReplicasStep,
     MoveFrozenPartsStep,
@@ -101,9 +111,14 @@ SAMPLE_TABLES = [
 ]
 
 SAMPLE_OBJET_STORAGE_FILES = [
-    ClickHouseObjectStorageFile(path=Path("abc/defghi")),
-    ClickHouseObjectStorageFile(path=Path("jkl/mnopqr")),
-    ClickHouseObjectStorageFile(path=Path("stu/vwxyza")),
+    ClickHouseObjectStorageFiles(
+        disk_name="remote",
+        files=[
+            ClickHouseObjectStorageFile(path=Path("abc/defghi")),
+            ClickHouseObjectStorageFile(path=Path("jkl/mnopqr")),
+            ClickHouseObjectStorageFile(path=Path("stu/vwxyza")),
+        ],
+    )
 ]
 
 SAMPLE_MANIFEST_V1 = ClickHouseManifest(
@@ -1071,3 +1086,92 @@ def check_each_pair_of_calls_has_the_same_session_id(mock_calls: Sequence[MockCa
     assert None not in session_ids
     for start_index in range(0, len(session_ids), 2):
         assert session_ids[start_index] == session_ids[start_index + 1]
+
+
+@pytest.mark.asyncio
+async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
+    object_storage = MemoryAsyncObjectStorage(
+        items=[
+            ObjectStorageItem(
+                key=Path("not_used/and_old"), last_modified=datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)
+            ),
+            ObjectStorageItem(
+                key=Path("abc/defghi"), last_modified=datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)
+            ),
+            ObjectStorageItem(
+                key=Path("jkl/mnopqr"), last_modified=datetime.datetime(2020, 1, 2, tzinfo=datetime.timezone.utc)
+            ),
+            ObjectStorageItem(
+                key=Path("stu/vwxyza"), last_modified=datetime.datetime(2020, 1, 3, tzinfo=datetime.timezone.utc)
+            ),
+            ObjectStorageItem(
+                key=Path("not_used/and_new"), last_modified=datetime.datetime(2020, 1, 4, tzinfo=datetime.timezone.utc)
+            ),
+        ]
+    )
+    disk_paths = DiskPaths(
+        disks=[
+            Disk(type=DiskType.object_storage, name="remote", path_parts=("disks", "remote"), object_storage=object_storage)
+        ]
+    )
+    step = DeleteDanglingObjectStorageFilesStep(disk_paths=disk_paths)
+    cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
+    context = StepsContext()
+    context.set_result(
+        DownloadKeptBackupManifestsStep,
+        [
+            BackupManifest(
+                start=datetime.datetime(2020, 1, 2, 10, tzinfo=datetime.timezone.utc),
+                end=datetime.datetime(2020, 1, 2, 11, tzinfo=datetime.timezone.utc),
+                attempt=1,
+                snapshot_results=[],
+                upload_results=[],
+                plugin=Plugin.clickhouse,
+                plugin_data=ClickHouseManifest(
+                    version=ClickHouseBackupVersion.V2,
+                    object_storage_files=[
+                        ClickHouseObjectStorageFiles(
+                            disk_name="remote",
+                            files=[
+                                ClickHouseObjectStorageFile(path=Path("abc/defghi")),
+                                ClickHouseObjectStorageFile(path=Path("jkl/mnopqr")),
+                            ],
+                        )
+                    ],
+                ).to_plugin_data(),
+                filename="backup-2",
+            ),
+            BackupManifest(
+                start=datetime.datetime(2020, 1, 3, 10, tzinfo=datetime.timezone.utc),
+                end=datetime.datetime(2020, 1, 3, 11, tzinfo=datetime.timezone.utc),
+                attempt=1,
+                snapshot_results=[],
+                upload_results=[],
+                plugin=Plugin.clickhouse,
+                plugin_data=ClickHouseManifest(
+                    version=ClickHouseBackupVersion.V2,
+                    object_storage_files=[
+                        ClickHouseObjectStorageFiles(
+                            disk_name="remote",
+                            files=[
+                                ClickHouseObjectStorageFile(path=Path("jkl/mnopqr")),
+                                ClickHouseObjectStorageFile(path=Path("stu/vwxyza")),
+                            ],
+                        )
+                    ],
+                ).to_plugin_data(),
+                filename="backup-3",
+            ),
+        ],
+    )
+    context.set_result(ComputeKeptBackupsStep, {"backup-2", "backup-3"})
+    await step.run_step(cluster, context)
+    assert await object_storage.list_items() == [
+        # Only not_used/and_old was deleted
+        ObjectStorageItem(key=Path("abc/defghi"), last_modified=datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)),
+        ObjectStorageItem(key=Path("jkl/mnopqr"), last_modified=datetime.datetime(2020, 1, 2, tzinfo=datetime.timezone.utc)),
+        ObjectStorageItem(key=Path("stu/vwxyza"), last_modified=datetime.datetime(2020, 1, 3, tzinfo=datetime.timezone.utc)),
+        ObjectStorageItem(
+            key=Path("not_used/and_new"), last_modified=datetime.datetime(2020, 1, 4, tzinfo=datetime.timezone.utc)
+        ),
+    ]

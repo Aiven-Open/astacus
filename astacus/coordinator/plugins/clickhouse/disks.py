@@ -2,6 +2,7 @@
 Copyright (c) 2023 Aiven Ltd
 See LICENSE for details
 """
+from .async_object_storage import AsyncObjectStorage, RohmuAsyncObjectStorage, ThreadSafeRohmuStorage
 from .config import DiskConfiguration, DiskType
 from .escaping import escape_for_file_name, unescape_from_file_name
 from astacus.common.magic import DEFAULT_EMBEDDED_FILE_SIZE
@@ -22,7 +23,28 @@ class PartFilePathError(ValueError):
 @dataclasses.dataclass(frozen=True, slots=True)
 class Disk:
     type: DiskType
+    name: str
     path_parts: tuple[str, ...]
+    object_storage: AsyncObjectStorage | None = None
+
+    @classmethod
+    def from_disk_config(cls, config: DiskConfiguration) -> "Disk":
+        if config.object_storage is None:
+            object_storage: RohmuAsyncObjectStorage | None = None
+        else:
+            object_storage = RohmuAsyncObjectStorage(
+                storage=ThreadSafeRohmuStorage(
+                    config=config.object_storage.storages[config.object_storage.default_storage].dict(
+                        by_alias=True, exclude_unset=True
+                    )
+                )
+            )
+        return Disk(
+            type=config.type,
+            name=config.name,
+            path_parts=config.path.parts,
+            object_storage=object_storage,
+        )
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -51,7 +73,9 @@ class ParsedPath:
 
 @dataclasses.dataclass(frozen=True)
 class DiskPaths:
-    _disks: Sequence[Disk] = dataclasses.field(default_factory=lambda: [Disk(type=DiskType.local, path_parts=())])
+    disks: Sequence[Disk] = dataclasses.field(
+        default_factory=lambda: [Disk(type=DiskType.local, name="default", path_parts=())]
+    )
 
     def get_snapshot_groups(self, freeze_name: str) -> Sequence[SnapshotGroup]:
         """
@@ -68,11 +92,17 @@ class DiskPaths:
                 excluded_names=("frozen_metadata.txt",) if disk.type == DiskType.object_storage else (),
                 embedded_file_size_max=None if disk.type == DiskType.object_storage else DEFAULT_EMBEDDED_FILE_SIZE,
             )
-            for disk in self._disks
+            for disk in self.disks
         ]
 
+    def get_object_storage(self, *, disk_name: str) -> AsyncObjectStorage | None:
+        for disk in self.disks:
+            if disk.name == disk_name:
+                return disk.object_storage
+        return None
+
     def _get_disk(self, path_parts: Sequence[str]) -> Optional[Disk]:
-        for disk in self._disks:
+        for disk in self.disks:
             if path_parts[: len(disk.path_parts)] == disk.path_parts:
                 return disk
         return None
@@ -122,8 +152,8 @@ class DiskPaths:
     @classmethod
     def from_disk_configs(cls, disk_configs: Sequence[DiskConfiguration]) -> "DiskPaths":
         return DiskPaths(
-            _disks=sorted(
-                [Disk(type=disk_config.type, path_parts=disk_config.path.parts) for disk_config in disk_configs],
+            disks=sorted(
+                [Disk.from_disk_config(disk_config) for disk_config in disk_configs],
                 key=lambda disk: len(disk.path_parts),
                 reverse=True,
             )

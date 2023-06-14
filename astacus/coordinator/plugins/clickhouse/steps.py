@@ -16,6 +16,7 @@ from .manifest import (
     ClickHouseBackupVersion,
     ClickHouseManifest,
     ClickHouseObjectStorageFile,
+    ClickHouseObjectStorageFiles,
     ReplicatedDatabase,
     Table,
 )
@@ -25,7 +26,14 @@ from astacus.common import ipc
 from astacus.common.exceptions import TransientException
 from astacus.common.limiter import gather_limited
 from astacus.coordinator.cluster import Cluster
-from astacus.coordinator.plugins.base import BackupManifestStep, SnapshotStep, Step, StepFailedError, StepsContext
+from astacus.coordinator.plugins.base import (
+    BackupManifestStep,
+    DownloadKeptBackupManifestsStep,
+    SnapshotStep,
+    Step,
+    StepFailedError,
+    StepsContext,
+)
 from astacus.coordinator.plugins.zookeeper import ChangeWatch, TransactionError, ZooKeeperClient
 from base64 import b64decode
 from pathlib import Path
@@ -212,16 +220,16 @@ class RetrieveMacrosStep(Step[Sequence[Macros]]):
 
 
 @dataclasses.dataclass
-class CollectObjectStorageFilesStep(Step[list[ClickHouseObjectStorageFile]]):
+class CollectObjectStorageFilesStep(Step[list[ClickHouseObjectStorageFiles]]):
     """
     Collects the list of files that are referenced by metadata files in the backup.
     """
 
     disk_paths: DiskPaths
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> list[ClickHouseObjectStorageFile]:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> list[ClickHouseObjectStorageFiles]:
         snapshot_results: Sequence[ipc.SnapshotResult] = context.get_result(SnapshotStep)
-        object_storage_files: set[Path] = set()
+        object_storage_files: dict[str, set[Path]] = {}
         for snapshot_result in snapshot_results:
             assert snapshot_result.state is not None
             for snapshot_file in snapshot_result.state.files:
@@ -237,8 +245,13 @@ class CollectObjectStorageFilesStep(Step[list[ClickHouseObjectStorageFile]]):
                     except InvalidFileMetadata as e:
                         raise StepFailedError(f"Invalid file metadata in {snapshot_file.relative_path}: {e}") from e
                     for object_metadata in file_metadata.objects:
-                        object_storage_files.add(object_metadata.relative_path)
-        return [ClickHouseObjectStorageFile(path=path) for path in sorted(object_storage_files)]
+                        object_storage_files.setdefault(parsed_path.disk.name, set()).add(object_metadata.relative_path)
+        return [
+            ClickHouseObjectStorageFiles(
+                disk_name=disk_name, files=[ClickHouseObjectStorageFile(path=path) for path in sorted(paths)]
+            )
+            for disk_name, paths in sorted(object_storage_files.items())
+        ]
 
 
 @dataclasses.dataclass
@@ -686,6 +699,57 @@ class SyncTableReplicasStep(Step[None]):
                 if table.is_replicated
             ],
         )
+
+
+@dataclasses.dataclass
+class DeleteDanglingObjectStorageFilesStep(Step[None]):
+    """
+    Delete object storage files that were created before the most recent backup
+    and that are not part of any backup.
+    """
+
+    disk_paths: DiskPaths
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
+        backup_manifests = context.get_result(DownloadKeptBackupManifestsStep)
+        if len(backup_manifests) < 1:
+            logger.info("no backup manifest, not deleting any object storage disk file")
+            # If we don't have at least one backup, we don't know which files are more recent
+            # than the latest backup, so we don't do anything.
+            return
+        newest_backup_start_time = max((backup_manifest.start for backup_manifest in backup_manifests))
+        clickhouse_manifests = [
+            ClickHouseManifest.from_plugin_data(backup_manifest.plugin_data) for backup_manifest in backup_manifests
+        ]
+        kept_paths: dict[str, set[Path]] = {}
+        for clickhouse_manifest in clickhouse_manifests:
+            for object_storage_disk in clickhouse_manifest.object_storage_files:
+                disk_kept_paths = kept_paths.setdefault(object_storage_disk.disk_name, set())
+                disk_kept_paths.update((file.path for file in object_storage_disk.files))
+        for disk_name, disk_kept_paths in sorted(kept_paths.items()):
+            disk_object_storage = self.disk_paths.get_object_storage(disk_name=disk_name)
+            if disk_object_storage is None:
+                raise StepFailedError(f"Could not find object storage disk named {disk_name!r}")
+            keys_to_remove = []
+            logger.info("found %d object storage files to keep in disk %r", len(disk_kept_paths), disk_name)
+            disk_object_storage_items = await disk_object_storage.list_items()
+            for item in disk_object_storage_items:
+                # We don't know if objects newer than the latest backup should be kept or not,
+                # so we leave them for now. We'll delete them if necessary once there is a newer
+                # backup to tell us if they are still used or not.
+                if item.last_modified < newest_backup_start_time and item.key not in disk_kept_paths:
+                    logger.debug("dangling object storage file in disk %r : %r", disk_name, item.key)
+                    keys_to_remove.append(item.key)
+            disk_available_paths = [item.key for item in disk_object_storage_items]
+            for disk_kept_path in disk_kept_paths:
+                if disk_kept_path not in disk_available_paths:
+                    # Make sure the non-deleted files are actually in object storage
+                    raise StepFailedError(f"missing object storage file in disk {disk_name!r}: {disk_kept_path!r}")
+            logger.info("found %d object storage files to remove in disk %r", len(keys_to_remove), disk_name)
+            for key_to_remove in keys_to_remove:
+                # We should really have a batch delete operation there, but it's missing from rohmu
+                logger.debug("deleting object storage file in disk %r : %r", disk_name, key_to_remove)
+                await disk_object_storage.delete_item(key_to_remove)
 
 
 async def execute_with_timeout(client: ClickHouseClient, timeout: float, query: bytes) -> None:
