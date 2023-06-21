@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from astacus.common import exceptions, ipc, magic, utils
 from astacus.common.asyncstorage import AsyncHexDigestStorage, AsyncJsonStorage
+from astacus.common.ipc import Retention
 from astacus.common.snapshot import SnapshotGroup
 from astacus.common.utils import AstacusModel
 from astacus.coordinator.cluster import Cluster, Result
@@ -34,6 +35,21 @@ class CoordinatorPlugin(AstacusModel):
 
     def get_restore_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> List[Step]:
         raise NotImplementedError
+
+    def get_cleanup_steps(
+        self, *, context: OperationContext, retention: ipc.Retention, explicit_delete: Sequence[str]
+    ) -> List[Step]:
+        return [
+            ListBackupsStep(json_storage=context.json_storage),
+            ComputeKeptBackupsStep(
+                json_storage=context.json_storage,
+                retention=retention,
+                explicit_delete=explicit_delete,
+            ),
+            DeleteBackupManifestsStep(json_storage=context.json_storage),
+            DownloadKeptBackupManifestsStep(json_storage=context.json_storage),
+            DeleteDanglingHexdigestsStep(hexdigest_storage=context.hexdigest_storage),
+        ]
 
 
 @dataclasses.dataclass
@@ -273,6 +289,119 @@ class RestoreStep(Step[List[ipc.NodeResult]]):
                 return []
             start_results.extend(start_result)
         return await cluster.wait_successful_results(start_results=start_results, result_class=ipc.NodeResult)
+
+
+@dataclasses.dataclass
+class ListBackupsStep(Step[set[str]]):
+    """
+    List all available backups and return their name.
+    """
+
+    json_storage: AsyncJsonStorage
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> set[str]:
+        return set(b for b in await self.json_storage.list_jsons() if b.startswith(magic.JSON_BACKUP_PREFIX))
+
+
+@dataclasses.dataclass
+class ComputeKeptBackupsStep(Step[set[str]]):
+    """
+    Return a list of backup names we want to keep, after excluding the explicitly deleted
+    backups and applying the retention rules.
+    """
+
+    json_storage: AsyncJsonStorage
+    retention: Retention
+    explicit_delete: Sequence[str]
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> set[str]:
+        all_backups = context.get_result(ListBackupsStep)
+        kept_backups = all_backups.difference(set(self.explicit_delete))
+        if self.retention.minimum_backups is not None and self.retention.minimum_backups >= len(kept_backups):
+            return kept_backups
+        now = utils.now()
+
+        manifests = [await download_backup_manifest(self.json_storage, backup) for backup in kept_backups]
+        manifests = sorted(manifests, key=lambda m: (m.start, m.end, m.filename), reverse=True)
+        while manifests:
+            if self.retention.maximum_backups is not None:
+                if self.retention.maximum_backups < len(manifests):
+                    manifests.pop()
+                    continue
+
+            # Ok, so now we have at most <maximum_backups> (if set) backups
+            # Do we have too _few_ backups to delete any more?
+            if self.retention.minimum_backups is not None:
+                if self.retention.minimum_backups >= len(manifests):
+                    break
+
+            if self.retention.keep_days is not None:
+                manifest = manifests[-1]
+                if (now - manifest.end).days > self.retention.keep_days:
+                    manifests.pop()
+                    continue
+            # We don't have any other criteria to filter the backup manifests with
+            break
+
+        return set(manifest.filename for manifest in manifests)
+
+
+@dataclasses.dataclass
+class DeleteBackupManifestsStep(Step[set[str]]):
+    """
+    Delete all backup manifests that are not kept.
+    """
+
+    json_storage: AsyncJsonStorage
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> set[str]:
+        all_backups = context.get_result(ListBackupsStep)
+        kept_backups = context.get_result(ComputeKeptBackupsStep)
+        deleted_backups = all_backups - kept_backups
+        for backup in deleted_backups:
+            logger.info("deleting backup manifest %r", backup)
+            await self.json_storage.delete_json(backup)
+        return deleted_backups
+
+
+@dataclasses.dataclass
+class DownloadKeptBackupManifestsStep(Step[Sequence[ipc.BackupManifest]]):
+    """
+    Download the manifest of all kept backups.
+    """
+
+    json_storage: AsyncJsonStorage
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> Sequence[ipc.BackupManifest]:
+        backup_names = context.get_result(ComputeKeptBackupsStep)
+        return [await download_backup_manifest(self.json_storage, backup_name) for backup_name in backup_names]
+
+
+@dataclasses.dataclass
+class DeleteDanglingHexdigestsStep(Step[None]):
+    """
+    Delete all backups that are not kept.
+    """
+
+    hexdigest_storage: AsyncHexDigestStorage
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
+        kept_manifests = context.get_result(DownloadKeptBackupManifestsStep)
+        logger.info("listing extra hexdigests")
+        kept_hexdigests: set[str] = set()
+        for manifest in kept_manifests:
+            for result in manifest.snapshot_results:
+                assert result.hashes is not None
+                kept_hexdigests = kept_hexdigests | set(h.hexdigest for h in result.hashes if h.hexdigest)
+        all_hexdigests = await self.hexdigest_storage.list_hexdigests()
+        extra_hexdigests = set(all_hexdigests).difference(kept_hexdigests)
+        logger.info("deleting %d hexdigests from object storage", len(extra_hexdigests))
+        for i, hexdigest in enumerate(extra_hexdigests, 1):
+            # Due to rate limiting, it might be better to not do this in parallel
+            await self.hexdigest_storage.delete_hexdigest(hexdigest)
+            if i % 100 == 0 and cluster.stats is not None:
+                cluster.stats.gauge("astacus_cleanup_hexdigest_progress", i)
+                cluster.stats.gauge("astacus_cleanup_hexdigest_progress_percent", 100.0 * i / len(extra_hexdigests))
 
 
 def get_node_to_backup_index(

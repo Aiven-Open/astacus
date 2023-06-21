@@ -62,10 +62,10 @@ def test_api_cleanup_flow(fail_at, client, populated_mstorage, app):
         (ipc.Retention(maximum_backups=1), 1, 1),
         (ipc.Retention(keep_days=-1), 0, 0),
         (ipc.Retention(minimum_backups=1, keep_days=-1), 1, 1),
-        (ipc.Retention(minimum_backups=3, maximum_backups=1, keep_days=-1), 2, 2),
+        (ipc.Retention(minimum_backups=3, maximum_backups=1, keep_days=-1), 2, 1),
         (ipc.Retention(keep_days=100), 0, 0),
-        (ipc.Retention(keep_days=10000), 2, 2),
-        (ipc.Retention(minimum_backups=1, keep_days=10000), 2, 2),
+        (ipc.Retention(keep_days=10000), 2, 1),
+        (ipc.Retention(minimum_backups=1, keep_days=10000), 2, 1),
         (ipc.Retention(maximum_backups=1, keep_days=10000), 1, 1),
     ],
 )

@@ -11,6 +11,7 @@ from astacus.common.rohmustorage import (
     RohmuConfig,
     RohmuEncryptionKey,
     RohmuLocalStorageConfig,
+    RohmuS3StorageConfig,
     RohmuStorageType,
 )
 from astacus.common.utils import build_netloc
@@ -21,6 +22,7 @@ from astacus.coordinator.plugins.clickhouse.config import (
     ClickHouseConfiguration,
     ClickHouseNode,
     DiskConfiguration,
+    DiskObjectStorageConfiguration,
     DiskType,
     ReplicatedDatabaseSettings,
 )
@@ -56,6 +58,7 @@ pytestmark = [pytest.mark.clickhouse, pytest.mark.x86_64]
 class ClickHouseServiceCluster(ServiceCluster):
     use_named_collections: bool
     expands_uuid_in_zookeeper_path: bool
+    object_storage_prefix: str
 
 
 USER_CONFIG = """
@@ -120,6 +123,9 @@ async def create_clickhouse_service(ports: Ports, command: ClickHouseCommand) ->
 
 @dataclasses.dataclass(frozen=True)
 class MinioBucket:
+    host: str
+    port: int
+    name: str
     endpoint_url: str
     access_key_id: str
     secret_access_key: str
@@ -172,6 +178,9 @@ class MinioService:
         with self.get_client(access_key=self.root_user, secret_key=self.root_password) as s3_client:
             s3_client.create_bucket(Bucket=bucket_name, ACL="private")
             yield MinioBucket(
+                host=self.host,
+                port=self.server_port,
+                name=bucket_name,
                 endpoint_url=f"{self.endpoint_url}/{bucket_name}/",
                 access_key_id=self.root_user,
                 secret_access_key=self.root_password,
@@ -201,7 +210,9 @@ async def fixture_minio_bucket(minio: MinioService) -> AsyncIterator[MinioBucket
 async def create_minio_service(ports: Ports) -> AsyncIterator[MinioService]:
     server_port = ports.allocate()
     console_port = ports.allocate()
-    host = "::1"
+    # It would be nice to verify IPv6 works well but rohmu does not use build_netloc or equivalent,
+    # the endpoint url is wrong when the host contains ":".
+    host = "localhost"
     server_netloc = build_netloc(host, server_port)
     console_netloc = build_netloc(host, console_port)
     root_user = "minio_root"
@@ -247,6 +258,7 @@ async def create_clickhouse_cluster(
     http_ports = [ports.allocate() for _ in range(cluster_size)]
     interserver_http_ports = [ports.allocate() for _ in range(cluster_size)]
     joined_http_ports = "-".join(str(port) for port in http_ports)
+    object_storage_prefix = "prefix/"
     with tempfile.TemporaryDirectory(prefix=f"clickhouse_{joined_http_ports}_") as base_data_dir:
         data_dirs = [Path(base_data_dir) / f"clickhouse_{http_port}" for http_port in http_ports]
         configs = create_clickhouse_configs(
@@ -258,6 +270,7 @@ async def create_clickhouse_cluster(
             interserver_http_ports,
             use_named_collections,
             minio_bucket=minio_bucket,
+            object_storage_prefix=object_storage_prefix,
         )
         for config, data_dir in zip(configs, data_dirs):
             data_dir.mkdir()
@@ -277,6 +290,7 @@ async def create_clickhouse_cluster(
                 ],
                 use_named_collections=use_named_collections,
                 expands_uuid_in_zookeeper_path=expands_uuid_in_zookeeper_path,
+                object_storage_prefix=object_storage_prefix,
             )
 
 
@@ -286,8 +300,9 @@ async def create_astacus_cluster(
     zookeeper: Service,
     clickhouse_cluster: ClickHouseServiceCluster,
     ports: Ports,
+    minio_bucket: MinioBucket,
 ) -> AsyncIterator[ServiceCluster]:
-    configs = create_astacus_configs(zookeeper, clickhouse_cluster, ports, Path(storage_path))
+    configs = create_astacus_configs(zookeeper, clickhouse_cluster, ports, Path(storage_path), minio_bucket)
     async with contextlib.AsyncExitStack() as stack:
         astacus_services_coro: List[Awaitable] = [stack.enter_async_context(_astacus(config=config)) for config in configs]
         astacus_services = list(await asyncio.gather(*astacus_services_coro))
@@ -303,6 +318,7 @@ def create_clickhouse_configs(
     interserver_http_ports: List[int],
     use_named_collections: bool,
     minio_bucket: Optional[MinioBucket] = None,
+    object_storage_prefix: str = "/",
 ):
     replicas = "\n".join(
         f"""
@@ -334,7 +350,7 @@ def create_clickhouse_configs(
                 </default>
                 <remote>
                     <type>s3</type>
-                    <endpoint>{minio_bucket.endpoint_url}prefix/</endpoint>
+                    <endpoint>{minio_bucket.endpoint_url}{object_storage_prefix}</endpoint>
                     <access_key_id>{minio_bucket.access_key_id}</access_key_id>
                     <secret_access_key>{minio_bucket.secret_access_key}</secret_access_key>
                     <support_batch_delete>true</support_batch_delete>
@@ -442,9 +458,14 @@ def create_astacus_configs(
     clickhouse_cluster: ClickHouseServiceCluster,
     ports: Ports,
     storage_path: Path,
+    minio_bucket: MinioBucket,
 ) -> List[GlobalConfig]:
     storage_tmp_path = storage_path / "tmp"
     storage_tmp_path.mkdir(exist_ok=True)
+    astacus_backup_storage_path = storage_path / "astacus_backup"
+    astacus_backup_storage_path.mkdir(exist_ok=True)
+    clickhouse_storage_storage_path = storage_path / "clickhouse_storage"
+    clickhouse_storage_storage_path.mkdir(exist_ok=True)
     node_ports = [ports.allocate() for _ in clickhouse_cluster.services]
     return [
         GlobalConfig(
@@ -475,8 +496,31 @@ def create_astacus_configs(
                         cluster_password=clickhouse_cluster.services[0].password,
                     ),
                     disks=[
-                        DiskConfiguration(type=DiskType.local, path=Path(""), name="default"),
-                        DiskConfiguration(type=DiskType.object_storage, path=Path("disks/remote"), name="remote"),
+                        DiskConfiguration(
+                            type=DiskType.local,
+                            path=Path(""),
+                            name="default",
+                        ),
+                        DiskConfiguration(
+                            type=DiskType.object_storage,
+                            path=Path("disks/remote"),
+                            name="remote",
+                            object_storage=DiskObjectStorageConfiguration(
+                                default_storage="default",
+                                storages={
+                                    "default": RohmuS3StorageConfig(
+                                        storage_type=RohmuStorageType.s3,
+                                        region="fake",
+                                        host=minio_bucket.host,
+                                        port=minio_bucket.port,
+                                        aws_access_key_id=minio_bucket.access_key_id,
+                                        aws_secret_access_key=minio_bucket.secret_access_key,
+                                        bucket_name=minio_bucket.name,
+                                        prefix=clickhouse_cluster.object_storage_prefix,
+                                    )
+                                },
+                            ),
+                        ),
                     ],
                     sync_databases_timeout=10.0,
                     sync_tables_timeout=30.0,
@@ -491,7 +535,7 @@ def create_astacus_configs(
                 storages={
                     "test": RohmuLocalStorageConfig(
                         storage_type=RohmuStorageType.local,
-                        directory=storage_path,
+                        directory=astacus_backup_storage_path,
                     )
                 },
                 compression=RohmuCompression(algorithm=RohmuCompressionType.zstd),

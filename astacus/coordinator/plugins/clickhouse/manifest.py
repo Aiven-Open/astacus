@@ -103,6 +103,18 @@ class ClickHouseObjectStorageFile(AstacusModel):
         return ClickHouseObjectStorageFile(path=Path(data["path"]))
 
 
+class ClickHouseObjectStorageFiles(AstacusModel):
+    disk_name: str
+    files: list[ClickHouseObjectStorageFile]
+
+    @classmethod
+    def from_plugin_data(cls, data: dict[str, Any]) -> "ClickHouseObjectStorageFiles":
+        return ClickHouseObjectStorageFiles(
+            disk_name=data["disk_name"],
+            files=[ClickHouseObjectStorageFile.from_plugin_data(item) for item in data["files"]],
+        )
+
+
 class ClickHouseManifest(AstacusModel):
     class Config:
         use_enum_values = False
@@ -111,7 +123,7 @@ class ClickHouseManifest(AstacusModel):
     access_entities: List[AccessEntity] = []
     replicated_databases: List[ReplicatedDatabase] = []
     tables: List[Table] = []
-    object_storage_files: list[ClickHouseObjectStorageFile] = []
+    object_storage_files: list[ClickHouseObjectStorageFiles] = []
 
     def to_plugin_data(self) -> Dict[str, Any]:
         return encode_manifest_data(self.dict())
@@ -124,7 +136,7 @@ class ClickHouseManifest(AstacusModel):
             replicated_databases=[ReplicatedDatabase.from_plugin_data(item) for item in data["replicated_databases"]],
             tables=[Table.from_plugin_data(item) for item in data["tables"]],
             object_storage_files=[
-                ClickHouseObjectStorageFile.from_plugin_data(item) for item in data.get("object_storage_files", [])
+                ClickHouseObjectStorageFiles.from_plugin_data(item) for item in data.get("object_storage_files", [])
             ],
         )
 

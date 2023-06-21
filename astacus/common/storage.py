@@ -6,6 +6,7 @@ See LICENSE for details
 """
 from .exceptions import NotFoundException
 from .utils import AstacusModel
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import BinaryIO, Callable, Generic, ParamSpec, TypeAlias, TypeVar
 
@@ -30,9 +31,10 @@ class StorageUploadResult(AstacusModel):
     stored_size: int
 
 
-class HexDigestStorage:
+class HexDigestStorage(ABC):
+    @abstractmethod
     def delete_hexdigest(self, hexdigest: str) -> None:
-        raise NotImplementedError
+        ...
 
     def download_hexdigest_bytes(self, hexdigest: str) -> bytes:
         b = io.BytesIO()
@@ -40,8 +42,9 @@ class HexDigestStorage:
         b.seek(0)
         return b.read()
 
+    @abstractmethod
     def download_hexdigest_to_file(self, hexdigest: str, f: BinaryIO) -> bool:
-        raise NotImplementedError
+        ...
 
     def download_hexdigest_to_path(self, hexdigest: str, filename: str | Path) -> None:
         tempfilename = f"{filename}.tmp"
@@ -49,29 +52,38 @@ class HexDigestStorage:
             self.download_hexdigest_to_file(hexdigest, f)
         os.rename(tempfilename, filename)
 
+    @abstractmethod
     def list_hexdigests(self) -> list[str]:
-        raise NotImplementedError
+        ...
 
     def upload_hexdigest_bytes(self, hexdigest: str, data: bytes) -> StorageUploadResult:
         return self.upload_hexdigest_from_file(hexdigest, io.BytesIO(data))
 
+    @abstractmethod
     def upload_hexdigest_from_file(self, hexdigest: str, f: BinaryIO) -> StorageUploadResult:
-        raise NotImplementedError
+        ...
 
     def upload_hexdigest_from_path(self, hexdigest: str, filename: str | Path) -> StorageUploadResult:
         with open(filename, "rb") as f:
             return self.upload_hexdigest_from_file(hexdigest, f)
 
 
-class JsonStorage:
+class JsonStorage(ABC):
+    @abstractmethod
     def delete_json(self, name: str) -> None:
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def download_json(self, name: str) -> Json:
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def list_jsons(self) -> list[str]:
-        raise NotImplementedError
+        ...
+
+    @abstractmethod
+    def upload_json_str(self, name: str, data: str) -> bool:
+        ...
 
     def upload_json(self, name: str, data: AstacusModel | Json) -> bool:
         if isinstance(data, AstacusModel):
@@ -80,16 +92,14 @@ class JsonStorage:
             text = json.dumps(data)
         return self.upload_json_str(name, text)
 
-    def upload_json_str(self, name: str, data: str) -> bool:
-        raise NotImplementedError
 
-
-class Storage(HexDigestStorage, JsonStorage):
+class Storage(HexDigestStorage, JsonStorage, ABC):
     # pylint: disable=abstract-method
     # This is abstract class which has whatever APIs necessary. Due to that,
     # it is expected not to implement the abstract methods.
+    @abstractmethod
     def copy(self) -> "Storage":
-        raise NotImplementedError
+        ...
 
 
 def file_error_wrapper(fun: Callable[P, T]) -> Callable[P, T]:
