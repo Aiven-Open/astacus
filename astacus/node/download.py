@@ -16,6 +16,7 @@ from astacus.common.progress import Progress
 from astacus.common.rohmustorage import RohmuStorage
 from astacus.common.snapshot import SnapshotGroup
 from astacus.common.storage import Storage, ThreadLocalStorage
+from astacus.common.utils import get_umask
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence
 
@@ -52,6 +53,7 @@ class Downloader(ThreadLocalStorage):
             else:
                 assert snapshotfile.content_b64 is not None
                 f.write(base64.b64decode(snapshotfile.content_b64))
+        os.chmod(download_path, 0o660 & ~get_umask())
         os.utime(download_path, ns=(snapshotfile.mtime_ns, snapshotfile.mtime_ns))
 
     def _download_snapshotfiles_from_storage(self, snapshotfiles: Sequence[ipc.SnapshotFile]) -> None:
