@@ -22,19 +22,24 @@ from typing import Callable, Dict, List, Optional, Sequence
 
 import base64
 import contextlib
+import getpass
 import logging
 import os
 import shutil
+import subprocess
 
 logger = logging.getLogger(__name__)
 
 
 class Downloader(ThreadLocalStorage):
-    def __init__(self, *, dst: Path, snapshotter: Snapshotter, parallel: int, storage: Storage) -> None:
+    def __init__(
+        self, *, dst: Path, snapshotter: Snapshotter, parallel: int, storage: Storage, copy_dst_owner: bool = False
+    ) -> None:
         super().__init__(storage=storage)
         self.dst = dst
         self.snapshotter = snapshotter
         self.parallel = parallel
+        self.copy_dst_owner = copy_dst_owner
 
     def _snapshotfile_already_exists(self, snapshotfile: ipc.SnapshotFile) -> bool:
         relative_path = snapshotfile.relative_path
@@ -78,7 +83,7 @@ class Downloader(ThreadLocalStorage):
         *,
         progress: Progress,
         snapshotstate: ipc.SnapshotState,
-        still_running_callback: Callable[[], bool] = lambda: True
+        still_running_callback: Callable[[], bool] = lambda: True,
     ) -> None:
         hexdigest_to_snapshotfiles: Dict[str, List[ipc.SnapshotFile]] = {}
         valid_relative_path_set = set()
@@ -119,6 +124,29 @@ class Downloader(ThreadLocalStorage):
             with contextlib.suppress(FileNotFoundError):
                 absolute_path.unlink()
 
+        if self.copy_dst_owner:
+            # Adjust owner of created files and folders to be like the owner of dst
+            dst_owner_uid = self.dst.stat().st_uid
+            chowned_paths: set[str] = set()
+            for snapshotfile in snapshotstate.files:
+                absolute_path = self.dst / snapshotfile.relative_path
+                chown_candidate = absolute_path
+                while chown_candidate != self.dst and chown_candidate.stat().st_uid != dst_owner_uid:
+                    chowned_paths.add(str(chown_candidate.relative_to(self.dst)))
+                    chown_candidate = chown_candidate.parent
+            if chowned_paths:
+                astacus_user = getpass.getuser()
+                dst_owner_gid = self.dst.stat().st_gid
+                # We're very specific to allow a sufficiently restrictive sudoers configuration
+                cmd: Sequence[str | Path] = [
+                    "/usr/bin/sudo",
+                    "/usr/bin/chown",
+                    f"--from={astacus_user}:{dst_owner_gid}",
+                    f"{dst_owner_uid}",
+                    "--",
+                    *sorted(chowned_paths),
+                ]
+                subprocess.run(cmd, shell=False, check=True, cwd=self.dst)
         # This operation is done. It may or may not have been a success.
         progress.done()
 
@@ -156,6 +184,7 @@ class DownloadOp(NodeOp[ipc.SnapshotDownloadRequest, ipc.NodeResult]):
                 snapshotter=self.snapshotter,
                 storage=self.storage,
                 parallel=self.config.parallel.downloads,
+                copy_dst_owner=self.config.copy_root_owner,
             )
             downloader.download_from_storage(
                 snapshotstate=snapshotstate,

@@ -60,6 +60,11 @@ class NodeConfig(AstacusModel):
 
     parallel: NodeParallel = Field(default_factory=NodeParallel)
 
+    # Copy the owner of created files and folders from the owner of root,
+    # this requires the right to run this command:
+    # /usr/bin/sudo /usr/bin/chown --from=astacus_username:data_root_gid data_root_uid -- FILE...
+    copy_root_owner: bool = False
+
     # Cassandra configuration is optional; for now, in node part of
     # the code, there are no plugins. (This may change later.)
     cassandra: Optional[CassandraNodeConfig]
