@@ -7,7 +7,7 @@ Test astacus.common.utils
 """
 
 from astacus.common import utils
-from astacus.common.utils import AsyncSleeper, build_netloc
+from astacus.common.utils import AsyncSleeper, build_netloc, parse_umask
 from datetime import timedelta
 from pathlib import Path
 
@@ -174,3 +174,19 @@ def test_open_path_with_atomic_rename(tmpdir):
         with utils.open_path_with_atomic_rename(f3_path):
             assert False
     assert not Path(f3_path).exists()
+
+
+def test_parse_umask() -> None:
+    proc_status = """Name:   cat
+Umask:  0027
+State:  R (running)
+"""
+    assert parse_umask(proc_status) == 0o027
+
+
+def test_parse_umask_fallback() -> None:
+    proc_status = """Name:   cat
+Umask:  POTATO
+State:  R (running)
+"""
+    assert parse_umask(proc_status) == 0o022

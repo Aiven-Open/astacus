@@ -15,7 +15,7 @@ from contextlib import contextmanager
 from multiprocessing.dummy import Pool  # fastapi + fork = bad idea
 from pathlib import Path
 from pydantic import BaseModel
-from typing import Any, AsyncIterable, Callable, Dict, Iterable, Optional, TypeVar, Union
+from typing import Any, AsyncIterable, Callable, Dict, Final, Iterable, Optional, TypeVar, Union
 
 import asyncio
 import datetime
@@ -24,6 +24,7 @@ import httpx
 import json as _json
 import logging
 import os
+import re
 import requests
 import tempfile
 import time
@@ -319,3 +320,21 @@ def open_path_with_atomic_rename(path, **kwargs):
         except:
             os.unlink(f.name)
             raise
+
+
+FALLBACK_UMASK: Final[int] = 0o022
+
+
+def get_umask() -> int:
+    try:
+        proc_status = Path("/proc/self/status").read_text()
+    except FileNotFoundError:
+        return FALLBACK_UMASK
+    else:
+        return parse_umask(proc_status)
+
+
+def parse_umask(proc_status: str) -> int:
+    if umask_line := re.search(r"^Umask:\s+(0\d\d\d)$", proc_status, flags=re.MULTILINE):
+        return int(umask_line.group(1), 8)
+    return FALLBACK_UMASK
