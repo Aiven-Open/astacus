@@ -12,7 +12,7 @@ from .storage import Json, MultiStorage, Storage, StorageUploadResult
 from .utils import AstacusModel
 from astacus.common import exceptions
 from enum import Enum
-from pydantic import DirectoryPath, Field
+from pydantic import Field
 from rohmu import errors, rohmufile
 from typing import BinaryIO, Dict, Optional, Union
 from typing_extensions import Literal
@@ -58,15 +58,33 @@ class RohmuProxyInfo(RohmuModel):
     password: Optional[str] = Field(None, alias="pass")
 
 
-class RohmuProxyStorage(RohmuModel):
+class StatsdInfo(RohmuModel):
+    host: str
+    port: int
+    tags: dict[str, str | int | None]
+
+
+class ObjectStorageNotifier(RohmuModel):
+    notifier_type: str
+    url: str
+
+
+class ObjectStorageConfig(RohmuModel):
+    storage_type: RohmuStorageType
+    prefix: Optional[str] = None
+    notifier: Optional[ObjectStorageNotifier] = None
+    statsd_info: Optional[StatsdInfo] = None
+
+
+class RohmuProxyStorage(ObjectStorageConfig):
     """Storage backend with support for optional socks5 or http proxy connections"""
 
     proxy_info: Optional[RohmuProxyInfo] = None
 
 
-class RohmuLocalStorageConfig(RohmuModel):
+class RohmuLocalStorageConfig(ObjectStorageConfig):
     storage_type: Literal[RohmuStorageType.local]
-    directory: DirectoryPath
+    directory: str
     prefix: Optional[str] = None
 
 
