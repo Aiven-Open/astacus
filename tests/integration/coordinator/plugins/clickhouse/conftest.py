@@ -535,7 +535,7 @@ def create_astacus_configs(
                 storages={
                     "test": RohmuLocalStorageConfig(
                         storage_type=RohmuStorageType.local,
-                        directory=astacus_backup_storage_path,
+                        directory=str(astacus_backup_storage_path),
                     )
                 },
                 compression=RohmuCompression(algorithm=RohmuCompressionType.zstd),
