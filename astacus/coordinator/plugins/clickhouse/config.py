@@ -55,7 +55,8 @@ class DiskConfiguration(AstacusModel):
 
 
 def get_zookeeper_client(configuration: ZooKeeperConfiguration) -> ZooKeeperClient:
-    return KazooZooKeeperClient(hosts=[build_netloc(node.host, node.port) for node in configuration.nodes])
+    user = configuration.user.to_dataclass() if configuration.user else None
+    return KazooZooKeeperClient(hosts=[build_netloc(node.host, node.port) for node in configuration.nodes], user=user)
 
 
 def get_clickhouse_clients(configuration: ClickHouseConfiguration) -> List[ClickHouseClient]:

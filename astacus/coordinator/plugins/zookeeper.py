@@ -10,6 +10,7 @@ from typing import AsyncIterator, Callable, Collection, Dict, List, Optional, Tu
 
 import asyncio
 import contextlib
+import dataclasses
 import enum
 import kazoo.exceptions
 import logging
@@ -124,6 +125,15 @@ class ZooKeeperConnection:
         raise NotImplementedError
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class ZooKeeperUser:
+    username: str
+    password: str = dataclasses.field(repr=False)
+
+    def get_digest_auth_data(self) -> set[tuple[str, str]]:
+        return {("digest", f"{self.username}:{self.password}")}
+
+
 class ZooKeeperClient:
     """
     A configured client to a ZooKeeper cluster.
@@ -173,15 +183,17 @@ class RuntimeInconsistency(TransientException):
 
 
 class KazooZooKeeperClient(ZooKeeperClient):
-    def __init__(self, hosts: List[str], timeout: float = 10):
+    def __init__(self, *, hosts: List[str], user: ZooKeeperUser | None = None, timeout: float = 10):
         self.hosts = hosts
+        self.user = user
         self.timeout = timeout
         self.client: Optional[KazooClient] = None
         self.lock = asyncio.Lock()
 
     def connect(self) -> ZooKeeperConnection:
+        digest_auth_data = self.user.get_digest_auth_data() if self.user else None
         retry = KazooRetry(max_tries=None, deadline=self.timeout)
-        client = KazooClient(hosts=self.hosts, connection_retry=retry, command_retry=retry)
+        client = KazooClient(hosts=self.hosts, auth_data=digest_auth_data, connection_retry=retry, command_retry=retry)
         return KazooZooKeeperConnection(client)
 
 

@@ -11,7 +11,7 @@ jobs:
       - name: Install dependencies
         run: make build-dep-ubuntu
 
-      - name: Set up Python 3.10 with caching
+      - name: Set up Python 3.11 with caching
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
