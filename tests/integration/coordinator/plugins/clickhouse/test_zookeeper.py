@@ -126,7 +126,7 @@ async def test_kazoo_zookeeper_failing_transaction(zookeeper_client: KazooZooKee
 @pytest.mark.asyncio
 async def test_kazoo_zookeeper_client_bounded_failure_time(ports: Ports) -> None:
     async with create_zookeeper(ports) as zookeeper:
-        zookeeper_client = KazooZooKeeperClient(hosts=[get_kazoo_host(zookeeper)], timeout=1)
+        zookeeper_client = KazooZooKeeperClient(hosts=[get_kazoo_host(zookeeper)], user=None, timeout=1)
         async with zookeeper_client.connect() as connection:
             zookeeper.process.kill()
             start_time = time.monotonic()
