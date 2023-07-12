@@ -196,6 +196,7 @@ class CassandraSubOp(StrEnum):
     get_schema_hash = "get-schema-hash"
     remove_snapshot = "remove-snapshot"
     restore_snapshot = "restore-snapshot"
+    restore_snapshot_with_schema = "restore-snapshot-with-schema"
     start_cassandra = "start-cassandra"
     stop_cassandra = "stop-cassandra"
     take_snapshot = "take-snapshot"

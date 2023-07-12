@@ -57,10 +57,8 @@ class CassandraPlugin(CoordinatorPlugin):
         client = CassandraClient(self.client)
         # first *: keyspace name; second *: table name
         snapshot_groups = [
-            SnapshotGroup(root_glob=f"data/*/*/snapshots/{SNAPSHOT_NAME}/manifest.json"),
             SnapshotGroup(root_glob=f"data/*/*/snapshots/{SNAPSHOT_NAME}/*.db"),
             SnapshotGroup(root_glob=f"data/*/*/snapshots/{SNAPSHOT_NAME}/*.txt"),
-            SnapshotGroup(root_glob=f"data/*/*/snapshots/{SNAPSHOT_NAME}/*.cql"),
         ]
 
         return [
@@ -85,14 +83,32 @@ class CassandraPlugin(CoordinatorPlugin):
         # The nodes are not really used for now; perhaps they should be, at some point?
         # their validity is checked just for symmetry with backup, for now.
         nodes = self.nodes or [CassandraConfigurationNode(listen_address=self.client.get_listen_address())]
-        client = CassandraClient(self.client)
 
-        # TBD: partial_restore_nodes should be probably passed to about all steps?
+        cluster_restore_steps = (
+            self.get_restore_schema_from_snapshot_steps(context=context, req=req)
+            if req.partial_restore_nodes
+            else self.get_restore_schema_from_manifest_steps(context=context, req=req)
+        )
+
         return [
             ValidateConfigurationStep(nodes=nodes),
             base.BackupNameStep(json_storage=context.json_storage, requested_name=req.name),
             base.BackupManifestStep(json_storage=context.json_storage),
             restore_steps.ParsePluginManifestStep(),
+        ] + cluster_restore_steps
+
+    def get_restore_schema_from_snapshot_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> List[Step]:
+        return [
+            base.RestoreStep(storage_name=context.storage_name, partial_restore_nodes=req.partial_restore_nodes),
+            CassandraSubOpStep(op=ipc.CassandraSubOp.restore_snapshot_with_schema),
+            restore_steps.StartCassandraStep(partial_restore_nodes=req.partial_restore_nodes, override_tokens=True),
+            restore_steps.WaitCassandraUpStep(duration=self.restore_start_timeout),
+        ]
+
+    def get_restore_schema_from_manifest_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> List[Step]:
+        client = CassandraClient(self.client)
+
+        return [
             # Start cassandra with backed up token distribution + set schema + stop it
             restore_steps.StartCassandraStep(partial_restore_nodes=req.partial_restore_nodes, override_tokens=True),
             restore_steps.WaitCassandraUpStep(duration=self.restore_start_timeout),

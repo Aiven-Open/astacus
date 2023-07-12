@@ -13,6 +13,7 @@ from astacus.common.cassandra.client import CassandraClient
 from astacus.common.cassandra.config import SNAPSHOT_NAME
 from astacus.common.cassandra.utils import is_system_keyspace
 from astacus.common.exceptions import TransientException
+from pydantic import DirectoryPath
 
 import contextlib
 import logging
@@ -45,6 +46,7 @@ class SimpleCassandraSubOp(NodeOp[ipc.NodeRequest, ipc.NodeResult]):
             fun={
                 ipc.CassandraSubOp.remove_snapshot: self.remove_snapshot,
                 ipc.CassandraSubOp.restore_snapshot: self.restore_snapshot,
+                ipc.CassandraSubOp.restore_snapshot_with_schema: self.restore_snapshot_with_schema,
                 ipc.CassandraSubOp.stop_cassandra: self.stop_cassandra,
                 ipc.CassandraSubOp.take_snapshot: self.take_snapshot,
             }[subop],
@@ -70,6 +72,12 @@ class SimpleCassandraSubOp(NodeOp[ipc.NodeRequest, ipc.NodeResult]):
         progress.done()
 
     def restore_snapshot(self) -> None:
+        self._restore_snapshot(is_schema_restored=False)
+
+    def restore_snapshot_with_schema(self) -> None:
+        self._restore_snapshot(is_schema_restored=True)
+
+    def _restore_snapshot(self, *, is_schema_restored: bool) -> None:
         """This is used to restore the snapshot files into place, with Cassandra offline."""
         # TBD: Delete extra data (current cashew doesn't do it, but we could)
 
@@ -83,22 +91,18 @@ class SimpleCassandraSubOp(NodeOp[ipc.NodeRequest, ipc.NodeResult]):
             # -2 = snapshots, -1 = name of the snapshots
             table_name_and_id = parts[-3]
             keyspace_name = parts[-4]
-            if is_system_keyspace(keyspace_name):
+            skip_system_keyspace = is_system_keyspace(keyspace_name)
+            if is_schema_restored:
+                skip_system_keyspace = is_system_keyspace(keyspace_name) and keyspace_name != "system_schema"
+            if skip_system_keyspace:
                 progress.add_success()
                 continue
 
-            table_name, _ = table_name_and_id.rsplit("-", 1)
-
-            # This could be more efficient too; oh well.
-            keyspace_path = table_snapshot.parents[2]
-            table_paths = list(keyspace_path.glob(f"{table_name}-*"))
-            assert len(table_paths) >= 1, f"NO tables with prefix {table_name}- found in {keyspace_path}!"
-            if len(table_paths) > 1:
-                # Prefer the one that isn't table_name_and_id
-                table_paths = [p for p in table_paths if p.name != table_name_and_id]
-            assert len(table_paths) == 1
-
-            table_path = table_paths[0]
+            table_path = (
+                self.config.root / "data" / keyspace_name / table_name_and_id
+                if is_schema_restored
+                else self._match_table_by_name(table_name_and_id, table_snapshot)
+            )
 
             # Ensure destination path is empty except for potential directories (e.g. backups/)
             # This should never have anything - except for system_auth, it gets populated when we restore schema.
@@ -107,15 +111,28 @@ class SimpleCassandraSubOp(NodeOp[ipc.NodeRequest, ipc.NodeResult]):
                 for existing_file in existing_files:
                     existing_file.unlink()
                 existing_files = []
-            assert not existing_files, f"Files found in {table_name}: {existing_files}"
+            assert not existing_files, f"Files found in {table_name_and_id}: {existing_files}"
 
             for file_path in table_snapshot.glob("*"):
-                # TBD if we should filter something?
                 file_path.rename(table_path / file_path.name)
 
             progress.add_success()
 
         self.result.progress.done()
+
+    def _match_table_by_name(self, table_name_and_id: str, table_snapshot: DirectoryPath) -> DirectoryPath:
+        table_name, _ = table_name_and_id.rsplit("-", 1)
+
+        # This could be more efficient too; oh well.
+        keyspace_path = table_snapshot.parents[2]
+        table_paths = list(keyspace_path.glob(f"{table_name}-*"))
+        assert len(table_paths) >= 1, f"NO tables with prefix {table_name}- found in {keyspace_path}!"
+        if len(table_paths) > 1:
+            # Prefer the one that isn't table_name_and_id
+            table_paths = [p for p in table_paths if p.name != table_name_and_id]
+        assert len(table_paths) == 1
+
+        return table_paths[0]
 
     def stop_cassandra(self) -> None:
         assert self.config.cassandra

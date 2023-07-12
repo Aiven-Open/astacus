@@ -94,6 +94,15 @@ def test_api_cassandra_subop(app, ctenv, mocker, subop):
         # dummytable-234
         assert (ctenv.root / "data" / "dummyks" / "dummytable-234" / "asdf").read_text() == "foobar"
         assert progress["handled"]
+        # System schema keyspace should not be transferred
+        assert not (ctenv.root / "data" / "system_schema" / "tables-789" / "data.file").exists()
+    elif subop == ipc.CassandraSubOp.restore_snapshot_with_schema:
+        # The file should be moved from dummytable-123 snapshot dir to
+        # dummytable-123
+        assert (ctenv.root / "data" / "dummyks" / "dummytable-123" / "asdf").read_text() == "foobar"
+        assert progress["handled"]
+        # System schema keyspace should be restored
+        assert (ctenv.root / "data" / "system_schema" / "tables-789" / "data.file").read_text() == "schema"
     elif subop == ipc.CassandraSubOp.start_cassandra:
         subprocess_run.assert_any_call(ctenv.cassandra_node_config.start_command + ["tempfilename"], check=True)
 

@@ -49,6 +49,10 @@ class CassandraTestConfig:
         self.snapshot_path = keyspace_path / "dummytable-123" / "snapshots" / SNAPSHOT_NAME
         self.snapshot_path.mkdir(parents=True)
 
+        system_schema_path = self.root / "data" / "system_schema" / "tables-789" / "snapshots" / SNAPSHOT_NAME
+        system_schema_path.mkdir(parents=True)
+        (system_schema_path / "data.file").write_text("schema")
+
         self.other_snapshot_path = keyspace_path / "dummytable-123" / "snapshots" / f"not{SNAPSHOT_NAME}"
         self.other_snapshot_path.mkdir(parents=True)
 
