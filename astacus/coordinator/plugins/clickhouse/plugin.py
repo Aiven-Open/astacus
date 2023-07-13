@@ -43,6 +43,7 @@ from astacus.coordinator.plugins.base import (
     DownloadKeptBackupManifestsStep,
     ListBackupsStep,
     ListHexdigestsStep,
+    MapNodesStep,
     OperationContext,
     RestoreStep,
     SnapshotStep,
@@ -158,6 +159,7 @@ class ClickHousePlugin(CoordinatorPlugin):
                 replicated_databases_zookeeper_path=self.replicated_databases_zookeeper_path,
                 sync_timeout=self.sync_databases_timeout,
             ),
+            MapNodesStep(partial_restore_nodes=req.partial_restore_nodes),
             RestoreStep(storage_name=context.storage_name, partial_restore_nodes=req.partial_restore_nodes),
             AttachMergeTreePartsStep(
                 clients=clients,

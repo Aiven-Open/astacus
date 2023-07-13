@@ -233,6 +233,31 @@ class BackupManifestStep(Step[ipc.BackupManifest]):
 
 
 @dataclasses.dataclass
+class MapNodesStep(Step[List[Optional[int]]]):
+    """
+    Create an index mapping nodes from cluster configuration to nodes in the backup manifest.
+    """
+
+    partial_restore_nodes: Optional[List[ipc.PartialRestoreRequestNode]] = None
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> List[Optional[int]]:
+        # AZ distribution should in theory be forced to match, but in
+        # practise it doesn't really matter. So we restore nodes 'as
+        # well as we can' and hope that is well enough (or whoever
+        # configures us may lie about the real availability zone of
+        # the nodes anyway).
+
+        backup_manifest = context.get_result(BackupManifestStep)
+        snapshot_results = backup_manifest.snapshot_results
+
+        return get_node_to_backup_index(
+            partial_restore_nodes=self.partial_restore_nodes,
+            snapshot_results=snapshot_results,
+            nodes=cluster.nodes,
+        )
+
+
+@dataclasses.dataclass
 class RestoreStep(Step[List[ipc.NodeResult]]):
     """
     Request each node to download and restore all files listed in the backup manifest.
@@ -251,12 +276,8 @@ class RestoreStep(Step[List[ipc.NodeResult]]):
         backup_name = context.get_result(BackupNameStep)
         backup_manifest = context.get_result(BackupManifestStep)
         snapshot_results = backup_manifest.snapshot_results
+        node_to_backup_index = context.get_result(MapNodesStep)
 
-        node_to_backup_index = get_node_to_backup_index(
-            partial_restore_nodes=self.partial_restore_nodes,
-            snapshot_results=snapshot_results,
-            nodes=cluster.nodes,
-        )
         if not snapshot_results:
             raise exceptions.MissingSnapshotResultsException(
                 f"No snapshot results, yet full restore desired; {node_to_backup_index!r} {cluster.nodes!r}"

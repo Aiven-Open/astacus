@@ -5,11 +5,13 @@ See LICENSE for details
 
 from astacus.common import ipc
 from astacus.common.cassandra.schema import CassandraSchema
+from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins import base
 from astacus.coordinator.plugins.cassandra import restore_steps
-from astacus.coordinator.plugins.cassandra.model import CassandraManifest, CassandraManifestNode
+from astacus.coordinator.plugins.cassandra.model import CassandraConfigurationNode, CassandraManifest, CassandraManifestNode
 from tests.unit.coordinator.plugins.cassandra.builders import build_keyspace
 from types import SimpleNamespace
+from uuid import UUID
 
 import datetime
 import pytest
@@ -17,20 +19,42 @@ import pytest
 # TBD: Eventually multinode configuration would be perhaps interesting to test too
 
 
+def _manifest_node(node_index: int) -> CassandraManifestNode:
+    return CassandraManifestNode(
+        address=f"127.0.0.{node_index}",
+        host_id=UUID(int=node_index),
+        listen_address=f"::{node_index}",
+        rack=f"r{node_index}",
+        tokens=[f"token{node_index}"],
+    )
+
+
+def _configuration_node(node_index: int) -> CassandraConfigurationNode:
+    return CassandraConfigurationNode(
+        address=f"127.0.0.{node_index}",
+        host_id=UUID(int=node_index),
+        listen_address=f"::{node_index}",
+        tokens=[f"token{node_index}"],
+    )
+
+
+def _coordinator_node(node_index: int) -> CoordinatorNode:
+    return CoordinatorNode(
+        url=f"http:://localhost:{node_index}",
+        az=f"az-{node_index}",
+    )
+
+
+_pr_node = ipc.PartialRestoreRequestNode
+
+
 @pytest.mark.parametrize("override_tokens", [False, True])
+@pytest.mark.parametrize("replace_backup_nodes", [False, True])
 @pytest.mark.asyncio
-async def test_step_start_cassandra(mocker, override_tokens):
+async def test_step_start_cassandra(mocker, override_tokens, replace_backup_nodes):
     plugin_manifest = CassandraManifest(
         cassandra_schema=CassandraSchema(keyspaces=[]),
-        nodes=[
-            CassandraManifestNode(
-                address="127.0.0.1",
-                host_id="12345678123456781234567812345678",
-                listen_address="::1",
-                rack="unused",
-                tokens=["token0"],
-            )
-        ],
+        nodes=[_manifest_node(1)],
     )
 
     backup_manifest = ipc.BackupManifest(
@@ -42,20 +66,79 @@ async def test_step_start_cassandra(mocker, override_tokens):
         plugin_data=plugin_manifest.dict(),
     )
 
+    nodes = [_coordinator_node(1)]
+    node_to_backup_index = [0]
+
     def get_result(cl):
-        if cl == base.BackupManifestStep:
-            return backup_manifest
-        if cl == restore_steps.ParsePluginManifestStep:
-            return plugin_manifest
-        raise NotImplementedError(cl)
+        match cl:
+            case base.BackupManifestStep:
+                return backup_manifest
+            case restore_steps.ParsePluginManifestStep:
+                return plugin_manifest
+            case base.MapNodesStep:
+                return node_to_backup_index
+            case _:
+                raise NotImplementedError(cl)
 
-    mocker.patch.object(restore_steps, "run_subop")
+    expected_reqs = [
+        ipc.CassandraStartRequest(
+            tokens=["token1"] if override_tokens else None,
+            replace_address_first_boot="::1" if replace_backup_nodes else None,
+            skip_bootstrap_streaming=True if replace_backup_nodes else None,
+        )
+    ]
 
-    step = restore_steps.StartCassandraStep(partial_restore_nodes=None, override_tokens=override_tokens)
+    run_subop = mocker.patch.object(restore_steps, "run_subop")
+
+    step = restore_steps.StartCassandraStep(
+        replace_backup_nodes=replace_backup_nodes, override_tokens=override_tokens, cassandra_nodes=[_configuration_node(1)]
+    )
     context = SimpleNamespace(get_result=get_result)
-    cluster = SimpleNamespace(nodes=[SimpleNamespace(az="az1")])
+    cluster = SimpleNamespace(nodes=nodes)
     result = await step.run_step(cluster, context)
     assert result is None
+    run_subop.assert_awaited_once_with(
+        cluster,
+        ipc.CassandraSubOp.start_cassandra,
+        nodes=nodes,
+        reqs=expected_reqs,
+        result_class=ipc.NodeResult,
+    )
+
+
+@pytest.mark.asyncio
+async def test_step_stop_replaced_nodes(mocker):
+    # Node 3 is replacing node 1.
+    manifest_nodes = [_manifest_node(1), _manifest_node(2)]
+    cassandra_nodes = [_configuration_node(1), _configuration_node(2), _configuration_node(3)]
+    nodes = [_coordinator_node(1), _coordinator_node(2), _coordinator_node(3)]
+    node_to_backup_index = [None, None, 0]
+    partial_restore_nodes = [_pr_node(backup_index=0, node_index=2)]
+
+    plugin_manifest = CassandraManifest(cassandra_schema=CassandraSchema(keyspaces=[]), nodes=manifest_nodes)
+
+    def get_result(cl):
+        match cl:
+            case restore_steps.ParsePluginManifestStep:
+                return plugin_manifest
+            case base.MapNodesStep:
+                return node_to_backup_index
+            case _:
+                raise NotImplementedError(cl)
+
+    run_subop = mocker.patch.object(restore_steps, "run_subop")
+
+    step = restore_steps.StopReplacedNodesStep(partial_restore_nodes=partial_restore_nodes, cassandra_nodes=cassandra_nodes)
+    context = SimpleNamespace(get_result=get_result)
+    cluster = SimpleNamespace(nodes=nodes)
+    result = await step.run_step(cluster, context)
+    assert result is None
+    run_subop.assert_awaited_once_with(
+        cluster,
+        ipc.CassandraSubOp.stop_cassandra,
+        nodes=[_coordinator_node(1)],
+        result_class=ipc.NodeResult,
+    )
 
 
 class AsyncIterableWrapper:

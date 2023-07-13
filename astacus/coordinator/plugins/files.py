@@ -19,6 +19,7 @@ from .base import (
     BackupNameStep,
     CoordinatorPlugin,
     ListHexdigestsStep,
+    MapNodesStep,
     OperationContext,
     RestoreStep,
     SnapshotStep,
@@ -48,5 +49,6 @@ class FilesPlugin(CoordinatorPlugin):
         return [
             BackupNameStep(json_storage=context.json_storage, requested_name=req.name),
             BackupManifestStep(json_storage=context.json_storage),
+            MapNodesStep(partial_restore_nodes=req.partial_restore_nodes),
             RestoreStep(storage_name=context.storage_name, partial_restore_nodes=req.partial_restore_nodes),
         ]
