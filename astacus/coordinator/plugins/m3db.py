@@ -75,9 +75,9 @@ class M3DBPlugin(CoordinatorPlugin):
             InitStep(placement_nodes=self.placement_nodes),
             BackupNameStep(json_storage=context.json_storage, requested_name=req.name),
             BackupManifestStep(json_storage=context.json_storage),
+            MapNodesStep(partial_restore_nodes=req.partial_restore_nodes),
             RewriteEtcdStep(placement_nodes=self.placement_nodes, partial_restore_nodes=req.partial_restore_nodes),
             RestoreEtcdStep(etcd_client=etcd_client, partial_restore_nodes=req.partial_restore_nodes),
-            MapNodesStep(partial_restore_nodes=req.partial_restore_nodes),
             RestoreStep(storage_name=context.storage_name, partial_restore_nodes=req.partial_restore_nodes),
         ]
 
