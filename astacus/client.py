@@ -165,8 +165,14 @@ def _run_delete(args) -> bool:
 
 
 def _reload_config(args) -> bool:
-    response = http_request(f"{args.url}/config/reload", method="post", caller="client._reload_config")
-    return response is not None
+    start_time = time.monotonic()
+    for _ in exponential_backoff(initial=0.1, duration=args.wait_completion):
+        # Wait as much as we can, without going over the global wait_completion limit
+        timeout = args.wait_completion - (time.monotonic() - start_time)
+        response = http_request(f"{args.url}/config/reload", method="post", caller="client._reload_config", timeout=timeout)
+        if response is not None:
+            return True
+    return False
 
 
 def _check_reload_config(args) -> bool:
