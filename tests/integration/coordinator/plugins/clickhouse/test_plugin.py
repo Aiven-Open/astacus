@@ -17,7 +17,7 @@ from tests.integration.coordinator.plugins.clickhouse.conftest import (
     MinioBucket,
     run_astacus_command,
 )
-from typing import AsyncIterable, AsyncIterator, List, Sequence
+from typing import AsyncIterable, AsyncIterator, Final, List, Sequence
 from unittest import mock
 
 import base64
@@ -28,6 +28,11 @@ pytestmark = [
     pytest.mark.clickhouse,
     pytest.mark.order("last"),
 ]
+
+SAMPLE_URL_ENGINE_DDL: Final[str] = (
+    "CREATE TABLE default.url_engine_table (`thekey` UInt32, `thedata` String) "
+    "ENGINE = URL('http://127.0.0.1:12345/', 'CSV')"
+)
 
 
 def _b64_str(b: bytes) -> str:
@@ -124,6 +129,7 @@ async def setup_cluster_content(clients: List[HttpClickHouseClient], use_named_c
         b"ENGINE = ReplicatedMergeTree ORDER BY (thekey) "
         b"SETTINGS storage_policy='remote'"
     )
+    await clients[0].execute(SAMPLE_URL_ENGINE_DDL.encode())
     await clients[0].execute(
         b"CREATE VIEW default.simple_view AS SELECT toInt32(thekey * 2) as thekey2 FROM default.replicated_merge_tree"
     )
@@ -213,6 +219,13 @@ async def check_object_storage_data(cluster: List[ClickHouseClient]) -> None:
     for client, expected_data in zip(cluster, cluster_data):
         response = await client.execute(b"SELECT thekey, thedata FROM default.in_object_storage ORDER BY thekey")
         assert response == expected_data
+
+
+@pytest.mark.asyncio
+async def test_restores_url_engine_table(restored_cluster: List[ClickHouseClient]) -> None:
+    for client in restored_cluster:
+        response = await client.execute(b"SELECT create_table_query FROM system.tables WHERE name = 'url_engine_table'")
+        assert response[0][0] == SAMPLE_URL_ENGINE_DDL
 
 
 @pytest.mark.asyncio
