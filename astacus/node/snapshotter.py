@@ -218,6 +218,11 @@ class Snapshotter:
             # making extra symlinks and we can just use the src
             # directory contents as-is.
             dst_dirs, dst_files = src_dirs, src_files
+            # When the src and dst files are identical, we can't compare the files of the previous
+            # snapshot, but we still need to cleanup outdated files in relative_path_to_snapshotfile.
+            relative_dst_files = {dst_file.relative_path for dst_file in dst_files}
+            for outdated_relative_path in set(self.relative_path_to_snapshotfile) - relative_dst_files:
+                self._remove_snapshotfile(self.relative_path_to_snapshotfile[outdated_relative_path])
         else:
             progress.add_total(3)
             dst_dirs, dst_files = self._list_dirs_and_files(self.dst)
