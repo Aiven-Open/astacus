@@ -115,6 +115,7 @@ class CassandraPlugin(CoordinatorPlugin):
             base.BackupManifestStep(json_storage=context.json_storage),
             restore_steps.ParsePluginManifestStep(),
             base.MapNodesStep(partial_restore_nodes=req.partial_restore_nodes),
+            CassandraRestoreSubOpStep(op=ipc.CassandraSubOp.stop_cassandra),
             CassandraRestoreSubOpStep(op=ipc.CassandraSubOp.remove_keyspaces),
         ] + cluster_restore_steps
 
