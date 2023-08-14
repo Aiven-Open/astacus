@@ -4,6 +4,7 @@ See LICENSE for details
 """
 
 from astacus.common.cassandra.config import CassandraClientConfiguration
+from astacus.common.magic import StrEnum
 from astacus.common.rohmustorage import RohmuConfig
 from astacus.common.statsd import StatsdConfig
 from astacus.common.utils import AstacusModel
@@ -22,6 +23,11 @@ class NodeParallel(AstacusModel):
     uploads: int = 1
 
 
+class CassandraAccessLevel(StrEnum):
+    read = "read"
+    write = "write"
+
+
 class CassandraNodeConfig(AstacusModel):
     # Used in subop=get-schema-hash
     client: CassandraClientConfiguration
@@ -34,6 +40,10 @@ class CassandraNodeConfig(AstacusModel):
     # (arguments passed as-is to subprocess.run)
     start_command: List[str]
     stop_command: List[str]
+
+    # We might want to block some damaging operations to avoid accidentally destroying live data.
+    # Specify a safe default, let the users override it when restoring.
+    access_level: CassandraAccessLevel = CassandraAccessLevel.read
 
     @classmethod
     @validator("client")

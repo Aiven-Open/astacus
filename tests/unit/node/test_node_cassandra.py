@@ -5,7 +5,8 @@ See LICENSE for details
 
 from astacus.common import ipc
 from astacus.common.cassandra.config import SNAPSHOT_NAME
-from astacus.node.config import CassandraNodeConfig
+from astacus.node.api import READONLY_SUBOPS
+from astacus.node.config import CassandraAccessLevel, CassandraNodeConfig
 from tests.unit.conftest import CassandraTestConfig
 
 import pytest
@@ -39,6 +40,7 @@ class CassandraTestEnv(CassandraTestConfig):
             nodetool_command=["nodetool"],
             start_command=["dummy-start"],
             stop_command=["dummy-stop"],
+            access_level=CassandraAccessLevel.write,
         )
         self.app.state.node_config.cassandra = self.cassandra_node_config
 
@@ -151,3 +153,13 @@ def test_api_cassandra_get_schema_hash(ctenv, fail, mocker):
         assert not schema_hash
     else:
         assert schema_hash == "mockhash"
+
+
+@pytest.mark.parametrize("dangerous_op", set(ipc.CassandraSubOp) - READONLY_SUBOPS)
+def test_dangerous_ops_not_allowed_on_read_access_level(ctenv, dangerous_op: ipc.CassandraSubOp):
+    pytest.importorskip("astacus.node.cassandra")
+    ctenv.lock()
+    ctenv.setup_cassandra_node_config()
+    ctenv.cassandra_node_config.access_level = CassandraAccessLevel.read
+    response = ctenv.post(subop=dangerous_op, json={})
+    assert response.status_code == 403, response.json()
