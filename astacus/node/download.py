@@ -134,7 +134,10 @@ class Downloader(ThreadLocalStorage):
                 while chown_candidate != self.dst and chown_candidate.stat().st_uid != dst_owner_uid:
                     chowned_paths.add(str(chown_candidate.relative_to(self.dst)))
                     chown_candidate = chown_candidate.parent
-            if chowned_paths:
+
+            chunk_size = 1000
+            sorted_paths = sorted(chowned_paths)
+            for chunk_start in range(0, len(sorted_paths), chunk_size):
                 astacus_user = getpass.getuser()
                 dst_owner_gid = self.dst.stat().st_gid
                 # We're very specific to allow a sufficiently restrictive sudoers configuration
@@ -144,7 +147,7 @@ class Downloader(ThreadLocalStorage):
                     f"--from={astacus_user}:{dst_owner_gid}",
                     f"{dst_owner_uid}",
                     "--",
-                    *sorted(chowned_paths),
+                    *sorted_paths[chunk_start : chunk_start + chunk_size],
                 ]
                 subprocess.run(cmd, shell=False, check=True, cwd=self.dst)
         # This operation is done. It may or may not have been a success.
