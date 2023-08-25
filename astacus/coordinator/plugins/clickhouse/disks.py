@@ -72,7 +72,7 @@ class ParsedPath:
 
 
 @dataclasses.dataclass(frozen=True)
-class DiskPaths:
+class Disks:
     disks: Sequence[Disk] = dataclasses.field(
         default_factory=lambda: [Disk(type=DiskType.local, name="default", path_parts=())]
     )

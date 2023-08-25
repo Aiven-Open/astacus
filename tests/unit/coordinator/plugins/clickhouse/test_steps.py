@@ -23,7 +23,7 @@ from astacus.coordinator.plugins.clickhouse.config import (
     DiskType,
     ReplicatedDatabaseSettings,
 )
-from astacus.coordinator.plugins.clickhouse.disks import Disk, DiskPaths
+from astacus.coordinator.plugins.clickhouse.disks import Disk, Disks
 from astacus.coordinator.plugins.clickhouse.macros import Macros, MACROS_LIST_QUERY
 from astacus.coordinator.plugins.clickhouse.manifest import (
     AccessEntity,
@@ -417,13 +417,13 @@ def create_remote_file(path: Path, remote_path: Path) -> SnapshotFile:
 
 @pytest.mark.asyncio
 async def test_collect_object_storage_file_steps() -> None:
-    disk_paths = DiskPaths.from_disk_configs(
+    disks = Disks.from_disk_configs(
         [
             DiskConfiguration(type=DiskType.local, path=Path(), name="default"),
             DiskConfiguration(type=DiskType.object_storage, path=Path("disks/remote"), name="remote"),
         ]
     )
-    step = CollectObjectStorageFilesStep(disk_paths=disk_paths)
+    step = CollectObjectStorageFilesStep(disks=disks)
     context = StepsContext()
     table_uuid_parts = "000/00000000-0000-0000-0000-100000000001"
     snapshot_results = [
@@ -464,13 +464,13 @@ async def test_collect_object_storage_file_steps() -> None:
 
 @pytest.mark.asyncio
 async def test_move_frozen_parts_steps() -> None:
-    disk_paths = DiskPaths.from_disk_configs(
+    disks = Disks.from_disk_configs(
         [
             DiskConfiguration(type=DiskType.local, path=Path(), name="default"),
             DiskConfiguration(type=DiskType.object_storage, path=Path("disks/remote"), name="remote"),
         ]
     )
-    step = MoveFrozenPartsStep(disk_paths=disk_paths)
+    step = MoveFrozenPartsStep(disks=disks)
     context = StepsContext()
     table_uuid_parts = "000/00000000-0000-0000-0000-100000000001"
     snapshot_results = [
@@ -954,7 +954,7 @@ async def test_restore_replica() -> None:
     step = RestoreReplicaStep(
         zookeeper_client=zookeeper_client,
         clients=clients,
-        disk_paths=DiskPaths(),
+        disks=Disks(),
         restart_timeout=30,
         max_concurrent_restart=20,
         restore_timeout=60,
@@ -991,7 +991,7 @@ async def test_attaches_all_mergetree_parts_in_manifest() -> None:
     client_1 = mock_clickhouse_client()
     client_2 = mock_clickhouse_client()
     clients = [client_1, client_2]
-    step = AttachMergeTreePartsStep(clients, disk_paths=DiskPaths(), attach_timeout=60, max_concurrent_attach=10)
+    step = AttachMergeTreePartsStep(clients, disks=Disks(), attach_timeout=60, max_concurrent_attach=10)
 
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
@@ -1109,12 +1109,12 @@ async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
             ),
         ]
     )
-    disk_paths = DiskPaths(
+    disks = Disks(
         disks=[
             Disk(type=DiskType.object_storage, name="remote", path_parts=("disks", "remote"), object_storage=object_storage)
         ]
     )
-    step = DeleteDanglingObjectStorageFilesStep(disk_paths=disk_paths)
+    step = DeleteDanglingObjectStorageFilesStep(disks=disks)
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
     context.set_result(

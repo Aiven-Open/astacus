@@ -7,7 +7,7 @@ from __future__ import annotations
 from .client import ClickHouseClient, ClickHouseClientQueryError, escape_sql_identifier, escape_sql_string
 from .config import ClickHouseConfiguration, DiskType, ReplicatedDatabaseSettings
 from .dependencies import access_entities_sorted_by_dependencies, tables_sorted_by_dependencies
-from .disks import DiskPaths
+from .disks import Disks
 from .escaping import escape_for_file_name, unescape_from_file_name
 from .file_metadata import FileMetadata, InvalidFileMetadata
 from .macros import fetch_server_macros, Macros
@@ -225,7 +225,7 @@ class CollectObjectStorageFilesStep(Step[list[ClickHouseObjectStorageFiles]]):
     Collects the list of files that are referenced by metadata files in the backup.
     """
 
-    disk_paths: DiskPaths
+    disks: Disks
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> list[ClickHouseObjectStorageFiles]:
         snapshot_results: Sequence[ipc.SnapshotResult] = context.get_result(SnapshotStep)
@@ -233,7 +233,7 @@ class CollectObjectStorageFilesStep(Step[list[ClickHouseObjectStorageFiles]]):
         for snapshot_result in snapshot_results:
             assert snapshot_result.state is not None
             for snapshot_file in snapshot_result.state.files:
-                parsed_path = self.disk_paths.parse_part_file_path(snapshot_file.relative_path)
+                parsed_path = self.disks.parse_part_file_path(snapshot_file.relative_path)
                 if parsed_path.disk.type == DiskType.object_storage:
                     if snapshot_file.content_b64 is None:
                         # This shouldn't happen because the snapshot glob will be configured to embed all files
@@ -378,7 +378,7 @@ class MoveFrozenPartsStep(Step[None]):
     only identifies files by their hash, it doesn't care about their original, or modified, path.
     """
 
-    disk_paths: DiskPaths
+    disks: Disks
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         # Note: we could also do that on restore, but this way we can erase the ClickHouse `FREEZE`
@@ -392,7 +392,7 @@ class MoveFrozenPartsStep(Step[None]):
                 snapshot_file.copy(
                     update={
                         "relative_path": dataclasses.replace(
-                            self.disk_paths.parse_part_file_path(snapshot_file.relative_path),
+                            self.disks.parse_part_file_path(snapshot_file.relative_path),
                             freeze_name=None,
                             detached=False,
                         ).to_path()
@@ -599,7 +599,7 @@ class RestoreReplicaStep(Step[None]):
 
     zookeeper_client: ZooKeeperClient
     clients: List[ClickHouseClient]
-    disk_paths: DiskPaths
+    disks: Disks
     restart_timeout: float
     max_concurrent_restart: int
     restore_timeout: float
@@ -649,7 +649,7 @@ class AttachMergeTreePartsStep(Step[None]):
     """
 
     clients: List[ClickHouseClient]
-    disk_paths: DiskPaths
+    disks: Disks
     attach_timeout: float
     max_concurrent_attach: int
 
@@ -668,7 +668,7 @@ class AttachMergeTreePartsStep(Step[None]):
                     f"ALTER TABLE {table_identifier} ATTACH PART {escape_sql_string(part_name)}".encode(),
                 )
                 for client, snapshot_result in zip(self.clients, backup_manifest.snapshot_results)
-                for table_identifier, part_name in list_parts_to_attach(snapshot_result, self.disk_paths, tables_by_uuid)
+                for table_identifier, part_name in list_parts_to_attach(snapshot_result, self.disks, tables_by_uuid)
             ],
         )
 
@@ -708,7 +708,7 @@ class DeleteDanglingObjectStorageFilesStep(Step[None]):
     and that are not part of any backup.
     """
 
-    disk_paths: DiskPaths
+    disks: Disks
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         backup_manifests = context.get_result(DownloadKeptBackupManifestsStep)
@@ -727,7 +727,7 @@ class DeleteDanglingObjectStorageFilesStep(Step[None]):
                 disk_kept_paths = kept_paths.setdefault(object_storage_disk.disk_name, set())
                 disk_kept_paths.update((file.path for file in object_storage_disk.files))
         for disk_name, disk_kept_paths in sorted(kept_paths.items()):
-            disk_object_storage = self.disk_paths.get_object_storage(disk_name=disk_name)
+            disk_object_storage = self.disks.get_object_storage(disk_name=disk_name)
             if disk_object_storage is None:
                 raise StepFailedError(f"Could not find object storage disk named {disk_name!r}")
             keys_to_remove = []

@@ -10,7 +10,7 @@ from .config import (
     get_zookeeper_client,
     ReplicatedDatabaseSettings,
 )
-from .disks import DiskPaths
+from .disks import Disks
 from .steps import (
     AttachMergeTreePartsStep,
     ClickHouseManifestStep,
@@ -85,7 +85,7 @@ class ClickHousePlugin(CoordinatorPlugin):
     def get_backup_steps(self, *, context: OperationContext) -> List[Step]:
         zookeeper_client = get_zookeeper_client(self.zookeeper)
         clickhouse_clients = get_clickhouse_clients(self.clickhouse)
-        disk_paths = DiskPaths.from_disk_configs(self.disks)
+        disks = Disks.from_disk_configs(self.disks)
         return [
             ValidateConfigStep(clickhouse=self.clickhouse),
             # Cleanup old frozen parts from failed backup attempts
@@ -107,7 +107,7 @@ class ClickHousePlugin(CoordinatorPlugin):
             ),
             # Then snapshot and backup all frozen table parts
             SnapshotStep(
-                snapshot_groups=disk_paths.get_snapshot_groups(self.freeze_name),
+                snapshot_groups=disks.get_snapshot_groups(self.freeze_name),
             ),
             ListHexdigestsStep(hexdigest_storage=context.hexdigest_storage),
             UploadBlocksStep(storage_name=context.storage_name, validate_file_hashes=False),
@@ -116,8 +116,8 @@ class ClickHousePlugin(CoordinatorPlugin):
                 clients=clickhouse_clients, freeze_name=self.freeze_name, freeze_unfreeze_timeout=self.unfreeze_timeout
             ),
             # Prepare the manifest for restore
-            CollectObjectStorageFilesStep(disk_paths=disk_paths),
-            MoveFrozenPartsStep(disk_paths=disk_paths),
+            CollectObjectStorageFilesStep(disks=disks),
+            MoveFrozenPartsStep(disks=disks),
             PrepareClickHouseManifestStep(),
             UploadManifestStep(
                 json_storage=context.json_storage,
@@ -137,7 +137,7 @@ class ClickHousePlugin(CoordinatorPlugin):
             raise NotImplementedError
         zookeeper_client = get_zookeeper_client(self.zookeeper)
         clients = get_clickhouse_clients(self.clickhouse)
-        disk_paths = DiskPaths.from_disk_configs(self.disks)
+        disks = Disks.from_disk_configs(self.disks)
         return [
             ValidateConfigStep(clickhouse=self.clickhouse),
             BackupNameStep(json_storage=context.json_storage, requested_name=req.name),
@@ -163,7 +163,7 @@ class ClickHousePlugin(CoordinatorPlugin):
             RestoreStep(storage_name=context.storage_name, partial_restore_nodes=req.partial_restore_nodes),
             AttachMergeTreePartsStep(
                 clients=clients,
-                disk_paths=disk_paths,
+                disks=disks,
                 attach_timeout=self.attach_timeout,
                 max_concurrent_attach=self.max_concurrent_attach,
             ),
@@ -175,7 +175,7 @@ class ClickHousePlugin(CoordinatorPlugin):
             RestoreReplicaStep(
                 zookeeper_client=zookeeper_client,
                 clients=clients,
-                disk_paths=disk_paths,
+                disks=disks,
                 restart_timeout=self.restart_replica_timeout,
                 max_concurrent_restart=self.max_concurrent_restart_replica,
                 restore_timeout=self.restore_replica_timeout,
@@ -190,7 +190,7 @@ class ClickHousePlugin(CoordinatorPlugin):
     def get_cleanup_steps(
         self, *, context: OperationContext, retention: Retention, explicit_delete: Sequence[str]
     ) -> List[Step]:
-        disk_paths = DiskPaths.from_disk_configs(self.disks)
+        disks = Disks.from_disk_configs(self.disks)
         return [
             ListBackupsStep(json_storage=context.json_storage),
             ComputeKeptBackupsStep(
@@ -201,5 +201,5 @@ class ClickHousePlugin(CoordinatorPlugin):
             DeleteBackupManifestsStep(json_storage=context.json_storage),
             DownloadKeptBackupManifestsStep(json_storage=context.json_storage),
             DeleteDanglingHexdigestsStep(hexdigest_storage=context.hexdigest_storage),
-            DeleteDanglingObjectStorageFilesStep(disk_paths=disk_paths),
+            DeleteDanglingObjectStorageFilesStep(disks=disks),
         ]
