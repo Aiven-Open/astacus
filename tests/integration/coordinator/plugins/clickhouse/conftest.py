@@ -249,6 +249,7 @@ async def create_clickhouse_cluster(
     ports: Ports,
     cluster_shards: Sequence[str],
     command: ClickHouseCommand,
+    object_storage_prefix: str = "prefix/",
 ) -> AsyncIterator[ClickHouseServiceCluster]:
     cluster_size = len(cluster_shards)
     clickhouse_version = get_clickhouse_version(command)
@@ -258,7 +259,6 @@ async def create_clickhouse_cluster(
     http_ports = [ports.allocate() for _ in range(cluster_size)]
     interserver_http_ports = [ports.allocate() for _ in range(cluster_size)]
     joined_http_ports = "-".join(str(port) for port in http_ports)
-    object_storage_prefix = "prefix/"
     with tempfile.TemporaryDirectory(prefix=f"clickhouse_{joined_http_ports}_") as base_data_dir:
         data_dirs = [Path(base_data_dir) / f"clickhouse_{http_port}" for http_port in http_ports]
         configs = create_clickhouse_configs(
@@ -294,6 +294,12 @@ async def create_clickhouse_cluster(
             )
 
 
+@dataclasses.dataclass(frozen=True)
+class RestorableSource:
+    astacus_storage_path: Path
+    clickhouse_object_storage_prefix: str
+
+
 @contextlib.asynccontextmanager
 async def create_astacus_cluster(
     storage_path: Path,
@@ -301,8 +307,11 @@ async def create_astacus_cluster(
     clickhouse_cluster: ClickHouseServiceCluster,
     ports: Ports,
     minio_bucket: MinioBucket,
+    restorable_source: RestorableSource | None = None,
 ) -> AsyncIterator[ServiceCluster]:
-    configs = create_astacus_configs(zookeeper, clickhouse_cluster, ports, Path(storage_path), minio_bucket)
+    configs = create_astacus_configs(
+        zookeeper, clickhouse_cluster, ports, Path(storage_path), minio_bucket, restorable_source
+    )
     async with contextlib.AsyncExitStack() as stack:
         astacus_services_coro: List[Awaitable] = [stack.enter_async_context(_astacus(config=config)) for config in configs]
         astacus_services = list(await asyncio.gather(*astacus_services_coro))
@@ -459,14 +468,46 @@ def create_astacus_configs(
     ports: Ports,
     storage_path: Path,
     minio_bucket: MinioBucket,
+    restorable_source: RestorableSource | None = None,
 ) -> List[GlobalConfig]:
     storage_tmp_path = storage_path / "tmp"
     storage_tmp_path.mkdir(exist_ok=True)
     astacus_backup_storage_path = storage_path / "astacus_backup"
     astacus_backup_storage_path.mkdir(exist_ok=True)
-    clickhouse_storage_storage_path = storage_path / "clickhouse_storage"
-    clickhouse_storage_storage_path.mkdir(exist_ok=True)
     node_ports = [ports.allocate() for _ in clickhouse_cluster.services]
+    disk_storages = {
+        "default": RohmuS3StorageConfig(
+            storage_type=RohmuStorageType.s3,
+            region="fake",
+            host=minio_bucket.host,
+            port=minio_bucket.port,
+            aws_access_key_id=minio_bucket.access_key_id,
+            aws_secret_access_key=minio_bucket.secret_access_key,
+            bucket_name=minio_bucket.name,
+            prefix=clickhouse_cluster.object_storage_prefix,
+        )
+    }
+    backup_storages = {
+        "default": RohmuLocalStorageConfig(
+            storage_type=RohmuStorageType.local,
+            directory=str(astacus_backup_storage_path),
+        )
+    }
+    if restorable_source:
+        backup_storages["restorable"] = RohmuLocalStorageConfig(
+            storage_type=RohmuStorageType.local,
+            directory=str(restorable_source.astacus_storage_path),
+        )
+        disk_storages["restorable"] = RohmuS3StorageConfig(
+            storage_type=RohmuStorageType.s3,
+            region="fake",
+            host=minio_bucket.host,
+            port=minio_bucket.port,
+            aws_access_key_id=minio_bucket.access_key_id,
+            aws_secret_access_key=minio_bucket.secret_access_key,
+            bucket_name=minio_bucket.name,
+            prefix=restorable_source.clickhouse_object_storage_prefix,
+        )
     return [
         GlobalConfig(
             coordinator=CoordinatorConfig(
@@ -507,18 +548,7 @@ def create_astacus_configs(
                             name="remote",
                             object_storage=DiskObjectStorageConfiguration(
                                 default_storage="default",
-                                storages={
-                                    "default": RohmuS3StorageConfig(
-                                        storage_type=RohmuStorageType.s3,
-                                        region="fake",
-                                        host=minio_bucket.host,
-                                        port=minio_bucket.port,
-                                        aws_access_key_id=minio_bucket.access_key_id,
-                                        aws_secret_access_key=minio_bucket.secret_access_key,
-                                        bucket_name=minio_bucket.name,
-                                        prefix=clickhouse_cluster.object_storage_prefix,
-                                    )
-                                },
+                                storages=disk_storages,
                             ),
                         ),
                     ],
@@ -531,13 +561,8 @@ def create_astacus_configs(
             ),
             object_storage=RohmuConfig(
                 temporary_directory=str(storage_tmp_path),
-                default_storage="test",
-                storages={
-                    "test": RohmuLocalStorageConfig(
-                        storage_type=RohmuStorageType.local,
-                        directory=str(astacus_backup_storage_path),
-                    )
-                },
+                default_storage="default",
+                storages=backup_storages,
                 compression=RohmuCompression(algorithm=RohmuCompressionType.zstd),
                 encryption_key_id="test",
                 encryption_keys={

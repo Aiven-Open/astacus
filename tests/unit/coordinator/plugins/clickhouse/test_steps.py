@@ -14,7 +14,11 @@ from astacus.coordinator.plugins.base import (
     StepFailedError,
     StepsContext,
 )
-from astacus.coordinator.plugins.clickhouse.async_object_storage import MemoryAsyncObjectStorage, ObjectStorageItem
+from astacus.coordinator.plugins.clickhouse.async_object_storage import (
+    AsyncObjectStorage,
+    MemoryAsyncObjectStorage,
+    ObjectStorageItem,
+)
 from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, StubClickHouseClient
 from astacus.coordinator.plugins.clickhouse.config import (
     ClickHouseConfiguration,
@@ -46,6 +50,7 @@ from astacus.coordinator.plugins.clickhouse.steps import (
     PrepareClickHouseManifestStep,
     RemoveFrozenTablesStep,
     RestoreAccessEntitiesStep,
+    RestoreObjectStorageFilesStep,
     RestoreReplicaStep,
     RestoreReplicatedDatabasesStep,
     RetrieveAccessEntitiesStep,
@@ -987,6 +992,61 @@ async def test_restore_replica() -> None:
 
 
 @pytest.mark.asyncio
+async def test_restore_object_storage_files() -> None:
+    object_storage_items = [
+        ObjectStorageItem(key=file.path, last_modified=datetime.datetime(2020, 1, 2, tzinfo=datetime.timezone.utc))
+        for file in SAMPLE_MANIFEST.object_storage_files[0].files
+    ]
+    source_object_storage = MemoryAsyncObjectStorage.from_items(object_storage_items)
+    target_object_storage = MemoryAsyncObjectStorage()
+    source_disks = Disks(disks=[create_object_storage_disk("remote", source_object_storage)])
+    target_disks = Disks(disks=[create_object_storage_disk("remote", target_object_storage)])
+    step = RestoreObjectStorageFilesStep(source_disks=source_disks, target_disks=target_disks)
+    cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
+    context = StepsContext()
+    context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
+    await step.run_step(cluster, context)
+    assert await target_object_storage.list_items() == object_storage_items
+
+
+@pytest.mark.asyncio
+async def test_restore_object_storage_files_does_nothing_is_storages_have_same_config() -> None:
+    same_object_storage = mock.Mock(spec_set=AsyncObjectStorage)
+    source_disks = Disks(disks=[create_object_storage_disk("remote", same_object_storage)])
+    target_disks = Disks(disks=[create_object_storage_disk("remote", same_object_storage)])
+    step = RestoreObjectStorageFilesStep(source_disks=source_disks, target_disks=target_disks)
+    cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
+    context = StepsContext()
+    context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
+    await step.run_step(cluster, context)
+    same_object_storage.copy_items_from.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_restore_object_storage_files_fails_if_source_disk_has_no_object_storage_config() -> None:
+    source_disks = Disks(disks=[create_object_storage_disk("remote", None)])
+    target_disks = Disks(disks=[create_object_storage_disk("remote", MemoryAsyncObjectStorage())])
+    step = RestoreObjectStorageFilesStep(source_disks=source_disks, target_disks=target_disks)
+    cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
+    context = StepsContext()
+    context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
+    with pytest.raises(StepFailedError, match="Source disk named 'remote' isn't configured as object storage"):
+        await step.run_step(cluster, context)
+
+
+@pytest.mark.asyncio
+async def test_restore_object_storage_files_fails_if_target_disk_has_no_object_storage_config() -> None:
+    source_disks = Disks(disks=[create_object_storage_disk("remote", MemoryAsyncObjectStorage())])
+    target_disks = Disks(disks=[create_object_storage_disk("remote", None)])
+    step = RestoreObjectStorageFilesStep(source_disks=source_disks, target_disks=target_disks)
+    cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
+    context = StepsContext()
+    context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
+    with pytest.raises(StepFailedError, match="Target disk named 'remote' isn't configured as object storage"):
+        await step.run_step(cluster, context)
+
+
+@pytest.mark.asyncio
 async def test_attaches_all_mergetree_parts_in_manifest() -> None:
     client_1 = mock_clickhouse_client()
     client_2 = mock_clickhouse_client()
@@ -1109,11 +1169,7 @@ async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
             ),
         ]
     )
-    disks = Disks(
-        disks=[
-            Disk(type=DiskType.object_storage, name="remote", path_parts=("disks", "remote"), object_storage=object_storage)
-        ]
-    )
+    disks = Disks(disks=[create_object_storage_disk("remote", object_storage)])
     step = DeleteDanglingObjectStorageFilesStep(disks=disks)
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
@@ -1175,3 +1231,7 @@ async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
             key=Path("not_used/and_new"), last_modified=datetime.datetime(2020, 1, 4, tzinfo=datetime.timezone.utc)
         ),
     ]
+
+
+def create_object_storage_disk(name: str, object_storage: AsyncObjectStorage | None) -> Disk:
+    return Disk(type=DiskType.object_storage, name=name, path_parts=("disks", name), object_storage=object_storage)

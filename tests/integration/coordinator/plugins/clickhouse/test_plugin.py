@@ -15,6 +15,7 @@ from tests.integration.coordinator.plugins.clickhouse.conftest import (
     create_clickhouse_cluster,
     get_clickhouse_client,
     MinioBucket,
+    RestorableSource,
     run_astacus_command,
 )
 from typing import AsyncIterable, AsyncIterator, Final, List, Sequence
@@ -58,7 +59,12 @@ async def fixture_restorable_cluster(
         storage_path = Path(storage_path_str)
         async with create_zookeeper(ports) as zookeeper:
             async with create_clickhouse_cluster(
-                zookeeper, minio_bucket, ports, ("s1", "s1", "s2"), clickhouse_command
+                zookeeper=zookeeper,
+                minio_bucket=minio_bucket,
+                ports=ports,
+                cluster_shards=("s1", "s1", "s2"),
+                command=clickhouse_command,
+                object_storage_prefix="restorable/",
             ) as clickhouse_cluster:
                 async with create_astacus_cluster(
                     storage_path, zookeeper, clickhouse_cluster, ports, minio_bucket
@@ -80,24 +86,41 @@ async def fixture_restored_cluster(
     minio_bucket: MinioBucket,
 ) -> AsyncIterable[Sequence[ClickHouseClient]]:
     stop_after_step: str = request.param
+    restorable_source = RestorableSource(
+        astacus_storage_path=restorable_cluster / "astacus_backup", clickhouse_object_storage_prefix="restorable/"
+    )
     async with create_zookeeper(ports) as zookeeper:
         async with create_clickhouse_cluster(
-            zookeeper, minio_bucket, ports, ("s1", "s1", "s2"), clickhouse_restore_command
+            zookeeper=zookeeper,
+            minio_bucket=minio_bucket,
+            ports=ports,
+            cluster_shards=("s1", "s1", "s2"),
+            command=clickhouse_restore_command,
+            object_storage_prefix="restored/",
         ) as clickhouse_cluster:
             clients = [get_clickhouse_client(service) for service in clickhouse_cluster.services]
-            async with create_astacus_cluster(
-                restorable_cluster, zookeeper, clickhouse_cluster, ports, minio_bucket
-            ) as astacus_cluster:
-                # To test if we can survive transient failures during an entire restore operation,
-                # we first run a partial restore that stops after one of the restore steps,
-                # then we run the full restore, on the same ClickHouse cluster,
-                # then we check if the final restored data is as expected.
-                # This sequence is repeated with a different partial restore each time, stopping at a different step.
-                # We also need to test failure in the middle of a step, this is covered in the unit tests of each step.
-                if stop_after_step is not None:
-                    run_astacus_command(astacus_cluster, "restore", "--stop-after-step", stop_after_step)
-                run_astacus_command(astacus_cluster, "restore")
-                yield clients
+            with tempfile.TemporaryDirectory(prefix="storage_") as storage_path_str:
+                storage_path = Path(storage_path_str)
+                async with create_astacus_cluster(
+                    storage_path, zookeeper, clickhouse_cluster, ports, minio_bucket, restorable_source
+                ) as astacus_cluster:
+                    # To test if we can survive transient failures during an entire restore operation,
+                    # we first run a partial restore that stops after one of the restore steps,
+                    # then we run the full restore, on the same ClickHouse cluster,
+                    # then we check if the final restored data is as expected.
+                    # This sequence is repeated with a different partial restore each time, stopping at a different step.
+                    # We also need to test failure in the middle of a step, this is covered in the unit tests of each step.
+                    if stop_after_step is not None:
+                        run_astacus_command(
+                            astacus_cluster,
+                            "restore",
+                            "--stop-after-step",
+                            stop_after_step,
+                            "--storage",
+                            "restorable",
+                        )
+                    run_astacus_command(astacus_cluster, "restore", "--storage", "restorable")
+                    yield clients
 
 
 async def setup_cluster_content(clients: List[HttpClickHouseClient], use_named_collections: bool) -> None:

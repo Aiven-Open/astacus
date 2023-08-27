@@ -22,6 +22,7 @@ from .steps import (
     PrepareClickHouseManifestStep,
     RemoveFrozenTablesStep,
     RestoreAccessEntitiesStep,
+    RestoreObjectStorageFilesStep,
     RestoreReplicaStep,
     RestoreReplicatedDatabasesStep,
     RetrieveAccessEntitiesStep,
@@ -138,6 +139,7 @@ class ClickHousePlugin(CoordinatorPlugin):
         zookeeper_client = get_zookeeper_client(self.zookeeper)
         clients = get_clickhouse_clients(self.clickhouse)
         disks = Disks.from_disk_configs(self.disks)
+        source_disks = Disks.from_disk_configs(self.disks, storage_name=context.storage_name)
         return [
             ValidateConfigStep(clickhouse=self.clickhouse),
             BackupNameStep(json_storage=context.json_storage, requested_name=req.name),
@@ -161,6 +163,7 @@ class ClickHousePlugin(CoordinatorPlugin):
             ),
             MapNodesStep(partial_restore_nodes=req.partial_restore_nodes),
             RestoreStep(storage_name=context.storage_name, partial_restore_nodes=req.partial_restore_nodes),
+            RestoreObjectStorageFilesStep(source_disks=source_disks, target_disks=disks),
             AttachMergeTreePartsStep(
                 clients=clients,
                 disks=disks,

@@ -639,6 +639,32 @@ class RestoreReplicaStep(Step[None]):
 
 
 @dataclasses.dataclass
+class RestoreObjectStorageFilesStep(Step[None]):
+    """
+    If the source and target disks are not the same, restore object storage files by copying them
+    from the source to the target disk.
+    """
+
+    source_disks: Disks
+    target_disks: Disks
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
+        clickhouse_manifest = context.get_result(ClickHouseManifestStep)
+        for object_storage_files in clickhouse_manifest.object_storage_files:
+            if len(object_storage_files.files) > 0:
+                disk_name = object_storage_files.disk_name
+                source_storage = self.source_disks.get_object_storage(disk_name=disk_name)
+                if source_storage is None:
+                    raise StepFailedError(f"Source disk named {disk_name!r} isn't configured as object storage")
+                target_storage = self.target_disks.get_object_storage(disk_name=disk_name)
+                if target_storage is None:
+                    raise StepFailedError(f"Target disk named {disk_name!r} isn't configured as object storage")
+                if source_storage.get_config() != target_storage.get_config():
+                    paths = [file.path for file in object_storage_files.files]
+                    await target_storage.copy_items_from(source_storage, paths)
+
+
+@dataclasses.dataclass
 class AttachMergeTreePartsStep(Step[None]):
     """
     Restore data to all tables by using `ALTER TABLE ... ATTACH`.
@@ -723,9 +749,9 @@ class DeleteDanglingObjectStorageFilesStep(Step[None]):
         ]
         kept_paths: dict[str, set[Path]] = {}
         for clickhouse_manifest in clickhouse_manifests:
-            for object_storage_disk in clickhouse_manifest.object_storage_files:
-                disk_kept_paths = kept_paths.setdefault(object_storage_disk.disk_name, set())
-                disk_kept_paths.update((file.path for file in object_storage_disk.files))
+            for object_storage_files in clickhouse_manifest.object_storage_files:
+                disk_kept_paths = kept_paths.setdefault(object_storage_files.disk_name, set())
+                disk_kept_paths.update((file.path for file in object_storage_files.files))
         for disk_name, disk_kept_paths in sorted(kept_paths.items()):
             disk_object_storage = self.disks.get_object_storage(disk_name=disk_name)
             if disk_object_storage is None:
