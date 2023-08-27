@@ -4,7 +4,7 @@ See LICENSE for details
 """
 from astacus.common.snapshot import SnapshotGroup
 from astacus.coordinator.plugins.clickhouse.config import DiskConfiguration, DiskType
-from astacus.coordinator.plugins.clickhouse.disks import Disk, Disks, ParsedPath
+from astacus.coordinator.plugins.clickhouse.disks import Disk, Disks, ParsedPath, PartFilePathError
 from pathlib import Path
 from uuid import UUID
 
@@ -77,6 +77,30 @@ def test_parse_part_file_path_on_other_disk() -> None:
         part_name=b"all_1_1_0",
         file_parts=("checksum.txt",),
     )
+
+
+def test_parse_part_file_path_matching_no_disk() -> None:
+    disks = Disks(disks=[Disk(type=DiskType.local, name="non_default", path_parts=("disks", "non_default"))])
+    with pytest.raises(PartFilePathError, match="should start with a disk path"):
+        disks.parse_part_file_path(Path("store/123/12345678-1234-1234-1234-12345678abcd/detached/all_1_1_0/checksum.txt"))
+
+
+def test_parse_part_file_path_not_in_store_or_shadow() -> None:
+    disks = Disks()
+    with pytest.raises(PartFilePathError, match="should start with 'store' or 'shadow' after the disk path"):
+        disks.parse_part_file_path(Path("config/config.xml"))
+
+
+def test_parse_part_file_path_invalid_uuid() -> None:
+    disks = Disks()
+    with pytest.raises(PartFilePathError, match="invalid table UUID"):
+        disks.parse_part_file_path(Path("store/123/12345678-XXXX-1234-1234-12345678abcd/detached/all_1_1_0/checksum.txt"))
+
+
+def test_parse_part_file_path_consistent_uuid() -> None:
+    disks = Disks()
+    with pytest.raises(PartFilePathError, match="the UUID folder should have the 3 first characters of the UUID"):
+        disks.parse_part_file_path(Path("store/999/12345678-1234-1234-1234-12345678abcd/detached/all_1_1_0/checksum.txt"))
 
 
 def test_parsed_path_to_path() -> None:
