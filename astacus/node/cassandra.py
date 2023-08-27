@@ -25,6 +25,7 @@ import yaml
 logger = logging.getLogger(__name__)
 
 SNAPSHOT_GLOB = f"data/*/*/snapshots/{SNAPSHOT_NAME}"
+KEYSPACES_GLOB = "data/*"
 
 
 class SimpleCassandraSubOp(NodeOp[ipc.NodeRequest, ipc.NodeResult]):
@@ -45,6 +46,7 @@ class SimpleCassandraSubOp(NodeOp[ipc.NodeRequest, ipc.NodeResult]):
             op=self,
             fun={
                 ipc.CassandraSubOp.remove_snapshot: self.remove_snapshot,
+                ipc.CassandraSubOp.remove_keyspaces: self.remove_keyspaces,
                 ipc.CassandraSubOp.restore_snapshot: self.restore_snapshot,
                 ipc.CassandraSubOp.restore_snapshot_with_schema: self.restore_snapshot_with_schema,
                 ipc.CassandraSubOp.stop_cassandra: self.stop_cassandra,
@@ -61,13 +63,23 @@ class SimpleCassandraSubOp(NodeOp[ipc.NodeRequest, ipc.NodeResult]):
         Note that Cassandra does not do any internal bookkeeping of
         the snapshots so the rmtrees are enough.
         """
+        self._remove_matching(SNAPSHOT_GLOB)
+
+    def remove_keyspaces(self) -> None:
+        """Remove everything from the data dir except Astacus-maintained snapshot.
+
+        Used to ensure we restore from a clean state.
+        """
+        self._remove_matching(KEYSPACES_GLOB)
+
+    def _remove_matching(self, dir_glob: str) -> None:
         progress = self.result.progress
         progress.add_total(1)
-        todo = list(self.config.root.glob(SNAPSHOT_GLOB))
+        todo = list(self.config.root.glob(dir_glob))
         progress.add_success()
         progress.add_total(len(todo))
-        for snapshotpath in todo:
-            shutil.rmtree(snapshotpath)
+        for to_remove in todo:
+            shutil.rmtree(to_remove)
             progress.add_success()
         progress.done()
 

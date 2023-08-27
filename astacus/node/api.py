@@ -10,12 +10,19 @@ from .snapshot import SnapshotOp, UploadOp
 from .state import node_state, NodeState
 from astacus.common import ipc
 from astacus.common.magic import StrEnum
+from astacus.node.config import CassandraAccessLevel
 from astacus.version import __version__
 from enum import Enum
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Union
 
 router = APIRouter()
+
+READONLY_SUBOPS = {
+    ipc.CassandraSubOp.get_schema_hash,
+    ipc.CassandraSubOp.remove_snapshot,
+    ipc.CassandraSubOp.take_snapshot,
+}
 
 
 class OpName(StrEnum):
@@ -33,6 +40,14 @@ class Features(Enum):
     validate_file_hashes = "validate_file_hashes"
     # Added on 2023-06-07
     snapshot_groups = "snapshot_groups"
+
+
+def is_allowed(subop: ipc.CassandraSubOp, access_level: CassandraAccessLevel):
+    match access_level:
+        case CassandraAccessLevel.read:
+            return subop in READONLY_SUBOPS
+        case CassandraAccessLevel.write:
+            return True
 
 
 @router.get("/metadata")
@@ -138,6 +153,11 @@ def cassandra(req: Union[ipc.NodeRequest, ipc.CassandraStartRequest], subop: ipc
         raise HTTPException(status_code=409, detail="Not locked")
     if not n.config.cassandra:
         raise HTTPException(status_code=409, detail="Cassandra node configuration not found")
+    if not is_allowed(subop, n.config.cassandra.access_level):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Cassandra subop {subop} is not allowed on access level {n.config.cassandra.access_level}",
+        )
 
     if subop == ipc.CassandraSubOp.get_schema_hash:
         return CassandraGetSchemaHashOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start()
