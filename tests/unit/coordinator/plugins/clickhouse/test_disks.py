@@ -2,11 +2,37 @@
 Copyright (c) 2023 Aiven Ltd
 See LICENSE for details
 """
+from astacus.common.rohmustorage import RohmuLocalStorageConfig, RohmuStorageType
 from astacus.common.snapshot import SnapshotGroup
-from astacus.coordinator.plugins.clickhouse.config import DiskConfiguration, DiskType
+from astacus.coordinator.plugins.clickhouse.config import DiskConfiguration, DiskObjectStorageConfiguration, DiskType
 from astacus.coordinator.plugins.clickhouse.disks import Disk, Disks, ParsedPath, PartFilePathError
 from pathlib import Path
 from uuid import UUID
+
+import pytest
+
+SAMPLE_DEFAULT_DISK_CONFIGURATION = DiskConfiguration(type=DiskType.local, path=Path(), name="default")
+SAMPLE_SECONDARY_DISK_CONFIGURATION = DiskConfiguration(
+    type=DiskType.object_storage,
+    path=Path("disks/secondary"),
+    name="secondary",
+    object_storage=DiskObjectStorageConfiguration(
+        default_storage="default",
+        # We're using local storage here because it's the only storage type
+        # that does not try to do operation during its __init__...
+        storages={
+            "default": RohmuLocalStorageConfig(
+                storage_type=RohmuStorageType.local,
+                directory="default-bucket",
+            ),
+            "recovery": RohmuLocalStorageConfig(
+                storage_type=RohmuStorageType.local,
+                directory="recovery-bucket",
+            ),
+        },
+    ),
+)
+SAMPLE_DISKS_CONFIGURATION = [SAMPLE_DEFAULT_DISK_CONFIGURATION, SAMPLE_SECONDARY_DISK_CONFIGURATION]
 
 
 def test_get_snapshot_groups_pattern_escapes_backup_name() -> None:
@@ -145,3 +171,23 @@ def test_other_disk_parsed_path_to_path() -> None:
         part_name=b"all_1_1_0",
         file_parts=("checksum.txt",),
     ).to_path() == Path("disks/secondary/store/123/12345678-1234-1234-1234-12345678abcd/all_1_1_0/checksum.txt")
+
+
+def test_disk_can_load_default_object_storage_config() -> None:
+    disk = Disk.from_disk_config(SAMPLE_SECONDARY_DISK_CONFIGURATION)
+    assert disk.object_storage.get_config()["directory"] == "default-bucket"
+
+
+def test_disk_can_load_alternate_object_storage_config() -> None:
+    disk = Disk.from_disk_config(SAMPLE_SECONDARY_DISK_CONFIGURATION, storage_name="recovery")
+    assert disk.object_storage.get_config()["directory"] == "recovery-bucket"
+
+
+def test_disks_can_load_default_object_storage_config() -> None:
+    disks = Disks.from_disk_configs(SAMPLE_DISKS_CONFIGURATION)
+    assert disks.get_object_storage(disk_name="secondary").get_config()["directory"] == "default-bucket"
+
+
+def test_disks_can_load_alternate_object_storage_config() -> None:
+    disks = Disks.from_disk_configs(SAMPLE_DISKS_CONFIGURATION, storage_name="recovery")
+    assert disks.get_object_storage(disk_name="secondary").get_config()["directory"] == "recovery-bucket"

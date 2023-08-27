@@ -25,6 +25,10 @@ class ObjectStorageItem:
 
 class AsyncObjectStorage(ABC):
     @abstractmethod
+    def get_config(self) -> Mapping[str, Any]:
+        ...
+
+    @abstractmethod
     async def list_items(self) -> list[ObjectStorageItem]:
         ...
 
@@ -35,6 +39,7 @@ class AsyncObjectStorage(ABC):
 
 class ThreadSafeRohmuStorage:
     def __init__(self, config: Mapping[str, Any]) -> None:
+        self.config = config
         self._storage = rohmu.get_transfer(config)
         self._storage_lock = threading.Lock()
 
@@ -51,6 +56,9 @@ class ThreadSafeRohmuStorage:
 class RohmuAsyncObjectStorage(AsyncObjectStorage):
     storage: ThreadSafeRohmuStorage
 
+    def get_config(self) -> Mapping[str, Any]:
+        return self.storage.config
+
     async def list_items(self) -> list[ObjectStorageItem]:
         items = await run_in_threadpool(self.storage.list_iter, key="", with_metadata=True, deep=True)
         return [ObjectStorageItem(key=Path(item["name"]), last_modified=item["last_modified"]) for item in items]
@@ -62,6 +70,9 @@ class RohmuAsyncObjectStorage(AsyncObjectStorage):
 @dataclasses.dataclass(frozen=True)
 class MemoryAsyncObjectStorage(AsyncObjectStorage):
     items: list[ObjectStorageItem]
+
+    def get_config(self) -> Mapping[str, Any]:
+        return {}
 
     async def list_items(self) -> list[ObjectStorageItem]:
         return self.items[:]

@@ -1090,8 +1090,8 @@ def check_each_pair_of_calls_has_the_same_session_id(mock_calls: Sequence[MockCa
 
 @pytest.mark.asyncio
 async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
-    object_storage = MemoryAsyncObjectStorage(
-        items=[
+    object_storage = MemoryAsyncObjectStorage.from_items(
+        [
             ObjectStorageItem(
                 key=Path("not_used/and_old"), last_modified=datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)
             ),
