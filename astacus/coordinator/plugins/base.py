@@ -33,6 +33,9 @@ class CoordinatorPlugin(AstacusModel):
     def get_backup_steps(self, *, context: OperationContext) -> List[Step]:
         raise NotImplementedError
 
+    def get_delta_backup_steps(self, *, context: OperationContext) -> List[Step]:
+        raise NotImplementedError
+
     def get_restore_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> List[Step]:
         raise NotImplementedError
 

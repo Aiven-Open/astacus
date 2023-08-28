@@ -34,11 +34,11 @@ def compute_deduplicated_snapshot_file_stats(manifest: ipc.BackupManifest) -> tu
     return num_files, total_size
 
 
-def _iter_backups(storage: JsonStorage) -> Iterator[ipc.ListSingleBackup]:
+def _iter_backups(storage: JsonStorage, backup_prefix: str) -> Iterator[ipc.ListSingleBackup]:
     for name in sorted(storage.list_jsons()):
-        if not name.startswith(magic.JSON_BACKUP_PREFIX):
+        if not name.startswith(backup_prefix):
             continue
-        pname = name[len(magic.JSON_BACKUP_PREFIX) :]
+        pname = name[len(backup_prefix) :]
         manifest = ipc.BackupManifest.parse_obj(storage.download_json(name))
         files = sum(x.files for x in manifest.snapshot_results)
         total_size = sum(x.total_size for x in manifest.snapshot_results)
@@ -61,14 +61,20 @@ def _iter_backups(storage: JsonStorage) -> Iterator[ipc.ListSingleBackup]:
         )
 
 
-def _iter_storages(req: ipc.ListRequest, json_mstorage: MultiStorage) -> Iterator[ipc.ListForStorage]:
+def _iter_storages(
+    req: ipc.ListRequest, json_mstorage: MultiStorage, backup_prefix: str = magic.JSON_BACKUP_PREFIX
+) -> Iterator[ipc.ListForStorage]:
     # req.storage is optional, used to constrain listing just to the
     # given storage. by default, we list all storages.
     for storage_name in sorted(json_mstorage.list_storages()):
         if not req.storage or req.storage == storage_name:
-            backups = list(_iter_backups(json_mstorage.get_storage(storage_name)))
+            backups = list(_iter_backups(json_mstorage.get_storage(storage_name), backup_prefix=backup_prefix))
             yield ipc.ListForStorage(storage_name=storage_name, backups=backups)
 
 
 def list_backups(*, req: ipc.ListRequest, json_mstorage: MultiStorage) -> ipc.ListResponse:
     return ipc.ListResponse(storages=list(_iter_storages(req, json_mstorage)))
+
+
+def list_delta_backups(*, req: ipc.ListRequest, json_mstorage: MultiStorage) -> ipc.ListResponse:
+    return ipc.ListResponse(storages=list(_iter_storages(req, json_mstorage, backup_prefix=magic.JSON_DELTA_PREFIX)))

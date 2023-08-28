@@ -325,6 +325,17 @@ class BackupOp(SteppedCoordinatorOp):
         super().__init__(c=c, attempts=c.config.backup_attempts, steps=steps)
 
 
+class DeltaBackupOp(SteppedCoordinatorOp):
+    @staticmethod
+    async def create(*, c: Coordinator = Depends()) -> "DeltaBackupOp":
+        return DeltaBackupOp(c=c)
+
+    def __init__(self, *, c: Coordinator) -> None:
+        context = c.get_operation_context()
+        steps = c.get_plugin().get_delta_backup_steps(context=context)
+        super().__init__(c=c, attempts=c.config.backup_attempts, steps=steps)
+
+
 class RestoreOp(SteppedCoordinatorOp):
     @staticmethod
     async def create(*, c: Coordinator = Depends(), req: ipc.RestoreRequest = ipc.RestoreRequest()) -> "RestoreOp":

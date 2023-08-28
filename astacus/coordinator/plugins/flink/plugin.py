@@ -46,6 +46,9 @@ class FlinkPlugin(CoordinatorPlugin):
             ),
         ]
 
+    def get_delta_backup_steps(self, *, context: OperationContext) -> List[Step]:
+        raise NotImplementedError
+
     def get_restore_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> List[Step]:
         zookeeper_client = get_zookeeper_client(self.zookeeper)
         return [

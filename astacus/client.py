@@ -50,10 +50,6 @@ def _run_op(op, args, *, json=None, data=None) -> bool:
     return True
 
 
-def _run_backup(args) -> bool:
-    return _run_op("backup", args)
-
-
 def _run_restore(args) -> bool:
     json = {}
     if args.storage:
@@ -139,11 +135,11 @@ def print_list_result(result):
         print(tabulate(table, headers=headers, tablefmt="github"))
 
 
-def _run_list(args) -> bool:
+def _run_list(args, list_path: str) -> bool:
     storage_name = ""
     if args.storage:
         storage_name = f"?storage={args.storage}"
-    r = http_request(f"{args.url}/list{storage_name}", caller="client._run_list")
+    r = http_request(f"{args.url}/{list_path}{storage_name}", caller="client._run_list")
     if r is None:
         return False
     print_list_result(ipc.ListResponse.parse_obj(r))
@@ -189,6 +185,17 @@ def _check_reload_config(args) -> bool:
     return True
 
 
+def _add_backup(p_parent, url_path: str) -> None:
+    p_backup = p_parent.add_parser("backup", help="Request backup")
+    p_backup.set_defaults(func=lambda args: _run_op(url_path, args))
+
+
+def _add_list(p_parent, url_path: str) -> None:
+    p_delta_list = p_parent.add_parser("list", help="List backups")
+    p_delta_list.add_argument("--storage", help="Particular storage to list (default: all)")
+    p_delta_list.set_defaults(func=lambda args: _run_list(args, url_path))
+
+
 def create_client_parsers(parser, subparsers):
     default_url = f"http://localhost:{magic.ASTACUS_DEFAULT_PORT}"
     parser.add_argument("-u", "--url", type=str, help="Astacus REST endpoint URL", default=default_url)
@@ -210,8 +217,7 @@ def create_client_parsers(parser, subparsers):
         "--status", action="store_true", help="Returns a status code of 1 if the configuration needs to be reloaded"
     )
 
-    p_backup = subparsers.add_parser("backup", help="Request backup")
-    p_backup.set_defaults(func=_run_backup)
+    _add_backup(subparsers, "backup")
 
     p_restore = subparsers.add_parser("restore", help="Request backup restoration")
     p_restore.add_argument("--storage", help="Storage to use (default: configured)")
@@ -219,9 +225,7 @@ def create_client_parsers(parser, subparsers):
     p_restore.add_argument("--stop-after-step", type=str, help="Stop restore operation after the specified step")
     p_restore.set_defaults(func=_run_restore)
 
-    p_list = subparsers.add_parser("list", help="List backups")
-    p_list.add_argument("--storage", help="Particular storage to list (default: all)")
-    p_list.set_defaults(func=_run_list)
+    _add_list(subparsers, "list")
 
     p_cleanup = subparsers.add_parser("cleanup", help="Delete backups that should no longer be kept")
     p_cleanup.add_argument("--minimum-backups", type=int, help="Minimum number of backups to be kept")
@@ -235,3 +239,8 @@ def create_client_parsers(parser, subparsers):
     p_delete = subparsers.add_parser("delete", help="Delete specific old existing backup(s)")
     p_delete.add_argument("--backups", nargs="+", help="Backup names to be deleted")
     p_delete.set_defaults(func=_run_delete)
+
+    p_delta = subparsers.add_parser("delta", help="Delta backup commands")
+    sub_delta = p_delta.add_subparsers()
+    _add_backup(sub_delta, "delta/backup")
+    _add_list(sub_delta, "delta/list")
