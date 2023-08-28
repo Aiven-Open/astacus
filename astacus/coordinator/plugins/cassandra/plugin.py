@@ -101,6 +101,9 @@ class CassandraPlugin(CoordinatorPlugin):
             ),
         ]
 
+    def get_delta_backup_steps(self, *, context: OperationContext) -> List[Step]:
+        raise NotImplementedError
+
     def get_restore_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> List[Step]:
         nodes = self.nodes or [CassandraConfigurationNode(listen_address=self.client.get_listen_address())]
         cluster_restore_steps = (

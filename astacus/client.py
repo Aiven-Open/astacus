@@ -51,7 +51,7 @@ def _run_op(op, args, *, json=None, data=None) -> bool:
 
 
 def _run_backup(args) -> bool:
-    return _run_op("backup", args)
+    return _run_op("deltabackup" if args.delta else "backup", args)
 
 
 def _run_restore(args) -> bool:
@@ -143,7 +143,8 @@ def _run_list(args) -> bool:
     storage_name = ""
     if args.storage:
         storage_name = f"?storage={args.storage}"
-    r = http_request(f"{args.url}/list{storage_name}", caller="client._run_list")
+    method = "delta/list" if args.delta else "list"
+    r = http_request(f"{args.url}/{method}{storage_name}", caller="client._run_list")
     if r is None:
         return False
     print_list_result(ipc.ListResponse.parse_obj(r))
@@ -211,6 +212,7 @@ def create_client_parsers(parser, subparsers):
     )
 
     p_backup = subparsers.add_parser("backup", help="Request backup")
+    p_backup.add_argument("--delta", action="store_true", help="Request only a delta backup (default is full)")
     p_backup.set_defaults(func=_run_backup)
 
     p_restore = subparsers.add_parser("restore", help="Request backup restoration")
@@ -221,6 +223,7 @@ def create_client_parsers(parser, subparsers):
 
     p_list = subparsers.add_parser("list", help="List backups")
     p_list.add_argument("--storage", help="Particular storage to list (default: all)")
+    p_list.add_argument("--delta", action="store_true", help="List delta backups")
     p_list.set_defaults(func=_run_list)
 
     p_cleanup = subparsers.add_parser("cleanup", help="Delete backups that should no longer be kept")

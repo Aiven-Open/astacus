@@ -4,8 +4,8 @@ See LICENSE for details
 """
 
 from .cleanup import CleanupOp
-from .coordinator import BackupOp, Coordinator, RestoreOp
-from .list import list_backups
+from .coordinator import BackupOp, Coordinator, DeltaBackupOp, RestoreOp
+from .list import list_backups, list_delta_backups
 from .lockops import LockOps
 from .state import CachedListResponse
 from astacus import config
@@ -30,6 +30,7 @@ class OpName(StrEnum):
     """(Long-running) operations defined in this API (for coordinator)"""
 
     backup = "backup"
+    delta_backup = "deltabackup"
     lock = "lock"
     restore = "restore"
     unlock = "unlock"
@@ -81,6 +82,12 @@ async def backup(*, c: Coordinator = Depends(), op: BackupOp = Depends(BackupOp.
     return c.start_op(op_name=OpName.backup, op=op, fun=runner)
 
 
+@router.post("/deltabackup")
+async def delta_backup(*, c: Coordinator = Depends(), op: DeltaBackupOp = Depends(DeltaBackupOp.create)):
+    runner = await op.acquire_cluster_lock()
+    return c.start_op(op_name=OpName.delta_backup, op=op, fun=runner)
+
+
 @router.post("/restore")
 async def restore(*, c: Coordinator = Depends(), op: RestoreOp = Depends(RestoreOp.create)):
     runner = await op.acquire_cluster_lock()
@@ -114,6 +121,12 @@ async def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordina
     return list_response
 
 
+@router.get("/delta/list")
+async def _list_delta_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordinator = Depends(), request: Request):
+    # This is not supposed to be called very often, no caching necessary
+    return await to_thread(list_delta_backups, req=req, json_mstorage=c.json_mstorage)
+
+
 @router.post("/cleanup")
 async def cleanup(*, op: CleanupOp = Depends(CleanupOp.create), c: Coordinator = Depends()):
     runner = await op.acquire_cluster_lock()
@@ -124,7 +137,7 @@ async def cleanup(*, op: CleanupOp = Depends(CleanupOp.create), c: Coordinator =
 def op_status(*, op_name: OpName, op_id: int, c: Coordinator = Depends()):
     op, op_info = c.get_op_and_op_info(op_id=op_id, op_name=op_name)
     result = {"state": op_info.op_status}
-    if isinstance(op, (BackupOp, RestoreOp)):
+    if isinstance(op, (BackupOp, DeltaBackupOp, RestoreOp)):
         result["progress"] = op.progress
     return result
 
