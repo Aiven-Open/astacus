@@ -3,7 +3,7 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 
-from .clear import ClearOp
+from .clear import ClearOp, DeltaClearOp
 from .download import DownloadOp
 from .node import Node
 from .snapshot import SnapshotOp, UploadOp
@@ -93,7 +93,7 @@ def unlock(locker: str, state: NodeState = Depends(node_state)):
 def snapshot(req: ipc.SnapshotRequestV2, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
-    return SnapshotOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start()
+    return SnapshotOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(n.get_or_create_snapshotter)
 
 
 @router.get("/snapshot/{op_id}")
@@ -102,11 +102,26 @@ def snapshot_result(*, op_id: int, n: Node = Depends()):
     return op.result
 
 
+@router.post("/delta/snapshot")
+def delta_snapshot(req: ipc.SnapshotRequestV2, n: Node = Depends()):
+    if not n.state.is_locked:
+        raise HTTPException(status_code=409, detail="Not locked")
+    return SnapshotOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(n.get_or_create_delta_snapshotter)
+
+
+@router.get("/delta/snapshot/{op_id}")
+def delta_snapshot_result(*, op_id: int, n: Node = Depends()):
+    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.snapshot)
+    return op.result
+
+
 @router.post("/upload")
 def upload(req: ipc.SnapshotUploadRequestV20221129, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
-    return UploadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start()
+    snapshotter = n.get_snapshotter()
+    assert snapshotter
+    return UploadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshotter)
 
 
 @router.get("/upload/{op_id}")
@@ -115,11 +130,26 @@ def upload_result(*, op_id: int, n: Node = Depends()):
     return op.result
 
 
+@router.post("/delta/upload")
+def delta_upload(req: ipc.SnapshotUploadRequestV20221129, n: Node = Depends()):
+    if not n.state.is_locked:
+        raise HTTPException(status_code=409, detail="Not locked")
+    snapshotter = n.get_delta_snapshotter()
+    assert snapshotter
+    return UploadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshotter)
+
+
+@router.get("/delta/upload/{op_id}")
+def delta_upload_result(*, op_id: int, n: Node = Depends()):
+    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.upload)
+    return op.result
+
+
 @router.post("/download")
 def download(req: ipc.SnapshotDownloadRequest, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
-    return DownloadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start()
+    return DownloadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(n.get_or_create_snapshotter)
 
 
 @router.get("/download/{op_id}")
@@ -132,11 +162,24 @@ def download_result(*, op_id: int, n: Node = Depends()):
 def clear(req: ipc.SnapshotClearRequest, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
-    return ClearOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start()
+    return ClearOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(n.get_or_create_snapshotter)
 
 
 @router.get("/clear/{op_id}")
 def clear_result(*, op_id: int, n: Node = Depends()):
+    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.clear)
+    return op.result
+
+
+@router.post("/delta/clear")
+def delta_clear(req: ipc.SnapshotClearRequest, n: Node = Depends()):
+    if not n.state.is_locked:
+        raise HTTPException(status_code=409, detail="Not locked")
+    return DeltaClearOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(n.get_or_create_delta_snapshotter)
+
+
+@router.get("/delta/clear/{op_id}")
+def delta_clear_result(*, op_id: int, n: Node = Depends()):
     op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.clear)
     return op.result
 

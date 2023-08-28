@@ -12,7 +12,7 @@ from .snapshotter import Snapshotter
 from astacus.common import ipc
 from astacus.common.progress import Progress
 from astacus.common.snapshot import SnapshotGroup
-from typing import Optional
+from typing import Callable, Optional, Sequence
 
 import contextlib
 import logging
@@ -22,12 +22,13 @@ logger = logging.getLogger(__name__)
 
 class ClearOp(NodeOp[ipc.SnapshotClearRequest, ipc.NodeResult]):
     snapshotter: Optional[Snapshotter] = None
+    is_snaphot_outdated: bool = True
 
     def create_result(self) -> ipc.NodeResult:
         return ipc.NodeResult()
 
-    def start(self) -> NodeOp.StartResult:
-        self.snapshotter = self.get_or_create_snapshotter(
+    def start(self, get_or_create_snapshotter: Callable[[Sequence[SnapshotGroup]], Snapshotter]) -> NodeOp.StartResult:
+        self.snapshotter = get_or_create_snapshotter(
             [SnapshotGroup(root_glob=root_glob) for root_glob in self.req.root_globs]
         )
         logger.info("start_clear %r", self.req)
@@ -38,7 +39,8 @@ class ClearOp(NodeOp[ipc.SnapshotClearRequest, ipc.NodeResult]):
         # 'snapshotter' is global; ensure we have sole access to it
         with self.snapshotter.lock:
             self.check_op_id()
-            self.snapshotter.snapshot(progress=Progress())
+            if self.is_snaphot_outdated:
+                self.snapshotter.snapshot(progress=Progress())
             files = set(self.snapshotter.relative_path_to_snapshotfile.keys())
             progress = self.result.progress
             progress.start(len(files))
@@ -48,3 +50,9 @@ class ClearOp(NodeOp[ipc.SnapshotClearRequest, ipc.NodeResult]):
                     absolute_path.unlink()
                 progress.add_success()
             progress.done()
+
+
+class DeltaClearOp(ClearOp):
+    def start(self, get_or_create_snapshotter: Callable[[Sequence[SnapshotGroup]], Snapshotter]) -> NodeOp.StartResult:
+        self.is_snaphot_outdated = False
+        return super().start(get_or_create_snapshotter)

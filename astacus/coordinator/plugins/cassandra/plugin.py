@@ -9,6 +9,7 @@ from .utils import run_subop
 from astacus.common import ipc
 from astacus.common.cassandra.client import CassandraClient
 from astacus.common.cassandra.config import CassandraClientConfiguration, SNAPSHOT_NAME
+from astacus.common.magic import JSON_DELTA_PREFIX
 from astacus.common.snapshot import SnapshotGroup
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins import base
@@ -22,8 +23,9 @@ from astacus.coordinator.plugins.base import (
 )
 from astacus.coordinator.plugins.cassandra import backup_steps, restore_steps
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Set
 
+import dataclasses
 import logging
 
 logger = logging.getLogger(__name__)
@@ -102,7 +104,36 @@ class CassandraPlugin(CoordinatorPlugin):
         ]
 
     def get_delta_backup_steps(self, *, context: OperationContext) -> List[Step]:
-        raise NotImplementedError
+        nodes = self.nodes or [CassandraConfigurationNode(listen_address=self.client.get_listen_address())]
+        # first *: keyspace name; second *: table name
+        delta_snapshot_groups = [
+            SnapshotGroup(root_glob="data/*/*/backups/*.db"),
+            SnapshotGroup(root_glob="data/*/*/backups/*.txt"),
+        ]
+
+        @dataclasses.dataclass
+        class SkipHexdigestsListStep(Step[Set[str]]):
+            async def run_step(self, cluster: Cluster, context: StepsContext) -> Set[str]:
+                return set()
+
+        return [
+            ValidateConfigurationStep(nodes=nodes),
+            base.SnapshotStep(snapshot_groups=delta_snapshot_groups, snapshot_request="delta/snapshot"),
+            SkipHexdigestsListStep(),
+            base.UploadBlocksStep(
+                storage_name=context.storage_name,
+                upload_request="delta/upload",
+                # Data in delta backups is assumed to be new, supply an empty list of uploaded hashes.
+                list_hexdigests_step=SkipHexdigestsListStep,
+            ),
+            base.UploadManifestStep(
+                json_storage=context.json_storage,
+                plugin=ipc.Plugin.cassandra,
+                plugin_manifest_step=None,
+                backup_prefix=JSON_DELTA_PREFIX,
+            ),
+            base.SnapshotClearStep(clear_request="delta/clear"),
+        ]
 
     def get_restore_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> List[Step]:
         nodes = self.nodes or [CassandraConfigurationNode(listen_address=self.client.get_listen_address())]

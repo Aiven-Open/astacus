@@ -165,8 +165,8 @@ class DownloadOp(NodeOp[ipc.SnapshotDownloadRequest, ipc.NodeResult]):
     def create_result(self) -> ipc.NodeResult:
         return ipc.NodeResult()
 
-    def start(self) -> NodeOp.StartResult:
-        self.snapshotter = self.get_or_create_snapshotter(
+    def start(self, get_or_create_snapshotter: Callable[[Sequence[SnapshotGroup]], Snapshotter]) -> NodeOp.StartResult:
+        self.snapshotter = get_or_create_snapshotter(
             [SnapshotGroup(root_glob=root_glob) for root_glob in self.req.root_globs]
         )
         logger.info("start_download %r", self.req)
