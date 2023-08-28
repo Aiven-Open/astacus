@@ -77,11 +77,6 @@ class StepsContext:
         self.attempt_start = utils.now() if attempt_start is None else attempt_start
         self.step_results: Dict[Type[Step], Any] = {}
 
-    @property
-    def backup_name(self) -> str:
-        iso = self.attempt_start.isoformat(timespec="seconds")
-        return f"{magic.JSON_BACKUP_PREFIX}{iso}"
-
     def get_result(self, step_class: Type[Step[T]]) -> T:
         return self.step_results[step_class]
 
@@ -102,6 +97,7 @@ class SnapshotStep(Step[List[ipc.SnapshotResult]]):
     """
 
     snapshot_groups: Sequence[SnapshotGroup]
+    snapshot_request: str = "snapshot"
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> List[ipc.SnapshotResult]:
         nodes_metadata = await get_nodes_metadata(cluster)
@@ -121,7 +117,9 @@ class SnapshotStep(Step[List[ipc.SnapshotResult]]):
             req = ipc.SnapshotRequest(
                 root_globs=[group.root_glob for group in self.snapshot_groups],
             )
-        start_results = await cluster.request_from_nodes("snapshot", method="post", caller="SnapshotStep", req=req)
+        start_results = await cluster.request_from_nodes(
+            self.snapshot_request, method="post", caller="SnapshotStep", req=req
+        )
         return await cluster.wait_successful_results(start_results=start_results, result_class=ipc.SnapshotResult)
 
 
@@ -155,10 +153,12 @@ class UploadBlocksStep(Step[List[ipc.SnapshotUploadResult]]):
 
     storage_name: str
     validate_file_hashes: bool = True
+    upload_request: str = "upload"
+    list_hexdigests_step: type[Step[Set[str]]] = ListHexdigestsStep
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> List[ipc.SnapshotUploadResult]:
         node_index_datas = build_node_index_datas(
-            hexdigests=context.get_result(ListHexdigestsStep),
+            hexdigests=context.get_result(self.list_hexdigests_step),
             snapshots=context.get_result(SnapshotStep),
             node_indices=list(range(len(cluster.nodes))),
         )
@@ -167,7 +167,28 @@ class UploadBlocksStep(Step[List[ipc.SnapshotUploadResult]]):
             self.storage_name,
             node_index_datas,
             validate_file_hashes=self.validate_file_hashes,
+            upload_request=self.upload_request,
         )
+
+
+@dataclasses.dataclass
+class SnapshotClearStep(Step[List[ipc.NodeResult]]):
+    """
+    Request to clear the source hierarchy of the snapshotter on all nodes.
+
+    Depending on the request, this can clear either the main snapshotter or the delta snapshotter.
+    """
+
+    clear_request: str = "clear"
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> List[ipc.NodeResult]:
+        snapshot_results = context.get_result(SnapshotStep)
+        assert snapshot_results[0].state
+        node_request = ipc.SnapshotClearRequest(root_globs=snapshot_results[0].state.root_globs)
+        start_results = await cluster.request_from_nodes(
+            self.clear_request, method="post", caller="SnapshotClearStep", req=node_request
+        )
+        return await cluster.wait_successful_results(start_results=start_results, result_class=ipc.NodeResult)
 
 
 @dataclasses.dataclass
@@ -184,6 +205,7 @@ class UploadManifestStep(Step[None]):
     plugin_manifest_step: Optional[Type[Step[Dict]]] = None
     snapshot_step: Optional[Type[Step[List[ipc.SnapshotResult]]]] = SnapshotStep
     upload_step: Optional[Type[Step[List[ipc.SnapshotUploadResult]]]] = UploadBlocksStep
+    backup_prefix: str = magic.JSON_BACKUP_PREFIX
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         plugin_data = context.get_result(self.plugin_manifest_step) if self.plugin_manifest_step else {}
@@ -201,7 +223,7 @@ class UploadManifestStep(Step[None]):
 
     def _make_backup_name(self, context: StepsContext) -> str:
         iso = context.attempt_start.isoformat(timespec="seconds")
-        return f"{magic.JSON_BACKUP_PREFIX}{iso}"
+        return f"{self.backup_prefix}{iso}"
 
 
 @dataclasses.dataclass
@@ -545,7 +567,7 @@ class NodeIndexData(utils.AstacusModel):
 
 
 def build_node_index_datas(
-    *, hexdigests, snapshots: List[ipc.SnapshotResult], node_indices: List[int]
+    *, hexdigests: Set[str], snapshots: List[ipc.SnapshotResult], node_indices: List[int]
 ) -> List[NodeIndexData]:
     assert len(snapshots) == len(node_indices)
     sshash_to_node_indexes: Dict[ipc.SnapshotHash, List[int]] = {}
@@ -573,7 +595,11 @@ def build_node_index_datas(
 
 
 async def upload_node_index_datas(
-    cluster: Cluster, storage_name: str, node_index_datas: List[NodeIndexData], validate_file_hashes: bool
+    cluster: Cluster,
+    storage_name: str,
+    node_index_datas: List[NodeIndexData],
+    validate_file_hashes: bool,
+    upload_request: str,
 ):
     logger.info("upload_node_index_datas")
     start_results: List[Optional[Result]] = []
@@ -586,7 +612,7 @@ async def upload_node_index_datas(
         else:
             req = ipc.SnapshotUploadRequest(hashes=data.sshashes, storage=storage_name)
         start_result = await cluster.request_from_nodes(
-            "upload", caller="upload_node_index_datas", method="post", req=req, nodes=[cluster.nodes[data.node_index]]
+            upload_request, caller="upload_node_index_datas", method="post", req=req, nodes=[cluster.nodes[data.node_index]]
         )
         if len(start_result) != 1:
             raise StepFailedError("upload failed")

@@ -15,7 +15,6 @@ from .snapshotter import Snapshotter
 from .uploader import Uploader
 from astacus.common import ipc, utils
 from astacus.common.rohmustorage import RohmuStorage
-from astacus.common.snapshot import SnapshotGroup
 from typing import Optional
 
 import hashlib
@@ -32,28 +31,13 @@ class SnapshotOp(NodeOp[ipc.SnapshotRequestV2, ipc.SnapshotResult]):
     def create_result(self) -> ipc.SnapshotResult:
         return ipc.SnapshotResult()
 
-    def start(self) -> NodeOp.StartResult:
+    def start(self, snapshotter: Snapshotter) -> NodeOp.StartResult:
         logger.info("start_snapshot %r", self.req)
-        # We merge the list of groups and simple root_globs
-        # to handle backward compatibility if the controller is older than the nodes.
-        groups = [
-            SnapshotGroup(
-                root_glob=group.root_glob,
-                excluded_names=group.excluded_names,
-                embedded_file_size_max=group.embedded_file_size_max,
-            )
-            for group in self.req.groups
-        ]
-        groups += [
-            SnapshotGroup(root_glob=root_glob)
-            for root_glob in self.req.root_globs
-            if not any(group.root_glob == root_glob for group in groups)
-        ]
-        self.snapshotter = self.get_or_create_snapshotter(groups)
+        self.snapshotter = snapshotter
         return self.start_op(op_name="snapshot", op=self, fun=self.snapshot)
 
     def snapshot(self) -> None:
-        assert self.snapshotter is not None
+        assert self.snapshotter
         # 'snapshotter' is global; ensure we have sole access to it
         with self.snapshotter.lock:
             self.check_op_id()
@@ -71,6 +55,8 @@ class SnapshotOp(NodeOp[ipc.SnapshotRequestV2, ipc.SnapshotResult]):
 
 
 class UploadOp(NodeOp[ipc.SnapshotUploadRequestV20221129, ipc.SnapshotUploadResult]):
+    snapshotter: Optional[Snapshotter] = None
+
     @property
     def storage(self) -> RohmuStorage:
         assert self.config.object_storage is not None
@@ -79,18 +65,19 @@ class UploadOp(NodeOp[ipc.SnapshotUploadRequestV20221129, ipc.SnapshotUploadResu
     def create_result(self) -> ipc.SnapshotUploadResult:
         return ipc.SnapshotUploadResult()
 
-    def start(self) -> NodeOp.StartResult:
+    def start(self, snapshotter: Snapshotter) -> NodeOp.StartResult:
         logger.info("start_upload %r", self.req)
+        self.snapshotter = snapshotter
         return self.start_op(op_name="upload", op=self, fun=self.upload)
 
     def upload(self) -> None:
         uploader = Uploader(storage=self.storage)
-        snapshotter = self.get_snapshotter()
+        assert self.snapshotter
         # 'snapshotter' is global; ensure we have sole access to it
-        with snapshotter.lock:
+        with self.snapshotter.lock:
             self.check_op_id()
             self.result.total_size, self.result.total_stored_size = uploader.write_hashes_to_storage(
-                snapshotter=snapshotter,
+                snapshotter=self.snapshotter,
                 hashes=self.req.hashes,
                 parallel=self.config.parallel.uploads,
                 progress=self.result.progress,

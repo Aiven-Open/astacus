@@ -10,11 +10,13 @@ from .snapshot import SnapshotOp, UploadOp
 from .state import node_state, NodeState
 from astacus.common import ipc
 from astacus.common.magic import StrEnum
+from astacus.common.snapshot import SnapshotGroup
 from astacus.node.config import CassandraAccessLevel
+from astacus.node.snapshotter import Snapshotter
 from astacus.version import __version__
 from enum import Enum
 from fastapi import APIRouter, Depends, HTTPException
-from typing import Union
+from typing import Sequence, Union
 
 router = APIRouter()
 
@@ -93,7 +95,8 @@ def unlock(locker: str, state: NodeState = Depends(node_state)):
 def snapshot(req: ipc.SnapshotRequestV2, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
-    return SnapshotOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start()
+    snapshotter = snapshotter_from_snapshot_req(req, n)
+    return SnapshotOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshotter)
 
 
 @router.get("/snapshot/{op_id}")
@@ -102,11 +105,27 @@ def snapshot_result(*, op_id: int, n: Node = Depends()):
     return op.result
 
 
+@router.post("/delta/snapshot")
+def delta_snapshot(req: ipc.SnapshotRequestV2, n: Node = Depends()):
+    if not n.state.is_locked:
+        raise HTTPException(status_code=409, detail="Not locked")
+    snapshotter = delta_snapshotter_from_snapshot_req(req, n)
+    return SnapshotOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshotter)
+
+
+@router.get("/delta/snapshot/{op_id}")
+def delta_snapshot_result(*, op_id: int, n: Node = Depends()):
+    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.snapshot)
+    return op.result
+
+
 @router.post("/upload")
 def upload(req: ipc.SnapshotUploadRequestV20221129, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
-    return UploadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start()
+    snapshotter = n.get_snapshotter()
+    assert snapshotter
+    return UploadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshotter)
 
 
 @router.get("/upload/{op_id}")
@@ -115,11 +134,27 @@ def upload_result(*, op_id: int, n: Node = Depends()):
     return op.result
 
 
+@router.post("/delta/upload")
+def delta_upload(req: ipc.SnapshotUploadRequestV20221129, n: Node = Depends()):
+    if not n.state.is_locked:
+        raise HTTPException(status_code=409, detail="Not locked")
+    snapshotter = n.get_delta_snapshotter()
+    assert snapshotter
+    return UploadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshotter)
+
+
+@router.get("/delta/upload/{op_id}")
+def delta_upload_result(*, op_id: int, n: Node = Depends()):
+    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.upload)
+    return op.result
+
+
 @router.post("/download")
 def download(req: ipc.SnapshotDownloadRequest, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
-    return DownloadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start()
+    snapshotter = snapshotter_from_snapshot_req(req, n)
+    return DownloadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshotter)
 
 
 @router.get("/download/{op_id}")
@@ -132,11 +167,26 @@ def download_result(*, op_id: int, n: Node = Depends()):
 def clear(req: ipc.SnapshotClearRequest, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
-    return ClearOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start()
+    snapshotter = snapshotter_from_snapshot_req(req, n)
+    return ClearOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshotter, is_snapshot_outdated=True)
 
 
 @router.get("/clear/{op_id}")
 def clear_result(*, op_id: int, n: Node = Depends()):
+    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.clear)
+    return op.result
+
+
+@router.post("/delta/clear")
+def delta_clear(req: ipc.SnapshotClearRequest, n: Node = Depends()):
+    if not n.state.is_locked:
+        raise HTTPException(status_code=409, detail="Not locked")
+    snapshotter = delta_snapshotter_from_snapshot_req(req, n)
+    return ClearOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshotter, is_snapshot_outdated=False)
+
+
+@router.get("/delta/clear/{op_id}")
+def delta_clear_result(*, op_id: int, n: Node = Depends()):
     op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.clear)
     return op.result
 
@@ -173,3 +223,34 @@ def cassandra(req: Union[ipc.NodeRequest, ipc.CassandraStartRequest], subop: ipc
 def cassandra_result(*, subop: ipc.CassandraSubOp, op_id: int, n: Node = Depends()):
     op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.cassandra)
     return op.result
+
+
+SnapshotReq = Union[ipc.SnapshotRequestV2, ipc.SnapshotDownloadRequest, ipc.SnapshotClearRequest]
+
+
+def groups_from_snapshot_req(req: SnapshotReq) -> Sequence[SnapshotGroup]:
+    # We merge the list of groups and simple root_globs
+    # to handle backward compatibility if the controller is older than the nodes.
+    groups = [SnapshotGroup(root_glob=root_glob) for root_glob in req.root_globs]
+
+    if isinstance(req, ipc.SnapshotRequestV2):
+        groups += [
+            SnapshotGroup(
+                root_glob=group.root_glob,
+                excluded_names=group.excluded_names,
+                embedded_file_size_max=group.embedded_file_size_max,
+            )
+            for group in req.groups
+            if not any(existing_group.root_glob == group.root_glob for existing_group in groups)
+        ]
+    return groups
+
+
+def snapshotter_from_snapshot_req(req: SnapshotReq, n: Node) -> Snapshotter:
+    groups = groups_from_snapshot_req(req)
+    return n.get_or_create_snapshotter(groups)
+
+
+def delta_snapshotter_from_snapshot_req(req: SnapshotReq, n: Node) -> Snapshotter:
+    groups = groups_from_snapshot_req(req)
+    return n.get_or_create_delta_snapshotter(groups)

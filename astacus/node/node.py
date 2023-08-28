@@ -12,13 +12,16 @@ from astacus.common.dependencies import get_request_app_state, get_request_url
 from astacus.common.snapshot import SnapshotGroup
 from astacus.common.statsd import StatsClient
 from fastapi import BackgroundTasks, Depends
+from pathlib import Path
 from starlette.datastructures import URL
 from typing import Generic, Optional, Sequence, TypeVar
 
+import functools
 import logging
 
 logger = logging.getLogger(__name__)
 SNAPSHOTTER_KEY = "node_snapshotter"
+DELTA_SNAPSHOTTER_KEY = "node_delta_snapshotter"
 
 Request = TypeVar("Request", bound=ipc.NodeRequest)
 Result = TypeVar("Result", bound=ipc.NodeResult)
@@ -34,8 +37,6 @@ class NodeOp(op.Op, Generic[Request, Result]):
         self.req = req
         self.result = self.create_result()
         self.result.az = self.config.az
-        self.get_or_create_snapshotter = n.get_or_create_snapshotter
-        self.get_snapshotter = n.get_snapshotter
         # TBD: Could start some worker thread to send the self.result periodically
         # (or to some local start method )
 
@@ -103,13 +104,29 @@ class Node(op.OpMixin):
         self.stats = stats
 
     def get_or_create_snapshotter(self, groups: Sequence[SnapshotGroup]) -> Snapshotter:
-        root_link = self.config.root_link if self.config.root_link is not None else self.config.root / magic.ASTACUS_TMPDIR
-        root_link.mkdir(exist_ok=True)
+        return self._get_or_create_snapshotter(groups, SNAPSHOTTER_KEY, self.config.root_link)
 
-        def _create_snapshotter() -> Snapshotter:
-            return Snapshotter(src=self.config.root, dst=root_link, groups=groups, parallel=self.config.parallel.hashes)
-
-        return utils.get_or_create_state(state=self.app_state, key=SNAPSHOTTER_KEY, factory=_create_snapshotter)
+    def get_or_create_delta_snapshotter(self, groups: Sequence[SnapshotGroup]) -> Snapshotter:
+        return self._get_or_create_snapshotter(groups, DELTA_SNAPSHOTTER_KEY, self.config.delta_root_link)
 
     def get_snapshotter(self) -> Snapshotter:
         return getattr(self.app_state, SNAPSHOTTER_KEY)
+
+    def get_delta_snapshotter(self) -> Snapshotter:
+        return getattr(self.app_state, DELTA_SNAPSHOTTER_KEY)
+
+    def _get_or_create_snapshotter(
+        self, groups: Sequence[SnapshotGroup], snapshotter_key: str, root_link: Path | None
+    ) -> Snapshotter:
+        if root_link is None:
+            root_link = self.config.root / magic.ASTACUS_TMPDIR / snapshotter_key
+            (self.config.root / magic.ASTACUS_TMPDIR).mkdir(exist_ok=True)
+        root_link.mkdir(exist_ok=True)
+
+        return utils.get_or_create_state(
+            state=self.app_state,
+            key=snapshotter_key,
+            factory=functools.partial(
+                Snapshotter, src=self.config.root, dst=root_link, groups=groups, parallel=self.config.parallel.hashes
+            ),
+        )
