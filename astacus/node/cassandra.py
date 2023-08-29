@@ -13,7 +13,9 @@ from astacus.common.cassandra.client import CassandraClient
 from astacus.common.cassandra.config import SNAPSHOT_NAME
 from astacus.common.cassandra.utils import is_system_keyspace
 from astacus.common.exceptions import TransientException
+from pathlib import Path
 from pydantic import DirectoryPath
+from typing import Callable
 
 import contextlib
 import logging
@@ -25,7 +27,7 @@ import yaml
 logger = logging.getLogger(__name__)
 
 SNAPSHOT_GLOB = f"data/*/*/snapshots/{SNAPSHOT_NAME}"
-KEYSPACES_GLOB = "data/*"
+TABLES_GLOB = "data/*/*"
 
 
 class SimpleCassandraSubOp(NodeOp[ipc.NodeRequest, ipc.NodeResult]):
@@ -46,7 +48,7 @@ class SimpleCassandraSubOp(NodeOp[ipc.NodeRequest, ipc.NodeResult]):
             op=self,
             fun={
                 ipc.CassandraSubOp.remove_snapshot: self.remove_snapshot,
-                ipc.CassandraSubOp.remove_keyspaces: self.remove_keyspaces,
+                ipc.CassandraSubOp.unrestore_snapshot: self.unrestore_snapshot,
                 ipc.CassandraSubOp.restore_snapshot: self.restore_snapshot,
                 ipc.CassandraSubOp.restore_snapshot_with_schema: self.restore_snapshot_with_schema,
                 ipc.CassandraSubOp.stop_cassandra: self.stop_cassandra,
@@ -63,25 +65,49 @@ class SimpleCassandraSubOp(NodeOp[ipc.NodeRequest, ipc.NodeResult]):
         Note that Cassandra does not do any internal bookkeeping of
         the snapshots so the rmtrees are enough.
         """
-        self._remove_matching(SNAPSHOT_GLOB)
+        self._clean_matching(SNAPSHOT_GLOB, clean_func=shutil.rmtree)
 
-    def remove_keyspaces(self) -> None:
-        """Remove everything from the data dir except Astacus-maintained snapshot.
+    def unrestore_snapshot(self) -> None:
+        """Remove everything from the data dir except the snapshots and backups.
 
-        Used to ensure we restore from a clean state.
+        This is the "opposite" of restore snapshot subop: it cleans all the live
+        data files and leaves only the snapshots and backups directories. Those
+        are (or will be) used by Snapshotter as download destinations when restoring.
+        If we unlink those, we end up re-downloading the whole snapshot on each
+        restore attempt, and that's unnecessary in most cases.
         """
-        self._remove_matching(KEYSPACES_GLOB)
+        self._clean_matching(TABLES_GLOB, clean_func=self._remove_sstables)
 
-    def _remove_matching(self, dir_glob: str) -> None:
+    def _clean_matching(self, dir_glob: str, *, clean_func: Callable[[Path], None]) -> None:
         progress = self.result.progress
         progress.add_total(1)
         todo = list(self.config.root.glob(dir_glob))
         progress.add_success()
         progress.add_total(len(todo))
-        for to_remove in todo:
-            shutil.rmtree(to_remove)
+        for to_clean in todo:
+            clean_func(to_clean)
             progress.add_success()
         progress.done()
+
+    def _remove_sstables(self, table_dir: Path) -> None:
+        if not table_dir.is_dir():
+            # Doesn't seem worth it to fail the restore attempt because of an existing file
+            # that should not have existed anyway.
+            logger.warning("Unexpected non-directory path in keyspaces dir: %s", table_dir)
+            table_dir.unlink(missing_ok=True)
+            return
+        if not (table_dir / "snapshots" / SNAPSHOT_NAME).exists():
+            # This was created by Cassandra during the schema restore. Remove entirely.
+            shutil.rmtree(table_dir)
+            return
+        for p in table_dir.iterdir():
+            # Remove anything except the things controlled by Snapshotter
+            if p.name in ("snapshots", "backups"):
+                continue
+            if p.is_dir():
+                shutil.rmtree(p)
+            else:
+                p.unlink(missing_ok=True)
 
     def restore_snapshot(self) -> None:
         self._restore_snapshot(is_schema_restored=False)

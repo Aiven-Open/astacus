@@ -91,9 +91,12 @@ def test_api_cassandra_subop(app, ctenv, mocker, subop):
     if subop == ipc.CassandraSubOp.remove_snapshot:
         assert not ctenv.snapshot_path.exists()
         assert ctenv.other_snapshot_path.exists()
-    elif subop == ipc.CassandraSubOp.remove_keyspaces:
+    elif subop == ipc.CassandraSubOp.unrestore_snapshot:
         assert (ctenv.root / "data").exists()
-        assert not (ctenv.root / "data" / "dummyks").exists()
+        assert (ctenv.root / "data" / "dummyks").exists()
+        assert (ctenv.root / "data" / "dummyks" / "dummytable-123").exists()
+        assert [p.name for p in (ctenv.root / "data" / "dummyks" / "dummytable-123").iterdir()] == ["snapshots"]
+        assert not (ctenv.root / "data" / "dummyks" / "dummytable-234").exists()
     elif subop == ipc.CassandraSubOp.restore_snapshot:
         # The file should be moved from dummytable-123 snapshot dir to
         # dummytable-234
