@@ -163,11 +163,7 @@ class Cluster:
         return rv
 
     async def wait_successful_results(
-        self,
-        *,
-        start_results: Sequence[Optional[Result]],
-        result_class: Type[NR],
-        required_successes: Optional[int] = None,
+        self, *, start_results: Sequence[Optional[Result]], result_class: Type[NR]
     ) -> List[NR]:
         urls = []
 
@@ -179,8 +175,8 @@ class Cluster:
                 raise WaitResultError(f"incorrect start result for #{i}/{len(start_results)}: {start_result!r}")
             parsed_start_result = op.Op.StartResult.parse_obj(start_result)
             urls.append(parsed_start_result.status_url)
-        if required_successes is not None and len(urls) != required_successes:
-            raise WaitResultError(f"incorrect number of results: {len(urls)} vs {required_successes}")
+        if len(urls) != len(start_results):
+            raise WaitResultError(f"incorrect number of results: {len(urls)} vs {len(start_results)}")
         results: List[Optional[NR]] = [None] * len(urls)
         # Note that we don't have timeout mechanism here as such,
         # however, if re-locking times out, we will bail out. TBD if
