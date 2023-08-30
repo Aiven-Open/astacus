@@ -16,6 +16,7 @@ import copy
 import httpx
 import json
 import logging
+import urllib.parse
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +195,8 @@ class Cluster:
                 # TBD: This could be done in parallel too
                 if result is not None and result.progress.final:
                     continue
+                progress_text = f"{result.progress!r}" if result is not None else "not started"
+                logger.info("%s node #%d/%d: %s", node_op_from_url(url), i, len(urls), progress_text)
                 r = await utils.httpx_request(
                     url, caller="Nodes.wait_successful_results", timeout=self.poll_config.result_timeout
                 )
@@ -221,3 +224,8 @@ class Cluster:
 
 class WaitResultError(Exception):
     pass
+
+
+def node_op_from_url(url: str) -> str:
+    parsed_url = urllib.parse.urlparse(url)
+    return parsed_url.path.replace("/node/", "")
