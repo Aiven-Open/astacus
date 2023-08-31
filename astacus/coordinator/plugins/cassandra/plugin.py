@@ -85,6 +85,7 @@ class CassandraPlugin(CoordinatorPlugin):
         snapshot_groups = [
             SnapshotGroup(root_glob=f"data/*/*/snapshots/{SNAPSHOT_NAME}/*.db"),
             SnapshotGroup(root_glob=f"data/*/*/snapshots/{SNAPSHOT_NAME}/*.txt"),
+            SnapshotGroup(root_glob=f"data/*/*/snapshots/{SNAPSHOT_NAME}/*.crc32"),
         ]
 
         return [
@@ -112,6 +113,7 @@ class CassandraPlugin(CoordinatorPlugin):
         delta_snapshot_groups = [
             SnapshotGroup(root_glob="data/*/*/backups/*.db"),
             SnapshotGroup(root_glob="data/*/*/backups/*.txt"),
+            SnapshotGroup(root_glob="data/*/*/backups/*.crc32"),
         ]
 
         @dataclasses.dataclass
