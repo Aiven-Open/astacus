@@ -119,9 +119,7 @@ class SnapshotStep(Step[List[ipc.SnapshotResult]]):
                 root_globs=[group.root_glob for group in self.snapshot_groups],
             )
         start_results = await cluster.request_from_nodes("snapshot", method="post", caller="SnapshotStep", req=req)
-        return await cluster.wait_successful_results(
-            start_results=start_results, result_class=ipc.SnapshotResult, required_successes=len(start_results)
-        )
+        return await cluster.wait_successful_results(start_results=start_results, result_class=ipc.SnapshotResult)
 
 
 @dataclasses.dataclass

@@ -16,6 +16,7 @@ import copy
 import httpx
 import json
 import logging
+import urllib.parse
 
 logger = logging.getLogger(__name__)
 
@@ -163,11 +164,7 @@ class Cluster:
         return rv
 
     async def wait_successful_results(
-        self,
-        *,
-        start_results: Sequence[Optional[Result]],
-        result_class: Type[NR],
-        required_successes: Optional[int] = None,
+        self, *, start_results: Sequence[Optional[Result]], result_class: Type[NR]
     ) -> List[NR]:
         urls = []
 
@@ -179,8 +176,8 @@ class Cluster:
                 raise WaitResultError(f"incorrect start result for #{i}/{len(start_results)}: {start_result!r}")
             parsed_start_result = op.Op.StartResult.parse_obj(start_result)
             urls.append(parsed_start_result.status_url)
-        if required_successes is not None and len(urls) != required_successes:
-            raise WaitResultError(f"incorrect number of results: {len(urls)} vs {required_successes}")
+        if len(urls) != len(start_results):
+            raise WaitResultError(f"incorrect number of results: {len(urls)} vs {len(start_results)}")
         results: List[Optional[NR]] = [None] * len(urls)
         # Note that we don't have timeout mechanism here as such,
         # however, if re-locking times out, we will bail out. TBD if
@@ -198,6 +195,8 @@ class Cluster:
                 # TBD: This could be done in parallel too
                 if result is not None and result.progress.final:
                     continue
+                progress_text = f"{result.progress!r}" if result is not None else "not started"
+                logger.info("%s node #%d/%d: %s", node_op_from_url(url), i, len(urls), progress_text)
                 r = await utils.httpx_request(
                     url, caller="Nodes.wait_successful_results", timeout=self.poll_config.result_timeout
                 )
@@ -225,3 +224,8 @@ class Cluster:
 
 class WaitResultError(Exception):
     pass
+
+
+def node_op_from_url(url: str) -> str:
+    parsed_url = urllib.parse.urlparse(url)
+    return parsed_url.path.replace("/node/", "")
