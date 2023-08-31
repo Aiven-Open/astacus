@@ -116,7 +116,7 @@ class CassandraPlugin(CoordinatorPlugin):
             restore_steps.ParsePluginManifestStep(),
             base.MapNodesStep(partial_restore_nodes=req.partial_restore_nodes),
             CassandraRestoreSubOpStep(op=ipc.CassandraSubOp.stop_cassandra),
-            CassandraRestoreSubOpStep(op=ipc.CassandraSubOp.remove_keyspaces),
+            CassandraRestoreSubOpStep(op=ipc.CassandraSubOp.unrestore_snapshot),
         ] + cluster_restore_steps
 
     def get_restore_schema_from_snapshot_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> List[Step]:

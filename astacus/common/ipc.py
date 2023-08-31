@@ -195,7 +195,7 @@ class SnapshotClearRequest(NodeRequest):
 class CassandraSubOp(StrEnum):
     get_schema_hash = "get-schema-hash"
     remove_snapshot = "remove-snapshot"
-    remove_keyspaces = "remove-keyspaces"
+    unrestore_snapshot = "unrestore-snapshot"
     restore_snapshot = "restore-snapshot"
     restore_snapshot_with_schema = "restore-snapshot-with-schema"
     start_cassandra = "start-cassandra"
