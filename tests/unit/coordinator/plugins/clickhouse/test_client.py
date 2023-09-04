@@ -51,6 +51,14 @@ async def test_sends_authentication_headers() -> None:
         assert request.headers["x-clickhouse-key"] == "password"
 
 
+@pytest.mark.asyncio
+async def test_sends_session_id_as_parameter() -> None:
+    client = HttpClickHouseClient(host="example.org", port=9000)
+    with respx.mock:
+        respx.post("http://example.org:9000?wait_end_of_query=1&session_id=something").respond(content="")
+        await client.execute(b"SELECT 1 LIMIT 0", session_id="something")
+
+
 def test_escape_sql_identifier() -> None:
     assert escape_sql_identifier(b"foo") == "`foo`"
     assert escape_sql_identifier(b"fo\\o") == "`fo\\\\o`"
@@ -107,6 +115,8 @@ def test_unescape_sql_string_invalid() -> None:
         assert unescape_sql_string(b"'foo'bar'")
     with pytest.raises(ValueError, match="Not a valid sql string: unescaped backslash"):
         assert unescape_sql_string(b"'foo\\'")
+    with pytest.raises(ValueError, match="Not a valid sql string: incomplete escape sequence"):
+        assert unescape_sql_string(b"'foo\\x0'")
 
 
 def test_unescape_sql_string_invalid_utf8_does_not_raise_error() -> None:

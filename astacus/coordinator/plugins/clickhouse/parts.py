@@ -7,7 +7,7 @@ Replicated family of table engines.
 
 This does not support shards, but this is the right place to add support for them.
 """
-from .disks import DiskPaths
+from .disks import Disks
 from .manifest import Table
 from astacus.common.ipc import SnapshotFile, SnapshotResult
 from typing import AbstractSet, Iterable, Mapping, Optional, Sequence, Set, Tuple
@@ -60,7 +60,7 @@ def get_part_servers(part_files: Iterable[PartFile]) -> AbstractSet[int]:
 
 def list_parts_to_attach(
     snapshot_result: SnapshotResult,
-    disk_paths: DiskPaths,
+    disks: Disks,
     tables_by_uuid: Mapping[uuid.UUID, Table],
 ) -> Sequence[Tuple[str, bytes]]:
     """
@@ -69,7 +69,7 @@ def list_parts_to_attach(
     parts_to_attach: Set[Tuple[str, bytes]] = set()
     assert snapshot_result.state is not None
     for snapshot_file in snapshot_result.state.files:
-        parsed_path = disk_paths.parse_part_file_path(snapshot_file.relative_path)
+        parsed_path = disks.parse_part_file_path(snapshot_file.relative_path)
         table = tables_by_uuid.get(parsed_path.table_uuid)
         if table is not None:
             parts_to_attach.add((table.escaped_sql_identifier, parsed_path.part_name))

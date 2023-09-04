@@ -28,17 +28,13 @@ class Disk:
     object_storage: AsyncObjectStorage | None = None
 
     @classmethod
-    def from_disk_config(cls, config: DiskConfiguration) -> "Disk":
+    def from_disk_config(cls, config: DiskConfiguration, storage_name: str | None = None) -> "Disk":
         if config.object_storage is None:
             object_storage: RohmuAsyncObjectStorage | None = None
         else:
-            object_storage = RohmuAsyncObjectStorage(
-                storage=ThreadSafeRohmuStorage(
-                    config=config.object_storage.storages[config.object_storage.default_storage].dict(
-                        by_alias=True, exclude_unset=True
-                    )
-                )
-            )
+            config_name = storage_name if storage_name is not None else config.object_storage.default_storage
+            storage_config = config.object_storage.storages[config_name].dict(by_alias=True, exclude_unset=True)
+            object_storage = RohmuAsyncObjectStorage(storage=ThreadSafeRohmuStorage(config=storage_config))
         return Disk(
             type=config.type,
             name=config.name,
@@ -72,7 +68,7 @@ class ParsedPath:
 
 
 @dataclasses.dataclass(frozen=True)
-class DiskPaths:
+class Disks:
     disks: Sequence[Disk] = dataclasses.field(
         default_factory=lambda: [Disk(type=DiskType.local, name="default", path_parts=())]
     )
@@ -150,10 +146,10 @@ class DiskPaths:
         )
 
     @classmethod
-    def from_disk_configs(cls, disk_configs: Sequence[DiskConfiguration]) -> "DiskPaths":
-        return DiskPaths(
+    def from_disk_configs(cls, disk_configs: Sequence[DiskConfiguration], storage_name: str | None = None) -> "Disks":
+        return Disks(
             disks=sorted(
-                [Disk.from_disk_config(disk_config) for disk_config in disk_configs],
+                [Disk.from_disk_config(disk_config, storage_name) for disk_config in disk_configs],
                 key=lambda disk: len(disk.path_parts),
                 reverse=True,
             )

@@ -3,7 +3,7 @@ Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
 from astacus.common.ipc import SnapshotFile, SnapshotResult, SnapshotState
-from astacus.coordinator.plugins.clickhouse.disks import DiskPaths
+from astacus.coordinator.plugins.clickhouse.disks import Disks
 from astacus.coordinator.plugins.clickhouse.manifest import Table
 from astacus.coordinator.plugins.clickhouse.parts import get_part_servers, list_parts_to_attach, Part, PartFile
 from astacus.coordinator.plugins.clickhouse.replication import DatabaseReplica
@@ -72,7 +72,7 @@ def test_get_part_servers_fails_on_inconsistent_servers_set() -> None:
 def test_list_parts_to_attach() -> None:
     parts_to_attach = list_parts_to_attach(
         SnapshotResult(state=SnapshotState(files=TABLE_1_PART_1 + TABLE_1_PART_2)),
-        DiskPaths(),
+        Disks(),
         {
             T1_UUID: Table(
                 database=b"default",
