@@ -100,7 +100,7 @@ def test_api_cassandra_subop(app, ctenv, mocker, subop):
         assert (ctenv.root / "data").exists()
         assert (ctenv.root / "data" / "dummyks").exists()
         assert (ctenv.root / "data" / "dummyks" / "dummytable-123").exists()
-        assert [p.name for p in (ctenv.root / "data" / "dummyks" / "dummytable-123").iterdir()] == ["snapshots"]
+        assert {p.name for p in (ctenv.root / "data" / "dummyks" / "dummytable-123").iterdir()} == {"backups", "snapshots"}
         assert not (ctenv.root / "data" / "dummyks" / "dummytable-234").exists()
     elif subop == ipc.CassandraSubOp.start_cassandra:
         subprocess_run.assert_any_call(ctenv.cassandra_node_config.start_command + ["tempfilename"], check=True)
@@ -154,6 +154,7 @@ class TestCassandraRestoreSSTables:
             table_glob: str = astacus_node_cassandra.SNAPSHOT_GLOB
             keyspaces_to_skip: Sequence[str] = list(SYSTEM_KEYSPACES)
             match_tables_by: ipc.CassandraTableMatching = ipc.CassandraTableMatching.cfname
+            expect_empty_target: bool = True
 
         return DefaultedRestoreSSTablesRequest
 
@@ -182,6 +183,12 @@ class TestCassandraRestoreSSTables:
 
         assert (ctenv.root / "data" / "dummyks" / "dummytable-123" / "asdf").read_text() == "foobar"
         assert not (ctenv.root / "data" / "dummyks" / "dummytable-234" / "asdf").exists()
+
+    def test_allows_existing_files_when_told_to(self, ctenv, make_sstables_request) -> None:
+        req = make_sstables_request(expect_empty_target=False)
+        (ctenv.root / "data" / "dummyks" / "dummytable-123" / "existing_file").write_text("exists")
+
+        self.assert_request_succeeded(ctenv, req)
 
     def assert_request_succeeded(self, ctenv, req: ipc.CassandraRestoreSSTablesRequest) -> None:
         response = ctenv.post(subop=ipc.CassandraSubOp.restore_sstables, json=req.dict())

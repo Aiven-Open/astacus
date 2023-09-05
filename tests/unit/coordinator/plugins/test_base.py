@@ -5,13 +5,16 @@ See LICENSE for details
 """
 from astacus.common import ipc, utils
 from astacus.common.asyncstorage import AsyncJsonStorage
+from astacus.common.ipc import Plugin
 from astacus.common.op import Op
 from astacus.common.progress import Progress
 from astacus.common.utils import now
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins.base import (
+    BackupManifestStep,
     ComputeKeptBackupsStep,
+    DeltaManifestsStep,
     ListBackupsStep,
     ListHexdigestsStep,
     SnapshotReleaseStep,
@@ -29,6 +32,7 @@ from tests.unit.json_storage import MemoryJsonStorage
 from typing import AbstractSet, Callable, List, Optional, Sequence
 from unittest import mock
 
+import dataclasses
 import datetime
 import httpx
 import json
@@ -285,3 +289,79 @@ async def test_snapshot_release_step(
         if ipc.NodeFeatures.release_snapshot_files in node_features:
             assert release_request.call_count == 1
             assert status_request.called
+
+
+def make_manifest(start: str, end: str) -> ipc.BackupManifest:
+    manifest = ipc.BackupManifest(
+        start=datetime.datetime.fromisoformat(start),
+        end=datetime.datetime.fromisoformat(end),
+        attempt=1,
+        snapshot_results=[],
+        upload_results=[],
+        plugin=Plugin.files,
+    )
+    return manifest
+
+
+@dataclasses.dataclass
+class TestListDeltasParam:
+    test_id: str
+    basebackup_manifest: ipc.BackupManifest
+    stored_jsons: dict[str, str]
+    expected_deltas: list[str]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "p",
+    [
+        TestListDeltasParam(
+            test_id="empty_storage",
+            basebackup_manifest=make_manifest(start="1970-01-01T00:00", end="1970-01-01T00:30"),
+            stored_jsons={},
+            expected_deltas=[],
+        ),
+        TestListDeltasParam(
+            test_id="single_delta",
+            basebackup_manifest=make_manifest(start="1970-01-01T00:00", end="1970-01-01T00:30"),
+            stored_jsons={
+                "backup-base": make_manifest(start="1970-01-01T00:00", end="1970-01-01T00:30").json(),
+                "delta-one": make_manifest(start="1970-01-01T01:00", end="1970-01-01T01:05").json(),
+            },
+            expected_deltas=["delta-one"],
+        ),
+        TestListDeltasParam(
+            test_id="deltas_older_than_backup_are_not_listed",
+            basebackup_manifest=make_manifest(start="2000-01-01T00:00", end="2000-01-01T00:30"),
+            stored_jsons={
+                "backup-old": make_manifest(start="1970-01-01T00:00", end="1970-01-01T00:30").json(),
+                "delta-old": make_manifest(start="1970-01-01T01:00", end="1970-01-01T01:05").json(),
+                "backup-one": make_manifest(start="2000-01-01T00:00", end="2000-01-01T00:30").json(),
+                "delta-one": make_manifest(start="2000-01-01T01:00", end="2000-01-01T01:05").json(),
+                "delta-two": make_manifest(start="2000-01-01T12:00", end="1970-01-01T12:05").json(),
+                "backup-two": make_manifest(start="2000-01-02T00:00", end="2000-01-02T00:30").json(),
+                "delta-three": make_manifest(start="2000-01-02T12:00", end="2000-01-02T12:05").json(),
+            },
+            expected_deltas=["delta-one", "delta-two", "delta-three"],
+        ),
+        TestListDeltasParam(
+            test_id="relies_on_start_time_in_case_of_intersections",
+            basebackup_manifest=make_manifest(start="2000-01-01T00:00", end="2000-01-01T00:30"),
+            stored_jsons={
+                "delta-old": make_manifest(start="1999-12-31T23:59", end="2000-01-01T00:04").json(),
+                "backup-one": make_manifest(start="2000-01-01T00:00", end="2000-01-01T00:30").json(),
+                "delta-one": make_manifest(start="2000-01-01T00:05", end="2000-01-01T00:10").json(),
+            },
+            expected_deltas=["delta-one"],
+        ),
+    ],
+    ids=lambda p: p.test_id,
+)
+async def test_list_delta_backups(p: TestListDeltasParam) -> None:
+    async_json_storage = AsyncJsonStorage(MemoryJsonStorage(p.stored_jsons))
+    step = DeltaManifestsStep(async_json_storage)
+    cluster = Cluster(nodes=[CoordinatorNode(url="http://node_1")])
+    context = StepsContext()
+    context.set_result(BackupManifestStep, p.basebackup_manifest)
+    backup_names = [b.filename for b in await step.run_step(cluster=cluster, context=context)]
+    assert backup_names == p.expected_deltas

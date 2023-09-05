@@ -132,7 +132,7 @@ async def test_step_stop_replaced_nodes(mocker):
     context = SimpleNamespace(get_result=get_result)
     cluster = SimpleNamespace(nodes=nodes)
     result = await step.run_step(cluster, context)
-    assert result is None
+    assert result == [_coordinator_node(1)]
     run_subop.assert_awaited_once_with(
         cluster,
         ipc.CassandraSubOp.stop_cassandra,

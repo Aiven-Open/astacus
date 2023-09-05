@@ -171,6 +171,20 @@ def download_result(*, op_id: int, n: Node = Depends()):
     return op.result
 
 
+@router.post("/delta/download")
+def delta_download(req: ipc.SnapshotDownloadRequest, n: Node = Depends()):
+    if not n.state.is_locked:
+        raise HTTPException(status_code=409, detail="Not locked")
+    snapshotter = delta_snapshotter_from_snapshot_req(req, n)
+    return DownloadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshotter)
+
+
+@router.get("/delta/download/{op_id}")
+def delta_download_result(*, op_id: int, n: Node = Depends()):
+    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.download)
+    return op.result
+
+
 @router.post("/clear")
 def clear(req: ipc.SnapshotClearRequest, n: Node = Depends()):
     if not n.state.is_locked:
