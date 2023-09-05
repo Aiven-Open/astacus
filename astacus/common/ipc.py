@@ -226,6 +226,7 @@ class CassandraRestoreSSTablesRequest(NodeRequest):
     table_glob: str
     keyspaces_to_skip: Sequence[str]
     match_tables_by: CassandraTableMatching
+    expect_empty_target: bool
 
 
 # coordinator.api
