@@ -7,6 +7,7 @@ from astacus.common import ipc, utils
 from astacus.common.asyncstorage import AsyncJsonStorage
 from astacus.common.op import Op
 from astacus.common.progress import Progress
+from astacus.common.utils import now
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins.base import (
@@ -17,13 +18,15 @@ from astacus.coordinator.plugins.base import (
     Step,
     StepsContext,
     UploadBlocksStep,
+    UploadManifestStep,
 )
 from astacus.node.api import Features
 from astacus.node.snapshotter import hash_hexdigest_readable
 from http import HTTPStatus
 from io import BytesIO
+from pydantic import Field
 from tests.unit.json_storage import MemoryJsonStorage
-from typing import AbstractSet, Sequence
+from typing import AbstractSet, List, Optional, Sequence
 from unittest import mock
 
 import datetime
@@ -36,11 +39,6 @@ import respx
 class DummyStep(Step[int]):
     async def run_step(self, cluster: Cluster, context: StepsContext) -> int:
         return 1
-
-
-def test_steps_context_backup_name_is_prefixed_timestamp():
-    context = StepsContext(attempt_start=datetime.datetime(2020, 1, 2, 3, 4, 5, 678912, tzinfo=datetime.timezone.utc))
-    assert context.backup_name == "backup-2020-01-02T03:04:05+00:00"
 
 
 def test_steps_context_result_can_be_set_and_retrieved():
@@ -66,6 +64,11 @@ def get_sample_hashes() -> list[ipc.SnapshotHash]:
     data = b"new_data"
     hexdigest = hash_hexdigest_readable(BytesIO(data))
     return [ipc.SnapshotHash(hexdigest=hexdigest, size=len(data))]
+
+
+class DefaultedSnapshotResult(ipc.SnapshotResult):
+    end: Optional[datetime.datetime] = Field(default_factory=now)
+    hashes: Optional[List[ipc.SnapshotHash]] = None
 
 
 @pytest.fixture(name="single_node_cluster")
@@ -215,3 +218,17 @@ async def test_compute_kept_backups(
     with mock.patch.object(utils, "now", lambda: half_a_day_after_last_backup):
         result = await step.run_step(cluster=single_node_cluster, context=context)
     assert result == kept_backups
+
+
+@pytest.mark.asyncio
+async def test_upload_manifest_step_generates_correct_backup_name(
+    single_node_cluster: Cluster,
+    context: StepsContext,
+) -> None:
+    context.attempt_start = datetime.datetime(2020, 1, 7, 5, 0, tzinfo=datetime.timezone.utc)
+    context.set_result(SnapshotStep, [DefaultedSnapshotResult()])
+    context.set_result(UploadBlocksStep, [ipc.SnapshotUploadResult()])
+    async_json_storage = AsyncJsonStorage(storage=MemoryJsonStorage(items={}))
+    step = UploadManifestStep(json_storage=async_json_storage, plugin=ipc.Plugin.files)
+    await step.run_step(cluster=single_node_cluster, context=context)
+    assert "backup-2020-01-07T05:00:00+00:00" in async_json_storage.storage.items

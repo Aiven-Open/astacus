@@ -192,8 +192,13 @@ class UploadManifestStep(Step[None]):
             plugin=self.plugin,
             plugin_data=plugin_data,
         )
-        logger.info("Storing backup manifest %s", context.backup_name)
-        await self.json_storage.upload_json(context.backup_name, manifest)
+        backup_name = self._make_backup_name(context)
+        logger.info("Storing backup manifest %s", backup_name)
+        await self.json_storage.upload_json(backup_name, manifest)
+
+    def _make_backup_name(self, context: StepsContext) -> str:
+        iso = context.attempt_start.isoformat(timespec="seconds")
+        return f"{magic.JSON_BACKUP_PREFIX}{iso}"
 
 
 @dataclasses.dataclass
