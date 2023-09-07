@@ -11,6 +11,9 @@ from astacus.common import ipc, magic, op, statsd, utils
 from astacus.common.dependencies import get_request_app_state, get_request_url
 from astacus.common.snapshot import SnapshotGroup
 from astacus.common.statsd import StatsClient
+from astacus.node.memory_snapshot import MemorySnapshot, MemorySnapshotter
+from astacus.node.snapshot import Snapshot
+from astacus.node.sqlite_snapshot import SQLiteSnapshot, SQLiteSnapshotter
 from fastapi import BackgroundTasks, Depends
 from starlette.datastructures import URL
 from typing import Generic, Optional, Sequence, TypeVar
@@ -34,8 +37,8 @@ class NodeOp(op.Op, Generic[Request, Result]):
         self.req = req
         self.result = self.create_result()
         self.result.az = self.config.az
-        self.get_or_create_snapshotter = n.get_or_create_snapshotter
-        self.get_snapshotter = n.get_snapshotter
+        self.get_or_create_snapshot = n.get_or_create_snapshot
+        self.get_snapshot_and_snapshotter = n.get_snapshot_and_snapshotter
         # TBD: Could start some worker thread to send the self.result periodically
         # (or to some local start method )
 
@@ -102,14 +105,23 @@ class Node(op.OpMixin):
         self.state = state
         self.stats = stats
 
-    def get_or_create_snapshotter(self, groups: Sequence[SnapshotGroup]) -> Snapshotter:
+    def get_or_create_snapshot(self) -> Snapshot:
         root_link = self.config.root_link if self.config.root_link is not None else self.config.root / magic.ASTACUS_TMPDIR
-        root_link.mkdir(exist_ok=True)
 
-        def _create_snapshotter() -> Snapshotter:
-            return Snapshotter(src=self.config.root, dst=root_link, groups=groups, parallel=self.config.parallel.hashes)
+        def _create_snapshot() -> Snapshot:
+            if self.config.db_path is None:
+                return MemorySnapshot(root_link)
+            return SQLiteSnapshot(root_link, self.config.db_path)
 
-        return utils.get_or_create_state(state=self.app_state, key=SNAPSHOTTER_KEY, factory=_create_snapshotter)
+        return utils.get_or_create_state(state=self.app_state, key=SNAPSHOTTER_KEY, factory=_create_snapshot)
 
-    def get_snapshotter(self) -> Snapshotter:
-        return getattr(self.app_state, SNAPSHOTTER_KEY)
+    def get_snapshot_and_snapshotter(self, groups: Sequence[SnapshotGroup]) -> tuple[Snapshot, Snapshotter]:
+        snapshot = self.get_or_create_snapshot()
+        return snapshot, self.get_snapshotter(snapshot, groups)
+
+    def get_snapshotter(self, snapshot: Snapshot, groups: Sequence[SnapshotGroup]) -> Snapshotter:
+        if isinstance(snapshot, SQLiteSnapshot):
+            return SQLiteSnapshotter(groups, self.config.root, snapshot.dst, snapshot, self.config.parallel.hashes)
+        if isinstance(snapshot, MemorySnapshot):
+            return MemorySnapshotter(groups, self.config.root, snapshot.dst, snapshot, self.config.parallel.hashes)
+        assert False

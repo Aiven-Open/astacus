@@ -64,6 +64,8 @@ class NodeConfig(AstacusModel):
     # Directory is created if it does not exist
     root_link: Optional[Path]
 
+    db_path: Optional[Path]
+
     # These can be either globally or locally set
     object_storage: Optional[RohmuConfig] = None
     statsd: Optional[StatsdConfig] = None

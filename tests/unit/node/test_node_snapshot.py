@@ -5,7 +5,7 @@ See LICENSE for details
 
 from astacus.common import ipc, magic, utils
 from astacus.common.progress import Progress
-from astacus.node.snapshot import SnapshotOp
+from astacus.node.snapshot_op import SnapshotOp
 
 import os
 import pytest

@@ -17,8 +17,9 @@ from astacus.common.rohmustorage import RohmuStorage
 from astacus.common.snapshot import SnapshotGroup
 from astacus.common.storage import Storage, ThreadLocalStorage
 from astacus.common.utils import get_umask
+from astacus.node.snapshot import Snapshot
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Sequence
+from typing import Callable, Dict, List, Sequence
 
 import base64
 import contextlib
@@ -33,17 +34,23 @@ logger = logging.getLogger(__name__)
 
 class Downloader(ThreadLocalStorage):
     def __init__(
-        self, *, dst: Path, snapshotter: Snapshotter, parallel: int, storage: Storage, copy_dst_owner: bool = False
+        self,
+        *,
+        dst: Path,
+        snapshot: Snapshot,
+        parallel: int,
+        storage: Storage,
+        copy_dst_owner: bool = False,
     ) -> None:
         super().__init__(storage=storage)
         self.dst = dst
-        self.snapshotter = snapshotter
+        self.snapshot = snapshot
         self.parallel = parallel
         self.copy_dst_owner = copy_dst_owner
 
     def _snapshotfile_already_exists(self, snapshotfile: ipc.SnapshotFile) -> bool:
         relative_path = snapshotfile.relative_path
-        existing_snapshotfile = self.snapshotter.relative_path_to_snapshotfile.get(relative_path)
+        existing_snapshotfile = self.snapshot.get_file(relative_path)
         return existing_snapshotfile is not None and existing_snapshotfile.equals_excluding_mtime(snapshotfile)
 
     def _download_snapshotfile(self, snapshotfile: ipc.SnapshotFile) -> None:
@@ -92,7 +99,6 @@ class Downloader(ThreadLocalStorage):
             if snapshotfile.hexdigest:
                 hexdigest_to_snapshotfiles.setdefault(snapshotfile.hexdigest, []).append(snapshotfile)
 
-        self.snapshotter.snapshot(progress=Progress())
         # TBD: Error checking, what to do if we're told to restore to existing directory?
         progress.start(sum(1 + snapshotfile.file_size for snapshotfile in snapshotstate.files))
         for snapshotfile in snapshotstate.files:
@@ -119,7 +125,7 @@ class Downloader(ThreadLocalStorage):
             return
 
         # Delete files that were not supposed to exist
-        for relative_path in set(self.snapshotter.relative_path_to_snapshotfile.keys()).difference(valid_relative_path_set):
+        for relative_path in set(self.snapshot.get_all_paths()).difference(valid_relative_path_set):
             absolute_path = self.dst / relative_path
             with contextlib.suppress(FileNotFoundError):
                 absolute_path.unlink()
@@ -155,7 +161,8 @@ class Downloader(ThreadLocalStorage):
 
 
 class DownloadOp(NodeOp[ipc.SnapshotDownloadRequest, ipc.NodeResult]):
-    snapshotter: Optional[Snapshotter] = None
+    snapshotter: Snapshotter | None = None
+    snapshot: Snapshot | None = None
 
     @property
     def storage(self) -> RohmuStorage:
@@ -166,25 +173,24 @@ class DownloadOp(NodeOp[ipc.SnapshotDownloadRequest, ipc.NodeResult]):
         return ipc.NodeResult()
 
     def start(self) -> NodeOp.StartResult:
-        self.snapshotter = self.get_or_create_snapshotter(
-            [SnapshotGroup(root_glob=root_glob) for root_glob in self.req.root_globs]
-        )
+        groups = [SnapshotGroup(root_glob=root_glob) for root_glob in self.req.root_globs]
+        self.snapshot, self.snapshotter = self.get_snapshot_and_snapshotter(groups)
         logger.info("start_download %r", self.req)
         return self.start_op(op_name="download", op=self, fun=self.download)
 
     def download(self) -> None:
-        assert self.snapshotter
+        assert self.snapshotter and self.snapshot
         # Actual 'restore from backup'
         manifest = ipc.BackupManifest.parse_obj(self.storage.download_json(self.req.backup_name))
         snapshotstate = manifest.snapshot_results[self.req.snapshot_index].state
         assert snapshotstate is not None
 
         # 'snapshotter' is global; ensure we have sole access to it
-        with self.snapshotter.lock:
+        with self.snapshot.lock:
             self.check_op_id()
             downloader = Downloader(
                 dst=self.config.root,
-                snapshotter=self.snapshotter,
+                snapshot=self.snapshot,
                 storage=self.storage,
                 parallel=self.config.parallel.downloads,
                 copy_dst_owner=self.config.copy_root_owner,

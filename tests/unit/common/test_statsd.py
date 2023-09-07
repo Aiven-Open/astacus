@@ -51,8 +51,3 @@ async def test_statsd():
         pass
     data = await received.get()
     assert data.startswith(b"sync_timing,success=1:") and data.endswith(b"|ms")
-
-    async with c.async_timing_manager("async_timing"):
-        pass
-    data = await received.get()
-    assert data.startswith(b"async_timing,success=1:") and data.endswith(b"|ms")

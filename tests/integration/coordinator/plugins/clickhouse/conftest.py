@@ -31,7 +31,7 @@ from astacus.coordinator.plugins.zookeeper_config import ZooKeeperConfiguration,
 from astacus.node.config import NodeConfig
 from pathlib import Path
 from tests.conftest import CLICKHOUSE_PATH_OPTION, CLICKHOUSE_RESTORE_PATH_OPTION
-from tests.integration.conftest import get_command_path, Ports, run_process_and_wait_for_pattern, Service, ServiceCluster
+from tests.integration.conftest import Ports, run_process_and_wait_for_pattern, Service, ServiceCluster
 from tests.system.conftest import background_process, wait_url_up
 from tests.utils import CONSTANT_TEST_RSA_PRIVATE_KEY, CONSTANT_TEST_RSA_PUBLIC_KEY, get_clickhouse_version
 from typing import AsyncIterator, Awaitable, Iterator, List, Optional, Sequence, Union
@@ -45,6 +45,8 @@ import dataclasses
 import logging
 import pytest
 import secrets
+import shutil
+import subprocess
 import sys
 import tempfile
 import urllib.parse
@@ -85,9 +87,9 @@ ClickHouseCommand = List[Union[str, Path]]
 async def fixture_clickhouse_command(request: FixtureRequest) -> ClickHouseCommand:
     clickhouse_path = request.config.getoption(CLICKHOUSE_PATH_OPTION)
     if clickhouse_path is None:
-        clickhouse_path = await get_command_path("clickhouse")
+        clickhouse_path = shutil.which("clickhouse")
     if clickhouse_path is None:
-        clickhouse_path = await get_command_path("clickhouse-server")
+        clickhouse_path = shutil.which("clickhouse-server")
     if clickhouse_path is None:
         pytest.skip("clickhouse installation not found")
     return get_clickhouse_command(clickhouse_path)
@@ -133,7 +135,7 @@ class MinioBucket:
 
 @dataclasses.dataclass(frozen=True)
 class MinioService:
-    process: asyncio.subprocess.Process
+    process: subprocess.Popen
     data_dir: Path
     host: str
     server_port: int
@@ -224,7 +226,15 @@ async def create_minio_service(ports: Ports) -> AsyncIterator[MinioService]:
             "MINIO_ROOT_USER": root_user,
             "MINIO_ROOT_PASSWORD": root_password,
         }
-        command = ["/usr/bin/minio", "server", data_dir, "--address", server_netloc, "--console-address", console_netloc]
+        command = [
+            shutil.which("minio"),
+            "server",
+            data_dir,
+            "--address",
+            server_netloc,
+            "--console-address",
+            console_netloc,
+        ]
         async with run_process_and_wait_for_pattern(
             args=command,
             cwd=data_dir,

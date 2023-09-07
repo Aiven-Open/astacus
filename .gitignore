@@ -144,3 +144,5 @@ astacus/proto/*_pb2.py
 **/py.typed
 
 .idea
+
+.vscode/
