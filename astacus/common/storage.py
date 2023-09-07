@@ -5,7 +5,7 @@ See LICENSE for details
 
 """
 from .exceptions import NotFoundException
-from .utils import AstacusModel
+from .utils import AstacusModel, BinaryReadable
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import BinaryIO, Callable, Generic, ParamSpec, TypeAlias, TypeVar
@@ -60,7 +60,7 @@ class HexDigestStorage(ABC):
         return self.upload_hexdigest_from_file(hexdigest, io.BytesIO(data), len(data))
 
     @abstractmethod
-    def upload_hexdigest_from_file(self, hexdigest: str, f: BinaryIO, file_size: int) -> StorageUploadResult:
+    def upload_hexdigest_from_file(self, hexdigest: str, f: BinaryReadable, file_size: int) -> StorageUploadResult:
         ...
 
 
@@ -148,7 +148,7 @@ class FileStorage(Storage):
         f.write(path.read_bytes())
         return True
 
-    def upload_hexdigest_from_file(self, hexdigest: str, f: BinaryIO, file_size: int) -> StorageUploadResult:
+    def upload_hexdigest_from_file(self, hexdigest: str, f: BinaryReadable, file_size: int) -> StorageUploadResult:
         logger.info("upload_hexdigest_from_file %r", hexdigest)
         path = self._hexdigest_to_path(hexdigest)
         data = f.read()

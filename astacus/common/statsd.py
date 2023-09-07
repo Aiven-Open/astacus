@@ -16,7 +16,7 @@ This is combination of:
 """
 from .magic import StrEnum
 from .utils import AstacusModel
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import contextmanager
 from typing import Optional, Union
 
 import socket
@@ -49,11 +49,6 @@ class StatsClient:
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._tags = config.tags
         self._message_format = config.message_format
-
-    @asynccontextmanager
-    async def async_timing_manager(self, metric: str, tags: Optional[Tags] = None):
-        with self.timing_manager(metric, tags=tags):
-            yield
 
     @contextmanager
     def timing_manager(self, metric: str, tags: Optional[Tags] = None):

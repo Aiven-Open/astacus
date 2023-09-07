@@ -4,11 +4,9 @@ See LICENSE for details
 """
 
 from astacus.common import magic
-from astacus.common.progress import Progress
 from astacus.common.storage import FileStorage
 from astacus.node.api import router as node_router
 from astacus.node.config import NodeConfig
-from astacus.node.snapshotter import SnapshotGroup, Snapshotter
 from astacus.node.uploader import Uploader
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -55,26 +53,24 @@ def fixture_client(app) -> TestClient:
     yield TestClient(app)
 
 
-class SnapshotterWithDefaults(Snapshotter):
-    def create_4foobar(self):
-        (self.src / "foo").write_text("foobar")
-        (self.src / "foo2").write_text("foobar")
-        (self.src / "foobig").write_text("foobar" * magic.DEFAULT_EMBEDDED_FILE_SIZE)
-        (self.src / "foobig2").write_text("foobar" * magic.DEFAULT_EMBEDDED_FILE_SIZE)
-        assert self.snapshot(progress=Progress()) > 0
-        ss1 = self.get_snapshot_state()
-        assert self.snapshot(progress=Progress()) == 0
-        ss2 = self.get_snapshot_state()
-        assert ss1 == ss2
-
-
-@pytest.fixture(name="snapshotter")
-def fixture_snapshotter(tmpdir):
+@pytest.fixture(name="src")
+def fixture_src(tmpdir: Path) -> Path:
     src = Path(tmpdir) / "src"
     src.mkdir()
+    return src
+
+
+@pytest.fixture(name="dst")
+def fixture_dst(tmpdir: Path) -> Path:
     dst = Path(tmpdir) / "dst"
     dst.mkdir()
-    yield SnapshotterWithDefaults(src=src, dst=dst, groups=[SnapshotGroup(root_glob="*")], parallel=1)
+    return dst
+
+
+@pytest.fixture(name="db")
+def fixture_db(tmpdir: Path) -> Path:
+    db = Path(tmpdir) / "db"
+    return db
 
 
 @pytest.fixture(name="uploader")

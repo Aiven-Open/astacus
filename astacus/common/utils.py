@@ -15,7 +15,7 @@ from contextlib import contextmanager
 from multiprocessing.dummy import Pool  # fastapi + fork = bad idea
 from pathlib import Path
 from pydantic import BaseModel
-from typing import Any, AsyncIterable, Callable, Dict, Final, Iterable, Optional, TypeVar, Union
+from typing import Any, AsyncIterable, Callable, Dict, Final, Iterable, Optional, Protocol, TypeVar, Union
 
 import asyncio
 import datetime
@@ -204,6 +204,7 @@ def exponential_backoff(
             if maximum is not None:
                 delay = min(delay, maximum)
             if duration is not None:
+                assert self.initial is not None
                 time_left_after_sleep = (self.initial + duration) - time_now - delay
                 if time_left_after_sleep < 0:
                     return None
@@ -243,32 +244,46 @@ def exponential_backoff(
     return _Iterable()
 
 
-class SizeLimitedFile:
+class BinaryReadable(Protocol):
+    def read(self, n: int | None = None) -> bytes:
+        ...
+
+    def seek(self, ofs: int, whence: int = ..., /) -> int:
+        ...
+
+    def close(self) -> None:
+        ...
+
+
+class SizeLimitedFile(BinaryReadable):
     def __init__(self, *, path, file_size):
         self._f = open(path, "rb")  # pylint: disable=consider-using-with
         self._file_size = file_size
         self.tell = self._f.tell
 
-    def __enter__(self):
+    def __enter__(self) -> SizeLimitedFile:
         return self
 
-    def __exit__(self, t, v, tb):
-        self._f.close()
+    def __exit__(self, t, v, tb) -> None:
+        self.close()
 
-    def read(self, n=None):
+    def read(self, n: int | None = None) -> bytes:
         can_read = max(0, self._file_size - self._f.tell())
         if n is None:
             n = can_read
         n = min(can_read, n)
         return self._f.read(n)
 
-    def seek(self, ofs, whence=0):
+    def seek(self, ofs: int, whence: int = 0, /) -> int:
         if whence == os.SEEK_END:
             ofs += self._file_size
             whence = os.SEEK_SET
         if whence == os.SEEK_SET:
             ofs = max(0, min(self._file_size, ofs))
         return self._f.seek(ofs, whence)
+
+    def close(self) -> None:
+        self._f.close()
 
 
 def timedelta_as_short_str(delta):

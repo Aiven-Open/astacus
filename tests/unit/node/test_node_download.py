@@ -30,7 +30,7 @@ def test_download(snapshotter, uploader, storage, tmpdir):
         downloader.download_from_storage(progress=Progress(), snapshotstate=ss1)
 
         # And ensure we get same snapshot state by snapshotting it
-        assert snapshotter.snapshot(progress=Progress()) > 0
+        assert snapshotter.perform_snapshot(progress=Progress()) > 0
         ss2 = snapshotter.get_snapshot_state()
 
     # Ensure the files are same (modulo mtime_ns, which doesn't

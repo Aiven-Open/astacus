@@ -6,6 +6,8 @@ See LICENSE for details
 """
 
 from .utils import AstacusModel
+from pyparsing import Iterable
+from typing import TypeVar
 
 import logging
 import math
@@ -36,6 +38,9 @@ def increase_worth_reporting(value, new_value=None, *, total=None):
     return old_exp != new_exp
 
 
+T = TypeVar("T")
+
+
 class Progress(AstacusModel):
     """JSON-encodable progress meter of sorts"""
 
@@ -47,6 +52,12 @@ class Progress(AstacusModel):
     def __repr__(self):
         finished = ", finished" if self.final else ""
         return f"{self.handled}/{self.total} handled, {self.failed} failures{finished}"
+
+    def wrap(self, i: Iterable[T]) -> Iterable[T]:
+        for item in i:
+            yield item
+            self.add_success()
+        self.done()
 
     def start(self, n):
         "Optional 'first' step, just for logic handling state (e.g. no progress object reuse desired)"

@@ -13,6 +13,7 @@ import contextlib
 import dataclasses
 import logging
 import pytest
+import shutil
 import socket
 import subprocess
 import tempfile
@@ -29,19 +30,6 @@ def fixture_event_loop() -> Iterator[asyncio.AbstractEventLoop]:
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
     loop.close()
-
-
-async def get_command_path(name: str) -> Optional[Path]:
-    process = await asyncio.create_subprocess_exec(
-        "which", name, stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE
-    )
-    stdout, stderr = await process.communicate()
-    decoded_stderr = stderr.decode()
-    if decoded_stderr:
-        logger.debug("which %s: %s", name, decoded_stderr)
-    if process.returncode == 0:
-        return Path(stdout.decode().rstrip("\n"))
-    return None
 
 
 def get_zookeeper_command(*, java_path: Path, data_dir: Path, port: int) -> Optional[List[Union[str, Path]]]:
@@ -68,7 +56,7 @@ async def run_process_and_wait_for_pattern(
     fail_pattern: Optional[str] = None,
     env: Mapping[str, str] = MappingProxyType({}),
     timeout: float = 10.0,
-) -> AsyncIterator[asyncio.subprocess.Process]:
+) -> AsyncIterator[subprocess.Popen]:
     # This stringification is a workaround for a bug in pydev (pydev_monkey.py:111)
     str_args = [str(arg) for arg in args]
     pattern_found = asyncio.Event()
@@ -102,7 +90,7 @@ async def run_process_and_wait_for_pattern(
 
 @dataclasses.dataclass
 class Service:
-    process: asyncio.subprocess.Process
+    process: subprocess.Popen
     data_dir: Path
     port: int
     host: str = "localhost"
@@ -158,7 +146,7 @@ def fixture_zookeeper_client(zookeeper: Service) -> KazooZooKeeperClient:
 
 @contextlib.asynccontextmanager
 async def create_zookeeper(ports: Ports) -> AsyncIterator[Service]:
-    java_path = await get_command_path("java")
+    java_path = shutil.which("java")
     if java_path is None:
         pytest.skip("java installation not found")
     port = ports.allocate()
@@ -190,9 +178,9 @@ log4j.appender.default.layout.ConversionPattern=[%-5p] %m%n
                             timeout=20.0,
                         )
                     )
+                    yield Service(process=process, port=port, data_dir=data_dir)
                     break
                 except FailPatternFoundError:
                     if attempt + 1 == max_attempts:
                         raise
                     await asyncio.sleep(2.0)
-            yield Service(process=process, port=port, data_dir=data_dir)

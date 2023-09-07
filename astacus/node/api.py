@@ -6,7 +6,8 @@ See LICENSE for details
 from .clear import ClearOp
 from .download import DownloadOp
 from .node import Node
-from .snapshot import ReleaseOp, SnapshotOp, UploadOp
+from .snapshot import ReleaseOp, UploadOp
+from .snapshot_op import SnapshotOp, UploadOp
 from .state import node_state, NodeState
 from astacus.common import ipc
 from astacus.common.magic import StrEnum

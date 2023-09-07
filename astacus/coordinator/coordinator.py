@@ -163,7 +163,7 @@ class LockedCoordinatorOp(CoordinatorOp):
     async def run_with_lock(self, cluster: Cluster) -> None:
         raise NotImplementedError
 
-    async def acquire_cluster_lock(self) -> Callable[[], Awaitable]:
+    async def acquire_cluster_lock(self) -> Callable[[], Awaitable[None]]:
         # Acquire initial locks
         cluster = self.get_cluster()
         result = await cluster.request_lock(locker=self.locker, ttl=self.ttl)
@@ -190,7 +190,7 @@ class LockedCoordinatorOp(CoordinatorOp):
 
         return run
 
-    async def _create_relock_tasks(self, cluster: Cluster) -> List[asyncio.Task]:
+    async def _create_relock_tasks(self, cluster: Cluster) -> List[asyncio.Task[None]]:
         current_task = asyncio.current_task()
         assert current_task is not None
         return [
@@ -274,7 +274,7 @@ class SteppedCoordinatorOp(LockedCoordinatorOp):
                 logger.info("%s - attempt #%d/%d", name, attempt, self.attempts)
                 context = StepsContext(attempt=attempt)
                 stats_tags: Tags = {"op": name, "attempt": str(attempt)}
-                async with self.stats.async_timing_manager("astacus_attempt_duration", stats_tags):
+                with self.stats.timing_manager("astacus_attempt_duration", stats_tags):
                     try:
                         if await self.try_run(cluster, context):
                             return
@@ -292,7 +292,7 @@ class SteppedCoordinatorOp(LockedCoordinatorOp):
                 logger.info("Step %s not even started due to shutdown", step_name)
                 return False
             logger.info("Step %d/%d: %s", i, len(self.steps), step_name)
-            async with self.stats.async_timing_manager("astacus_step_duration", {"op": op_name, "step": step_name}):
+            with self.stats.timing_manager("astacus_step_duration", {"op": op_name, "step": step_name}):
                 with self._progress_handler(cluster, step):
                     try:
                         r = await step.run_step(cluster, context)
