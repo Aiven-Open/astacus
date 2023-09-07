@@ -68,6 +68,16 @@ def get_sample_hashes() -> list[ipc.SnapshotHash]:
     return [ipc.SnapshotHash(hexdigest=hexdigest, size=len(data))]
 
 
+@pytest.fixture(name="single_node_cluster")
+def fixture_single_node_cluster() -> Cluster:
+    return Cluster(nodes=[CoordinatorNode(url="http://node_1")])
+
+
+@pytest.fixture(name="context")
+def fixture_context() -> StepsContext:
+    return StepsContext()
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "node_features,expected_request",
@@ -86,17 +96,17 @@ def get_sample_hashes() -> list[ipc.SnapshotHash]:
     ids=["no_feature", "validate_file_hashes"],
 )
 async def test_upload_step_uses_new_request_if_supported(
-    node_features: Sequence[Features], expected_request: ipc.SnapshotUploadRequest
+    node_features: Sequence[Features],
+    expected_request: ipc.SnapshotUploadRequest,
+    single_node_cluster: Cluster,
+    context: StepsContext,
 ) -> None:
-    context = StepsContext()
     context.set_result(ListHexdigestsStep, {})
     sample_hashes = get_sample_hashes()
     context.set_result(
         SnapshotStep, [ipc.SnapshotResult(hostname="localhost", az="az1", files=1, total_size=2, hashes=sample_hashes)]
     )
     upload_step = UploadBlocksStep(storage_name="fake")
-    coordinator_nodes = [CoordinatorNode(url="http://node_1")]
-    cluster = Cluster(nodes=coordinator_nodes)
     with respx.mock:
 
         def check_request(request: httpx.Request) -> httpx.Response:
@@ -119,7 +129,61 @@ async def test_upload_step_uses_new_request_if_supported(
                 total_stored_size=8,
             ).jsondict()
         )
-        await upload_step.run_step(cluster=cluster, context=context)
+        await upload_step.run_step(cluster=single_node_cluster, context=context)
+
+
+BACKUPS_FOR_RETENTION_TEST = {
+    "b1": json.dumps(
+        {
+            "start": "2020-01-01T11:00Z",
+            "end": "2020-01-01T13:00Z",
+            "attempt": 1,
+            "snapshot_results": [],
+            "upload_results": [],
+            "plugin": "clickhouse",
+        }
+    ),
+    "b2": json.dumps(
+        {
+            "start": "2020-01-02T11:00Z",
+            "end": "2020-01-02T13:00Z",
+            "attempt": 1,
+            "snapshot_results": [],
+            "upload_results": [],
+            "plugin": "clickhouse",
+        }
+    ),
+    "b3": json.dumps(
+        {
+            "start": "2020-01-03T11:00Z",
+            "end": "2020-01-03T13:00Z",
+            "attempt": 1,
+            "snapshot_results": [],
+            "upload_results": [],
+            "plugin": "clickhouse",
+        }
+    ),
+    "b4": json.dumps(
+        {
+            "start": "2020-01-04T11:00Z",
+            "end": "2020-01-04T13:00Z",
+            "attempt": 1,
+            "snapshot_results": [],
+            "upload_results": [],
+            "plugin": "clickhouse",
+        }
+    ),
+    "b5": json.dumps(
+        {
+            "start": "2020-01-05T11:00Z",
+            "end": "2020-01-05T13:00Z",
+            "attempt": 1,
+            "snapshot_results": [],
+            "upload_results": [],
+            "plugin": "clickhouse",
+        }
+    ),
+}
 
 
 @pytest.mark.asyncio
@@ -134,72 +198,20 @@ async def test_upload_step_uses_new_request_if_supported(
         (ipc.Retention(minimum_backups=0, maximum_backups=3, keep_days=0), set()),
     ],
 )
-async def test_compute_kept_backups(retention: ipc.Retention, kept_backups: AbstractSet[str]) -> None:
-    async_json_storage = AsyncJsonStorage(
-        storage=MemoryJsonStorage(
-            items={
-                "b1": json.dumps(
-                    {
-                        "start": "2020-01-01T11:00Z",
-                        "end": "2020-01-01T13:00Z",
-                        "attempt": 1,
-                        "snapshot_results": [],
-                        "upload_results": [],
-                        "plugin": "clickhouse",
-                    }
-                ),
-                "b2": json.dumps(
-                    {
-                        "start": "2020-01-02T11:00Z",
-                        "end": "2020-01-02T13:00Z",
-                        "attempt": 1,
-                        "snapshot_results": [],
-                        "upload_results": [],
-                        "plugin": "clickhouse",
-                    }
-                ),
-                "b3": json.dumps(
-                    {
-                        "start": "2020-01-03T11:00Z",
-                        "end": "2020-01-03T13:00Z",
-                        "attempt": 1,
-                        "snapshot_results": [],
-                        "upload_results": [],
-                        "plugin": "clickhouse",
-                    }
-                ),
-                "b4": json.dumps(
-                    {
-                        "start": "2020-01-04T11:00Z",
-                        "end": "2020-01-04T13:00Z",
-                        "attempt": 1,
-                        "snapshot_results": [],
-                        "upload_results": [],
-                        "plugin": "clickhouse",
-                    }
-                ),
-                "b5": json.dumps(
-                    {
-                        "start": "2020-01-05T11:00Z",
-                        "end": "2020-01-05T13:00Z",
-                        "attempt": 1,
-                        "snapshot_results": [],
-                        "upload_results": [],
-                        "plugin": "clickhouse",
-                    }
-                ),
-            }
-        )
-    )
+async def test_compute_kept_backups(
+    retention: ipc.Retention,
+    kept_backups: AbstractSet[str],
+    single_node_cluster: Cluster,
+    context: StepsContext,
+) -> None:
+    async_json_storage = AsyncJsonStorage(storage=MemoryJsonStorage(items=BACKUPS_FOR_RETENTION_TEST))
     step = ComputeKeptBackupsStep(
         json_storage=async_json_storage,
         retention=retention,
         explicit_delete=[],
     )
-    cluster = Cluster(nodes=[CoordinatorNode(url="http://node_1")])
-    context = StepsContext()
     context.set_result(ListBackupsStep, set(await async_json_storage.list_jsons()))
     half_a_day_after_last_backup = datetime.datetime(2020, 1, 7, 5, 0, tzinfo=datetime.timezone.utc)
     with mock.patch.object(utils, "now", lambda: half_a_day_after_last_backup):
-        result = await step.run_step(cluster=cluster, context=context)
+        result = await step.run_step(cluster=single_node_cluster, context=context)
     assert result == kept_backups
