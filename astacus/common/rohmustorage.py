@@ -6,7 +6,6 @@ See LICENSE for details
 Rohmu-specific actual object storage implementation
 
 """
-
 from .magic import StrEnum
 from .storage import Json, MultiStorage, Storage, StorageUploadResult
 from .utils import AstacusModel
@@ -14,6 +13,8 @@ from astacus.common import exceptions
 from enum import Enum
 from pydantic import Field
 from rohmu import errors, rohmufile
+from rohmu.compressor import CompressionStream
+from rohmu.encryptor import EncryptorStream
 from typing import BinaryIO, Dict, Optional, Union
 from typing_extensions import Literal
 
@@ -216,34 +217,21 @@ class RohmuStorage(Storage):
         return self.config.encryption_keys[key_id].public
 
     @rohmu_error_wrapper
-    def _upload_key_from_file(self, key: str, f: BinaryIO) -> StorageUploadResult:
+    def _upload_key_from_file(self, key: str, f: BinaryIO, file_size: int) -> StorageUploadResult:
         encryption_key_id = self.config.encryption_key_id
         compression = self.config.compression
         metadata = RohmuMetadata()
-        rsa_public_key = None
+        wrapped_file = f
+        if compression.algorithm:
+            metadata.compression_algorithm = compression.algorithm
+            wrapped_file = CompressionStream(wrapped_file, compression.algorithm, compression.level)
         if encryption_key_id:
             metadata.encryption_key_id = encryption_key_id
             rsa_public_key = self._public_key_lookup(encryption_key_id)
-        if compression.algorithm:
-            metadata.compression_algorithm = compression.algorithm
+            wrapped_file = EncryptorStream(wrapped_file, rsa_public_key)
         rohmu_metadata = metadata.dict(exclude_defaults=True, by_alias=True)
-        plain_size = f.seek(0, 2)
-        f.seek(0)
-        with tempfile.TemporaryFile(dir=self.config.temporary_directory) as temp_file:
-            rohmufile.write_file(
-                input_obj=f,
-                output_obj=temp_file,
-                compression_algorithm=compression.algorithm,
-                compression_level=compression.level,
-                rsa_public_key=rsa_public_key,
-                log_func=logger.debug,
-            )
-            # compression_threads=compression.threads, # I wish
-            # currently not supported by write_file API
-            compressed_size = temp_file.tell()
-            temp_file.seek(0)
-            self.storage.store_file_object(key, temp_file, metadata=rohmu_metadata)
-        return StorageUploadResult(size=plain_size, stored_size=compressed_size)
+        self.storage.store_file_object(key, wrapped_file, metadata=rohmu_metadata)
+        return StorageUploadResult(size=file_size, stored_size=wrapped_file.tell())
 
     storage_name: str = ""
 
@@ -271,9 +259,9 @@ class RohmuStorage(Storage):
         key = os.path.join(self.hexdigest_key, hexdigest)
         return self._download_key_to_file(key, f)
 
-    def upload_hexdigest_from_file(self, hexdigest, f: BinaryIO) -> StorageUploadResult:
+    def upload_hexdigest_from_file(self, hexdigest, f: BinaryIO, file_size: int) -> StorageUploadResult:
         key = os.path.join(self.hexdigest_key, hexdigest)
-        return self._upload_key_from_file(key, f)
+        return self._upload_key_from_file(key, f, file_size)
 
     # JsonStorage implementation
     @rohmu_error_wrapper
@@ -294,9 +282,10 @@ class RohmuStorage(Storage):
     def upload_json_str(self, name: str, data: str) -> bool:
         key = os.path.join(self.json_key, name)
         f = io.BytesIO()
-        f.write(data.encode())
+        encoded_data = data.encode()
+        f.write(encoded_data)
         f.seek(0)
-        self._upload_key_from_file(key, f)
+        self._upload_key_from_file(key, f, len(encoded_data))
         return True
 
 

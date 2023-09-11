@@ -48,7 +48,7 @@ class Uploader(ThreadLocalStorage):
                         continue
                 try:
                     with snapshotfile.open_for_reading(snapshotter.dst) as f:
-                        upload_result = storage.upload_hexdigest_from_file(hexdigest, f)
+                        upload_result = storage.upload_hexdigest_from_file(hexdigest, f, file_size=snapshotfile.file_size)
                 except exceptions.TransientException as ex:
                     # Do not pollute logs with transient exceptions
                     logger.info("Transient exception uploading %r: %r", path, ex)
