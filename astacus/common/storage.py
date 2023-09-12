@@ -57,15 +57,11 @@ class HexDigestStorage(ABC):
         ...
 
     def upload_hexdigest_bytes(self, hexdigest: str, data: bytes) -> StorageUploadResult:
-        return self.upload_hexdigest_from_file(hexdigest, io.BytesIO(data))
+        return self.upload_hexdigest_from_file(hexdigest, io.BytesIO(data), len(data))
 
     @abstractmethod
-    def upload_hexdigest_from_file(self, hexdigest: str, f: BinaryIO) -> StorageUploadResult:
+    def upload_hexdigest_from_file(self, hexdigest: str, f: BinaryIO, file_size: int) -> StorageUploadResult:
         ...
-
-    def upload_hexdigest_from_path(self, hexdigest: str, filename: str | Path) -> StorageUploadResult:
-        with open(filename, "rb") as f:
-            return self.upload_hexdigest_from_file(hexdigest, f)
 
 
 class JsonStorage(ABC):
@@ -152,7 +148,7 @@ class FileStorage(Storage):
         f.write(path.read_bytes())
         return True
 
-    def upload_hexdigest_from_file(self, hexdigest: str, f: BinaryIO) -> StorageUploadResult:
+    def upload_hexdigest_from_file(self, hexdigest: str, f: BinaryIO, file_size: int) -> StorageUploadResult:
         logger.info("upload_hexdigest_from_file %r", hexdigest)
         path = self._hexdigest_to_path(hexdigest)
         data = f.read()
