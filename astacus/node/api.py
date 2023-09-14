@@ -192,11 +192,15 @@ def delta_clear_result(*, op_id: int, n: Node = Depends()):
 
 
 @router.post("/cassandra/{subop}")
-def cassandra(req: Union[ipc.NodeRequest, ipc.CassandraStartRequest], subop: ipc.CassandraSubOp, n: Node = Depends()):
+def cassandra(
+    req: Union[ipc.NodeRequest, ipc.CassandraStartRequest, ipc.CassandraRestoreSSTablesRequest],
+    subop: ipc.CassandraSubOp,
+    n: Node = Depends(),
+):
     # pylint: disable=import-outside-toplevel
     # pylint: disable=raise-missing-from
     try:
-        from .cassandra import CassandraGetSchemaHashOp, CassandraStartOp, SimpleCassandraSubOp
+        from .cassandra import CassandraGetSchemaHashOp, CassandraRestoreSSTablesOp, CassandraStartOp, SimpleCassandraSubOp
     except ImportError:
         raise HTTPException(status_code=501, detail="Cassandra support is not installed")
     if not n.state.is_locked:
@@ -215,6 +219,10 @@ def cassandra(req: Union[ipc.NodeRequest, ipc.CassandraStartRequest], subop: ipc
     if subop == ipc.CassandraSubOp.start_cassandra:
         assert isinstance(req, ipc.CassandraStartRequest)
         return CassandraStartOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start()
+
+    if subop == ipc.CassandraSubOp.restore_sstables:
+        assert isinstance(req, ipc.CassandraRestoreSSTablesRequest)
+        return CassandraRestoreSSTablesOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start()
 
     return SimpleCassandraSubOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(subop=subop)
 

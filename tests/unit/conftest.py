@@ -49,6 +49,10 @@ class CassandraTestConfig:
         self.snapshot_path = keyspace_path / "dummytable-123" / "snapshots" / SNAPSHOT_NAME
         self.snapshot_path.mkdir(parents=True)
 
+        other_table_path = keyspace_path / "anothertable-345" / "snapshots" / SNAPSHOT_NAME
+        other_table_path.mkdir(parents=True)
+        (other_table_path / "data.file").write_text("data")
+
         system_schema_path = self.root / "data" / "system_schema" / "tables-789" / "snapshots" / SNAPSHOT_NAME
         system_schema_path.mkdir(parents=True)
         (system_schema_path / "data.file").write_text("schema")
@@ -65,6 +69,7 @@ listen_address: 127.0.0.1
 
         (self.snapshot_path / "asdf").write_text("foobar")
         (keyspace_path / "dummytable-234").mkdir()
+        (keyspace_path / "anothertable-789").mkdir()
 
         named_temporary_file = mocker.patch.object(tempfile, "NamedTemporaryFile")
         self.fake_conffile = StringIO()

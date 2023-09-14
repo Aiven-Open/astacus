@@ -195,9 +195,8 @@ class SnapshotClearRequest(NodeRequest):
 class CassandraSubOp(StrEnum):
     get_schema_hash = "get-schema-hash"
     remove_snapshot = "remove-snapshot"
-    unrestore_snapshot = "unrestore-snapshot"
-    restore_snapshot = "restore-snapshot"
-    restore_snapshot_with_schema = "restore-snapshot-with-schema"
+    unrestore_sstables = "unrestore-sstables"
+    restore_sstables = "restore-sstables"
     start_cassandra = "start-cassandra"
     stop_cassandra = "stop-cassandra"
     take_snapshot = "take-snapshot"
@@ -211,6 +210,17 @@ class CassandraStartRequest(NodeRequest):
 
 class CassandraGetSchemaHashResult(NodeResult):
     schema_hash: str
+
+
+class CassandraTableMatching(StrEnum):
+    cfid = "cfid"
+    cfname = "cfname"
+
+
+class CassandraRestoreSSTablesRequest(NodeRequest):
+    table_glob: str
+    keyspaces_to_skip: Sequence[str]
+    match_tables_by: CassandraTableMatching
 
 
 # coordinator.api
