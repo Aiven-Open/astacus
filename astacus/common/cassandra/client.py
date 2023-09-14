@@ -90,7 +90,7 @@ class CassandraClient:
 
             error = error_values[0]
 
-            logger.exception("Unexpected exception while connecting to local cassandra: %r", error)
+            logger.error("Unexpected exception while connecting to local cassandra: %r", error)
             raise NoHostAvailableException from ex
 
     async def run_sync(self, fun: Callable, *args: Any, **kwargs: Any) -> Any:
