@@ -66,21 +66,33 @@ class ClickHousePlugin(CoordinatorPlugin):
     freeze_name: str = "astacus"
     disks: Sequence[DiskConfiguration] = [DiskConfiguration(type=DiskType.local, path=Path(""), name="default")]
     drop_databases_timeout: float = 300.0
-    max_concurrent_drop_databases: int = 100
+    # Deprecated parameter, ignored
+    max_concurrent_drop_databases: int = 10
+    max_concurrent_drop_databases_per_node: int = 10
     create_databases_timeout: float = 60.0
-    max_concurrent_create_databases: int = 100
+    # Deprecated parameter, ignored
+    max_concurrent_create_databases: int = 10
+    max_concurrent_create_databases_per_node: int = 10
     sync_databases_timeout: float = 60.0
     restart_replica_timeout: float = 300.0
-    max_concurrent_restart_replica: int = 100
+    # Deprecated parameter, ignored
+    max_concurrent_restart_replica: int = 10
+    max_concurrent_restart_replica_per_node: int = 10
     restore_replica_timeout: float = 300.0
-    max_concurrent_restore_replica: int = 100
+    # Deprecated parameter, ignored
+    max_concurrent_restore_replica: int = 10
+    max_concurrent_restore_replica_per_node: int = 10
     freeze_timeout: float = 3600.0
     unfreeze_timeout: float = 3600.0
     # Deprecated parameter, ignored
     attach_timeout: float = 300.0
-    max_concurrent_attach: int = 100
+    # Deprecated parameter, ignored
+    max_concurrent_attach: int = 10
+    max_concurrent_attach_per_node: int = 10
     sync_tables_timeout: float = 3600.0
+    # Deprecated parameter, ignored
     max_concurrent_sync: int = 100
+    max_concurrent_sync_per_node: int = 10
     use_system_unfreeze: bool = True
 
     def get_backup_steps(self, *, context: OperationContext) -> List[Step]:
@@ -155,9 +167,9 @@ class ClickHousePlugin(CoordinatorPlugin):
                 replicated_databases_zookeeper_path=self.replicated_databases_zookeeper_path,
                 replicated_database_settings=self.replicated_databases_settings,
                 drop_databases_timeout=self.drop_databases_timeout,
-                max_concurrent_drop_databases=self.max_concurrent_drop_databases,
+                max_concurrent_drop_databases_per_node=self.max_concurrent_drop_databases_per_node,
                 create_databases_timeout=self.create_databases_timeout,
-                max_concurrent_create_database=self.max_concurrent_create_databases,
+                max_concurrent_create_database_per_node=self.max_concurrent_create_databases_per_node,
             ),
             SyncDatabaseReplicasStep(
                 zookeeper_client=zookeeper_client,
@@ -171,21 +183,21 @@ class ClickHousePlugin(CoordinatorPlugin):
                 clients=clients,
                 disks=disks,
                 attach_timeout=self.attach_timeout,
-                max_concurrent_attach=self.max_concurrent_attach,
+                max_concurrent_attach_per_node=self.max_concurrent_attach_per_node,
             ),
             SyncTableReplicasStep(
                 clients=clients,
                 sync_timeout=self.sync_tables_timeout,
-                max_concurrent_sync=self.max_concurrent_sync,
+                max_concurrent_sync_per_node=self.max_concurrent_sync_per_node,
             ),
             RestoreReplicaStep(
                 zookeeper_client=zookeeper_client,
                 clients=clients,
                 disks=disks,
                 restart_timeout=self.restart_replica_timeout,
-                max_concurrent_restart=self.max_concurrent_restart_replica,
+                max_concurrent_restart_per_node=self.max_concurrent_restart_replica_per_node,
                 restore_timeout=self.restore_replica_timeout,
-                max_concurrent_restore=self.max_concurrent_restore_replica,
+                max_concurrent_restore_per_node=self.max_concurrent_restore_replica_per_node,
             ),
             # Keeping this step last avoids access from non-admin users while we are still restoring
             RestoreAccessEntitiesStep(
