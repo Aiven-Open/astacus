@@ -64,6 +64,9 @@ class NodeConfig(AstacusModel):
     # Directory is created if it does not exist
     root_link: Optional[Path]
 
+    # Same as root_link for the delta snapshotter.
+    delta_root_link: Optional[Path]
+
     # These can be either globally or locally set
     object_storage: Optional[RohmuConfig] = None
     statsd: Optional[StatsdConfig] = None

@@ -14,7 +14,6 @@ from .snapshotter import Snapshotter
 from astacus.common import ipc, utils
 from astacus.common.progress import Progress
 from astacus.common.rohmustorage import RohmuStorage
-from astacus.common.snapshot import SnapshotGroup
 from astacus.common.storage import Storage, ThreadLocalStorage
 from astacus.common.utils import get_umask
 from pathlib import Path
@@ -165,11 +164,9 @@ class DownloadOp(NodeOp[ipc.SnapshotDownloadRequest, ipc.NodeResult]):
     def create_result(self) -> ipc.NodeResult:
         return ipc.NodeResult()
 
-    def start(self) -> NodeOp.StartResult:
-        self.snapshotter = self.get_or_create_snapshotter(
-            [SnapshotGroup(root_glob=root_glob) for root_glob in self.req.root_globs]
-        )
+    def start(self, snapshotter: Snapshotter) -> NodeOp.StartResult:
         logger.info("start_download %r", self.req)
+        self.snapshotter = snapshotter
         return self.start_op(op_name="download", op=self, fun=self.download)
 
     def download(self) -> None:

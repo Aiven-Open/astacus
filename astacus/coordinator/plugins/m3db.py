@@ -69,6 +69,9 @@ class M3DBPlugin(CoordinatorPlugin):
             ),
         ]
 
+    def get_delta_backup_steps(self, *, context: OperationContext) -> List[Step]:
+        raise NotImplementedError
+
     def get_restore_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> List[Step]:
         etcd_client = ETCDClient(self.etcd_url)
         return [

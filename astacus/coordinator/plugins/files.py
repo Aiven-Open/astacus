@@ -45,6 +45,9 @@ class FilesPlugin(CoordinatorPlugin):
             UploadManifestStep(json_storage=context.json_storage, plugin=Plugin.files),
         ]
 
+    def get_delta_backup_steps(self, *, context: OperationContext) -> List[Step]:
+        raise NotImplementedError
+
     def get_restore_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> List[Step]:
         return [
             BackupNameStep(json_storage=context.json_storage, requested_name=req.name),

@@ -127,6 +127,9 @@ class ClickHousePlugin(CoordinatorPlugin):
             ),
         ]
 
+    def get_delta_backup_steps(self, *, context: OperationContext) -> List[Step]:
+        raise NotImplementedError
+
     def get_restore_steps(self, *, context: OperationContext, req: RestoreRequest) -> List[Step]:
         if req.partial_restore_nodes:
             # Required modifications to implement single-node restore:

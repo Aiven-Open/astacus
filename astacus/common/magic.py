@@ -31,3 +31,4 @@ class ErrorCode(StrEnum):
 
 # In storage, json files with this prefix are backup manifests
 JSON_BACKUP_PREFIX = "backup-"
+JSON_DELTA_PREFIX = "delta-"
