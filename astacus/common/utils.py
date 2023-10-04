@@ -14,6 +14,7 @@ from abc import ABC
 from contextlib import contextmanager
 from multiprocessing.dummy import Pool  # fastapi + fork = bad idea
 from pathlib import Path
+from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
 from typing import Any, AsyncIterable, Callable, Dict, Final, Iterable, Optional, TypeVar, Union
 
@@ -21,7 +22,6 @@ import asyncio
 import datetime
 import httpcore
 import httpx
-import json as _json
 import logging
 import os
 import re
@@ -39,12 +39,6 @@ class AstacusModel(BaseModel):
         # enumname.value (it is also slightly less safe but oh well)
         use_enum_values = True
 
-        # Extra values should be errors, as they are most likely typos
-        # which lead to grief when not detected. However, if we ever
-        # start deprecating some old fields and not wanting to parse
-        # them, this might need to be revisited.
-        extra = "forbid"
-
         # Validate field default values too
         validate_all = True
 
@@ -54,16 +48,8 @@ class AstacusModel(BaseModel):
         # possibly the tests themselves are broken
 
     def jsondict(self, **kw):
-        # By default,
-        #
-        # .json() returns json string.
-        # .dict() returns Python dict, but it has things that are not
-        # json serializable.
-        #
-        # We provide json seralizable dict (super inefficiently) here.
-        #
-        # This is mostly used for test code so that should be fine
-        return _json.loads(self.json(**kw))
+        """Serialize as a json encodable dict, eg datetimes become strings."""
+        return jsonable_encoder(self.dict(**kw))
 
 
 def get_or_create_state(*, state: object, key: str, factory: Callable[[], Any]) -> Any:
