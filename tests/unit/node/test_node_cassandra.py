@@ -5,12 +5,19 @@ See LICENSE for details
 
 from astacus.common import ipc
 from astacus.common.cassandra.config import SNAPSHOT_NAME
+from astacus.common.cassandra.utils import SYSTEM_KEYSPACES
 from astacus.node.api import READONLY_SUBOPS
 from astacus.node.config import CassandraAccessLevel, CassandraNodeConfig
 from tests.unit.conftest import CassandraTestConfig
+from typing import Sequence
 
 import pytest
 import subprocess
+
+
+@pytest.fixture(name="astacus_node_cassandra", autouse=True)
+def fixture_astacus_node_cassandra() -> None:
+    return pytest.importorskip("astacus.node.cassandra")
 
 
 class CassandraTestEnv(CassandraTestConfig):
@@ -50,7 +57,9 @@ def fixture_ctenv(app, client, mocker, tmpdir):
     return CassandraTestEnv(app=app, client=client, mocker=mocker, tmpdir=tmpdir)
 
 
-@pytest.mark.parametrize("subop", ipc.CassandraSubOp)
+@pytest.mark.parametrize(
+    "subop", set(ipc.CassandraSubOp) - {ipc.CassandraSubOp.get_schema_hash, ipc.CassandraSubOp.restore_sstables}
+)
 def test_api_cassandra_subop(app, ctenv, mocker, subop):
     req_json = {"tokens": ["42", "7"]}
 
@@ -73,10 +82,6 @@ def test_api_cassandra_subop(app, ctenv, mocker, subop):
 
     # Now the app is actually correctly configured
 
-    if subop == ipc.CassandraSubOp.get_schema_hash:
-        # This is tested separately
-        return
-
     response = ctenv.post(subop=subop, json=req_json)
 
     # Ensure that besides the measurable internal effect, the API also
@@ -91,26 +96,12 @@ def test_api_cassandra_subop(app, ctenv, mocker, subop):
     if subop == ipc.CassandraSubOp.remove_snapshot:
         assert not ctenv.snapshot_path.exists()
         assert ctenv.other_snapshot_path.exists()
-    elif subop == ipc.CassandraSubOp.unrestore_snapshot:
+    elif subop == ipc.CassandraSubOp.unrestore_sstables:
         assert (ctenv.root / "data").exists()
         assert (ctenv.root / "data" / "dummyks").exists()
         assert (ctenv.root / "data" / "dummyks" / "dummytable-123").exists()
         assert [p.name for p in (ctenv.root / "data" / "dummyks" / "dummytable-123").iterdir()] == ["snapshots"]
         assert not (ctenv.root / "data" / "dummyks" / "dummytable-234").exists()
-    elif subop == ipc.CassandraSubOp.restore_snapshot:
-        # The file should be moved from dummytable-123 snapshot dir to
-        # dummytable-234
-        assert (ctenv.root / "data" / "dummyks" / "dummytable-234" / "asdf").read_text() == "foobar"
-        assert progress["handled"]
-        # System schema keyspace should not be transferred
-        assert not (ctenv.root / "data" / "system_schema" / "tables-789" / "data.file").exists()
-    elif subop == ipc.CassandraSubOp.restore_snapshot_with_schema:
-        # The file should be moved from dummytable-123 snapshot dir to
-        # dummytable-123
-        assert (ctenv.root / "data" / "dummyks" / "dummytable-123" / "asdf").read_text() == "foobar"
-        assert progress["handled"]
-        # System schema keyspace should be restored
-        assert (ctenv.root / "data" / "system_schema" / "tables-789" / "data.file").read_text() == "schema"
     elif subop == ipc.CassandraSubOp.start_cassandra:
         subprocess_run.assert_any_call(ctenv.cassandra_node_config.start_command + ["tempfilename"], check=True)
 
@@ -133,15 +124,13 @@ num_tokens: 2
 
 
 @pytest.mark.parametrize("fail", [True])
-def test_api_cassandra_get_schema_hash(ctenv, fail, mocker):
+def test_api_cassandra_get_schema_hash(ctenv, fail, mocker, astacus_node_cassandra):
     # The state of API *before* these two setup steps are done is checked in the test_api_cassandra_subop
     ctenv.lock()
     ctenv.setup_cassandra_node_config()
 
-    node_cassandra = pytest.importorskip("astacus.node.cassandra")
-
     if not fail:
-        mocker.patch.object(node_cassandra.CassandraOp, "_get_schema_hash", return_value="mockhash")
+        mocker.patch.object(astacus_node_cassandra.CassandraOp, "_get_schema_hash", return_value="mockhash")
 
     response = ctenv.post(subop=ipc.CassandraSubOp.get_schema_hash, json={})
     status = ctenv.get_status(response)
@@ -158,9 +147,54 @@ def test_api_cassandra_get_schema_hash(ctenv, fail, mocker):
         assert schema_hash == "mockhash"
 
 
+class TestCassandraRestoreSSTables:
+    @pytest.fixture(name="make_sstables_request")
+    def fixture_make_sstables_request(self, astacus_node_cassandra) -> ipc.CassandraRestoreSSTablesRequest:
+        class DefaultedRestoreSSTablesRequest(ipc.CassandraRestoreSSTablesRequest):
+            table_glob: str = astacus_node_cassandra.SNAPSHOT_GLOB
+            keyspaces_to_skip: Sequence[str] = list(SYSTEM_KEYSPACES)
+            match_tables_by: ipc.CassandraTableMatching = ipc.CassandraTableMatching.cfname
+
+        return DefaultedRestoreSSTablesRequest
+
+    @pytest.fixture(name="locked_ctenv", autouse=True)
+    def fixture_locked_ctenv(self, ctenv) -> None:
+        ctenv.lock()
+        ctenv.setup_cassandra_node_config()
+
+    def test_uses_glob_from_request_instead_of_default(self, ctenv, make_sstables_request) -> None:
+        req = make_sstables_request(table_glob=f"data/*/dummytable-123/snapshots/{SNAPSHOT_NAME}")
+        self.assert_request_succeeded(ctenv, req)
+
+        assert (ctenv.root / "data" / "dummyks" / "dummytable-234" / "asdf").read_text() == "foobar"
+        assert not (ctenv.root / "data" / "dummyks" / "anothertable-789" / "data.file").exists()
+
+    def test_skips_keyspace_if_told_to(self, ctenv, make_sstables_request) -> None:
+        req = make_sstables_request(keyspaces_to_skip=["dummyks"])
+        self.assert_request_succeeded(ctenv, req)
+
+        assert not (ctenv.root / "data" / "dummyks" / "dummytable-234" / "asdf").exists()
+        assert (ctenv.root / "data" / "system_schema" / "tables-789" / "data.file").read_text() == "schema"
+
+    def test_matches_tables_by_id_when_told_to(self, ctenv, make_sstables_request) -> None:
+        req = make_sstables_request(match_tables_by=ipc.CassandraTableMatching.cfid)
+        self.assert_request_succeeded(ctenv, req)
+
+        assert (ctenv.root / "data" / "dummyks" / "dummytable-123" / "asdf").read_text() == "foobar"
+        assert not (ctenv.root / "data" / "dummyks" / "dummytable-234" / "asdf").exists()
+
+    def assert_request_succeeded(self, ctenv, req: ipc.CassandraRestoreSSTablesRequest) -> None:
+        response = ctenv.post(subop=ipc.CassandraSubOp.restore_sstables, json=req.dict())
+        status = ctenv.get_status(response)
+        assert status.status_code == 200, response.json()
+
+        progress = status.json()["progress"]
+        assert not progress["failed"]
+        assert progress["final"]
+
+
 @pytest.mark.parametrize("dangerous_op", set(ipc.CassandraSubOp) - READONLY_SUBOPS)
 def test_dangerous_ops_not_allowed_on_read_access_level(ctenv, dangerous_op: ipc.CassandraSubOp):
-    pytest.importorskip("astacus.node.cassandra")
     ctenv.lock()
     ctenv.setup_cassandra_node_config()
     ctenv.cassandra_node_config.access_level = CassandraAccessLevel.read

@@ -8,7 +8,8 @@ from .model import CassandraConfigurationNode
 from .utils import run_subop
 from astacus.common import ipc
 from astacus.common.cassandra.client import CassandraClient
-from astacus.common.cassandra.config import CassandraClientConfiguration, SNAPSHOT_NAME
+from astacus.common.cassandra.config import CassandraClientConfiguration, SNAPSHOT_GLOB, SNAPSHOT_NAME
+from astacus.common.cassandra.utils import SYSTEM_KEYSPACES
 from astacus.common.magic import JSON_DELTA_PREFIX
 from astacus.common.snapshot import SnapshotGroup
 from astacus.coordinator.cluster import Cluster
@@ -46,6 +47,7 @@ class CassandraSubOpStep(Step[None]):
 @dataclass
 class CassandraRestoreSubOpStep(Step[None]):
     op: ipc.CassandraSubOp
+    req: Optional[ipc.NodeRequest] = None
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         node_to_backup_index = context.get_result(MapNodesStep)
@@ -55,7 +57,7 @@ class CassandraRestoreSubOpStep(Step[None]):
             if backup_index is not None
         ]
 
-        await run_subop(cluster, self.op, nodes=nodes, result_class=ipc.NodeResult)
+        await run_subop(cluster, self.op, nodes=nodes, req=self.req, result_class=ipc.NodeResult)
 
 
 @dataclass
@@ -150,15 +152,20 @@ class CassandraPlugin(CoordinatorPlugin):
             restore_steps.ParsePluginManifestStep(),
             base.MapNodesStep(partial_restore_nodes=req.partial_restore_nodes),
             CassandraRestoreSubOpStep(op=ipc.CassandraSubOp.stop_cassandra),
-            CassandraRestoreSubOpStep(op=ipc.CassandraSubOp.unrestore_snapshot),
+            CassandraRestoreSubOpStep(op=ipc.CassandraSubOp.unrestore_sstables),
         ] + cluster_restore_steps
 
     def get_restore_schema_from_snapshot_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> List[Step]:
         assert self.nodes is not None
+        restore_sstables_req = ipc.CassandraRestoreSSTablesRequest(
+            table_glob=SNAPSHOT_GLOB,
+            keyspaces_to_skip=[ks for ks in SYSTEM_KEYSPACES if ks != "system_schema"],
+            match_tables_by=ipc.CassandraTableMatching.cfid,
+        )
 
         return [
             base.RestoreStep(storage_name=context.storage_name, partial_restore_nodes=req.partial_restore_nodes),
-            CassandraRestoreSubOpStep(op=ipc.CassandraSubOp.restore_snapshot_with_schema),
+            CassandraRestoreSubOpStep(op=ipc.CassandraSubOp.restore_sstables, req=restore_sstables_req),
             restore_steps.StopReplacedNodesStep(partial_restore_nodes=req.partial_restore_nodes, cassandra_nodes=self.nodes),
             restore_steps.StartCassandraStep(replace_backup_nodes=True, override_tokens=True, cassandra_nodes=self.nodes),
             restore_steps.WaitCassandraUpStep(duration=self.restore_start_timeout),
@@ -167,16 +174,20 @@ class CassandraPlugin(CoordinatorPlugin):
     def get_restore_schema_from_manifest_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> List[Step]:
         assert self.nodes is not None
         client = CassandraClient(self.client)
-
+        restore_sstables_req = ipc.CassandraRestoreSSTablesRequest(
+            table_glob=SNAPSHOT_GLOB,
+            keyspaces_to_skip=SYSTEM_KEYSPACES,
+            match_tables_by=ipc.CassandraTableMatching.cfname,
+        )
         return [
             # Start cassandra with backed up token distribution + set schema + stop it
             restore_steps.StartCassandraStep(override_tokens=True, cassandra_nodes=self.nodes),
             restore_steps.WaitCassandraUpStep(duration=self.restore_start_timeout),
             restore_steps.RestorePreDataStep(client=client),
-            CassandraSubOpStep(op=ipc.CassandraSubOp.stop_cassandra),
+            CassandraRestoreSubOpStep(op=ipc.CassandraSubOp.stop_cassandra),
             # Restore snapshot
             base.RestoreStep(storage_name=context.storage_name, partial_restore_nodes=req.partial_restore_nodes),
-            CassandraSubOpStep(op=ipc.CassandraSubOp.restore_snapshot),
+            CassandraRestoreSubOpStep(op=ipc.CassandraSubOp.restore_sstables, req=restore_sstables_req),
             # restart cassandra and do the final actions with data available
             # not configuring tokens here, because we've already bootstrapped the ring when restoring schema
             restore_steps.StartCassandraStep(override_tokens=False, cassandra_nodes=self.nodes),

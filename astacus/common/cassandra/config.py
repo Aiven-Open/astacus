@@ -24,6 +24,7 @@ from typing import List, Optional
 import yaml
 
 SNAPSHOT_NAME = "astacus-backup"
+SNAPSHOT_GLOB = f"data/*/*/snapshots/{SNAPSHOT_NAME}"
 
 
 class CassandraClientConfiguration(AstacusModel):

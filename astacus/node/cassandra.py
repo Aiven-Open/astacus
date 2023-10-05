@@ -10,8 +10,7 @@ Cassandra handling that is run on every node in the Cluster
 from .node import NodeOp
 from astacus.common import ipc
 from astacus.common.cassandra.client import CassandraClient
-from astacus.common.cassandra.config import SNAPSHOT_NAME
-from astacus.common.cassandra.utils import is_system_keyspace
+from astacus.common.cassandra.config import SNAPSHOT_GLOB, SNAPSHOT_NAME
 from astacus.common.exceptions import TransientException
 from pathlib import Path
 from pydantic import DirectoryPath
@@ -26,7 +25,6 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-SNAPSHOT_GLOB = f"data/*/*/snapshots/{SNAPSHOT_NAME}"
 TABLES_GLOB = "data/*/*"
 
 
@@ -48,9 +46,7 @@ class SimpleCassandraSubOp(NodeOp[ipc.NodeRequest, ipc.NodeResult]):
             op=self,
             fun={
                 ipc.CassandraSubOp.remove_snapshot: self.remove_snapshot,
-                ipc.CassandraSubOp.unrestore_snapshot: self.unrestore_snapshot,
-                ipc.CassandraSubOp.restore_snapshot: self.restore_snapshot,
-                ipc.CassandraSubOp.restore_snapshot_with_schema: self.restore_snapshot_with_schema,
+                ipc.CassandraSubOp.unrestore_sstables: self.unrestore_sstables,
                 ipc.CassandraSubOp.stop_cassandra: self.stop_cassandra,
                 ipc.CassandraSubOp.take_snapshot: self.take_snapshot,
             }[subop],
@@ -67,7 +63,7 @@ class SimpleCassandraSubOp(NodeOp[ipc.NodeRequest, ipc.NodeResult]):
         """
         self._clean_matching(SNAPSHOT_GLOB, clean_func=shutil.rmtree)
 
-    def unrestore_snapshot(self) -> None:
+    def unrestore_sstables(self) -> None:
         """Remove everything from the data dir except the snapshots and backups.
 
         This is the "opposite" of restore snapshot subop: it cleans all the live
@@ -109,37 +105,44 @@ class SimpleCassandraSubOp(NodeOp[ipc.NodeRequest, ipc.NodeResult]):
             else:
                 p.unlink(missing_ok=True)
 
-    def restore_snapshot(self) -> None:
-        self._restore_snapshot(is_schema_restored=False)
+    def stop_cassandra(self) -> None:
+        assert self.config.cassandra
+        subprocess.run(self.config.cassandra.stop_command, check=True)
+        self.result.progress.done()
 
-    def restore_snapshot_with_schema(self) -> None:
-        self._restore_snapshot(is_schema_restored=True)
+    def take_snapshot(self) -> None:
+        assert self.config.cassandra
+        cmd = self.config.cassandra.nodetool_command[:]
+        cmd.extend(["snapshot", "-t", SNAPSHOT_NAME])
+        subprocess.run(cmd, check=True)
+        self.result.progress.done()
 
-    def _restore_snapshot(self, *, is_schema_restored: bool) -> None:
+
+class CassandraRestoreSSTablesOp(NodeOp[ipc.CassandraRestoreSSTablesRequest, ipc.NodeResult]):
+    def create_result(self) -> ipc.NodeResult:
+        return ipc.NodeResult()
+
+    def start(self) -> NodeOp.StartResult:
+        return self.start_op(op_name="cassandra", op=self, fun=self.restore_sstables)
+
+    def restore_sstables(self) -> None:
         """This is used to restore the snapshot files into place, with Cassandra offline."""
-        # TBD: Delete extra data (current cashew doesn't do it, but we could)
-
         # Move files from Astacus snapshot directories to the actual data directories
         progress = self.result.progress
-        table_snapshots = list(self.config.root.glob(SNAPSHOT_GLOB))
+        table_snapshots = list(self.config.root.glob(self.req.table_glob))
         progress.add_total(len(table_snapshots))
 
         for table_snapshot in table_snapshots:
-            parts = table_snapshot.parts
-            # -2 = snapshots, -1 = name of the snapshots
-            table_name_and_id = parts[-3]
-            keyspace_name = parts[-4]
-            skip_system_keyspace = is_system_keyspace(keyspace_name)
-            if is_schema_restored:
-                skip_system_keyspace = is_system_keyspace(keyspace_name) and keyspace_name != "system_schema"
-            if skip_system_keyspace:
+            # expected table_snapshot structure: <config.root>/data/ks/tname-tid/...
+            keyspace_name, table_name_and_id = table_snapshot.relative_to(self.config.root / "data").parts[:2]
+            if keyspace_name in self.req.keyspaces_to_skip:
                 progress.add_success()
                 continue
 
             table_path = (
                 self.config.root / "data" / keyspace_name / table_name_and_id
-                if is_schema_restored
-                else self._match_table_by_name(table_name_and_id, table_snapshot)
+                if self.req.match_tables_by == ipc.CassandraTableMatching.cfid
+                else self._match_table_by_name(keyspace_name, table_name_and_id)
             )
 
             # Ensure destination path is empty except for potential directories (e.g. backups/)
@@ -158,11 +161,11 @@ class SimpleCassandraSubOp(NodeOp[ipc.NodeRequest, ipc.NodeResult]):
 
         self.result.progress.done()
 
-    def _match_table_by_name(self, table_name_and_id: str, table_snapshot: DirectoryPath) -> DirectoryPath:
+    def _match_table_by_name(self, keyspace_name: str, table_name_and_id: str) -> DirectoryPath:
         table_name, _ = table_name_and_id.rsplit("-", 1)
 
         # This could be more efficient too; oh well.
-        keyspace_path = table_snapshot.parents[2]
+        keyspace_path = self.config.root / "data" / keyspace_name
         table_paths = list(keyspace_path.glob(f"{table_name}-*"))
         assert len(table_paths) >= 1, f"NO tables with prefix {table_name}- found in {keyspace_path}!"
         if len(table_paths) > 1:
@@ -171,18 +174,6 @@ class SimpleCassandraSubOp(NodeOp[ipc.NodeRequest, ipc.NodeResult]):
         assert len(table_paths) == 1
 
         return table_paths[0]
-
-    def stop_cassandra(self) -> None:
-        assert self.config.cassandra
-        subprocess.run(self.config.cassandra.stop_command, check=True)
-        self.result.progress.done()
-
-    def take_snapshot(self) -> None:
-        assert self.config.cassandra
-        cmd = self.config.cassandra.nodetool_command[:]
-        cmd.extend(["snapshot", "-t", SNAPSHOT_NAME])
-        subprocess.run(cmd, check=True)
-        self.result.progress.done()
 
 
 class CassandraStartOp(NodeOp[ipc.CassandraStartRequest, ipc.NodeResult]):
