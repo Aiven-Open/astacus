@@ -100,6 +100,7 @@ class RohmuS3StorageConfig(RohmuProxyStorage):
     is_secure: Optional[bool] = False
     is_verify_tls: Optional[bool] = False
     prefix: Optional[str] = None
+    addressing_style: Optional[str] = None
     # Some more obscure options with defaults are omitted
 
 
