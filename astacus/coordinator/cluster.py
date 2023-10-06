@@ -67,8 +67,8 @@ class Cluster:
         *,
         caller: str,
         req: Optional[ipc.NodeRequest] = None,
-        reqs: Optional[List[ipc.NodeRequest]] = None,
-        nodes: Optional[List[CoordinatorNode]] = None,
+        reqs: Optional[Sequence[ipc.NodeRequest]] = None,
+        nodes: Optional[Sequence[CoordinatorNode]] = None,
         **kw,
     ) -> Sequence[Optional[Result]]:
         """Perform asynchronously parallel request to the node components.

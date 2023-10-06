@@ -14,6 +14,7 @@ from astacus.coordinator.plugins.base import (
     ComputeKeptBackupsStep,
     ListBackupsStep,
     ListHexdigestsStep,
+    SnapshotReleaseStep,
     SnapshotStep,
     Step,
     StepsContext,
@@ -26,7 +27,7 @@ from http import HTTPStatus
 from io import BytesIO
 from pydantic import Field
 from tests.unit.json_storage import MemoryJsonStorage
-from typing import AbstractSet, List, Optional, Sequence
+from typing import AbstractSet, Callable, List, Optional, Sequence
 from unittest import mock
 
 import datetime
@@ -81,6 +82,17 @@ def fixture_context() -> StepsContext:
     return StepsContext()
 
 
+def make_request_check(expected_payload: dict, op_name: str) -> Callable[[httpx.Request], httpx.Response]:
+    def check_request(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        assert payload == expected_payload
+        return httpx.Response(
+            status_code=HTTPStatus.OK, json=Op.StartResult(op_id=1, status_url=f"http://node_1/{op_name}/1").jsondict()
+        )
+
+    return check_request
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "node_features,expected_request",
@@ -111,19 +123,13 @@ async def test_upload_step_uses_new_request_if_supported(
     )
     upload_step = UploadBlocksStep(storage_name="fake")
     with respx.mock:
-
-        def check_request(request: httpx.Request) -> httpx.Response:
-            payload = json.loads(request.content)
-            assert payload == expected_request.jsondict()
-            return httpx.Response(
-                status_code=HTTPStatus.OK, json=Op.StartResult(op_id=1, status_url="http://node_1/upload/1").jsondict()
-            )
-
-        respx.get("http://node_1/metadata").respond(
+        metadata_request = respx.get("http://node_1/metadata").respond(
             json=ipc.MetadataResult(version="0.1", features=[feature.value for feature in node_features]).jsondict()
         )
-        respx.post("http://node_1/upload").mock(side_effect=check_request)
-        respx.get("http://node_1/upload/1").respond(
+        upload_request = respx.post("http://node_1/upload").mock(
+            side_effect=make_request_check(expected_request.jsondict(), "upload")
+        )
+        status_request = respx.get("http://node_1/upload/1").respond(
             json=ipc.SnapshotUploadResult(
                 hostname="localhost",
                 az="az1",
@@ -133,6 +139,9 @@ async def test_upload_step_uses_new_request_if_supported(
             ).jsondict()
         )
         await upload_step.run_step(cluster=single_node_cluster, context=context)
+        assert metadata_request.call_count == 1
+        assert upload_request.call_count == 1
+        assert status_request.called
 
 
 BACKUPS_FOR_RETENTION_TEST = {
@@ -232,3 +241,47 @@ async def test_upload_manifest_step_generates_correct_backup_name(
     step = UploadManifestStep(json_storage=async_json_storage, plugin=ipc.Plugin.files)
     await step.run_step(cluster=single_node_cluster, context=context)
     assert "backup-2020-01-07T05:00:00+00:00" in async_json_storage.storage.items
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "node_features,expected_request",
+    [
+        ([], None),
+        (
+            [Features.release_snapshot_files],
+            ipc.SnapshotReleaseRequest(hexdigests=["aaa", "bbb"]),
+        ),
+    ],
+)
+async def test_snapshot_release_step(
+    node_features: Sequence[Features],
+    expected_request: Optional[ipc.SnapshotReleaseRequest],
+    single_node_cluster: Cluster,
+    context: StepsContext,
+) -> None:
+    hashes_to_release = [ipc.SnapshotHash(hexdigest="aaa", size=1), ipc.SnapshotHash(hexdigest="bbb", size=2)]
+    context.set_result(SnapshotStep, [DefaultedSnapshotResult(hashes=hashes_to_release)])
+    release_step = SnapshotReleaseStep()
+
+    with respx.mock:
+        metadata_request = respx.get("http://node_1/metadata").respond(
+            json=ipc.MetadataResult(version="0.1", features=[feature.value for feature in node_features]).jsondict()
+        )
+        if Features.release_snapshot_files in node_features:
+            assert expected_request is not None
+            release_request = respx.post("http://node_1/release").mock(
+                side_effect=make_request_check(expected_request.jsondict(), "release")
+            )
+            status_request = respx.get("http://node_1/release/1").respond(
+                json=ipc.NodeResult(
+                    hostname="localhost",
+                    az="az1",
+                    progress=Progress(handled=2, total=2, final=True),
+                ).jsondict()
+            )
+        await release_step.run_step(cluster=single_node_cluster, context=context)
+        assert metadata_request.call_count == 1
+        if Features.release_snapshot_files in node_features:
+            assert release_request.call_count == 1
+            assert status_request.called

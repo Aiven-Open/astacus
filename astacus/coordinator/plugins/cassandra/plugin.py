@@ -98,6 +98,7 @@ class CassandraPlugin(CoordinatorPlugin):
             base.ListHexdigestsStep(hexdigest_storage=context.hexdigest_storage),
             base.UploadBlocksStep(storage_name=context.storage_name),
             CassandraSubOpStep(op=ipc.CassandraSubOp.remove_snapshot),
+            base.SnapshotReleaseStep(),
             base.UploadManifestStep(
                 json_storage=context.json_storage,
                 plugin=ipc.Plugin.cassandra,

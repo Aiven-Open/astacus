@@ -113,6 +113,10 @@ class Snapshotter:
         if snapshotfile.hexdigest:
             self.hexdigest_to_snapshotfiles[snapshotfile.hexdigest].remove(snapshotfile)
 
+    def _release_snapshotfile(self, snapshotfile: SnapshotFile) -> None:
+        dst_path = self.dst / snapshotfile.relative_path
+        dst_path.unlink(missing_ok=True)
+
     def _snapshotfile_from_path(self, relative_path) -> SnapshotFile:
         src_path = self.src / relative_path
         st = src_path.stat()
@@ -273,3 +277,9 @@ class Snapshotter:
         progress.add_success()
 
         return changes
+
+    def release(self, hexdigest: str) -> None:
+        assert self.lock.locked()
+        assert self.src != self.dst
+        for snapshotfile in self.hexdigest_to_snapshotfiles.get(hexdigest, []):
+            self._release_snapshotfile(snapshotfile)
