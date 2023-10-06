@@ -481,16 +481,22 @@ class RestoreReplicatedDatabasesStep(Step[None]):
         )
         # Tables creation is not parallelized with gather since they can depend on each other
         # (although, we could use graphlib more subtly and parallelize what we can).
-
-        # If any table was initially created with custom global settings,
-        # we need to re-enable these custom global settings when creating the table again.
-        # We can enable these settings unconditionally because they are harmless
-        # for tables not needing them.
         session_id = secrets.token_hex()
         for query in [
+            # If any table was initially created with custom global settings,
+            # we need to re-enable these custom global settings when creating the table again.
+            # We can enable these settings unconditionally because they are harmless
+            # for tables not needing them.
             b"SET allow_experimental_geo_types=true",
             b"SET allow_experimental_object_type=true",
             b"SET allow_suspicious_low_cardinality_types=true",
+            # If a table was created with flatten_nested=0, we must be careful to not re-create the
+            # table with flatten_nested=1, since this would recreate the table with a different schema.
+            # If a table was created with flatten_nested=1, the query in system.tables.create_table_query
+            # shows the flattened fields, not the original user query with nested fields. This means that
+            # when re-executing the query, we don't need to re-flatten the fields.
+            # In both cases, flatten_nested=0 is the right choice when restoring a backup.
+            b"SET flatten_nested=0",
         ]:
             try:
                 await self.clients[0].execute(query, session_id=session_id)
