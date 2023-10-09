@@ -146,6 +146,31 @@ async def setup_cluster_content(clients: List[HttpClickHouseClient], use_named_c
         b"SETTINGS index_granularity=8192 "
         b"SETTINGS allow_experimental_object_type=1"
     )
+    # test that we correctly restore nested fields
+    await clients[0].execute(
+        b"CREATE TABLE default.nested_not_flatten (thekey UInt32, thedata Nested(a UInt32, b UInt32)) "
+        b"ENGINE = ReplicatedMergeTree ORDER BY (thekey) "
+        b"SETTINGS index_granularity=8192 "
+        b"SETTINGS flatten_nested=0"
+    )
+    await clients[0].execute(
+        b"CREATE TABLE default.nested_flatten (thekey UInt32, thedata Nested(a UInt32, b UInt32)) "
+        b"ENGINE = ReplicatedMergeTree ORDER BY (thekey) "
+        b"SETTINGS index_granularity=8192 "
+        b"SETTINGS flatten_nested=1"
+    )
+    await clients[0].execute(
+        b"CREATE TABLE default.array_tuple_not_flatten (thekey UInt32, thedata Array(Tuple(a UInt32, b UInt32))) "
+        b"ENGINE = ReplicatedMergeTree ORDER BY (thekey) "
+        b"SETTINGS index_granularity=8192 "
+        b"SETTINGS flatten_nested=0"
+    )
+    await clients[0].execute(
+        b"CREATE TABLE default.array_tuple_flatten (thekey UInt32, thedata Array(Tuple(a UInt32, b UInt32))) "
+        b"ENGINE = ReplicatedMergeTree ORDER BY (thekey) "
+        b"SETTINGS index_granularity=8192 "
+        b"SETTINGS flatten_nested=1"
+    )
     # add a table with data in object storage
     await clients[0].execute(
         b"CREATE TABLE default.in_object_storage (thekey UInt32, thedata String) "
@@ -170,6 +195,11 @@ async def setup_cluster_content(clients: List[HttpClickHouseClient], use_named_c
     await clients[0].execute(b"INSERT INTO default.with_experimental_types VALUES (123, '{\"a\":1}')")
     await clients[1].execute(b"INSERT INTO default.with_experimental_types VALUES (456, '{\"b\":2}')")
     await clients[2].execute(b"INSERT INTO default.with_experimental_types VALUES (789, '{\"c\":3}')")
+    # Sample data for nested fields
+    await clients[0].execute(b"INSERT INTO default.nested_not_flatten VALUES (123, [(4, 5)])")
+    await clients[0].execute(b"INSERT INTO default.nested_flatten VALUES (123, [4], [5])")
+    await clients[0].execute(b"INSERT INTO default.array_tuple_not_flatten VALUES (123, [(4, 5)])")
+    await clients[0].execute(b"INSERT INTO default.array_tuple_flatten VALUES (123, [4], [5])")
     # And some object storage data
     await clients[0].execute(b"INSERT INTO default.in_object_storage VALUES (123, 'foo')")
     await clients[1].execute(b"INSERT INTO default.in_object_storage VALUES (456, 'bar')")
@@ -233,6 +263,19 @@ async def test_restores_table_with_experimental_types(restored_cluster: List[Cli
     for client, expected_data in zip(restored_cluster, cluster_data):
         response = await client.execute(b"SELECT thekey, thedata FROM default.with_experimental_types ORDER BY thekey")
         assert response == expected_data
+
+
+@pytest.mark.asyncio
+async def test_restores_table_with_nested_fields(restored_cluster: List[ClickHouseClient]) -> None:
+    client = restored_cluster[0]
+    response = await client.execute(b"SELECT thekey, thedata FROM default.nested_not_flatten ORDER BY thekey")
+    assert response == [[123, [{"a": 4, "b": 5}]]]
+    response = await client.execute(b"SELECT thekey, thedata.a, thedata.b FROM default.nested_flatten ORDER BY thekey")
+    assert response == [[123, [4], [5]]]
+    response = await client.execute(b"SELECT thekey, thedata FROM default.array_tuple_not_flatten ORDER BY thekey")
+    assert response == [[123, [{"a": 4, "b": 5}]]]
+    response = await client.execute(b"SELECT thekey, thedata.a, thedata.b FROM default.array_tuple_flatten ORDER BY thekey")
+    assert response == [[123, [4], [5]]]
 
 
 async def check_object_storage_data(cluster: List[ClickHouseClient]) -> None:
