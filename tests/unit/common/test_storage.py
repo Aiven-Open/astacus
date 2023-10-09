@@ -43,7 +43,7 @@ def create_storage(*, tmpdir, engine, **kw):
     raise NotImplementedError(f"unknown storage {engine}")
 
 
-def _test_hexdigeststorage(storage):
+def _test_hexdigeststorage(storage: FileStorage):
     storage.upload_hexdigest_bytes(TEST_HEXDIGEST, TEXT_HEXDIGEST_DATA)
     assert storage.download_hexdigest_bytes(TEST_HEXDIGEST) == TEXT_HEXDIGEST_DATA
     # Ensure that download attempts of nonexistent keys give NotFoundException
@@ -56,7 +56,7 @@ def _test_hexdigeststorage(storage):
     assert storage.list_hexdigests() == []
 
 
-def _test_jsonstorage(storage):
+def _test_jsonstorage(storage: JsonStorage):
     assert storage.list_jsons() == []
     storage.upload_json(TEST_JSON, TEST_JSON_DATA)
     assert storage.download_json(TEST_JSON) == TEST_JSON_DATA

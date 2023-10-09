@@ -6,7 +6,6 @@ See LICENSE for details
 Rohmu-specific actual object storage implementation
 
 """
-from .magic import StrEnum
 from .storage import Json, MultiStorage, Storage, StorageUploadResult
 from .utils import AstacusModel
 from astacus.common import exceptions
@@ -16,7 +15,6 @@ from rohmu import errors, rohmufile
 from rohmu.compressor import CompressionStream
 from rohmu.encryptor import EncryptorStream
 from typing import BinaryIO, Dict, Optional, Union
-from typing_extensions import Literal
 
 import io
 import json
@@ -28,17 +26,6 @@ import tempfile
 logger = logging.getLogger(__name__)
 
 
-class RohmuStorageType(StrEnum):
-    """Embodies what is detected in rohmu.get_class_for_transfer"""
-
-    azure = "azure"
-    google = "google"
-    local = "local"
-    s3 = "s3"
-    # sftp = "sftp"
-    # swift = "swift"
-
-
 class RohmuModel(AstacusModel):
     class Config:
         # As we're keen to both export and decode json, just using enum
@@ -46,84 +33,12 @@ class RohmuModel(AstacusModel):
         use_enum_values = True
 
 
-class RohmuProxyType(StrEnum):
-    socks5 = "socks5"
-    http = "http"
-
-
-class RohmuProxyInfo(RohmuModel):
-    type: RohmuProxyType
-    host: str
-    port: int
-    user: Optional[str] = None
-    password: Optional[str] = Field(None, alias="pass")
-
-
-class StatsdInfo(RohmuModel):
-    host: str
-    port: int
-    tags: dict[str, str | int | None]
-
-
-class ObjectStorageNotifier(RohmuModel):
-    notifier_type: str
-    url: str
-
-
-class ObjectStorageConfig(RohmuModel):
-    storage_type: RohmuStorageType
-    prefix: Optional[str] = None
-    notifier: Optional[ObjectStorageNotifier] = None
-    statsd_info: Optional[StatsdInfo] = None
-
-
-class RohmuProxyStorage(ObjectStorageConfig):
-    """Storage backend with support for optional socks5 or http proxy connections"""
-
-    proxy_info: Optional[RohmuProxyInfo] = None
-
-
-class RohmuLocalStorageConfig(ObjectStorageConfig):
-    storage_type: Literal[RohmuStorageType.local]
-    directory: str
-    prefix: Optional[str] = None
-
-
-class RohmuS3StorageConfig(RohmuProxyStorage):
-    storage_type: Literal[RohmuStorageType.s3]
-    region: str
-    bucket_name: str
-    aws_access_key_id: Optional[str] = None
-    aws_secret_access_key: Optional[str] = None
-    host: Optional[str] = None
-    port: Optional[int] = None
-    is_secure: Optional[bool] = False
-    is_verify_tls: Optional[bool] = False
-    prefix: Optional[str] = None
-    # Some more obscure options with defaults are omitted
-
-
-class RohmuAzureStorageConfig(RohmuProxyStorage):
-    storage_type: Literal[RohmuStorageType.azure]
-    account_name: str
-    bucket_name: str
-    account_key: Optional[str] = None
-    sas_token: Optional[str] = None
-    prefix: Optional[str] = None
-    azure_cloud: Optional[str] = None
-
-
-class RohmuGoogleStorageConfig(RohmuProxyStorage):
-    storage_type: Literal[RohmuStorageType.google]
-    # rohmu.object_storage.google:GoogleTransfer.__init__ arguments
-    project_id: str
-    bucket_name: str
-    credentials: Dict[str, str]
-    prefix: Optional[str] = None
-    # credential_file # omitted, n/a
-
-
-RohmuStorageConfig = Union[RohmuLocalStorageConfig, RohmuS3StorageConfig, RohmuAzureStorageConfig, RohmuGoogleStorageConfig]
+RohmuStorageConfig = Union[
+    rohmu.LocalObjectStorageConfig,
+    rohmu.S3ObjectStorageConfig,
+    rohmu.AzureObjectStorageConfig,
+    rohmu.GoogleObjectStorageConfig,
+]
 
 
 class RohmuEncryptionKey(RohmuModel):
@@ -240,7 +155,7 @@ class RohmuStorage(Storage):
             storage = self.config.default_storage
         self.storage_name = storage
         self.storage_config = self.config.storages[storage]
-        self.storage = rohmu.get_transfer(self.storage_config.dict(by_alias=True, exclude_unset=True))
+        self.storage = rohmu.get_transfer_from_model(self.storage_config)
 
     def copy(self) -> "RohmuStorage":
         return RohmuStorage(config=self.config, storage=self.storage_name)

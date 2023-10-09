@@ -39,7 +39,7 @@ nkMAHqg9PS372Cs=
 -----END PRIVATE KEY-----"""
 
 
-def create_rohmu_config(tmpdir, *, compression=True, encryption=True):
+def create_rohmu_config(tmpdir, *, compression=True, encryption=True) -> RohmuConfig:
     x_path = Path(tmpdir) / "rohmu-x"
     x_path.mkdir(exist_ok=True)
     y_path = Path(tmpdir) / "rohmu-y"
