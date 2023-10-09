@@ -16,48 +16,48 @@ pytestmark = [pytest.mark.clickhouse]
 
 def test_tables_sorted_by_dependencies() -> None:
     t1 = Table(
-        database="db_one",
-        name="t1",
+        database=b"db_one",
+        name=b"t1",
         engine="DontCare",
         uuid=uuid.UUID(int=0),
-        create_query="",
-        dependencies=[("db_two", "t4")],
+        create_query=b"",
+        dependencies=[(b"db_two", b"t4")],
     )
     t2 = Table(
-        database="db_one",
-        name="t2",
+        database=b"db_one",
+        name=b"t2",
         engine="DontCare",
         uuid=uuid.UUID(int=0),
-        create_query="",
+        create_query=b"",
         dependencies=[],
     )
     t3 = Table(
-        database="db_one",
-        name="t3",
+        database=b"db_one",
+        name=b"t3",
         engine="DontCare",
         uuid=uuid.UUID(int=0),
-        create_query="",
-        dependencies=[("db_one", "t2")],
+        create_query=b"",
+        dependencies=[(b"db_one", b"t2")],
     )
     t4 = Table(
-        database="db_two",
-        name="t4",
+        database=b"db_two",
+        name=b"t4",
         engine="DontCare",
         uuid=uuid.UUID(int=0),
-        create_query="",
-        dependencies=[("db_one", "t2"), ("db_one", "t3")],
+        create_query=b"",
+        dependencies=[(b"db_one", b"t2"), (b"db_one", b"t3")],
     )
     assert tables_sorted_by_dependencies([t1, t2, t3, t4]) == [t1, t4, t3, t2]
 
 
 def test_dangling_table_dependency_doesnt_crash() -> None:
     t1 = Table(
-        database="db_one",
-        name="t1",
+        database=b"db_one",
+        name=b"t1",
         engine="DontCare",
         uuid=uuid.UUID(int=0),
-        create_query="",
-        dependencies=[("db_two", "t4")],
+        create_query=b"",
+        dependencies=[(b"db_two", b"t4")],
     )
     assert tables_sorted_by_dependencies([t1]) == [t1]
 

@@ -33,7 +33,7 @@ class Disk:
             object_storage: RohmuAsyncObjectStorage | None = None
         else:
             config_name = storage_name if storage_name is not None else config.object_storage.default_storage
-            storage_config = config.object_storage.storages[config_name].dict(by_alias=True, exclude_unset=True)
+            storage_config = config.object_storage.storages[config_name]
             object_storage = RohmuAsyncObjectStorage(storage=ThreadSafeRohmuStorage(config=storage_config))
         return Disk(
             type=config.type,

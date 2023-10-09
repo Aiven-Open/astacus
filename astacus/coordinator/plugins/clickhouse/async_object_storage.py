@@ -3,11 +3,12 @@ Copyright (c) 2023 Aiven Ltd
 See LICENSE for details
 """
 from abc import ABC, abstractmethod
+from astacus.common.rohmustorage import RohmuStorageConfig
 from pathlib import Path
 from rohmu import BaseTransfer
 from rohmu.errors import FileNotFoundFromStorageError
 from starlette.concurrency import run_in_threadpool
-from typing import Any, Iterator, Mapping, Self, Sequence
+from typing import Any, Iterator, Mapping, Self, Sequence, Union
 
 import contextlib
 import dataclasses
@@ -27,7 +28,7 @@ class ObjectStorageItem:
 
 class AsyncObjectStorage(ABC):
     @abstractmethod
-    def get_config(self) -> Mapping[str, Any]:
+    def get_config(self) -> Union[RohmuStorageConfig, dict]:
         ...
 
     @abstractmethod
@@ -44,12 +45,12 @@ class AsyncObjectStorage(ABC):
 
 
 class ThreadSafeRohmuStorage:
-    def __init__(self, config: Mapping[str, Any]) -> None:
+    def __init__(self, config: RohmuStorageConfig) -> None:
         self.config = config
-        self._storage = rohmu.get_transfer(config)
+        self._storage = rohmu.get_transfer_from_model(config)
         self._storage_lock = threading.Lock()
 
-    def list_iter(self, key: str, *, with_metadata: bool = True, deep: bool = False) -> list[Mapping[str, Any]]:
+    def list_iter(self, key: str, *, with_metadata: bool = True, deep: bool = False) -> Iterator[Mapping[str, Any]]:
         with self._storage_lock:
             return self._storage.list_iter(key, with_metadata=with_metadata, deep=deep)
 
@@ -67,7 +68,7 @@ class ThreadSafeRohmuStorage:
                 target_storage.copy_files_from(source=source_storage, keys=keys)
 
     @contextlib.contextmanager
-    def get_storage(self) -> Iterator[BaseTransfer]:
+    def get_storage(self) -> Iterator[BaseTransfer[Any]]:
         with self._storage_lock:
             yield self._storage
 
@@ -76,7 +77,7 @@ class ThreadSafeRohmuStorage:
 class RohmuAsyncObjectStorage(AsyncObjectStorage):
     storage: ThreadSafeRohmuStorage
 
-    def get_config(self) -> Mapping[str, Any]:
+    def get_config(self) -> RohmuStorageConfig:
         return self.storage.config
 
     async def list_items(self) -> list[ObjectStorageItem]:
@@ -101,7 +102,7 @@ class MemoryAsyncObjectStorage(AsyncObjectStorage):
     def from_items(cls, items: Sequence[ObjectStorageItem]) -> Self:
         return cls(items={item.key: item for item in items})
 
-    def get_config(self) -> Mapping[str, Any]:
+    def get_config(self) -> dict:
         # Exposing the object id in the config ensures that the same memory storage
         # has the same config as itself and a different config as another memory storage.
         # Using a manually picked name would be more error-prone: we want two object

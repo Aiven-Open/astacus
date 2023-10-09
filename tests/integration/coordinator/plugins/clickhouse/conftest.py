@@ -5,15 +5,7 @@ See LICENSE for details
 from _pytest.fixtures import FixtureRequest
 from astacus.client import create_client_parsers
 from astacus.common.ipc import Plugin
-from astacus.common.rohmustorage import (
-    RohmuCompression,
-    RohmuCompressionType,
-    RohmuConfig,
-    RohmuEncryptionKey,
-    RohmuLocalStorageConfig,
-    RohmuS3StorageConfig,
-    RohmuStorageType,
-)
+from astacus.common.rohmustorage import RohmuCompression, RohmuCompressionType, RohmuConfig, RohmuEncryptionKey
 from astacus.common.utils import build_netloc
 from astacus.config import GlobalConfig, UvicornConfig
 from astacus.coordinator.config import CoordinatorConfig, CoordinatorNode
@@ -44,6 +36,7 @@ import contextlib
 import dataclasses
 import logging
 import pytest
+import rohmu
 import secrets
 import sys
 import tempfile
@@ -446,7 +439,7 @@ async def _astacus(*, config: GlobalConfig) -> AsyncIterator[Service]:
     async with background_process(*cmd, env={"PYTHONPATH": astacus_source_root}) as process:
         await wait_url_up(f"http://localhost:{config.uvicorn.port}")
         storage = config.object_storage.storages[config.object_storage.default_storage]
-        assert isinstance(storage, RohmuLocalStorageConfig)
+        assert isinstance(storage, rohmu.LocalObjectStorageConfig)
         data_dir = storage.directory
         yield Service(process=process, port=config.uvicorn.port, data_dir=data_dir)
 
@@ -476,8 +469,8 @@ def create_astacus_configs(
     astacus_backup_storage_path.mkdir(exist_ok=True)
     node_ports = [ports.allocate() for _ in clickhouse_cluster.services]
     disk_storages = {
-        "default": RohmuS3StorageConfig(
-            storage_type=RohmuStorageType.s3,
+        "default": rohmu.S3ObjectStorageConfig(
+            storage_type=rohmu.StorageDriver.s3,
             region="fake",
             host=minio_bucket.host,
             port=minio_bucket.port,
@@ -488,18 +481,18 @@ def create_astacus_configs(
         )
     }
     backup_storages = {
-        "default": RohmuLocalStorageConfig(
-            storage_type=RohmuStorageType.local,
-            directory=str(astacus_backup_storage_path),
+        "default": rohmu.LocalObjectStorageConfig(
+            storage_type=rohmu.StorageDriver.local,
+            directory=astacus_backup_storage_path,
         )
     }
     if restorable_source:
-        backup_storages["restorable"] = RohmuLocalStorageConfig(
-            storage_type=RohmuStorageType.local,
-            directory=str(restorable_source.astacus_storage_path),
+        backup_storages["restorable"] = rohmu.LocalObjectStorageConfig(
+            storage_type=rohmu.StorageDriver.local,
+            directory=restorable_source.astacus_storage_path,
         )
-        disk_storages["restorable"] = RohmuS3StorageConfig(
-            storage_type=RohmuStorageType.s3,
+        disk_storages["restorable"] = rohmu.S3ObjectStorageConfig(
+            storage_type=rohmu.StorageDriver.s3,
             region="fake",
             host=minio_bucket.host,
             port=minio_bucket.port,
