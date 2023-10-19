@@ -189,6 +189,11 @@ class SnapshotClearRequest(NodeRequest):
     root_globs: Sequence[str]
 
 
+class SnapshotReleaseRequest(NodeRequest):
+    # Files matching these digests will be unlinked in snapshotter's dst
+    hexdigests: Sequence[str]
+
+
 # node.cassandra
 
 

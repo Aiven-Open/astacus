@@ -6,7 +6,7 @@ See LICENSE for details
 from .clear import ClearOp
 from .download import DownloadOp
 from .node import Node
-from .snapshot import SnapshotOp, UploadOp
+from .snapshot import ReleaseOp, SnapshotOp, UploadOp
 from .state import node_state, NodeState
 from astacus.common import ipc
 from astacus.common.magic import StrEnum
@@ -35,6 +35,7 @@ class OpName(StrEnum):
     download = "download"
     snapshot = "snapshot"
     upload = "upload"
+    release = "release"
 
 
 class Features(Enum):
@@ -42,6 +43,8 @@ class Features(Enum):
     validate_file_hashes = "validate_file_hashes"
     # Added on 2023-06-07
     snapshot_groups = "snapshot_groups"
+    # Added on 2023-10-16
+    release_snapshot_files = "release_snapshot_files"
 
 
 def is_allowed(subop: ipc.CassandraSubOp, access_level: CassandraAccessLevel):
@@ -146,6 +149,21 @@ def delta_upload(req: ipc.SnapshotUploadRequestV20221129, n: Node = Depends()):
 @router.get("/delta/upload/{op_id}")
 def delta_upload_result(*, op_id: int, n: Node = Depends()):
     op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.upload)
+    return op.result
+
+
+@router.post("/release")
+def release(req: ipc.SnapshotReleaseRequest, n: Node = Depends()):
+    if not n.state.is_locked:
+        raise HTTPException(status_code=409, detail="Not locked")
+    snapshotter = n.get_snapshotter()
+    assert snapshotter
+    return ReleaseOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshotter)
+
+
+@router.get("/release/{op_id}")
+def release_result(*, op_id: int, n: Node = Depends()):
+    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.release)
     return op.result
 
 

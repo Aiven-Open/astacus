@@ -192,6 +192,36 @@ class SnapshotClearStep(Step[List[ipc.NodeResult]]):
 
 
 @dataclasses.dataclass
+class SnapshotReleaseStep(Step[List[ipc.NodeResult]]):
+    """
+    Request to release the files we don't need any more in the destination hierarchy.
+
+    Allows to free some disk space before the next backup happens.
+    """
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> List[ipc.NodeResult]:
+        snapshot_results = context.get_result(SnapshotStep)
+        nodes_metadata = await get_nodes_metadata(cluster)
+        all_nodes_have_release_feature = nodes_metadata and all(
+            Features.release_snapshot_files.value in n.features for n in nodes_metadata
+        )
+        if not all_nodes_have_release_feature:
+            logger.info("Skipped SnapshotReleaseStep because some nodes don't support it, node features: %s", nodes_metadata)
+            return []
+        node_requests = [
+            ipc.SnapshotReleaseRequest(hexdigests=self._hexdigests_from_hashes(s.hashes)) for s in snapshot_results
+        ]
+        start_results = await cluster.request_from_nodes(
+            "release", method="post", caller="SnapshotReleaseStep", reqs=node_requests
+        )
+        return await cluster.wait_successful_results(start_results=start_results, result_class=ipc.NodeResult)
+
+    def _hexdigests_from_hashes(self, hashes: Optional[List[ipc.SnapshotHash]]) -> Sequence[str]:
+        assert hashes is not None
+        return [h.hexdigest for h in hashes]
+
+
+@dataclasses.dataclass
 class UploadManifestStep(Step[None]):
     """
     Store the backup manifest in the object storage.

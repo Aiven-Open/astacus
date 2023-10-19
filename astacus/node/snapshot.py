@@ -85,3 +85,25 @@ class UploadOp(NodeOp[ipc.SnapshotUploadRequestV20221129, ipc.SnapshotUploadResu
                 validate_file_hashes=self.req.validate_file_hashes,
             )
             self.result.progress.done()
+
+
+class ReleaseOp(NodeOp[ipc.SnapshotReleaseRequest, ipc.NodeResult]):
+    snapshotter: Optional[Snapshotter] = None
+
+    def create_result(self) -> ipc.NodeResult:
+        return ipc.NodeResult()
+
+    def start(self, snapshotter: Snapshotter) -> NodeOp.StartResult:
+        logger.info("start_release %r", self.req)
+        self.snapshotter = snapshotter
+        return self.start_op(op_name="release", op=self, fun=self.release)
+
+    def release(self) -> None:
+        assert self.snapshotter
+        with self.snapshotter.lock:
+            self.check_op_id()
+            self.result.progress.add_total(len(self.req.hexdigests))
+            for hexdigest in self.req.hexdigests:
+                self.snapshotter.release(hexdigest)
+                self.result.progress.add_success()
+            self.result.progress.done()
