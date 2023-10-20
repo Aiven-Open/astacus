@@ -767,9 +767,9 @@ async def test_creates_all_replicated_databases_and_tables_in_manifest() -> None
         replicated_databases_zookeeper_path="/clickhouse/databases",
         replicated_database_settings=ReplicatedDatabaseSettings(),
         drop_databases_timeout=20.0,
-        max_concurrent_drop_databases=100,
+        max_concurrent_drop_databases_per_node=10,
         create_databases_timeout=10.0,
-        max_concurrent_create_database=100,
+        max_concurrent_create_database_per_node=10,
     )
 
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
@@ -823,9 +823,9 @@ async def test_creates_all_replicated_databases_and_tables_in_manifest_with_cust
             cluster_password="alice_secret",
         ),
         drop_databases_timeout=20.0,
-        max_concurrent_drop_databases=100,
+        max_concurrent_drop_databases_per_node=10,
         create_databases_timeout=10.0,
-        max_concurrent_create_database=100,
+        max_concurrent_create_database_per_node=10,
     )
     cluster = Cluster(nodes=[CoordinatorNode(url="node1")])
     context = StepsContext()
@@ -858,41 +858,34 @@ async def test_creates_all_replicated_databases_and_tables_in_manifest_with_cust
 @pytest.mark.asyncio
 async def test_drops_each_database_on_all_servers_before_recreating_it() -> None:
     # We use the same client twice to record the global sequence of queries across all servers
-    client = mock_clickhouse_client()
+    client1 = mock_clickhouse_client()
+    client2 = mock_clickhouse_client()
     step = RestoreReplicatedDatabasesStep(
-        clients=[client, client],
+        clients=[client1, client2],
         replicated_databases_zookeeper_path="/clickhouse/databases",
         replicated_database_settings=ReplicatedDatabaseSettings(),
         drop_databases_timeout=20.0,
-        max_concurrent_drop_databases=100,
+        max_concurrent_drop_databases_per_node=10,
         create_databases_timeout=10.0,
-        max_concurrent_create_database=100,
+        max_concurrent_create_database_per_node=10,
     )
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
     context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
     await step.run_step(cluster, context)
-    all_client_queries = [
+    queries_expected_on_every_node = [
         b"SET receive_timeout=20.0",
         b"DROP DATABASE IF EXISTS `db-one` SYNC",
-        b"SET receive_timeout=20.0",
-        b"DROP DATABASE IF EXISTS `db-one` SYNC",
-        b"SET receive_timeout=20.0",
-        b"DROP DATABASE IF EXISTS `db-two` SYNC",
         b"SET receive_timeout=20.0",
         b"DROP DATABASE IF EXISTS `db-two` SYNC",
         b"SET receive_timeout=10.0",
         b"CREATE DATABASE `db-one` UUID '00000000-0000-0000-0000-000000000011'"
         b" ENGINE = Replicated('/clickhouse/databases/db%2Done', '{my_shard}', '{my_replica}')",
         b"SET receive_timeout=10.0",
-        b"CREATE DATABASE `db-one` UUID '00000000-0000-0000-0000-000000000011'"
-        b" ENGINE = Replicated('/clickhouse/databases/db%2Done', '{my_shard}', '{my_replica}')",
-        b"SET receive_timeout=10.0",
         b"CREATE DATABASE `db-two` UUID '00000000-0000-0000-0000-000000000012'"
         b" ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{my_shard}', '{my_replica}')",
-        b"SET receive_timeout=10.0",
-        b"CREATE DATABASE `db-two` UUID '00000000-0000-0000-0000-000000000012'"
-        b" ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{my_shard}', '{my_replica}')",
+    ]
+    queries_expected_on_a_single_node = [
         b"SET allow_experimental_geo_types=true",
         b"SET allow_experimental_object_type=true",
         b"SET allow_suspicious_low_cardinality_types=true",
@@ -901,7 +894,11 @@ async def test_drops_each_database_on_all_servers_before_recreating_it() -> None
         b"CREATE TABLE db-one.table-dos ...",
         b"CREATE TABLE db-two.table-eins ...",
     ]
-    assert [call.args[0] for call in client.execute.mock_calls] == all_client_queries
+    client1_queries = [call.args[0] for call in client1.execute.mock_calls]
+    client2_queries = [call.args[0] for call in client2.execute.mock_calls]
+    assert all(query in client1_queries for query in queries_expected_on_every_node)
+    assert all(query in client2_queries for query in queries_expected_on_every_node)
+    assert all(query in client1_queries or client2_queries for query in queries_expected_on_a_single_node)
 
 
 @pytest.mark.asyncio
@@ -964,9 +961,9 @@ async def test_restore_replica() -> None:
         clients=clients,
         disks=Disks(),
         restart_timeout=30,
-        max_concurrent_restart=20,
+        max_concurrent_restart_per_node=20,
         restore_timeout=60,
-        max_concurrent_restore=10,
+        max_concurrent_restore_per_node=10,
     )
     context = StepsContext()
     context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
@@ -1054,7 +1051,7 @@ async def test_attaches_all_mergetree_parts_in_manifest() -> None:
     client_1 = mock_clickhouse_client()
     client_2 = mock_clickhouse_client()
     clients = [client_1, client_2]
-    step = AttachMergeTreePartsStep(clients, disks=Disks(), attach_timeout=60, max_concurrent_attach=10)
+    step = AttachMergeTreePartsStep(clients, disks=Disks(), attach_timeout=60, max_concurrent_attach_per_node=10)
 
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
@@ -1128,7 +1125,7 @@ async def test_attaches_all_mergetree_parts_in_manifest() -> None:
 @pytest.mark.asyncio
 async def test_sync_replicas_for_replicated_mergetree_tables() -> None:
     clients = [mock_clickhouse_client(), mock_clickhouse_client()]
-    step = SyncTableReplicasStep(clients, sync_timeout=180, max_concurrent_sync=10)
+    step = SyncTableReplicasStep(clients, sync_timeout=180, max_concurrent_sync_per_node=10)
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
     context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST_V1)

@@ -37,7 +37,7 @@ from astacus.coordinator.plugins.base import (
 from astacus.coordinator.plugins.zookeeper import ChangeWatch, TransactionError, ZooKeeperClient
 from base64 import b64decode
 from pathlib import Path
-from typing import Any, cast, Dict, List, Mapping, Sequence, Tuple, TypeVar
+from typing import Any, Awaitable, Callable, cast, Dict, Iterable, Iterator, List, Mapping, Sequence, Tuple, TypeVar
 
 import asyncio
 import base64
@@ -413,6 +413,14 @@ class ClickHouseManifestStep(Step[ClickHouseManifest]):
         return ClickHouseManifest.from_plugin_data(backup_manifest.plugin_data)
 
 
+async def run_on_every_node(
+    clients: Iterable[ClickHouseClient],
+    fn: Callable[[ClickHouseClient], Iterable[Awaitable[None]]],
+    per_node_concurrency_limit: int,
+) -> None:
+    await asyncio.gather(*[gather_limited(per_node_concurrency_limit, fn(client)) for client in clients])
+
+
 @dataclasses.dataclass
 class RestoreReplicatedDatabasesStep(Step[None]):
     """
@@ -425,26 +433,28 @@ class RestoreReplicatedDatabasesStep(Step[None]):
     replicated_databases_zookeeper_path: str
     replicated_database_settings: ReplicatedDatabaseSettings
     drop_databases_timeout: float
-    max_concurrent_drop_databases: int
+    max_concurrent_drop_databases_per_node: int
     create_databases_timeout: float
-    max_concurrent_create_database: int
+    max_concurrent_create_database_per_node: int
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         manifest = context.get_result(ClickHouseManifestStep)
         # The database must be dropped on *every* node before attempting to recreate it.
         # If we don't do that, then the recreated database on one node will recover data from
         # a node where the database wasn't recreated yet.
-        await gather_limited(
-            self.max_concurrent_drop_databases,
-            [
+
+        def _drop_dbs(client: ClickHouseClient) -> Iterator[Awaitable[None]]:
+            yield from (
                 execute_with_timeout(
                     client,
                     self.drop_databases_timeout,
                     f"DROP DATABASE IF EXISTS {escape_sql_identifier(database.name)} SYNC".encode(),
                 )
                 for database in manifest.replicated_databases
-                for client in self.clients
-            ],
+            )
+
+        await run_on_every_node(
+            clients=self.clients, fn=_drop_dbs, per_node_concurrency_limit=self.max_concurrent_drop_databases_per_node
         )
 
         settings = [
@@ -471,13 +481,14 @@ class RestoreReplicatedDatabasesStep(Step[None]):
                 f"{escape_sql_string(database.replica)})"
                 f"{settings_clause}".encode()
             )
-        await gather_limited(
-            self.max_concurrent_create_database,
-            [
-                execute_with_timeout(client, self.create_databases_timeout, create_query)
-                for create_query in create_queries
-                for client in self.clients
-            ],
+
+        def _create_dbs(client: ClickHouseClient) -> Iterator[Awaitable[None]]:
+            yield from (
+                execute_with_timeout(client, self.create_databases_timeout, create_query) for create_query in create_queries
+            )
+
+        await run_on_every_node(
+            clients=self.clients, fn=_create_dbs, per_node_concurrency_limit=self.max_concurrent_create_database_per_node
         )
         # Tables creation is not parallelized with gather since they can depend on each other
         # (although, we could use graphlib more subtly and parallelize what we can).
@@ -607,9 +618,9 @@ class RestoreReplicaStep(Step[None]):
     clients: List[ClickHouseClient]
     disks: Disks
     restart_timeout: float
-    max_concurrent_restart: int
+    max_concurrent_restart_per_node: int
     restore_timeout: float
-    max_concurrent_restore: int
+    max_concurrent_restore_per_node: int
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         clickhouse_manifest = context.get_result(ClickHouseManifestStep)
@@ -622,25 +633,33 @@ class RestoreReplicaStep(Step[None]):
         async with self.zookeeper_client.connect() as connection:
             for table in replicated_tables:
                 await connection.delete(f"/clickhouse/tables/{str(table.uuid)}", recursive=True)
-        await gather_limited(
-            self.max_concurrent_restart,
-            [
+
+        def _restart_replicas(client: ClickHouseClient) -> Iterator[Awaitable[None]]:
+            yield from (
                 execute_with_timeout(
                     client, self.restart_timeout, f"SYSTEM RESTART REPLICA {table.escaped_sql_identifier}".encode()
                 )
                 for table in replicated_tables
-                for client in self.clients
-            ],
+            )
+
+        await run_on_every_node(
+            clients=self.clients,
+            fn=_restart_replicas,
+            per_node_concurrency_limit=self.max_concurrent_restart_per_node,
         )
-        await gather_limited(
-            self.max_concurrent_restore,
-            [
+
+        def _restore_replicas(client: ClickHouseClient) -> Iterator[Awaitable[None]]:
+            yield from (
                 execute_with_timeout(
                     client, self.restore_timeout, f"SYSTEM RESTORE REPLICA {table.escaped_sql_identifier}".encode()
                 )
                 for table in replicated_tables
-                for client in self.clients
-            ],
+            )
+
+        await run_on_every_node(
+            clients=self.clients,
+            fn=_restore_replicas,
+            per_node_concurrency_limit=self.max_concurrent_restore_per_node,
         )
 
 
@@ -683,7 +702,7 @@ class AttachMergeTreePartsStep(Step[None]):
     clients: List[ClickHouseClient]
     disks: Disks
     attach_timeout: float
-    max_concurrent_attach: int
+    max_concurrent_attach_per_node: int
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         backup_manifest = context.get_result(BackupManifestStep)
@@ -691,17 +710,21 @@ class AttachMergeTreePartsStep(Step[None]):
         if clickhouse_manifest.version != ClickHouseBackupVersion.V1:
             return
         tables_by_uuid = {table.uuid: table for table in clickhouse_manifest.tables}
-        await gather_limited(
-            self.max_concurrent_attach,
-            [
-                execute_with_timeout(
-                    client,
-                    self.attach_timeout,
-                    f"ALTER TABLE {table_identifier} ATTACH PART {escape_sql_string(part_name)}".encode(),
+        await asyncio.gather(
+            *[
+                gather_limited(
+                    self.max_concurrent_attach_per_node,
+                    [
+                        execute_with_timeout(
+                            client,
+                            self.attach_timeout,
+                            f"ALTER TABLE {table_identifier} ATTACH PART {escape_sql_string(part_name)}".encode(),
+                        )
+                        for table_identifier, part_name in list_parts_to_attach(snapshot_result, self.disks, tables_by_uuid)
+                    ],
                 )
                 for client, snapshot_result in zip(self.clients, backup_manifest.snapshot_results)
-                for table_identifier, part_name in list_parts_to_attach(snapshot_result, self.disks, tables_by_uuid)
-            ],
+            ]
         )
 
 
@@ -714,22 +737,26 @@ class SyncTableReplicasStep(Step[None]):
 
     clients: List[ClickHouseClient]
     sync_timeout: float
-    max_concurrent_sync: int
+    max_concurrent_sync_per_node: int
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         manifest = context.get_result(ClickHouseManifestStep)
         if manifest.version != ClickHouseBackupVersion.V1:
             return
-        await gather_limited(
-            self.max_concurrent_sync,
-            [
+
+        def _sync_replicas(client: ClickHouseClient) -> Iterator[Awaitable[None]]:
+            yield from (
                 execute_with_timeout(
                     client, self.sync_timeout, f"SYSTEM SYNC REPLICA {table.escaped_sql_identifier}".encode()
                 )
                 for table in manifest.tables
-                for client in self.clients
                 if table.is_replicated
-            ],
+            )
+
+        await run_on_every_node(
+            clients=self.clients,
+            fn=_sync_replicas,
+            per_node_concurrency_limit=self.max_concurrent_sync_per_node,
         )
 
 
