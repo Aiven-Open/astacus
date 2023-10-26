@@ -7,7 +7,7 @@ Basic backup-restore cycle and its variations
 """
 
 from astacus.common import magic
-from tests.system.conftest import astacus_ls, astacus_run
+from tests.system.conftest import astacus_ls, astacus_run, TestNode
 
 import logging
 import pytest
@@ -27,8 +27,10 @@ A1_FILES_AND_CONTENTS = [
 
 # This test is the slowest, so rather fail fast in real unittests before getting here
 @pytest.mark.order("last")
-@pytest.mark.asyncio
-async def test_astacus(astacus1, astacus2, astacus3, rootdir):
+def test_astacus(astacus1: TestNode, astacus2: TestNode, astacus3: TestNode, rootdir: str):
+    assert astacus1.root_path
+    assert astacus2.root_path
+    assert astacus3.root_path
     # Idea:
     # Store following files
     # a1 - A1_FILES_AND_CONTENTS
