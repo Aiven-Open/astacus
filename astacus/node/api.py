@@ -6,7 +6,7 @@ See LICENSE for details
 from .clear import ClearOp
 from .download import DownloadOp
 from .node import Node
-from .snapshot import ReleaseOp, SnapshotOp, UploadOp
+from .snapshot_op import ReleaseOp, SnapshotOp, UploadOp
 from .state import node_state, NodeState
 from astacus.common import ipc
 from astacus.common.magic import StrEnum
@@ -126,9 +126,8 @@ def delta_snapshot_result(*, op_id: int, n: Node = Depends()):
 def upload(req: ipc.SnapshotUploadRequestV20221129, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
-    snapshotter = n.get_snapshotter()
-    assert snapshotter
-    return UploadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshotter)
+    snapshot_ = n.get_or_create_snapshot()
+    return UploadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshot_)
 
 
 @router.get("/upload/{op_id}")
@@ -141,9 +140,8 @@ def upload_result(*, op_id: int, n: Node = Depends()):
 def delta_upload(req: ipc.SnapshotUploadRequestV20221129, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
-    snapshotter = n.get_delta_snapshotter()
-    assert snapshotter
-    return UploadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshotter)
+    snapshot_ = n.get_or_create_delta_snapshot()
+    return UploadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshot_)
 
 
 @router.get("/delta/upload/{op_id}")
@@ -156,7 +154,8 @@ def delta_upload_result(*, op_id: int, n: Node = Depends()):
 def release(req: ipc.SnapshotReleaseRequest, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
-    snapshotter = n.get_snapshotter()
+    # Groups not needed here.
+    snapshotter = n.get_snapshotter(groups=[])
     assert snapshotter
     return ReleaseOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshotter)
 
@@ -274,9 +273,9 @@ def groups_from_snapshot_req(req: SnapshotReq) -> Sequence[SnapshotGroup]:
 
 def snapshotter_from_snapshot_req(req: SnapshotReq, n: Node) -> Snapshotter:
     groups = groups_from_snapshot_req(req)
-    return n.get_or_create_snapshotter(groups)
+    return n.get_snapshotter(groups)
 
 
 def delta_snapshotter_from_snapshot_req(req: SnapshotReq, n: Node) -> Snapshotter:
     groups = groups_from_snapshot_req(req)
-    return n.get_or_create_delta_snapshotter(groups)
+    return n.get_delta_snapshotter(groups)

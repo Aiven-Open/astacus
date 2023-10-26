@@ -6,6 +6,9 @@ See LICENSE for details
 """
 
 from .utils import AstacusModel
+from pyparsing import Iterable
+from typing import Optional
+from typing_extensions import Self, TypeVar
 
 import logging
 import math
@@ -15,7 +18,7 @@ logger = logging.getLogger(__name__)
 _log_1_1 = math.log(1.1)
 
 
-def increase_worth_reporting(value, new_value=None, *, total=None):
+def increase_worth_reporting(value: int, new_value: Optional[int] = None, *, total: int | None = None):
     """Make reporting sparser and sparser as values grow larger
     - report every 1.1**N or so
     - if we know total, report every percent
@@ -36,6 +39,9 @@ def increase_worth_reporting(value, new_value=None, *, total=None):
     return old_exp != new_exp
 
 
+T = TypeVar("T")
+
+
 class Progress(AstacusModel):
     """JSON-encodable progress meter of sorts"""
 
@@ -44,17 +50,31 @@ class Progress(AstacusModel):
     total: int = 0
     final: bool = False
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         finished = ", finished" if self.final else ""
         return f"{self.handled}/{self.total} handled, {self.failed} failures{finished}"
 
-    def start(self, n):
+    def wrap(self, i: Iterable[T]) -> Iterable[T]:
+        """Iterate over i, updating progress as we go."""
+        try:
+            self.add_total(len(i))
+        except TypeError:
+            # Can't compute progress for this iterator
+            return i
+
+        for item in i:
+            yield item
+            self.add_success()
+        self.done()
+        return None
+
+    def start(self, n) -> None:
         "Optional 'first' step, just for logic handling state (e.g. no progress object reuse desired)"
         assert not self.total
         logger.info("start")
         self.add_total(n)
 
-    def add_total(self, n):
+    def add_total(self, n: int) -> None:
         if not n:
             return
         old_total = self.total
@@ -63,7 +83,7 @@ class Progress(AstacusModel):
             logger.info("add_total %r -> %r", n, self)
         assert not self.final
 
-    def add_fail(self, n=1, *, info="add_fail"):
+    def add_fail(self, n: int = 1, *, info: str = "add_fail") -> None:
         assert n > 0
         old_failed = self.failed
         self.failed += n
@@ -71,7 +91,7 @@ class Progress(AstacusModel):
             logger.info("%s %r -> %r", info, n, self)
         assert not self.final
 
-    def add_success(self, n=1, *, info="add_success"):
+    def add_success(self, n: int = 1, *, info: str = "add_success") -> None:
         assert n > 0
         old_handled = self.handled
         self.handled += n
@@ -80,34 +100,34 @@ class Progress(AstacusModel):
             logger.info("%s %r -> %r", info, n, self)
         assert not self.final
 
-    def download_success(self, size):
+    def download_success(self, size: int) -> None:
         self.add_success(size, info="download_success")
 
-    def upload_success(self, hexdigest):
+    def upload_success(self, hexdigest: str) -> None:
         self.add_success(info=f"upload_success {hexdigest}")
 
-    def upload_missing(self, hexdigest):
+    def upload_missing(self, hexdigest: str) -> None:
         self.add_fail(info=f"upload_missing {hexdigest}")
 
-    def upload_failure(self, hexdigest):
+    def upload_failure(self, hexdigest: str) -> None:
         self.add_fail(info=f"upload_failure {hexdigest}")
 
-    def done(self):
+    def done(self) -> None:
         assert self.total is not None and self.handled <= self.total
         assert not self.final
         self.final = True
         logger.info("done %r", self)
 
     @property
-    def finished_successfully(self):
+    def finished_successfully(self) -> bool:
         return self.final and not self.failed and self.handled == self.total
 
     @property
-    def finished_failed(self):
+    def finished_failed(self) -> bool:
         return self.final and not self.finished_successfully
 
     @classmethod
-    def merge(cls, progresses):
+    def merge(cls, progresses: Iterable[Self]) -> Self:
         p = cls()
         for progress in progresses:
             p.handled += progress.handled

@@ -5,95 +5,101 @@ See LICENSE for details
 
 from astacus.common import ipc, magic, utils
 from astacus.common.progress import Progress
-from astacus.node.snapshot import SnapshotOp
+from astacus.common.snapshot import SnapshotGroup
+from astacus.common.storage import JsonObject
+from astacus.node.memory_snapshot import MemorySnapshot
+from astacus.node.snapshot import Snapshot
+from astacus.node.snapshot_op import SnapshotOp
+from astacus.node.sqlite_snapshot import SQLiteSnapshot
+from astacus.node.uploader import Uploader
+from fastapi.testclient import TestClient
+from pathlib import Path
+from pytest_mock import MockerFixture
+from tests.unit.node.conftest import build_snapshot_and_snapshotter, create_files_at_path
 
 import os
 import pytest
 
 
 @pytest.mark.timeout(2)
-def test_snapshot(snapshotter, uploader):
+@pytest.mark.parametrize("snapshot_cls", [MemorySnapshot, SQLiteSnapshot])
+@pytest.mark.parametrize("src_is_dst", [True, False])
+def test_snapshot(
+    uploader: Uploader,
+    snapshot_cls: type[Snapshot],
+    src: Path,
+    dst: Path,
+    db: Path,
+    src_is_dst: bool,
+):
+    if src_is_dst:
+        dst = src
+
+    snapshot, snapshotter = build_snapshot_and_snapshotter(src, dst, db, snapshot_cls, [SnapshotGroup("**")])
     with snapshotter.lock:
         # Start with empty
-        assert snapshotter.snapshot(progress=Progress()) == 0
-        src = snapshotter.src
-        dst = snapshotter.dst
+        snapshotter.perform_snapshot(progress=Progress())
         assert not (dst / "foo").is_file()
 
         # Create files in src, run snapshot
-        snapshotter.create_4foobar()
+        create_files_at_path(
+            src,
+            [
+                (Path("foo"), b"foo"),
+                (Path("foo2"), b"foo2"),
+                (Path("foobig"), b"foobig" * magic.DEFAULT_EMBEDDED_FILE_SIZE),
+                (Path("foobig2"), b"foobig2" * magic.DEFAULT_EMBEDDED_FILE_SIZE),
+            ],
+        )
+        snapshotter.perform_snapshot(progress=Progress())
         ss2 = snapshotter.get_snapshot_state()
 
         assert (dst / "foo").is_file()
-        assert (dst / "foo").read_text() == "foobar"
-        assert (dst / "foo2").read_text() == "foobar"
+        assert (dst / "foo").read_text() == "foo"
+        assert (dst / "foo2").read_text() == "foo2"
+        assert (dst / "foobig").read_text() == "foobig" * magic.DEFAULT_EMBEDDED_FILE_SIZE
+        assert (dst / "foobig2").read_text() == "foobig2" * magic.DEFAULT_EMBEDDED_FILE_SIZE
 
-        hashes = snapshotter.get_snapshot_hashes()
-        assert len(hashes) == 1
+        hashes = list(snapshot.get_all_digests())
+        assert len(hashes) == 2
         assert hashes == [
-            ipc.SnapshotHash(hexdigest="72f4e28aa8b614a3525309004d2a2281f04d5081141bdf12dc14bc3706f62c8c", size=1200)
+            ipc.SnapshotHash(hexdigest="552d458198758daac752b948253b0d28bf0f21fcda40c626e54b5f9acf541a16", size=1200),
+            ipc.SnapshotHash(hexdigest="d13d8d5177d72633707f17f1d7df9caa169aa87dbc9ee738cb05c5c373591375", size=1400),
         ]
 
         while True:
             (src / "foo").write_text("barfoo")  # same length
-            if snapshotter.snapshot(progress=Progress()) > 0:
+            snapshotter.perform_snapshot(progress=Progress())
+            if snapshot.get_file(Path("foo")) is not None:
                 # Sometimes fails on first iteration(s) due to same mtime
                 # (inaccurate timestamps)
                 break
         ss3 = snapshotter.get_snapshot_state()
         assert ss2 != ss3
-        assert snapshotter.snapshot(progress=Progress()) == 0
+        snapshotter.perform_snapshot(progress=Progress())
         assert (dst / "foo").is_file()
         assert (dst / "foo").read_text() == "barfoo"
 
-        uploader.write_hashes_to_storage(snapshotter=snapshotter, hashes=hashes, parallel=1, progress=Progress())
+        uploader.write_hashes_to_storage(snapshot=snapshot, hashes=hashes, parallel=1, progress=Progress())
 
         # Remove file from src, run snapshot
         for filename in ["foo", "foo2", "foobig", "foobig2"]:
             (src / filename).unlink()
-            assert snapshotter.snapshot(progress=Progress()) > 0
-            assert snapshotter.snapshot(progress=Progress()) == 0
+            snapshotter.perform_snapshot(progress=Progress())
             assert not (dst / filename).is_file()
 
         # Now shouldn't have any data hashes
-        hashes_empty = snapshotter.get_snapshot_hashes()
+        hashes_empty = list(snapshot.get_all_digests())
         assert not hashes_empty
 
-    with pytest.raises(AssertionError):
-        snapshotter.snapshot(progress=Progress())
 
-    with pytest.raises(AssertionError):
-        snapshotter.get_snapshot_state()
-
-    with pytest.raises(AssertionError):
-        snapshotter.get_snapshot_hashes()
-
-
-@pytest.mark.parametrize("test", [(os, "link", 1, 1), (None, "_snapshotfile_from_path", 3, 0)])
-def test_snapshot_error_filenotfound(snapshotter, mocker, test):
-    (obj, fun, exp_progress_1, exp_progress_2) = test
-
-    def _not_really_found(*a, **kw):
-        raise FileNotFoundError
-
-    obj = obj or snapshotter
-    mocker.patch.object(obj, fun, new=_not_really_found)
-    (snapshotter.src / "foo").write_text("foobar")
-    (snapshotter.src / "bar").write_text("foobar")
-    with snapshotter.lock:
-        progress = Progress()
-        assert snapshotter.snapshot(progress=progress) == exp_progress_1
-        progress = Progress()
-        assert snapshotter.snapshot(progress=progress) == exp_progress_2
-
-
-def test_api_snapshot_and_upload(client, mocker):
+def test_api_snapshot_and_upload(client: TestClient, mocker: MockerFixture):
     url = "http://addr/result"
     m = mocker.patch.object(utils, "http_request")
     response = client.post("/node/snapshot")
     assert response.status_code == 422, response.json()
 
-    req_json = {"root_globs": ["*"]}
+    req_json: JsonObject = {"root_globs": ["*"]}
     response = client.post("/node/snapshot", json=req_json)
     assert response.status_code == 409, response.json()
 
@@ -123,8 +129,8 @@ def test_api_snapshot_and_upload(client, mocker):
     )
     assert response.status_code == 200, response.json()
     response = m.call_args[1]["data"]
-    result = ipc.SnapshotUploadResult.parse_raw(response)
-    assert result.progress.finished_successfully
+    result2 = ipc.SnapshotUploadResult.parse_raw(response)
+    assert result2.progress.finished_successfully
 
 
 def test_api_snapshot_error(client, mocker):
@@ -139,7 +145,7 @@ def test_api_snapshot_error(client, mocker):
     def _fun(self):
         raise ValueError("muah")
 
-    mocker.patch.object(SnapshotOp, "snapshot", new=_fun)
+    mocker.patch.object(SnapshotOp, "perform_snapshot", new=_fun)
     with pytest.raises(ValueError):
         # The fact that it propagates here immediately kind of sucks
         response = client.post("/node/snapshot", json=req_json)
@@ -160,12 +166,26 @@ def test_api_snapshot_error(client, mocker):
         (magic.DEFAULT_EMBEDDED_FILE_SIZE + 1, 1),
     ],
 )
-def test_snapshot_file_size_changed(snapshotter, truncate_to, hashes_in_second_snapshot):
-    path = snapshotter.src / "shrinky"
+@pytest.mark.parametrize("snapshot_cls", [MemorySnapshot, SQLiteSnapshot])
+@pytest.mark.parametrize("src_is_dst", [True, False])
+def test_snapshot_file_size_changed(
+    snapshot_cls: type[Snapshot],
+    src: Path,
+    dst: Path,
+    db: Path,
+    src_is_dst: bool,
+    truncate_to,
+    hashes_in_second_snapshot: int,
+):
+    if src_is_dst:
+        dst = src
+
+    snapshot, snapshotter = build_snapshot_and_snapshotter(src, dst, db, snapshot_cls, [SnapshotGroup("**")])
+    path = src / "shrinky"
     with snapshotter.lock:
         path.write_text("foobar" * magic.DEFAULT_EMBEDDED_FILE_SIZE)
-        assert snapshotter.snapshot(progress=Progress()) > 0
+        snapshotter.perform_snapshot(progress=Progress())
 
         os.truncate(path, truncate_to)
-        assert snapshotter.snapshot(progress=Progress()) == 1
-        assert len(snapshotter.get_snapshot_hashes()) == hashes_in_second_snapshot
+        snapshotter.perform_snapshot(progress=Progress())
+        assert len(list(snapshot.get_all_digests())) == hashes_in_second_snapshot

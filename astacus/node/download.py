@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence
 
 import base64
-import contextlib
 import getpass
 import logging
 import os
@@ -37,17 +36,18 @@ class Downloader(ThreadLocalStorage):
         super().__init__(storage=storage)
         self.dst = dst
         self.snapshotter = snapshotter
+        self.snapshot = snapshotter.snapshot
         self.parallel = parallel
         self.copy_dst_owner = copy_dst_owner
 
     def _snapshotfile_already_exists(self, snapshotfile: ipc.SnapshotFile) -> bool:
-        relative_path = snapshotfile.relative_path
-        existing_snapshotfile = self.snapshotter.relative_path_to_snapshotfile.get(relative_path)
+        existing_snapshotfile = self.snapshot.get_file(snapshotfile.relative_path)
         return existing_snapshotfile is not None and existing_snapshotfile.equals_excluding_mtime(snapshotfile)
 
     def _download_snapshotfile(self, snapshotfile: ipc.SnapshotFile) -> None:
         if self._snapshotfile_already_exists(snapshotfile):
             return
+
         relative_path = snapshotfile.relative_path
         download_path = self.dst / relative_path
         download_path.parent.mkdir(parents=True, exist_ok=True)
@@ -71,6 +71,7 @@ class Downloader(ThreadLocalStorage):
     def _copy_snapshotfile(self, snapshotfile_src: ipc.SnapshotFile, snapshotfile: ipc.SnapshotFile) -> None:
         if self._snapshotfile_already_exists(snapshotfile):
             return
+
         src_path = self.dst / snapshotfile_src.relative_path
         dst_path = self.dst / snapshotfile.relative_path
         dst_path.parent.mkdir(parents=True, exist_ok=True)
@@ -91,7 +92,7 @@ class Downloader(ThreadLocalStorage):
             if snapshotfile.hexdigest:
                 hexdigest_to_snapshotfiles.setdefault(snapshotfile.hexdigest, []).append(snapshotfile)
 
-        self.snapshotter.snapshot(progress=Progress())
+        self.snapshotter.perform_snapshot(progress=Progress())
         # TBD: Error checking, what to do if we're told to restore to existing directory?
         progress.start(sum(1 + snapshotfile.file_size for snapshotfile in snapshotstate.files))
         for snapshotfile in snapshotstate.files:
@@ -118,10 +119,9 @@ class Downloader(ThreadLocalStorage):
             return
 
         # Delete files that were not supposed to exist
-        for relative_path in set(self.snapshotter.relative_path_to_snapshotfile.keys()).difference(valid_relative_path_set):
+        for relative_path in set(self.snapshot.get_all_paths()).difference(valid_relative_path_set):
             absolute_path = self.dst / relative_path
-            with contextlib.suppress(FileNotFoundError):
-                absolute_path.unlink()
+            absolute_path.unlink(missing_ok=True)
 
         if self.copy_dst_owner:
             # Adjust owner of created files and folders to be like the owner of dst
@@ -170,7 +170,7 @@ class DownloadOp(NodeOp[ipc.SnapshotDownloadRequest, ipc.NodeResult]):
         return self.start_op(op_name="download", op=self, fun=self.download)
 
     def download(self) -> None:
-        assert self.snapshotter
+        assert self.snapshotter is not None
         # Actual 'restore from backup'
         manifest = ipc.BackupManifest.parse_obj(self.storage.download_json(self.req.backup_name))
         snapshotstate = manifest.snapshot_results[self.req.snapshot_index].state

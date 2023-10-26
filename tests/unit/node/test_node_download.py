@@ -3,35 +3,70 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 
-from astacus.common import ipc, utils
+from astacus.common import ipc, magic, utils
 from astacus.common.progress import Progress
 from astacus.common.snapshot import SnapshotGroup
+from astacus.common.storage import FileStorage
 from astacus.node.download import Downloader
-from astacus.node.snapshotter import Snapshotter
+from astacus.node.memory_snapshot import MemorySnapshot
+from astacus.node.snapshot import Snapshot
+from astacus.node.sqlite_snapshot import SQLiteSnapshot
+from astacus.node.uploader import Uploader
+from fastapi.testclient import TestClient
 from pathlib import Path
+from pytest_mock import MockerFixture
+from tests.unit.node.conftest import build_snapshot_and_snapshotter, create_files_at_path
+
+import pytest
 
 
-def test_download(snapshotter, uploader, storage, tmpdir):
+@pytest.mark.parametrize("snapshot_cls", [MemorySnapshot, SQLiteSnapshot])
+@pytest.mark.parametrize("src_is_dst", [True, False])
+def test_download(
+    storage: FileStorage,
+    uploader: Uploader,
+    snapshot_cls: type[Snapshot],
+    root: Path,
+    src: Path,
+    dst: Path,
+    db: Path,
+    src_is_dst: bool,
+) -> None:
+    if src_is_dst:
+        dst = src
+    create_files_at_path(
+        src,
+        [
+            (Path("foo"), b"foo"),
+            (Path("foo2"), b"foo2"),
+            (Path("foobig"), b"foobig" * magic.DEFAULT_EMBEDDED_FILE_SIZE),
+            (Path("foobig2"), b"foobig2" * magic.DEFAULT_EMBEDDED_FILE_SIZE),
+        ],
+    )
+    snapshot, snapshotter = build_snapshot_and_snapshotter(src, dst, db, snapshot_cls, [SnapshotGroup("**")])
     with snapshotter.lock:
-        snapshotter.create_4foobar()
+        snapshotter.perform_snapshot(progress=Progress())
         ss1 = snapshotter.get_snapshot_state()
-        hashes = snapshotter.get_snapshot_hashes()
+        hashes = list(snapshot.get_all_digests())
 
-    uploader.write_hashes_to_storage(snapshotter=snapshotter, hashes=hashes, progress=Progress(), parallel=1)
+    uploader.write_hashes_to_storage(snapshot=snapshot, hashes=hashes, progress=Progress(), parallel=1)
 
     # Download the old backup from storage
-    dst2 = Path(tmpdir / "dst2")
+    dst2 = Path(root / "dst2")
     dst2.mkdir()
 
-    dst3 = Path(tmpdir / "dst3")
+    dst3 = Path(root / "dst3")
     dst3.mkdir()
-    snapshotter = Snapshotter(src=dst2, dst=dst3, groups=[SnapshotGroup(root_glob="*")], parallel=1)
+
+    db2 = Path(root / "db2")
+
+    snapshot, snapshotter = build_snapshot_and_snapshotter(dst2, dst3, db2, snapshot_cls, [SnapshotGroup("**")])
     downloader = Downloader(storage=storage, snapshotter=snapshotter, dst=dst2, parallel=1)
     with snapshotter.lock:
         downloader.download_from_storage(progress=Progress(), snapshotstate=ss1)
 
         # And ensure we get same snapshot state by snapshotting it
-        assert snapshotter.snapshot(progress=Progress()) > 0
+        snapshotter.perform_snapshot(progress=Progress())
         ss2 = snapshotter.get_snapshot_state()
 
     # Ensure the files are same (modulo mtime_ns, which doesn't
@@ -40,13 +75,13 @@ def test_download(snapshotter, uploader, storage, tmpdir):
         assert ssfile1.equals_excluding_mtime(ssfile2)
 
 
-def test_api_download(client, mocker):
+def test_api_download(client: TestClient, mocker: MockerFixture) -> None:
     mocker.patch.object(utils, "http_request")
     response = client.post("/node/download")
     assert response.status_code == 422, response.json()
 
 
-def test_api_clear(client, mocker):
+def test_api_clear(client: TestClient, mocker: MockerFixture) -> None:
     url = "http://addr/result"
     m = mocker.patch.object(utils, "http_request")
     # Actual restoration is painful. So we trust above test_download
