@@ -28,6 +28,7 @@ import re
 import requests
 import tempfile
 import time
+import wcmatch.glob
 
 logger = logging.getLogger(__name__)
 
@@ -338,3 +339,7 @@ def parse_umask(proc_status: str) -> int:
     if umask_line := re.search(r"^Umask:\s+(0\d\d\d)$", proc_status, flags=re.MULTILINE):
         return int(umask_line.group(1), 8)
     return FALLBACK_UMASK
+
+
+def path_matches_glob(path: Path, glob: str) -> bool:
+    return wcmatch.glob.globmatch(path, glob, flags=wcmatch.glob.GLOBSTAR)

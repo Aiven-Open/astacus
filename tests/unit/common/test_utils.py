@@ -7,7 +7,7 @@ Test astacus.common.utils
 """
 
 from astacus.common import utils
-from astacus.common.utils import AsyncSleeper, build_netloc, parse_umask
+from astacus.common.utils import AsyncSleeper, build_netloc, parse_umask, path_matches_glob
 from datetime import timedelta
 from pathlib import Path
 
@@ -190,3 +190,14 @@ Umask:  POTATO
 State:  R (running)
 """
     assert parse_umask(proc_status) == 0o022
+
+
+def test_path_matches_glob() -> None:
+    assert path_matches_glob(Path("foo"), "foo")
+    assert path_matches_glob(Path("foo"), "*")
+    assert path_matches_glob(Path("foo"), "**")
+    assert path_matches_glob(Path("foo/bar"), "**")
+    assert path_matches_glob(Path("foo/bar/baz"), "**/*")
+    assert path_matches_glob(Path("foo/bar"), "**/*")
+    assert not path_matches_glob(Path("foo/bar/baz"), "*/*")
+    assert path_matches_glob(Path("foo/bar"), "**/**")
