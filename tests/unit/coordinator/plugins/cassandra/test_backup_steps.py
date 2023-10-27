@@ -30,7 +30,7 @@ class RetrieveTestCase:
     duplicate_address: bool = False
 
     # Output
-    expected_error: Optional[Exception] = None
+    expected_error: Optional[type[Exception]] = None
 
     def __str__(self):
         return self.name

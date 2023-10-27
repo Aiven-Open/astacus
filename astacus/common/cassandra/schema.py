@@ -10,7 +10,7 @@ from .client import CassandraSession
 from .utils import is_system_keyspace
 from astacus.common.utils import AstacusModel
 from cassandra import metadata as cm
-from typing import Any, Dict, Iterator, List, Set
+from typing import Any, Dict, Iterator, List, Mapping, Set
 
 import hashlib
 import itertools
@@ -236,7 +236,7 @@ def _extract_dcs(metadata: cm.KeyspaceMetadata) -> Dict[str, str]:
 
 
 class CassandraKeyspace(CassandraNamed):
-    network_topology_strategy_dcs: Dict[str, str]  # not [str, int] because of transient replication
+    network_topology_strategy_dcs: Mapping[str, str]  # not [str, int] because of transient replication
     durable_writes: bool
 
     aggregates: List[CassandraAggregate]

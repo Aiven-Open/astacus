@@ -240,6 +240,7 @@ async def test_upload_manifest_step_generates_correct_backup_name(
     async_json_storage = AsyncJsonStorage(storage=MemoryJsonStorage(items={}))
     step = UploadManifestStep(json_storage=async_json_storage, plugin=ipc.Plugin.files)
     await step.run_step(cluster=single_node_cluster, context=context)
+    assert isinstance(async_json_storage.storage, MemoryJsonStorage)
     assert "backup-2020-01-07T05:00:00+00:00" in async_json_storage.storage.items
 
 

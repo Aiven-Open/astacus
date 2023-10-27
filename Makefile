@@ -78,6 +78,10 @@ yapf: black
 black:
 	pre-commit run black --all-files
 
+.PHONY: mypy
+mypy:
+	pre-commit run mypy --all-files
+
 .PHONY: reformat
 reformat: isort black
 

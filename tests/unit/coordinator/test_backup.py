@@ -8,6 +8,7 @@ Test that the coordinator backup endpoint works.
 
 from astacus.common import ipc, utils
 from astacus.common.ipc import SnapshotHash
+from astacus.common.progress import Progress
 from astacus.common.statsd import StatsClient
 from astacus.coordinator.api import OpName
 from astacus.coordinator.plugins.base import build_node_index_datas, NodeIndexData
@@ -92,7 +93,7 @@ def test_backup(fail_at, app, client, storage):
         assert app.state.coordinator_state.op_info.op_id == 1
 
 
-_progress_done = ipc.Progress(final=True)
+_progress_done = Progress(final=True)
 
 
 def _ssresults(*kwarg_list):

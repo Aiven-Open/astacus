@@ -7,7 +7,7 @@ from astacus.common import ipc
 from astacus.coordinator.plugins.base import StepFailedError
 from astacus.coordinator.plugins.cassandra import plugin
 from astacus.coordinator.plugins.cassandra.model import CassandraConfigurationNode
-from tests.unit.node.test_node_cassandra import CassandraTestConfig
+from tests.unit.conftest import CassandraTestConfig
 from types import SimpleNamespace
 
 import pytest

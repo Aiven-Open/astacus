@@ -5,10 +5,11 @@ See LICENSE for details
 
 from astacus.common import magic
 from astacus.common.progress import Progress
+from astacus.common.snapshot import SnapshotGroup
 from astacus.common.storage import FileStorage
 from astacus.node.api import router as node_router
 from astacus.node.config import NodeConfig
-from astacus.node.snapshotter import SnapshotGroup, Snapshotter
+from astacus.node.snapshotter import Snapshotter
 from astacus.node.uploader import Uploader
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -47,12 +48,12 @@ def fixture_app(tmpdir) -> FastAPI:
             },
         }
     )
-    yield app
+    return app
 
 
 @pytest.fixture(name="client")
 def fixture_client(app) -> TestClient:
-    yield TestClient(app)
+    return TestClient(app)
 
 
 class SnapshotterWithDefaults(Snapshotter):
@@ -74,16 +75,16 @@ def fixture_snapshotter(tmpdir):
     src.mkdir()
     dst = Path(tmpdir) / "dst"
     dst.mkdir()
-    yield SnapshotterWithDefaults(src=src, dst=dst, groups=[SnapshotGroup(root_glob="*")], parallel=1)
+    return SnapshotterWithDefaults(src=src, dst=dst, groups=[SnapshotGroup(root_glob="*")], parallel=1)
 
 
 @pytest.fixture(name="uploader")
 def fixture_uploader(storage):
-    yield Uploader(storage=storage)
+    return Uploader(storage=storage)
 
 
 @pytest.fixture(name="storage")
 def fixture_storage(tmpdir):
     storage_path = Path(tmpdir) / "storage"
     storage_path.mkdir()
-    yield FileStorage(storage_path)
+    return FileStorage(storage_path)

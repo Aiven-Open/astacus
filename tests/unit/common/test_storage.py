@@ -11,7 +11,7 @@ TBD: Test with something else than local files?
 from astacus.common import exceptions
 from astacus.common.cachingjsonstorage import CachingJsonStorage
 from astacus.common.rohmustorage import RohmuConfig, RohmuStorage
-from astacus.common.storage import FileStorage, JsonStorage
+from astacus.common.storage import FileStorage, Json, JsonStorage
 from contextlib import nullcontext as does_not_raise
 from pathlib import Path
 from rohmu.object_storage import google
@@ -24,7 +24,7 @@ TEST_HEXDIGEST = "deadbeef"
 TEXT_HEXDIGEST_DATA = b"data" * 15
 
 TEST_JSON = "jsonblob"
-TEST_JSON_DATA = {"foo": 7, "array": [1, 2, 3], "true": True}
+TEST_JSON_DATA: Json = {"foo": 7, "array": [1, 2, 3], "true": True}
 
 
 def create_storage(*, tmpdir, engine, **kw):

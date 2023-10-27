@@ -5,8 +5,9 @@ See LICENSE for details
 
 from astacus.common import ipc, utils
 from astacus.common.progress import Progress
+from astacus.common.snapshot import SnapshotGroup
 from astacus.node.download import Downloader
-from astacus.node.snapshotter import SnapshotGroup, Snapshotter
+from astacus.node.snapshotter import Snapshotter
 from pathlib import Path
 
 

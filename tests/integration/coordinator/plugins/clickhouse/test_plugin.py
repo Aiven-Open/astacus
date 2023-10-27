@@ -278,7 +278,7 @@ async def test_restores_table_with_nested_fields(restored_cluster: List[ClickHou
     assert response == [[123, [4], [5]]]
 
 
-async def check_object_storage_data(cluster: List[ClickHouseClient]) -> None:
+async def check_object_storage_data(cluster: Sequence[ClickHouseClient]) -> None:
     s1_data = [[123, "foo"], [456, "bar"]]
     s2_data = [[789, "baz"]]
     cluster_data = [s1_data, s1_data, s2_data]

@@ -151,7 +151,7 @@ class RetrieveDatabasesAndTablesStep(Step[DatabasesAndTables]):
     node), and relies on that to query only the first server of the cluster.
     """
 
-    clients: List[ClickHouseClient]
+    clients: Sequence[ClickHouseClient]
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> DatabasesAndTables:
         clickhouse_client = self.clients[0]
@@ -279,7 +279,7 @@ class RemoveFrozenTablesStep(Step[None]):
     When the system unfreeze flag is enabled, clears frozen parts from all disks in a single go.
     """
 
-    clients: List[ClickHouseClient]
+    clients: Sequence[ClickHouseClient]
     freeze_name: str
     unfreeze_timeout: float
 
@@ -293,7 +293,7 @@ class RemoveFrozenTablesStep(Step[None]):
 
 @dataclasses.dataclass
 class FreezeUnfreezeTablesStepBase(Step[None]):
-    clients: List[ClickHouseClient]
+    clients: Sequence[ClickHouseClient]
     freeze_name: str
     freeze_unfreeze_timeout: float
 
@@ -429,7 +429,7 @@ class RestoreReplicatedDatabasesStep(Step[None]):
     After this step, all tables will be empty.
     """
 
-    clients: List[ClickHouseClient]
+    clients: Sequence[ClickHouseClient]
     replicated_databases_zookeeper_path: str
     replicated_database_settings: ReplicatedDatabaseSettings
     drop_databases_timeout: float
@@ -615,7 +615,7 @@ class RestoreReplicaStep(Step[None]):
     """
 
     zookeeper_client: ZooKeeperClient
-    clients: List[ClickHouseClient]
+    clients: Sequence[ClickHouseClient]
     disks: Disks
     restart_timeout: float
     max_concurrent_restart_per_node: int
@@ -699,7 +699,7 @@ class AttachMergeTreePartsStep(Step[None]):
     details.
     """
 
-    clients: List[ClickHouseClient]
+    clients: Sequence[ClickHouseClient]
     disks: Disks
     attach_timeout: float
     max_concurrent_attach_per_node: int
@@ -735,7 +735,7 @@ class SyncTableReplicasStep(Step[None]):
     are all exchanged between all nodes.
     """
 
-    clients: List[ClickHouseClient]
+    clients: Sequence[ClickHouseClient]
     sync_timeout: float
     max_concurrent_sync_per_node: int
 

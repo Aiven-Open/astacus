@@ -9,6 +9,7 @@ from astacus.coordinator.plugins.clickhouse.manifest import ReplicatedDatabase, 
 from astacus.coordinator.plugins.clickhouse.steps import RetrieveDatabasesAndTablesStep
 from base64 import b64decode
 from tests.integration.conftest import create_zookeeper, Ports
+from typing import cast, Sequence
 from uuid import UUID
 
 import pytest
@@ -50,11 +51,17 @@ async def test_retrieve_tables(ports: Ports, clickhouse_command: ClickHouseComma
             step = RetrieveDatabasesAndTablesStep(clients=[client])
             context = StepsContext()
             databases, tables = await step.run_step(Cluster(nodes=[]), context=context)
-            database_uuid_lines = list(await client.execute(b"SELECT base64Encode(name),uuid FROM system.databases"))
+            database_uuid_lines = cast(
+                Sequence[tuple[str, str]],
+                await client.execute(b"SELECT base64Encode(name),uuid FROM system.databases"),
+            )
             database_uuids = {
                 b64decode(database_name): UUID(database_uuid) for database_name, database_uuid in database_uuid_lines
             }
-            table_uuid_lines = list(await client.execute("SELECT uuid FROM system.tables where name = 'tablé_1'".encode()))
+            table_uuid_lines: Sequence[Sequence[str]] = cast(
+                list[tuple[str]],
+                list(await client.execute("SELECT uuid FROM system.tables where name = 'tablé_1'".encode())),
+            )
             table_uuid = UUID(table_uuid_lines[0][0])
 
             assert databases == [

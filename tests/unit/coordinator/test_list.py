@@ -238,7 +238,7 @@ def test_api_list_deduplication(backup_manifest: BackupManifest, tmpdir: PathLik
                         name="1",
                         start=datetime.datetime(2020, 1, 2, 3, 4, 5, 678, tzinfo=datetime.timezone.utc),
                         end=datetime.datetime(2020, 1, 2, 5, 6, 7, 891, tzinfo=datetime.timezone.utc),
-                        plugin="clickhouse",
+                        plugin=Plugin("clickhouse"),
                         attempt=1,
                         nodes=2,
                         cluster_files=6,

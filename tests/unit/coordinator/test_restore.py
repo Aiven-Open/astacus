@@ -11,6 +11,7 @@ from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins.base import get_node_to_backup_index
 from contextlib import nullcontext as does_not_raise
 from dataclasses import dataclass
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -23,8 +24,8 @@ import respx
 BACKUP_NAME = "dummybackup"
 
 BACKUP_MANIFEST = ipc.BackupManifest(
-    start="2020-01-01 21:43:00Z",
-    end="2020-02-02 12:34:56Z",
+    start=datetime(2020, 1, 1, 21, 43, tzinfo=UTC),
+    end=datetime(2020, 2, 2, 12, 34, 56, tzinfo=UTC),
     attempt=1,
     snapshot_results=[
         ipc.SnapshotResult(
