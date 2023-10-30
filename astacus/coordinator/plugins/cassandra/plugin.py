@@ -5,13 +5,12 @@ cassandra backup/restore plugin
 
 """
 from .model import CassandraConfigurationNode
-from .utils import run_subop
+from .utils import delta_snapshot_groups, run_subop, snapshot_groups
 from astacus.common import ipc
 from astacus.common.cassandra.client import CassandraClient
-from astacus.common.cassandra.config import CassandraClientConfiguration, SNAPSHOT_GLOB, SNAPSHOT_NAME
+from astacus.common.cassandra.config import CassandraClientConfiguration, SNAPSHOT_GLOB
 from astacus.common.cassandra.utils import SYSTEM_KEYSPACES
 from astacus.common.magic import JSON_DELTA_PREFIX
-from astacus.common.snapshot import SnapshotGroup
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins import base
 from astacus.coordinator.plugins.base import (
@@ -81,12 +80,6 @@ class CassandraPlugin(CoordinatorPlugin):
     def get_backup_steps(self, *, context: OperationContext) -> List[Step]:
         nodes = self.nodes or [CassandraConfigurationNode(listen_address=self.client.get_listen_address())]
         client = CassandraClient(self.client)
-        # first *: keyspace name; second *: table name
-        snapshot_groups = [
-            SnapshotGroup(root_glob=f"data/*/*/snapshots/{SNAPSHOT_NAME}/*.db"),
-            SnapshotGroup(root_glob=f"data/*/*/snapshots/{SNAPSHOT_NAME}/*.txt"),
-            SnapshotGroup(root_glob=f"data/*/*/snapshots/{SNAPSHOT_NAME}/*.crc32"),
-        ]
 
         return [
             ValidateConfigurationStep(nodes=nodes),
@@ -95,7 +88,7 @@ class CassandraPlugin(CoordinatorPlugin):
             CassandraSubOpStep(op=ipc.CassandraSubOp.remove_snapshot),
             CassandraSubOpStep(op=ipc.CassandraSubOp.take_snapshot),
             backup_steps.AssertSchemaUnchanged(),
-            base.SnapshotStep(snapshot_groups=snapshot_groups),
+            base.SnapshotStep(snapshot_groups=snapshot_groups()),
             base.ListHexdigestsStep(hexdigest_storage=context.hexdigest_storage),
             base.UploadBlocksStep(storage_name=context.storage_name),
             CassandraSubOpStep(op=ipc.CassandraSubOp.remove_snapshot),
@@ -109,12 +102,6 @@ class CassandraPlugin(CoordinatorPlugin):
 
     def get_delta_backup_steps(self, *, context: OperationContext) -> List[Step]:
         nodes = self.nodes or [CassandraConfigurationNode(listen_address=self.client.get_listen_address())]
-        # first *: keyspace name; second *: table name
-        delta_snapshot_groups = [
-            SnapshotGroup(root_glob="data/*/*/backups/*.db"),
-            SnapshotGroup(root_glob="data/*/*/backups/*.txt"),
-            SnapshotGroup(root_glob="data/*/*/backups/*.crc32"),
-        ]
 
         @dataclasses.dataclass
         class SkipHexdigestsListStep(Step[Set[str]]):
@@ -123,7 +110,7 @@ class CassandraPlugin(CoordinatorPlugin):
 
         return [
             ValidateConfigurationStep(nodes=nodes),
-            base.SnapshotStep(snapshot_groups=delta_snapshot_groups, snapshot_request="delta/snapshot"),
+            base.SnapshotStep(snapshot_groups=delta_snapshot_groups(), snapshot_request="delta/snapshot"),
             SkipHexdigestsListStep(),
             base.UploadBlocksStep(
                 storage_name=context.storage_name,
