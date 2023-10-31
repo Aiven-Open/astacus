@@ -246,7 +246,7 @@ async def test_retrieve_access_entities_fails_from_concurrent_updates() -> None:
 
 @pytest.mark.asyncio
 async def test_retrieve_tables() -> None:
-    clients = [StubClickHouseClient(), StubClickHouseClient()]
+    clients: Sequence[StubClickHouseClient] = [StubClickHouseClient(), StubClickHouseClient()]
     clients[0].set_response(
         TABLES_LIST_QUERY,
         [
@@ -319,6 +319,7 @@ async def test_retrieve_tables() -> None:
             ]
         ],
     )
+
     step = RetrieveDatabasesAndTablesStep(clients=clients)
     context = StepsContext()
     databases, tables = await step.run_step(Cluster(nodes=[]), context)

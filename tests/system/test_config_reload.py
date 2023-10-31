@@ -27,6 +27,7 @@ def test_reload_config(tmpdir, rootdir: str, astacus1: TestNode, astacus2: TestN
     check_without_status = astacus_run(rootdir, astacus1, "check-reload", check=True, capture_output=True)
     assert check_without_status.returncode == 0
     assert "Configuration does not need to be reloaded" in check_without_status.stdout.decode()
+    assert astacus1.root_path
     # Write some data to backup, including files that don't match the reloaded glob
     (astacus1.root_path / "saved.foo").write_text("dont_care")
     (astacus1.root_path / "ignored.bar").write_text("dont_care")

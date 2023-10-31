@@ -38,6 +38,7 @@ import logging
 import pytest
 import rohmu
 import secrets
+import subprocess
 import sys
 import tempfile
 import urllib.parse
@@ -126,7 +127,7 @@ class MinioBucket:
 
 @dataclasses.dataclass(frozen=True)
 class MinioService:
-    process: asyncio.subprocess.Process
+    process: subprocess.Popen[bytes]
     data_dir: Path
     host: str
     server_port: int
@@ -217,7 +218,15 @@ async def create_minio_service(ports: Ports) -> AsyncIterator[MinioService]:
             "MINIO_ROOT_USER": root_user,
             "MINIO_ROOT_PASSWORD": root_password,
         }
-        command = ["/usr/bin/minio", "server", data_dir, "--address", server_netloc, "--console-address", console_netloc]
+        command: List[Union[str, Path]] = [
+            "/usr/bin/minio",
+            "server",
+            data_dir,
+            "--address",
+            server_netloc,
+            "--console-address",
+            console_netloc,
+        ]
         async with run_process_and_wait_for_pattern(
             args=command,
             cwd=data_dir,

@@ -4,12 +4,13 @@ See LICENSE for details
 """
 
 from astacus.common.cassandra.config import CassandraClientConfiguration
+from pytest_mock import MockFixture
 
 import astacus.common.cassandra.client as client_module
 import pytest
 
 
-def test_cassandra_session(mocker):
+def test_cassandra_session(mocker: MockFixture) -> None:
     ccluster = mocker.MagicMock()
     csession = mocker.MagicMock()
     session = client_module.CassandraSession(cluster=ccluster, session=csession)
@@ -32,7 +33,7 @@ second!;
     assert len(csession.execute.mock_calls) == 2
 
 
-def create_client(mocker, ssl=False):
+def create_client(mocker: MockFixture, ssl: bool = False) -> client_module.CassandraClient:
     mocker.patch.object(client_module, "Cluster")
     mocker.patch.object(client_module, "WhiteListRoundRobinPolicy")
 
@@ -47,14 +48,14 @@ def create_client(mocker, ssl=False):
 
 
 @pytest.mark.parametrize("ssl", [False, True])
-def test_cassandra_client(mocker, ssl):
+def test_cassandra_client(mocker: MockFixture, ssl: bool) -> None:
     client: client_module.CassandraClient = create_client(mocker, ssl=ssl)
     with client.connect() as session:
         assert isinstance(session, client_module.CassandraSession)
 
 
 @pytest.mark.asyncio
-async def test_cassandra_client_run(mocker):
+async def test_cassandra_client_run(mocker: MockFixture):
     client = create_client(mocker)
 
     def test_fun(cas):

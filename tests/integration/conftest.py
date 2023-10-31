@@ -68,7 +68,7 @@ async def run_process_and_wait_for_pattern(
     fail_pattern: Optional[str] = None,
     env: Mapping[str, str] = MappingProxyType({}),
     timeout: float = 10.0,
-) -> AsyncIterator[asyncio.subprocess.Process]:
+) -> AsyncIterator[subprocess.Popen[bytes]]:
     # This stringification is a workaround for a bug in pydev (pydev_monkey.py:111)
     str_args = [str(arg) for arg in args]
     pattern_found = asyncio.Event()
@@ -102,7 +102,7 @@ async def run_process_and_wait_for_pattern(
 
 @dataclasses.dataclass
 class Service:
-    process: asyncio.subprocess.Process
+    process: subprocess.Popen[bytes] | asyncio.subprocess.Process
     data_dir: Path
     port: int
     host: str = "localhost"
@@ -161,6 +161,8 @@ async def create_zookeeper(ports: Ports) -> AsyncIterator[Service]:
     java_path = await get_command_path("java")
     if java_path is None:
         pytest.skip("java installation not found")
+        # newer versions of mypy should be able to infer that this is unreachable
+        assert False
     port = ports.allocate()
     with tempfile.TemporaryDirectory(prefix=f"zookeeper_{port}_") as data_dir_str:
         data_dir = Path(data_dir_str)
@@ -177,6 +179,7 @@ log4j.appender.default.layout.ConversionPattern=[%-5p] %m%n
         command = get_zookeeper_command(java_path=java_path, data_dir=data_dir, port=port)
         if command is None:
             pytest.skip("zookeeper installation not found")
+            assert False
         async with contextlib.AsyncExitStack() as stack:
             max_attempts = 10
             for attempt in range(max_attempts):
@@ -190,9 +193,9 @@ log4j.appender.default.layout.ConversionPattern=[%-5p] %m%n
                             timeout=20.0,
                         )
                     )
+                    yield Service(process=process, port=port, data_dir=data_dir)
                     break
                 except FailPatternFoundError:
                     if attempt + 1 == max_attempts:
                         raise
                     await asyncio.sleep(2.0)
-            yield Service(process=process, port=port, data_dir=data_dir)

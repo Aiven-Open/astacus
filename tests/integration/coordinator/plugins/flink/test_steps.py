@@ -6,6 +6,7 @@ from astacus.coordinator.plugins.base import StepsContext
 from astacus.coordinator.plugins.flink.manifest import FlinkManifest
 from astacus.coordinator.plugins.flink.steps import FlinkManifestStep, RestoreDataStep, RetrieveDataStep
 from astacus.coordinator.plugins.zookeeper import KazooZooKeeperClient
+from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
@@ -35,6 +36,6 @@ async def test_restore_data(zookeeper_client: KazooZooKeeperClient):
     manifest = FlinkManifest(data=data)
     context = StepsContext()
     context.set_result(FlinkManifestStep, manifest)
-    await RestoreDataStep(zookeeper_client, ["catalog", "flink"]).run_step(cluster=None, context=context)
-    res = await RetrieveDataStep(zookeeper_client, ["catalog", "flink"]).run_step(cluster=None, context=None)
+    await RestoreDataStep(zookeeper_client, ["catalog", "flink"]).run_step(cluster=Mock(), context=context)
+    res = await RetrieveDataStep(zookeeper_client, ["catalog", "flink"]).run_step(cluster=Mock(), context=Mock())
     assert res == data

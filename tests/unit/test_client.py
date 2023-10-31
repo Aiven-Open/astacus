@@ -44,17 +44,19 @@ def test_reload_config_sleep_and_http_timeout_honors_total_wait_completion() -> 
             current_time.tick(delta=datetime.timedelta(seconds=duration))
 
         with mock.patch.object(time, "sleep", new=sleep):
-
+            # mypy wants a return for this function but pylint doesn't
+            # pylint: disable=useless-return
             def http_request(*args, timeout: float = 10, **kwargs) -> Mapping[str, Any] | None:
                 time_since_start = time.monotonic() - start_time
                 assert time_since_start + timeout <= wait_completion_secs, "request could end after completion"
+                return None
 
             with mock.patch.object(astacus.client, "http_request", new=http_request):
                 _reload_config(ClientArgs(wait_completion=wait_completion_secs, url="http://localhost:55123"))
 
 
 def test_reload_config_stops_retrying_on_success() -> None:
-    return_values = [None, None, {}]
+    return_values: list[Mapping[str, Any] | None] = [None, None, {}]
     with mock.patch.object(time, "sleep"):
 
         def http_request(*args, **kwargs) -> Mapping[str, Any] | None:

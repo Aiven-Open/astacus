@@ -188,4 +188,5 @@ def astacus_run(
 
 
 def astacus_ls(astacus: TestNode) -> List[str]:
+    assert astacus.root_path
     return sorted(str(x.relative_to(astacus.root_path)) for x in astacus.root_path.glob("**/*"))

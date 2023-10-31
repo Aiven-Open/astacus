@@ -45,7 +45,7 @@ repos:
     rev: v1.0.0
     hooks:
       - id: mypy
-        exclude: ^setup.py|^tests/|^vendor/|^astacus/proto/
+        exclude: ^setup.py|^vendor/|^astacus/proto/
         additional_dependencies:
           - types-PyYAML>=6.0.12.2
           - types-requests>=2.28.11.5

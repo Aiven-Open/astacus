@@ -7,6 +7,7 @@ astacus.common.op tests that do not fit elsewhere
 
 """
 from astacus.common import op
+from astacus.common.exceptions import ExpiredOperationException
 from astacus.common.statsd import StatsClient
 from starlette.background import BackgroundTasks
 from starlette.datastructures import URL
@@ -35,7 +36,7 @@ class MockOp:
         (None, op.Op.Status.done, None),
         # If operation throws ExpiredOperationException, op status
         # should stay running as it may point to the next operation
-        (op.ExpiredOperationException, op.Op.Status.running, None),
+        (ExpiredOperationException, op.Op.Status.running, None),
         # If operation throws 'something else', it should fail the op status
         (AssertionError, op.Op.Status.fail, AssertionError),
     ],

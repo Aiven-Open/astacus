@@ -149,7 +149,7 @@ def test_api_cassandra_get_schema_hash(ctenv, fail, mocker, astacus_node_cassand
 
 class TestCassandraRestoreSSTables:
     @pytest.fixture(name="make_sstables_request")
-    def fixture_make_sstables_request(self, astacus_node_cassandra) -> ipc.CassandraRestoreSSTablesRequest:
+    def fixture_make_sstables_request(self, astacus_node_cassandra) -> type[ipc.CassandraRestoreSSTablesRequest]:
         class DefaultedRestoreSSTablesRequest(ipc.CassandraRestoreSSTablesRequest):
             table_glob: str = astacus_node_cassandra.SNAPSHOT_GLOB
             keyspaces_to_skip: Sequence[str] = list(SYSTEM_KEYSPACES)

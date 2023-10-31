@@ -5,6 +5,7 @@ See LICENSE for details
 from .conftest import ClickHouseCommand, create_clickhouse_service, get_clickhouse_client
 from astacus.coordinator.plugins.clickhouse.client import ClickHouseClientQueryError
 from tests.integration.conftest import Ports, Service
+from typing import cast, Sequence
 
 import pytest
 import time
@@ -18,7 +19,7 @@ pytestmark = [
 @pytest.mark.asyncio
 async def test_client_execute(clickhouse: Service) -> None:
     client = get_clickhouse_client(clickhouse)
-    response = await client.execute(b"SHOW DATABASES")
+    response = cast(Sequence[list[str]], await client.execute(b"SHOW DATABASES"))
     assert sorted(list(response)) == [["INFORMATION_SCHEMA"], ["default"], ["information_schema"], ["system"]]
 
 
