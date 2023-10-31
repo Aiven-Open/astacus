@@ -96,6 +96,18 @@ def make_request_check(expected_payload: dict, op_name: str) -> Callable[[httpx.
     return check_request
 
 
+def make_manifest(start: str, end: str) -> ipc.BackupManifest:
+    manifest = ipc.BackupManifest(
+        start=datetime.datetime.fromisoformat(start),
+        end=datetime.datetime.fromisoformat(end),
+        attempt=1,
+        snapshot_results=[],
+        upload_results=[],
+        plugin=Plugin.files,
+    )
+    return manifest
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "node_features,expected_request",
@@ -148,56 +160,11 @@ async def test_upload_step_uses_new_request_if_supported(
 
 
 BACKUPS_FOR_RETENTION_TEST = {
-    "b1": json.dumps(
-        {
-            "start": "2020-01-01T11:00Z",
-            "end": "2020-01-01T13:00Z",
-            "attempt": 1,
-            "snapshot_results": [],
-            "upload_results": [],
-            "plugin": "clickhouse",
-        }
-    ),
-    "b2": json.dumps(
-        {
-            "start": "2020-01-02T11:00Z",
-            "end": "2020-01-02T13:00Z",
-            "attempt": 1,
-            "snapshot_results": [],
-            "upload_results": [],
-            "plugin": "clickhouse",
-        }
-    ),
-    "b3": json.dumps(
-        {
-            "start": "2020-01-03T11:00Z",
-            "end": "2020-01-03T13:00Z",
-            "attempt": 1,
-            "snapshot_results": [],
-            "upload_results": [],
-            "plugin": "clickhouse",
-        }
-    ),
-    "b4": json.dumps(
-        {
-            "start": "2020-01-04T11:00Z",
-            "end": "2020-01-04T13:00Z",
-            "attempt": 1,
-            "snapshot_results": [],
-            "upload_results": [],
-            "plugin": "clickhouse",
-        }
-    ),
-    "b5": json.dumps(
-        {
-            "start": "2020-01-05T11:00Z",
-            "end": "2020-01-05T13:00Z",
-            "attempt": 1,
-            "snapshot_results": [],
-            "upload_results": [],
-            "plugin": "clickhouse",
-        }
-    ),
+    "b1": make_manifest("2020-01-01T11:00Z", "2020-01-01T13:00Z").json(),
+    "b2": make_manifest("2020-01-02T11:00Z", "2020-01-02T13:00Z").json(),
+    "b3": make_manifest("2020-01-03T11:00Z", "2020-01-03T13:00Z").json(),
+    "b4": make_manifest("2020-01-04T11:00Z", "2020-01-04T13:00Z").json(),
+    "b5": make_manifest("2020-01-05T11:00Z", "2020-01-05T13:00Z").json(),
 }
 
 
@@ -289,18 +256,6 @@ async def test_snapshot_release_step(
         if ipc.NodeFeatures.release_snapshot_files in node_features:
             assert release_request.call_count == 1
             assert status_request.called
-
-
-def make_manifest(start: str, end: str) -> ipc.BackupManifest:
-    manifest = ipc.BackupManifest(
-        start=datetime.datetime.fromisoformat(start),
-        end=datetime.datetime.fromisoformat(end),
-        attempt=1,
-        snapshot_results=[],
-        upload_results=[],
-        plugin=Plugin.files,
-    )
-    return manifest
 
 
 @dataclasses.dataclass
