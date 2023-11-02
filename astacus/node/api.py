@@ -14,7 +14,6 @@ from astacus.common.snapshot import SnapshotGroup
 from astacus.node.config import CassandraAccessLevel
 from astacus.node.snapshotter import Snapshotter
 from astacus.version import __version__
-from enum import Enum
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Sequence, Union
 
@@ -38,15 +37,6 @@ class OpName(StrEnum):
     release = "release"
 
 
-class Features(Enum):
-    # Added on 2022-11-29, this can be assumed to be supported everywhere after 1 or 2 years
-    validate_file_hashes = "validate_file_hashes"
-    # Added on 2023-06-07
-    snapshot_groups = "snapshot_groups"
-    # Added on 2023-10-16
-    release_snapshot_files = "release_snapshot_files"
-
-
 def is_allowed(subop: ipc.CassandraSubOp, access_level: CassandraAccessLevel):
     match access_level:
         case CassandraAccessLevel.read:
@@ -59,7 +49,7 @@ def is_allowed(subop: ipc.CassandraSubOp, access_level: CassandraAccessLevel):
 def metadata() -> ipc.MetadataResult:
     return ipc.MetadataResult(
         version=__version__,
-        features=[feature.value for feature in Features],
+        features=[feature.value for feature in ipc.NodeFeatures],
     )
 
 

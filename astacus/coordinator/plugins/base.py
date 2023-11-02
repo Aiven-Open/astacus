@@ -15,7 +15,6 @@ from astacus.common.utils import AstacusModel
 from astacus.coordinator.cluster import Cluster, Result
 from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.manifest import download_backup_manifest
-from astacus.node.api import Features
 from collections import Counter
 from typing import Any, Counter as TCounter, Dict, Generic, List, Optional, Sequence, Set, Type, TypeVar
 
@@ -101,7 +100,7 @@ class SnapshotStep(Step[List[ipc.SnapshotResult]]):
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> List[ipc.SnapshotResult]:
         nodes_metadata = await get_nodes_metadata(cluster)
-        if all(Features.snapshot_groups.value in node_metadata.features for node_metadata in nodes_metadata):
+        if all(ipc.NodeFeatures.snapshot_groups.value in node_metadata.features for node_metadata in nodes_metadata):
             req: ipc.NodeRequest = ipc.SnapshotRequestV2(
                 groups=[
                     ipc.SnapshotRequestGroup(
@@ -203,7 +202,7 @@ class SnapshotReleaseStep(Step[List[ipc.NodeResult]]):
         snapshot_results = context.get_result(SnapshotStep)
         nodes_metadata = await get_nodes_metadata(cluster)
         all_nodes_have_release_feature = nodes_metadata and all(
-            Features.release_snapshot_files.value in n.features for n in nodes_metadata
+            ipc.NodeFeatures.release_snapshot_files.value in n.features for n in nodes_metadata
         )
         if not all_nodes_have_release_feature:
             logger.info("Skipped SnapshotReleaseStep because some nodes don't support it, node features: %s", nodes_metadata)
@@ -635,7 +634,7 @@ async def upload_node_index_datas(
     start_results: List[Optional[Result]] = []
     nodes_metadata = await get_nodes_metadata(cluster)
     for data in node_index_datas:
-        if Features.validate_file_hashes.value in nodes_metadata[data.node_index].features:
+        if ipc.NodeFeatures.validate_file_hashes.value in nodes_metadata[data.node_index].features:
             req: ipc.NodeRequest = ipc.SnapshotUploadRequestV20221129(
                 hashes=data.sshashes, storage=storage_name, validate_file_hashes=validate_file_hashes
             )

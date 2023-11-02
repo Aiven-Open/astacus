@@ -21,7 +21,6 @@ from astacus.coordinator.plugins.base import (
     UploadBlocksStep,
     UploadManifestStep,
 )
-from astacus.node.api import Features
 from astacus.node.snapshotter import hash_hexdigest_readable
 from http import HTTPStatus
 from io import BytesIO
@@ -102,7 +101,7 @@ def make_request_check(expected_payload: dict, op_name: str) -> Callable[[httpx.
             ipc.SnapshotUploadRequest(result_url="", hashes=get_sample_hashes(), storage="fake"),
         ),
         (
-            [Features.validate_file_hashes],
+            [ipc.NodeFeatures.validate_file_hashes],
             ipc.SnapshotUploadRequestV20221129(
                 result_url="", hashes=get_sample_hashes(), storage="fake", validate_file_hashes=True
             ),
@@ -111,7 +110,7 @@ def make_request_check(expected_payload: dict, op_name: str) -> Callable[[httpx.
     ids=["no_feature", "validate_file_hashes"],
 )
 async def test_upload_step_uses_new_request_if_supported(
-    node_features: Sequence[Features],
+    node_features: Sequence[ipc.NodeFeatures],
     expected_request: ipc.SnapshotUploadRequest,
     single_node_cluster: Cluster,
     context: StepsContext,
@@ -250,13 +249,13 @@ async def test_upload_manifest_step_generates_correct_backup_name(
     [
         ([], None),
         (
-            [Features.release_snapshot_files],
+            [ipc.NodeFeatures.release_snapshot_files],
             ipc.SnapshotReleaseRequest(hexdigests=["aaa", "bbb"]),
         ),
     ],
 )
 async def test_snapshot_release_step(
-    node_features: Sequence[Features],
+    node_features: Sequence[ipc.NodeFeatures],
     expected_request: Optional[ipc.SnapshotReleaseRequest],
     single_node_cluster: Cluster,
     context: StepsContext,
@@ -269,7 +268,7 @@ async def test_snapshot_release_step(
         metadata_request = respx.get("http://node_1/metadata").respond(
             json=ipc.MetadataResult(version="0.1", features=[feature.value for feature in node_features]).jsondict()
         )
-        if Features.release_snapshot_files in node_features:
+        if ipc.NodeFeatures.release_snapshot_files in node_features:
             assert expected_request is not None
             release_request = respx.post("http://node_1/release").mock(
                 side_effect=make_request_check(expected_request.jsondict(), "release")
@@ -283,6 +282,6 @@ async def test_snapshot_release_step(
             )
         await release_step.run_step(cluster=single_node_cluster, context=context)
         assert metadata_request.call_count == 1
-        if Features.release_snapshot_files in node_features:
+        if ipc.NodeFeatures.release_snapshot_files in node_features:
             assert release_request.call_count == 1
             assert status_request.called

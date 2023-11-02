@@ -10,6 +10,7 @@ from .magic import DEFAULT_EMBEDDED_FILE_SIZE, StrEnum
 from .progress import Progress
 from .utils import AstacusModel, now, SizeLimitedFile
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from pydantic import Field, root_validator
 from typing import List, Optional, Sequence
@@ -26,6 +27,15 @@ class Plugin(StrEnum):
     files = "files"
     m3db = "m3db"
     flink = "flink"
+
+
+class NodeFeatures(Enum):
+    # Added on 2022-11-29, this can be assumed to be supported everywhere after 1 or 2 years
+    validate_file_hashes = "validate_file_hashes"
+    # Added on 2023-06-07
+    snapshot_groups = "snapshot_groups"
+    # Added on 2023-10-16
+    release_snapshot_files = "release_snapshot_files"
 
 
 class Retention(AstacusModel):
