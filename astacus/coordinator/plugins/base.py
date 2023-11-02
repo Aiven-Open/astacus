@@ -100,22 +100,8 @@ class SnapshotStep(Step[List[ipc.SnapshotResult]]):
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> List[ipc.SnapshotResult]:
         nodes_metadata = await get_nodes_metadata(cluster)
-        if all(ipc.NodeFeatures.snapshot_groups.value in node_metadata.features for node_metadata in nodes_metadata):
-            req: ipc.NodeRequest = ipc.SnapshotRequestV2(
-                groups=[
-                    ipc.SnapshotRequestGroup(
-                        root_glob=group.root_glob,
-                        excluded_names=group.excluded_names,
-                        embedded_file_size_max=group.embedded_file_size_max,
-                    )
-                    for group in self.snapshot_groups
-                ],
-            )
-        else:
-            # This is a lossy backward compatibility since the extra options are not passed
-            req = ipc.SnapshotRequest(
-                root_globs=[group.root_glob for group in self.snapshot_groups],
-            )
+        cluster_features = set.intersection(*(set(n.features) for n in nodes_metadata))
+        req = ipc.create_snapshot_request(self.snapshot_groups, node_features=cluster_features)
         start_results = await cluster.request_from_nodes(
             self.snapshot_request, method="post", caller="SnapshotStep", req=req
         )
