@@ -171,11 +171,13 @@ class CassandraRestoreSSTablesOp(NodeOp[ipc.CassandraRestoreSSTablesRequest, ipc
         # This could be more efficient too; oh well.
         keyspace_path = self.config.root / "data" / keyspace_name
         table_paths = list(keyspace_path.glob(f"{table_name}-*"))
-        assert len(table_paths) >= 1, f"NO tables with prefix {table_name}- found in {keyspace_path}!"
+        if not table_paths:
+            raise RuntimeError(f"NO tables with prefix {table_name}- found in {keyspace_path}!")
         if len(table_paths) > 1:
             # Prefer the one that isn't table_name_and_id
             table_paths = [p for p in table_paths if p.name != table_name_and_id]
-        assert len(table_paths) == 1
+        if len(table_paths) != 1:
+            raise RuntimeError(f"Too many tables with prefix {table_name}- found in {keyspace_path}: {table_paths}")
 
         return table_paths[0]
 
@@ -187,7 +189,8 @@ class CassandraRestoreSSTablesOp(NodeOp[ipc.CassandraRestoreSSTablesRequest, ipc
             for existing_file in existing_files:
                 existing_file.unlink()
             existing_files = []
-        assert not existing_files, f"Files found in {table_path.name}: {existing_files}"
+        if existing_files:
+            raise RuntimeError(f"Files found in {table_path.name}: {existing_files}")
 
 
 class CassandraStartOp(NodeOp[ipc.CassandraStartRequest, ipc.NodeResult]):
