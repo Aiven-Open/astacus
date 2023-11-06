@@ -7,6 +7,8 @@ cassandra backup/restore plugin utilities
 
 
 from astacus.common import ipc
+from astacus.common.cassandra.config import SNAPSHOT_NAME
+from astacus.common.snapshot import SnapshotGroup
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins.base import StepFailedError
@@ -49,3 +51,21 @@ async def get_schema_hash(cluster: Cluster) -> Tuple[str, str]:
     if len(set(hashes)) != 1:
         return "", f"Multiple schema hashes present: {hashes}"
     return hashes[0], ""
+
+
+def snapshot_groups() -> List[SnapshotGroup]:
+    # first *: keyspace name; second *: table name
+    return [
+        SnapshotGroup(root_glob=f"data/*/*/snapshots/{SNAPSHOT_NAME}/*.db"),
+        SnapshotGroup(root_glob=f"data/*/*/snapshots/{SNAPSHOT_NAME}/*.txt"),
+        SnapshotGroup(root_glob=f"data/*/*/snapshots/{SNAPSHOT_NAME}/*.crc32"),
+    ]
+
+
+def delta_snapshot_groups() -> List[SnapshotGroup]:
+    # first *: keyspace name; second *: table name
+    return [
+        SnapshotGroup(root_glob="data/*/*/backups/*.db"),
+        SnapshotGroup(root_glob="data/*/*/backups/*.txt"),
+        SnapshotGroup(root_glob="data/*/*/backups/*.crc32"),
+    ]

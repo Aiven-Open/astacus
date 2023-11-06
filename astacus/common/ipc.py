@@ -9,10 +9,12 @@ See LICENSE for details
 from .magic import DEFAULT_EMBEDDED_FILE_SIZE, StrEnum
 from .progress import Progress
 from .utils import AstacusModel, now, SizeLimitedFile
+from astacus.common.snapshot import SnapshotGroup
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from pydantic import Field, root_validator
-from typing import List, Optional, Sequence
+from typing import List, Optional, Sequence, Set
 
 import functools
 import socket
@@ -26,6 +28,15 @@ class Plugin(StrEnum):
     files = "files"
     m3db = "m3db"
     flink = "flink"
+
+
+class NodeFeatures(Enum):
+    # Added on 2022-11-29, this can be assumed to be supported everywhere after 1 or 2 years
+    validate_file_hashes = "validate_file_hashes"
+    # Added on 2023-06-07
+    snapshot_groups = "snapshot_groups"
+    # Added on 2023-10-16
+    release_snapshot_files = "release_snapshot_files"
 
 
 class Retention(AstacusModel):
@@ -106,6 +117,26 @@ class SnapshotRequestV2(NodeRequest):
     groups: Sequence[SnapshotRequestGroup] = ()
     # Accept V1 request for backward compatibility if the controller is older
     root_globs: Sequence[str] = ()
+
+
+def create_snapshot_request(
+    snapshot_groups: Sequence[SnapshotGroup], *, node_features: Set[str]
+) -> SnapshotRequestV2 | SnapshotRequest:
+    if NodeFeatures.snapshot_groups.value in node_features:
+        return SnapshotRequestV2(
+            groups=[
+                SnapshotRequestGroup(
+                    root_glob=group.root_glob,
+                    excluded_names=group.excluded_names,
+                    embedded_file_size_max=group.embedded_file_size_max,
+                )
+                for group in snapshot_groups
+            ],
+        )
+    # This is a lossy backward compatibility since the extra options are not passed
+    return SnapshotRequest(
+        root_globs=[group.root_glob for group in snapshot_groups],
+    )
 
 
 class SnapshotHash(AstacusModel):
@@ -226,6 +257,7 @@ class CassandraRestoreSSTablesRequest(NodeRequest):
     table_glob: str
     keyspaces_to_skip: Sequence[str]
     match_tables_by: CassandraTableMatching
+    expect_empty_target: bool
 
 
 # coordinator.api

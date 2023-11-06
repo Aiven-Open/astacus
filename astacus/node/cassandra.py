@@ -14,7 +14,7 @@ from astacus.common.cassandra.config import SNAPSHOT_GLOB, SNAPSHOT_NAME
 from astacus.common.exceptions import TransientException
 from pathlib import Path
 from pydantic import DirectoryPath
-from typing import Callable
+from typing import Callable, Tuple
 
 import contextlib
 import logging
@@ -26,6 +26,16 @@ import yaml
 logger = logging.getLogger(__name__)
 
 TABLES_GLOB = "data/*/*"
+
+
+def ks_table_from_snapshot_path(p: Path) -> Tuple[str, str]:
+    # /.../keyspace/table/snapshots/astacus
+    return p.parts[-4], p.parts[-3]
+
+
+def ks_table_from_backup_path(p: Path) -> Tuple[str, str]:
+    # /.../keyspace/table/backups
+    return p.parts[-3], p.parts[-2]
 
 
 class SimpleCassandraSubOp(NodeOp[ipc.NodeRequest, ipc.NodeResult]):
@@ -145,14 +155,8 @@ class CassandraRestoreSSTablesOp(NodeOp[ipc.CassandraRestoreSSTablesRequest, ipc
                 else self._match_table_by_name(keyspace_name, table_name_and_id)
             )
 
-            # Ensure destination path is empty except for potential directories (e.g. backups/)
-            # This should never have anything - except for system_auth, it gets populated when we restore schema.
-            existing_files = [file_path for file_path in table_path.glob("*") if file_path.is_file()]
-            if keyspace_name == "system_auth":
-                for existing_file in existing_files:
-                    existing_file.unlink()
-                existing_files = []
-            assert not existing_files, f"Files found in {table_name_and_id}: {existing_files}"
+            if self.req.expect_empty_target:
+                self._ensure_target_is_empty(keyspace_name=keyspace_name, table_path=table_path)
 
             for file_path in table_snapshot.glob("*"):
                 file_path.rename(table_path / file_path.name)
@@ -167,13 +171,26 @@ class CassandraRestoreSSTablesOp(NodeOp[ipc.CassandraRestoreSSTablesRequest, ipc
         # This could be more efficient too; oh well.
         keyspace_path = self.config.root / "data" / keyspace_name
         table_paths = list(keyspace_path.glob(f"{table_name}-*"))
-        assert len(table_paths) >= 1, f"NO tables with prefix {table_name}- found in {keyspace_path}!"
+        if not table_paths:
+            raise RuntimeError(f"NO tables with prefix {table_name}- found in {keyspace_path}!")
         if len(table_paths) > 1:
             # Prefer the one that isn't table_name_and_id
             table_paths = [p for p in table_paths if p.name != table_name_and_id]
-        assert len(table_paths) == 1
+        if len(table_paths) != 1:
+            raise RuntimeError(f"Too many tables with prefix {table_name}- found in {keyspace_path}: {table_paths}")
 
         return table_paths[0]
+
+    def _ensure_target_is_empty(self, *, keyspace_name: str, table_path: Path) -> None:
+        # Ensure destination path is empty except for potential directories (e.g. backups/)
+        # This should never have anything - except for system_auth, it gets populated when we restore schema.
+        existing_files = [file_path for file_path in table_path.glob("*") if file_path.is_file()]
+        if keyspace_name == "system_auth":
+            for existing_file in existing_files:
+                existing_file.unlink()
+            existing_files = []
+        if existing_files:
+            raise RuntimeError(f"Files found in {table_path.name}: {existing_files}")
 
 
 class CassandraStartOp(NodeOp[ipc.CassandraStartRequest, ipc.NodeResult]):
