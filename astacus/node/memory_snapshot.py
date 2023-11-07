@@ -11,7 +11,6 @@ from astacus.common.progress import increase_worth_reporting, Progress
 from astacus.common.snapshot import SnapshotGroup
 from astacus.node.snapshot import Snapshot
 from astacus.node.snapshotter import hash_hexdigest_readable, Snapshotter
-from glob import iglob
 from pathlib import Path
 from typing import Iterable, Iterator, Mapping, Sequence
 
@@ -77,12 +76,10 @@ class MemorySnapshot(Snapshot):
 class MemorySnapshotter(Snapshotter[MemorySnapshot]):
     def _list_files(self, basepath: Path) -> list[FoundFile]:
         result_files = set()
-        for group in self._groups:
-            for p in iglob(group.root_glob, root_dir=basepath, recursive=True):
+        for group in self._groups.groups:
+            for p in group.glob(root_dir=basepath):
                 path = basepath / p
                 if not path.is_file() or path.is_symlink():
-                    continue
-                if path.name in group.excluded_names:
                     continue
                 relpath = path.relative_to(basepath)
                 for parent in relpath.parents:
@@ -92,9 +89,7 @@ class MemorySnapshotter(Snapshotter[MemorySnapshot]):
                     result_files.add(
                         FoundFile(
                             relative_path=relpath,
-                            group=SnapshotGroup(
-                                root_glob=group.root_glob, embedded_file_size_max=group.embedded_file_size_max
-                            ),
+                            group=group.group.without_excluded_names(),
                         )
                     )
         return sorted(result_files, key=lambda found_file: found_file.relative_path)

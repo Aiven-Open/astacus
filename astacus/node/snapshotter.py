@@ -10,6 +10,7 @@ from astacus.common.ipc import SnapshotFile, SnapshotState
 from astacus.common.progress import Progress
 from astacus.common.snapshot import SnapshotGroup
 from astacus.node.snapshot import Snapshot
+from astacus.node.snapshot_groups import CompiledGroups
 from multiprocessing import dummy
 from pathlib import Path
 from threading import Lock
@@ -24,11 +25,10 @@ T = TypeVar("T", bound=Snapshot)
 
 class Snapshotter(ABC, Generic[T]):
     def __init__(self, groups: Sequence[SnapshotGroup], src: Path, dst: Path, snapshot: T, parallel: int) -> None:
-        assert groups  # model has empty; either plugin or configuration must supply them
         self.snapshot = snapshot
         self._src = src
         self._dst = dst
-        self._groups = groups
+        self._groups = CompiledGroups.compile(groups)
         self._parallel = parallel
         self._dst.mkdir(parents=True, exist_ok=True)
 
@@ -45,9 +45,7 @@ class Snapshotter(ABC, Generic[T]):
         ...
 
     def get_snapshot_state(self) -> SnapshotState:
-        return SnapshotState(
-            root_globs=[group.root_glob for group in self._groups], files=list(self.snapshot.get_all_files())
-        )
+        return SnapshotState(root_globs=self._groups.root_globs(), files=list(self.snapshot.get_all_files()))
 
     def _file_in_src(self, relative_path: Path) -> SnapshotFile:
         src_path = self._src / relative_path
@@ -71,10 +69,7 @@ class Snapshotter(ABC, Generic[T]):
             yield from p.imap_unordered(_cb, files)
 
     def _embedded_file_size_max_for_file(self, file: SnapshotFile) -> int | None:
-        groups = []
-        for group in self._groups:
-            if file.relative_path.match(group.root_glob):
-                groups.append(group)
+        groups = self._groups.get_matching(file.relative_path)
         assert groups
         head, *tail = groups
         for group in tail:

@@ -4,6 +4,7 @@ See LICENSE for details
 """
 from astacus.common.magic import DEFAULT_EMBEDDED_FILE_SIZE
 from typing import Sequence
+from typing_extensions import Self
 
 import dataclasses
 
@@ -15,3 +16,6 @@ class SnapshotGroup:
     excluded_names: Sequence[str] = ()
     # None means "no limit": all files matching the glob will be embedded
     embedded_file_size_max: int | None = DEFAULT_EMBEDDED_FILE_SIZE
+
+    def without_excluded_names(self) -> Self:
+        return dataclasses.replace(self, excluded_names=())

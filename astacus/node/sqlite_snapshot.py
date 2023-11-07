@@ -11,7 +11,6 @@ from astacus.common.snapshot import SnapshotGroup
 from astacus.node.snapshot import Snapshot
 from astacus.node.snapshotter import Snapshotter
 from contextlib import closing
-from fnmatch import fnmatch
 from pathlib import Path
 from typing import Iterable, Sequence
 from typing_extensions import override
@@ -124,15 +123,8 @@ class SQLiteSnapshotter(Snapshotter[SQLiteSnapshot]):
             (self._dst / rel_dir).mkdir(parents=True, exist_ok=True)
             for f in files:
                 rel_path = rel_dir / f
-                full_path = dir_path / f
-                if full_path.is_symlink():
-                    continue
-                for group in self._groups:
-                    # fnmatch works strangely with paths until 3.13 so convert to string
-                    # https://github.com/python/cpython/issues/73435
-                    if fnmatch(str(rel_path), group.root_glob) and f not in group.excluded_names:
-                        yield rel_path
-                        break
+                if not (dir_path / f).is_symlink() and self._groups.any_match(rel_path):
+                    yield rel_path
 
     def _compare_current_snapshot(self, files: Iterable[Path]) -> Iterable[tuple[Path, SnapshotFile | None]]:
         with closing(self._con.cursor()) as cur:
