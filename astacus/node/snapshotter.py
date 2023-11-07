@@ -40,10 +40,6 @@ class Snapshotter(ABC, Generic[T]):
     def perform_snapshot(self, *, progress: Progress) -> None:
         ...
 
-    @abstractmethod
-    def release(self, hexdigests: Iterable[str], *, progress: Progress) -> None:
-        ...
-
     def get_snapshot_state(self) -> SnapshotState:
         return SnapshotState(
             root_globs=[group.root_glob for group in self._groups], files=list(self.snapshot.get_all_files())

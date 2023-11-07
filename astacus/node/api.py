@@ -144,10 +144,7 @@ def delta_upload_result(*, op_id: int, n: Node = Depends()):
 def release(req: ipc.SnapshotReleaseRequest, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
-    # Groups not needed here.
-    snapshotter = n.get_snapshotter(groups=[])
-    assert snapshotter
-    return ReleaseOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshotter)
+    return ReleaseOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req, snapshot=n.get_or_create_snapshot()).start()
 
 
 @router.get("/release/{op_id}")

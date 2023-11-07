@@ -218,30 +218,6 @@ class SQLiteSnapshotter(Snapshotter[SQLiteSnapshot]):
             ((str(f.relative_path), f.file_size, f.mtime_ns, f.hexdigest, f.content_b64) for f in files),
         )
 
-    def release(self, hexdigests: Iterable[str], *, progress: Progress) -> None:
-        with closing(self._con.cursor()) as cur:
-            cur.execute(
-                """
-                create temporary table hexdigests (
-                    hexdigest text not null
-                );
-                """
-            )
-            cur.executemany(
-                "insert into hexdigests (hexdigest) values (?);",
-                ((h,) for h in hexdigests if h != ""),
-            )
-            cur.execute(
-                """
-                select relative_path
-                from snapshot_files
-                where hexdigest in (select hexdigest from hexdigests);
-                """
-            )
-            for (relative_path,) in cur:
-                (self._dst / relative_path).unlink(missing_ok=True)
-            cur.execute("drop table hexdigests;")
-
 
 def row_to_path_and_snapshotfile(row: tuple) -> tuple[Path, SnapshotFile | None]:
     return Path(row[0]), row_to_snapshotfile(row)

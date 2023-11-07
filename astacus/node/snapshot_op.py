@@ -16,7 +16,6 @@ from .uploader import Uploader
 from astacus.common import ipc, utils
 from astacus.common.rohmustorage import RohmuStorage
 from astacus.node.snapshot import Snapshot
-from typing import Optional
 
 import logging
 
@@ -86,18 +85,23 @@ class UploadOp(NodeOp[ipc.SnapshotUploadRequestV20221129, ipc.SnapshotUploadResu
 
 
 class ReleaseOp(NodeOp[ipc.SnapshotReleaseRequest, ipc.NodeResult]):
-    snapshotter: Optional[Snapshotter] = None
+    def __init__(self, *, snapshot: Snapshot, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.snapshot = snapshot
 
     def create_result(self) -> ipc.NodeResult:
         return ipc.NodeResult()
 
-    def start(self, snapshotter: Snapshotter) -> NodeOp.StartResult:
+    def start(self) -> NodeOp.StartResult:
         logger.info("start_release %r", self.req)
-        self.snapshotter = snapshotter
         return self.start_op(op_name="release", op=self, fun=self.release)
 
     def release(self) -> None:
-        assert self.snapshotter is not None
-        with self.snapshotter.lock:
-            self.check_op_id()
-            self.snapshotter.release(self.req.hexdigests, progress=self.result.progress)
+        self.check_op_id()
+        with self.snapshot.lock:
+            for hexdigest in self.result.progress.wrap(self.req.hexdigests):
+                self._release_hexdigest(hexdigest)
+
+    def _release_hexdigest(self, hexdigest: str) -> None:
+        for snapshotfile in self.snapshot.get_files_for_digest(hexdigest):
+            (self.snapshot.dst / snapshotfile.relative_path).unlink(missing_ok=True)

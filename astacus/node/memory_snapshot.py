@@ -250,16 +250,3 @@ class MemorySnapshotter(Snapshotter[MemorySnapshot]):
 
         # We initially started with 1 extra
         progress.add_success()
-
-    def release(self, hexdigests: Iterable[str], *, progress: Progress) -> None:
-        assert self._src != self._dst
-        for hexdigest in progress.wrap(hexdigests):
-            if hexdigest == "":
-                continue
-
-            for snapshotfile in self.snapshot.get_files_for_digest(hexdigest):
-                self._release_file(snapshotfile)
-
-    def _release_file(self, snapshotfile: SnapshotFile) -> None:
-        file = self._dst / snapshotfile.relative_path
-        file.unlink(missing_ok=True)
