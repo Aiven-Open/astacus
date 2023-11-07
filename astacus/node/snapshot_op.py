@@ -101,3 +101,4 @@ class ReleaseOp(NodeOp[ipc.SnapshotReleaseRequest, ipc.NodeResult]):
         with self.snapshotter.lock:
             self.check_op_id()
             self.snapshotter.release(self.req.hexdigests, progress=self.result.progress)
+            self.result.progress.done()

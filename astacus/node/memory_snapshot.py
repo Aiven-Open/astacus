@@ -146,7 +146,7 @@ class MemorySnapshotter(Snapshotter[MemorySnapshot]):
             snapshotfile = self.snapshot.get_file(found_file.relative_path)
             if snapshotfile:
                 self.snapshot.remove_file(snapshotfile)
-            dst_path.unlink()
+            dst_path.unlink(missing_ok=True)
             if increase_worth_reporting(i):
                 logger.info("#%d. extra file: %r", i, found_file.relative_path)
             changes += 1

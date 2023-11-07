@@ -15,8 +15,11 @@ from pathlib import Path
 from typing import Iterable, Sequence
 from typing_extensions import override
 
+import logging
 import os
 import sqlite3
+
+logger = logging.getLogger(__name__)
 
 
 class SQLiteSnapshot(Snapshot):
@@ -106,15 +109,17 @@ class SQLiteSnapshotter(Snapshotter[SQLiteSnapshot]):
 
     def perform_snapshot(self, *, progress: Progress) -> None:
         files = self._list_files_and_create_directories()
-        new_or_existing = self._compare_current_snapshot(files)
-        for_upsert = self._compare_with_src(new_or_existing)
-        with_digests = self._compute_digests(for_upsert)
-        self._upsert_files(with_digests)
-        self._con.execute("drop table if exists new_files;")
-        self._con.commit()
+        with self._con:
+            self._con.execute("begin")
+            new_or_existing = self._compare_current_snapshot(files)
+            for_upsert = self._compare_with_src(new_or_existing)
+            with_digests = self._compute_digests(for_upsert)
+            self._upsert_files(with_digests)
+            self._con.execute("drop table if exists new_files;")
 
     def _list_files_and_create_directories(self) -> Iterable[Path]:
         """List all files, and create directories in src."""
+        logger.info("Listing files in %s", self._src)
         for dir_, _, files in os.walk(self._src):
             dir_path = Path(dir_)
             if any(parent.name == magic.ASTACUS_TMPDIR for parent in dir_path.parents):
@@ -156,9 +161,10 @@ class SQLiteSnapshotter(Snapshotter[SQLiteSnapshot]):
                 """
             )
             if not self._same_root_mode():
+                logger.info("Deleting files in %s that are not in current snapshot", self._dst)
                 for (relative_path,) in cur:
-                    os.unlink(self._dst / relative_path)
-            self._con.commit()
+                    assert isinstance(relative_path, str)
+                    (self._dst / relative_path).unlink(missing_ok=True)
             cur.execute(
                 """
                 insert into new_files
@@ -193,13 +199,18 @@ class SQLiteSnapshotter(Snapshotter[SQLiteSnapshot]):
                     yield Path(row[0]), row_to_snapshotfile(row)
 
     def _compare_with_src(self, files: Iterable[tuple[Path, SnapshotFile | None]]) -> Iterable[SnapshotFile]:
+        logger.info("Checking metadata for files in %s", self._dst)
         for relpath, existing in files:
-            new = self._file_in_src(relpath)
-            if existing is None or not existing.underlying_file_is_the_same(new):
-                self._maybe_link(relpath)
-                yield new
+            try:
+                new = self._file_in_src(relpath)
+                if existing is None or not existing.underlying_file_is_the_same(new):
+                    self._maybe_link(relpath)
+                    yield new
+            except FileNotFoundError:
+                logger.warning("File %s disappeared while snapshotting", relpath)
 
     def _upsert_files(self, files: Iterable[SnapshotFile]) -> None:
+        logger.info("Upserting files in snapshot db")
         self._con.executemany(
             """
             insert or replace
@@ -211,28 +222,31 @@ class SQLiteSnapshotter(Snapshotter[SQLiteSnapshot]):
         )
 
     def release(self, hexdigests: Iterable[str], *, progress: Progress) -> None:
-        with closing(self._con.cursor()) as cur:
-            cur.execute(
-                """
-                create temporary table hexdigests (
-                    hexdigest text not null
-                );
-                """
-            )
-            cur.executemany(
-                "insert into hexdigests (hexdigest) values (?);",
-                ((h,) for h in hexdigests if h != ""),
-            )
-            cur.execute(
-                """
-                select relative_path
-                from snapshot_files
-                where hexdigest in (select hexdigest from hexdigests);
-                """
-            )
-            for (relative_path,) in cur:
-                (self._dst / relative_path).unlink(missing_ok=True)
-            cur.execute("drop table hexdigests;")
+        with self._con:
+            self._con.execute("begin")
+            with closing(self._con.cursor()) as cur:
+                cur.execute(
+                    """
+                        create temporary table hexdigests (
+                            hexdigest text not null
+                        );
+                        """
+                )
+                cur.executemany(
+                    "insert into hexdigests (hexdigest) values (?);",
+                    ((h,) for h in hexdigests if h != ""),
+                )
+                cur.execute(
+                    """
+                        select relative_path
+                        from snapshot_files
+                        where hexdigest in (select hexdigest from hexdigests);
+                        """
+                )
+                for (relative_path,) in cur:
+                    assert isinstance(relative_path, str)
+                    (self._dst / relative_path).unlink(missing_ok=True)
+                cur.execute("drop table hexdigests;")
 
 
 def row_to_path_and_snapshotfile(row: tuple) -> tuple[Path, SnapshotFile | None]:
