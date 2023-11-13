@@ -196,7 +196,7 @@ async def test_compute_kept_backups(
     half_a_day_after_last_backup = datetime.datetime(2020, 1, 7, 5, 0, tzinfo=datetime.timezone.utc)
     with mock.patch.object(utils, "now", lambda: half_a_day_after_last_backup):
         result = await step.run_step(cluster=single_node_cluster, context=context)
-    assert result == kept_backups
+    assert {b.filename for b in result} == kept_backups
 
 
 @pytest.mark.asyncio

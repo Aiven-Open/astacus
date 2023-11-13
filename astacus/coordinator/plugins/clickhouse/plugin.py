@@ -41,7 +41,6 @@ from astacus.coordinator.plugins.base import (
     CoordinatorPlugin,
     DeleteBackupManifestsStep,
     DeleteDanglingHexdigestsStep,
-    DownloadKeptBackupManifestsStep,
     ListBackupsStep,
     ListHexdigestsStep,
     MapNodesStep,
@@ -217,7 +216,6 @@ class ClickHousePlugin(CoordinatorPlugin):
                 explicit_delete=explicit_delete,
             ),
             DeleteBackupManifestsStep(json_storage=context.json_storage),
-            DownloadKeptBackupManifestsStep(json_storage=context.json_storage),
             DeleteDanglingHexdigestsStep(hexdigest_storage=context.hexdigest_storage),
             DeleteDanglingObjectStorageFilesStep(disks=disks),
         ]

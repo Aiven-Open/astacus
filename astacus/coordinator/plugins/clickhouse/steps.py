@@ -28,7 +28,7 @@ from astacus.common.limiter import gather_limited
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import (
     BackupManifestStep,
-    DownloadKeptBackupManifestsStep,
+    ComputeKeptBackupsStep,
     SnapshotStep,
     Step,
     StepFailedError,
@@ -770,7 +770,7 @@ class DeleteDanglingObjectStorageFilesStep(Step[None]):
     disks: Disks
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
-        backup_manifests = context.get_result(DownloadKeptBackupManifestsStep)
+        backup_manifests = context.get_result(ComputeKeptBackupsStep)
         if len(backup_manifests) < 1:
             logger.info("no backup manifest, not deleting any object storage disk file")
             # If we don't have at least one backup, we don't know which files are more recent

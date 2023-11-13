@@ -49,7 +49,6 @@ class CoordinatorPlugin(AstacusModel):
                 explicit_delete=explicit_delete,
             ),
             DeleteBackupManifestsStep(json_storage=context.json_storage),
-            DownloadKeptBackupManifestsStep(json_storage=context.json_storage),
             DeleteDanglingHexdigestsStep(hexdigest_storage=context.hexdigest_storage),
         ]
 
@@ -523,9 +522,9 @@ class RestoreDeltasStep(Step[None]):
 
 
 @dataclasses.dataclass
-class ComputeKeptBackupsStep(Step[set[str]]):
+class ComputeKeptBackupsStep(Step[Sequence[ipc.BackupManifest]]):
     """
-    Return a list of backup names we want to keep, after excluding the explicitly deleted
+    Return a list of backup manifests we want to keep, after excluding the explicitly deleted
     backups and applying the retention rules.
     """
 
@@ -533,15 +532,15 @@ class ComputeKeptBackupsStep(Step[set[str]]):
     retention: Retention
     explicit_delete: Sequence[str]
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> set[str]:
-        all_backups = context.get_result(ListBackupsStep)
-        kept_backups = all_backups.difference(set(self.explicit_delete))
-        if self.retention.minimum_backups is not None and self.retention.minimum_backups >= len(kept_backups):
-            return kept_backups
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> Sequence[ipc.BackupManifest]:
+        all_backup_names = context.get_result(ListBackupsStep)
+        kept_backup_names = all_backup_names.difference(set(self.explicit_delete))
+        manifests = [await download_backup_manifest(self.json_storage, backup_name) for backup_name in kept_backup_names]
+        manifests = sorted(manifests, key=lambda m: (m.start, m.end, m.filename), reverse=True)
+        if self.retention.minimum_backups is not None and self.retention.minimum_backups >= len(manifests):
+            return manifests
         now = utils.now()
 
-        manifests = [await download_backup_manifest(self.json_storage, backup) for backup in kept_backups]
-        manifests = sorted(manifests, key=lambda m: (m.start, m.end, m.filename), reverse=True)
         while manifests:
             if self.retention.maximum_backups is not None:
                 if self.retention.maximum_backups < len(manifests):
@@ -562,7 +561,7 @@ class ComputeKeptBackupsStep(Step[set[str]]):
             # We don't have any other criteria to filter the backup manifests with
             break
 
-        return set(manifest.filename for manifest in manifests)
+        return manifests
 
 
 @dataclasses.dataclass
@@ -575,25 +574,12 @@ class DeleteBackupManifestsStep(Step[set[str]]):
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> set[str]:
         all_backups = context.get_result(ListBackupsStep)
-        kept_backups = context.get_result(ComputeKeptBackupsStep)
+        kept_backups = {b.filename for b in context.get_result(ComputeKeptBackupsStep)}
         deleted_backups = all_backups - kept_backups
         for backup in deleted_backups:
             logger.info("deleting backup manifest %r", backup)
             await self.json_storage.delete_json(backup)
         return deleted_backups
-
-
-@dataclasses.dataclass
-class DownloadKeptBackupManifestsStep(Step[Sequence[ipc.BackupManifest]]):
-    """
-    Download the manifest of all kept backups.
-    """
-
-    json_storage: AsyncJsonStorage
-
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> Sequence[ipc.BackupManifest]:
-        backup_names = context.get_result(ComputeKeptBackupsStep)
-        return [await download_backup_manifest(self.json_storage, backup_name) for backup_name in backup_names]
 
 
 @dataclasses.dataclass
@@ -605,7 +591,7 @@ class DeleteDanglingHexdigestsStep(Step[None]):
     hexdigest_storage: AsyncHexDigestStorage
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
-        kept_manifests = context.get_result(DownloadKeptBackupManifestsStep)
+        kept_manifests = context.get_result(ComputeKeptBackupsStep)
         logger.info("listing extra hexdigests")
         kept_hexdigests: set[str] = set()
         for manifest in kept_manifests:

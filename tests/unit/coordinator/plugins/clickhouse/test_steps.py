@@ -9,7 +9,6 @@ from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins.base import (
     BackupManifestStep,
     ComputeKeptBackupsStep,
-    DownloadKeptBackupManifestsStep,
     SnapshotStep,
     StepFailedError,
     StepsContext,
@@ -1175,7 +1174,7 @@ async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
     context.set_result(
-        DownloadKeptBackupManifestsStep,
+        ComputeKeptBackupsStep,
         [
             BackupManifest(
                 start=datetime.datetime(2020, 1, 2, 10, tzinfo=datetime.timezone.utc),
@@ -1221,7 +1220,6 @@ async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
             ),
         ],
     )
-    context.set_result(ComputeKeptBackupsStep, {"backup-2", "backup-3"})
     await step.run_step(cluster, context)
     assert await object_storage.list_items() == [
         # Only not_used/and_old was deleted
