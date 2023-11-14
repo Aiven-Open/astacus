@@ -65,7 +65,6 @@ class Progress(AstacusModel):
         for item in i:
             yield item
             self.add_success()
-        self.done()
         return None
 
     def start(self, n) -> None:
