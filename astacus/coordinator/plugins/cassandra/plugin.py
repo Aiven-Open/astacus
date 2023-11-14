@@ -23,7 +23,7 @@ from astacus.coordinator.plugins.base import (
 )
 from astacus.coordinator.plugins.cassandra import backup_steps, restore_steps
 from dataclasses import dataclass
-from typing import List, Optional, Set
+from typing import List, Optional, Sequence, Set
 
 import dataclasses
 import logging
@@ -200,4 +200,20 @@ class CassandraPlugin(CoordinatorPlugin):
             restore_steps.StartCassandraStep(override_tokens=False, cassandra_nodes=self.nodes),
             restore_steps.WaitCassandraUpStep(duration=self.restore_start_timeout),
             restore_steps.RestorePostDataStep(client=client),
+        ]
+
+    def get_cleanup_steps(
+        self, *, context: OperationContext, retention: ipc.Retention, explicit_delete: Sequence[str]
+    ) -> List[Step]:
+        return [
+            base.ListBackupsStep(json_storage=context.json_storage),
+            base.ListDeltaBackupsStep(json_storage=context.json_storage),
+            base.ComputeKeptBackupsStep(
+                json_storage=context.json_storage,
+                retention=retention,
+                explicit_delete=explicit_delete,
+                retain_deltas=True,
+            ),
+            base.DeleteBackupAndDeltaManifestsStep(json_storage=context.json_storage),
+            base.DeleteDanglingHexdigestsStep(hexdigest_storage=context.hexdigest_storage),
         ]
