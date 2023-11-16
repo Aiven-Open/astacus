@@ -116,7 +116,8 @@ class Node(op.OpMixin):
         def _create_snapshot() -> Snapshot:
             if self.config.db_path is None:
                 return MemorySnapshot(root_link)
-            return SQLiteSnapshot(root_link, self.config.db_path)
+            snapshotter_db_name = f"{key}.db"
+            return SQLiteSnapshot(root_link, self.config.db_path / snapshotter_db_name)
 
         return utils.get_or_create_state(state=self.app_state, key=key, factory=_create_snapshot)
 
