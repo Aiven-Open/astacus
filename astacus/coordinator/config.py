@@ -54,7 +54,11 @@ class CoordinatorConfig(AstacusModel):
     nodes: List[CoordinatorNode] = []
 
     # How long cluster lock we acquire
-    default_lock_ttl: int = 60
+    #
+    # Note that in busy swapping system, GIL can be locked
+    # surprisingly long and e.g. 60 seconds has turned out to be
+    # insufficient at times.
+    default_lock_ttl: int = 600
 
     # Backup is attempted this many times before giving up.
     #

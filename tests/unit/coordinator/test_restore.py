@@ -76,7 +76,7 @@ def test_restore(rt, app, client, mstorage):
         for i, node in enumerate(nodes):
             respx.post(f"{node.url}/unlock?locker=x&ttl=0").respond(json={"locked": False})
             # Failure point 1: Lock fails
-            respx.post(f"{node.url}/lock?locker=x&ttl=60").respond(json={"locked": rt.fail_at != 1})
+            respx.post(f"{node.url}/lock?locker=x&ttl=600").respond(json={"locked": rt.fail_at != 1})
             if i == 0:
                 # Failure point 2: download call fails
                 def get_match_download(node_url: str) -> Callable[[httpx.Request], Optional[httpx.Response]]:

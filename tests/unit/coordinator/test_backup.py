@@ -30,7 +30,7 @@ def test_backup(fail_at, app, client, storage):
             respx.get(f"{node.url}/metadata").respond(json=metadata().jsondict())
             respx.post(f"{node.url}/unlock?locker=x&ttl=0").respond(json={"locked": False})
             # Failure point 1: Lock fails
-            respx.post(f"{node.url}/lock?locker=x&ttl=60").respond(json={"locked": fail_at != 1})
+            respx.post(f"{node.url}/lock?locker=x&ttl=600").respond(json={"locked": fail_at != 1})
 
             # Failure point 2: snapshot call fails
             respx.post(f"{node.url}/snapshot").respond(
@@ -165,7 +165,7 @@ def test_backup_stats(mock_time, app, client):
         for node in nodes:
             respx.get(f"{node.url}/metadata").respond(json=metadata().jsondict())
             respx.post(f"{node.url}/unlock?locker=x&ttl=0").respond(json={"locked": False})
-            respx.post(f"{node.url}/lock?locker=x&ttl=60").respond(json={"locked": True})
+            respx.post(f"{node.url}/lock?locker=x&ttl=600").respond(json={"locked": True})
             respx.post(f"{node.url}/snapshot").respond(json={"op_id": 42, "status_url": f"{node.url}/snapshot/result"})
             respx.get(f"{node.url}/snapshot/result").respond(
                 json={"progress": {"final": True}, "hashes": [{"hexdigest": "HASH", "size": 42}]}
