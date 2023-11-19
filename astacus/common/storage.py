@@ -11,7 +11,12 @@ from pathlib import Path
 from typing import BinaryIO, Callable, Generic, ParamSpec, TypeAlias, TypeVar
 
 import io
-import json
+
+try:
+    import ujson as json  # type: ignore [import]
+except ImportError:
+    import json
+
 import logging
 import os
 import threading
