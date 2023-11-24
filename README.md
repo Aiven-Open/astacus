@@ -26,9 +26,6 @@ shared code
 
 - Have most of the code covered by unit tests
 
-- Can be open sourced without feeling too bad about it
-    - Open source from the get go, no proprietary legacy dependencies
-
 # See also
 
 - [Design overview](doc/design/overview.md)
