@@ -41,9 +41,12 @@ from astacus.coordinator.plugins.clickhouse.replication import DatabaseReplica
 from astacus.coordinator.plugins.clickhouse.steps import (
     AttachMergeTreePartsStep,
     ClickHouseManifestStep,
+    ClickHouseVersion,
     CollectObjectStorageFilesStep,
     DeleteDanglingObjectStorageFilesStep,
     FreezeTablesStep,
+    FreezeUnfreezeTablesStepBase,
+    GetVersionsStep,
     ListDatabaseReplicasStep,
     MoveFrozenPartsStep,
     PrepareClickHouseManifestStep,
@@ -55,6 +58,7 @@ from astacus.coordinator.plugins.clickhouse.steps import (
     RetrieveAccessEntitiesStep,
     RetrieveDatabasesAndTablesStep,
     RetrieveMacrosStep,
+    run_partition_cmd_on_every_node,
     SyncDatabaseReplicasStep,
     SyncTableReplicasStep,
     TABLES_LIST_QUERY,
@@ -64,7 +68,7 @@ from astacus.coordinator.plugins.clickhouse.steps import (
 from astacus.coordinator.plugins.zookeeper import FakeZooKeeperClient, ZooKeeperClient
 from base64 import b64encode
 from pathlib import Path
-from typing import Optional, Sequence, Type, Union
+from typing import Awaitable, Iterable, Optional, Sequence
 from unittest import mock
 from unittest.mock import _Call as MockCall  # pylint: disable=protected-access
 
@@ -545,26 +549,27 @@ async def test_remove_frozen_tables_step_using_system_unfreeze() -> None:
 
 
 @pytest.mark.asyncio
-async def test_freezes_all_mergetree_tables_listed_in_manifest() -> None:
-    await _test_freeze_unfreezes_all_mergetree_tables_listed_in_manifest(step_class=FreezeTablesStep, operation="FREEZE")
+@pytest.mark.parametrize("all_clients", [True, False])
+@pytest.mark.parametrize("operation", ["FREEZE", "UNFREEZE"])
+async def test_freezes_all_mergetree_tables_listed_in_manifest(all_clients: bool, operation: str) -> None:
+    if operation == "FREEZE":
+        step_class: type[FreezeUnfreezeTablesStepBase] = FreezeTablesStep
+    else:
+        step_class = UnfreezeTablesStep
 
+    if all_clients:
+        versions = [(23, 8), (23, 8)]
+    else:
+        versions = [(23, 3), (23, 8)]
 
-@pytest.mark.asyncio
-async def test_unfreezes_all_mergetree_tables_listed_in_manifest() -> None:
-    await _test_freeze_unfreezes_all_mergetree_tables_listed_in_manifest(step_class=UnfreezeTablesStep, operation="UNFREEZE")
-
-
-async def _test_freeze_unfreezes_all_mergetree_tables_listed_in_manifest(
-    *, step_class: Union[Type[FreezeTablesStep], Type[UnfreezeTablesStep]], operation: str
-) -> None:
+    context = StepsContext()
+    context.set_result(GetVersionsStep, versions)
     first_client, second_client = mock_clickhouse_client(), mock_clickhouse_client()
     step = step_class(clients=[first_client, second_client], freeze_name="Äs`t:/.././@c'_'s", freeze_unfreeze_timeout=3600.0)
-
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
-    context = StepsContext()
     context.set_result(RetrieveDatabasesAndTablesStep, (SAMPLE_DATABASES, SAMPLE_TABLES))
     await step.run_step(cluster, context)
-    first_client_queries = [
+    queries = [
         b"SET receive_timeout=3600.0",
         b"ALTER TABLE `db-one`.`table-uno` " + operation.encode() + b" WITH NAME '\\xc3\\x84s`t:/.././@c\\'_\\'s'"
         b" SETTINGS distributed_ddl_task_timeout=3600.0",
@@ -575,9 +580,11 @@ async def _test_freeze_unfreezes_all_mergetree_tables_listed_in_manifest(
         b"ALTER TABLE `db-two`.`table-eins` " + operation.encode() + b" WITH NAME '\\xc3\\x84s`t:/.././@c\\'_\\'s'"
         b" SETTINGS distributed_ddl_task_timeout=3600.0",
     ]
-    assert [call.args[0] for call in first_client.execute.mock_calls] == first_client_queries
-    # The operation is replicated, so we'll only do it on the first client
-    assert second_client.mock_calls == []
+    assert [call.args[0] for call in first_client.execute.mock_calls] == queries
+    if all_clients:
+        assert [call.args[0] for call in second_client.execute.mock_calls] == queries
+    else:
+        assert second_client.mock_calls == []
 
 
 def b64_str(b: bytes) -> str:
@@ -1230,6 +1237,47 @@ async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
             key=Path("not_used/and_new"), last_modified=datetime.datetime(2020, 1, 4, tzinfo=datetime.timezone.utc)
         ),
     ]
+
+
+@pytest.mark.asyncio
+async def test_get_versions_step() -> None:
+    client_1 = mock_clickhouse_client()
+    client_1.execute.return_value = [["23.8.6.1"]]
+    client_2 = mock_clickhouse_client()
+    client_2.execute.return_value = [["23.3.15.1"]]
+    clients = [client_1, client_2]
+    step = GetVersionsStep(clients)
+    result = await step.run_step(Cluster(nodes=[]), StepsContext())
+    assert result == [(23, 8), (23, 3)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "versions,called_node_indicies",
+    [
+        ([(23, 8), (23, 12)], [0, 1]),
+        ([(23, 3), (23, 8)], [0]),
+        ([(23, 3), (22, 8)], [0]),
+        ([(23, 8), (23, 3)], [1]),
+    ],
+)
+async def test_run_partition_cmd_on_every_node(
+    versions: Sequence[ClickHouseVersion], called_node_indicies: Sequence[int]
+) -> None:
+    def call_execute(client: ClickHouseClient) -> Iterable[Awaitable[None]]:
+        async def call() -> None:
+            await client.execute(b"blah")
+            return None
+
+        yield from (call(), call())
+
+    clients = [mock_clickhouse_client() for _ in versions]
+    await run_partition_cmd_on_every_node(versions, clients, call_execute, 1)
+    for idx, client in enumerate(clients):
+        if idx in called_node_indicies:
+            client.execute.assert_called()
+        else:
+            client.execute.assert_not_called()
 
 
 def create_object_storage_disk(name: str, object_storage: AsyncObjectStorage | None) -> Disk:

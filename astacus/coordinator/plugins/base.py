@@ -29,18 +29,18 @@ StepResult_co = TypeVar("StepResult_co", covariant=True)
 
 
 class CoordinatorPlugin(AstacusModel):
-    def get_backup_steps(self, *, context: OperationContext) -> List[Step]:
+    def get_backup_steps(self, *, context: OperationContext) -> Sequence[Step[Any]]:
         raise NotImplementedError
 
-    def get_delta_backup_steps(self, *, context: OperationContext) -> List[Step]:
+    def get_delta_backup_steps(self, *, context: OperationContext) -> Sequence[Step[Any]]:
         raise NotImplementedError
 
-    def get_restore_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> List[Step]:
+    def get_restore_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> Sequence[Step[Any]]:
         raise NotImplementedError
 
     def get_cleanup_steps(
         self, *, context: OperationContext, retention: ipc.Retention, explicit_delete: Sequence[str]
-    ) -> List[Step]:
+    ) -> Sequence[Step[Any]]:
         return [
             ListBackupsStep(json_storage=context.json_storage),
             ComputeKeptBackupsStep(

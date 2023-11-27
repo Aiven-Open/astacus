@@ -17,6 +17,7 @@ from .steps import (
     CollectObjectStorageFilesStep,
     DeleteDanglingObjectStorageFilesStep,
     FreezeTablesStep,
+    GetVersionsStep,
     ListDatabaseReplicasStep,
     MoveFrozenPartsStep,
     PrepareClickHouseManifestStep,
@@ -53,7 +54,7 @@ from astacus.coordinator.plugins.base import (
 )
 from astacus.coordinator.plugins.zookeeper_config import ZooKeeperConfiguration
 from pathlib import Path
-from typing import List, Sequence
+from typing import Any, Sequence
 
 
 class ClickHousePlugin(CoordinatorPlugin):
@@ -94,12 +95,13 @@ class ClickHousePlugin(CoordinatorPlugin):
     max_concurrent_sync_per_node: int = 10
     use_system_unfreeze: bool = True
 
-    def get_backup_steps(self, *, context: OperationContext) -> List[Step]:
+    def get_backup_steps(self, *, context: OperationContext) -> Sequence[Step[Any]]:
         zookeeper_client = get_zookeeper_client(self.zookeeper)
         clickhouse_clients = get_clickhouse_clients(self.clickhouse)
         disks = Disks.from_disk_configs(self.disks)
         return [
             ValidateConfigStep(clickhouse=self.clickhouse),
+            GetVersionsStep(clickhouse_clients),
             # Cleanup old frozen parts from failed backup attempts
             RemoveFrozenTablesStep(
                 clients=clickhouse_clients,
@@ -138,10 +140,10 @@ class ClickHousePlugin(CoordinatorPlugin):
             ),
         ]
 
-    def get_delta_backup_steps(self, *, context: OperationContext) -> List[Step]:
+    def get_delta_backup_steps(self, *, context: OperationContext) -> Sequence[Step[Any]]:
         raise NotImplementedError
 
-    def get_restore_steps(self, *, context: OperationContext, req: RestoreRequest) -> List[Step]:
+    def get_restore_steps(self, *, context: OperationContext, req: RestoreRequest) -> Sequence[Step[Any]]:
         if req.partial_restore_nodes:
             # Required modifications to implement single-node restore:
             #  - don't restore tables inside Replicated databases (let ClickHouse do it)
@@ -206,7 +208,7 @@ class ClickHousePlugin(CoordinatorPlugin):
 
     def get_cleanup_steps(
         self, *, context: OperationContext, retention: Retention, explicit_delete: Sequence[str]
-    ) -> List[Step]:
+    ) -> Sequence[Step[Any]]:
         disks = Disks.from_disk_configs(self.disks)
         return [
             ListBackupsStep(json_storage=context.json_storage),

@@ -21,7 +21,7 @@ from astacus.coordinator.plugins.flink.steps import (
     RetrieveDataStep,
 )
 from astacus.coordinator.plugins.zookeeper_config import get_zookeeper_client, ZooKeeperConfiguration
-from typing import List
+from typing import Any, List, Sequence
 
 import logging
 
@@ -32,7 +32,7 @@ class FlinkPlugin(CoordinatorPlugin):
     zookeeper: ZooKeeperConfiguration = ZooKeeperConfiguration()
     zookeeper_paths: List[str] = ["/catalog"]
 
-    def get_backup_steps(self, *, context: OperationContext) -> List[Step]:
+    def get_backup_steps(self, *, context: OperationContext) -> Sequence[Step[Any]]:
         zookeeper_client = get_zookeeper_client(self.zookeeper)
         return [
             RetrieveDataStep(zookeeper_client=zookeeper_client, zookeeper_paths=self.zookeeper_paths),
@@ -46,10 +46,10 @@ class FlinkPlugin(CoordinatorPlugin):
             ),
         ]
 
-    def get_delta_backup_steps(self, *, context: OperationContext) -> List[Step]:
+    def get_delta_backup_steps(self, *, context: OperationContext) -> Sequence[Step[Any]]:
         raise NotImplementedError
 
-    def get_restore_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> List[Step]:
+    def get_restore_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> Sequence[Step[Any]]:
         zookeeper_client = get_zookeeper_client(self.zookeeper)
         return [
             BackupNameStep(json_storage=context.json_storage, requested_name=req.name),
