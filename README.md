@@ -1,5 +1,7 @@
 # astacus
 
+[![codecov](https://codecov.io/gh/Aiven-Open/astacus/branch/main/graph/badge.svg)](https://codecov.io/gh/Aiven-Open/astacus)
+
 Astacus is a clustered database backup system that is meant to work with
 multiple open-source cluster databases, such as
 [M3](https://github.com/m3db/m3/) and
