@@ -20,7 +20,7 @@ from astacus.coordinator.state import coordinator_state, CoordinatorState
 from fastapi import BackgroundTasks, Depends, HTTPException
 from functools import cached_property
 from starlette.datastructures import URL
-from typing import Awaitable, Callable, Dict, Iterator, List, Optional
+from typing import Any, Awaitable, Callable, Dict, Iterator, List, Optional, Sequence
 from urllib.parse import urlunsplit
 
 import asyncio
@@ -253,10 +253,10 @@ def get_subresult_url(request_url: URL, op_id: int) -> str:
 
 class SteppedCoordinatorOp(LockedCoordinatorOp):
     attempts: int
-    steps: List[Step]
+    steps: Sequence[Step[Any]]
     step_progress: Dict[int, Progress]
 
-    def __init__(self, *, c: Coordinator = Depends(), attempts: int, steps: List[Step]):
+    def __init__(self, *, c: Coordinator = Depends(), attempts: int, steps: Sequence[Step[Any]]):
         super().__init__(c=c)
         self.state = c.state
         self.attempts = attempts

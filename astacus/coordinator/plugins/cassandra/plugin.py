@@ -23,7 +23,7 @@ from astacus.coordinator.plugins.base import (
 )
 from astacus.coordinator.plugins.cassandra import backup_steps, restore_steps
 from dataclasses import dataclass
-from typing import List, Optional, Sequence, Set
+from typing import Any, List, Optional, Sequence, Set
 
 import dataclasses
 import logging
@@ -77,7 +77,7 @@ class CassandraPlugin(CoordinatorPlugin):
     datacenter: Optional[str]
     restore_start_timeout: int = 3600
 
-    def get_backup_steps(self, *, context: OperationContext) -> List[Step]:
+    def get_backup_steps(self, *, context: OperationContext) -> Sequence[Step[Any]]:
         nodes = self.nodes or [CassandraConfigurationNode(listen_address=self.client.get_listen_address())]
         client = CassandraClient(self.client)
 
@@ -100,7 +100,7 @@ class CassandraPlugin(CoordinatorPlugin):
             ),
         ]
 
-    def get_delta_backup_steps(self, *, context: OperationContext) -> List[Step]:
+    def get_delta_backup_steps(self, *, context: OperationContext) -> Sequence[Step[Any]]:
         nodes = self.nodes or [CassandraConfigurationNode(listen_address=self.client.get_listen_address())]
 
         @dataclasses.dataclass
@@ -127,7 +127,7 @@ class CassandraPlugin(CoordinatorPlugin):
             base.SnapshotClearStep(clear_request="delta/clear"),
         ]
 
-    def get_restore_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> List[Step]:
+    def get_restore_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> Sequence[Step[Any]]:
         nodes = self.nodes or [CassandraConfigurationNode(listen_address=self.client.get_listen_address())]
         cluster_restore_steps = (
             self.get_restore_schema_from_snapshot_steps(context=context, req=req)
@@ -143,9 +143,12 @@ class CassandraPlugin(CoordinatorPlugin):
             base.MapNodesStep(partial_restore_nodes=req.partial_restore_nodes),
             CassandraRestoreSubOpStep(op=ipc.CassandraSubOp.stop_cassandra),
             CassandraRestoreSubOpStep(op=ipc.CassandraSubOp.unrestore_sstables),
-        ] + cluster_restore_steps
+            *cluster_restore_steps,
+        ]
 
-    def get_restore_schema_from_snapshot_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> List[Step]:
+    def get_restore_schema_from_snapshot_steps(
+        self, *, context: OperationContext, req: ipc.RestoreRequest
+    ) -> Sequence[Step[Any]]:
         assert self.nodes is not None
         restore_sstables_req = ipc.CassandraRestoreSSTablesRequest(
             table_glob=SNAPSHOT_GLOB,
@@ -174,7 +177,9 @@ class CassandraPlugin(CoordinatorPlugin):
             restore_steps.WaitCassandraUpStep(duration=self.restore_start_timeout),
         ]
 
-    def get_restore_schema_from_manifest_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> List[Step]:
+    def get_restore_schema_from_manifest_steps(
+        self, *, context: OperationContext, req: ipc.RestoreRequest
+    ) -> Sequence[Step[Any]]:
         assert self.nodes is not None
         client = CassandraClient(self.client)
         restore_sstables_req = ipc.CassandraRestoreSSTablesRequest(
@@ -204,7 +209,7 @@ class CassandraPlugin(CoordinatorPlugin):
 
     def get_cleanup_steps(
         self, *, context: OperationContext, retention: ipc.Retention, explicit_delete: Sequence[str]
-    ) -> List[Step]:
+    ) -> Sequence[Step[Any]]:
         return [
             base.ListBackupsStep(json_storage=context.json_storage),
             base.ListDeltaBackupsStep(json_storage=context.json_storage),

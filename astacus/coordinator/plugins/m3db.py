@@ -31,7 +31,7 @@ from astacus.common.snapshot import SnapshotGroup
 from astacus.common.utils import AstacusModel
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 import dataclasses
 import logging
@@ -51,7 +51,7 @@ class M3DBPlugin(CoordinatorPlugin):
     environment: str
     placement_nodes: List[m3placement.M3PlacementNode]
 
-    def get_backup_steps(self, *, context: OperationContext) -> List[Step]:
+    def get_backup_steps(self, *, context: OperationContext) -> Sequence[Step[Any]]:
         etcd_client = ETCDClient(self.etcd_url)
         etcd_prefixes = get_etcd_prefixes(self.environment)
         return [
@@ -69,10 +69,10 @@ class M3DBPlugin(CoordinatorPlugin):
             ),
         ]
 
-    def get_delta_backup_steps(self, *, context: OperationContext) -> List[Step]:
+    def get_delta_backup_steps(self, *, context: OperationContext) -> Sequence[Step[Any]]:
         raise NotImplementedError
 
-    def get_restore_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> List[Step]:
+    def get_restore_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> Sequence[Step[Any]]:
         etcd_client = ETCDClient(self.etcd_url)
         return [
             InitStep(placement_nodes=self.placement_nodes),

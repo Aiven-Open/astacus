@@ -30,14 +30,14 @@ from .base import (
 from astacus.common import ipc
 from astacus.common.ipc import Plugin
 from astacus.common.snapshot import SnapshotGroup
-from typing import List
+from typing import Any, List, Sequence
 
 
 class FilesPlugin(CoordinatorPlugin):
     # list of globs, e.g. ["**/*.dat"] we want to back up from root
     root_globs: List[str]
 
-    def get_backup_steps(self, *, context: OperationContext) -> List[Step]:
+    def get_backup_steps(self, *, context: OperationContext) -> Sequence[Step[Any]]:
         return [
             SnapshotStep(snapshot_groups=[SnapshotGroup(root_glob) for root_glob in self.root_globs]),
             ListHexdigestsStep(hexdigest_storage=context.hexdigest_storage),
@@ -45,10 +45,10 @@ class FilesPlugin(CoordinatorPlugin):
             UploadManifestStep(json_storage=context.json_storage, plugin=Plugin.files),
         ]
 
-    def get_delta_backup_steps(self, *, context: OperationContext) -> List[Step]:
+    def get_delta_backup_steps(self, *, context: OperationContext) -> Sequence[Step[Any]]:
         raise NotImplementedError
 
-    def get_restore_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> List[Step]:
+    def get_restore_steps(self, *, context: OperationContext, req: ipc.RestoreRequest) -> Sequence[Step[Any]]:
         return [
             BackupNameStep(json_storage=context.json_storage, requested_name=req.name),
             BackupManifestStep(json_storage=context.json_storage),

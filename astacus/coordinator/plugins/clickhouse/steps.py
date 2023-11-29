@@ -49,6 +49,7 @@ import uuid
 logger = logging.getLogger(__name__)
 
 DatabasesAndTables = Tuple[List[ReplicatedDatabase], List[Table]]
+ClickHouseVersion = Tuple[int, int]
 
 TABLES_LIST_QUERY = b"""SELECT
     base64Encode(system.databases.name),
@@ -304,11 +305,13 @@ class FreezeUnfreezeTablesStepBase(Step[None]):
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         _, tables = context.get_result(RetrieveDatabasesAndTablesStep)
-        for table in tables:
-            if table.requires_freezing:
-                # We only run it on the first client because the `ALTER TABLE (UN)FREEZE` is replicated
-                await execute_with_timeout(
-                    self.clients[0],
+        versions = context.get_result(GetVersionsStep)
+        to_freeze = [table for table in tables if table.requires_freezing]
+
+        def freeze_partitions(clickhouse_client: ClickHouseClient) -> Iterable[Awaitable[None]]:
+            for table in to_freeze:
+                yield execute_with_timeout(
+                    clickhouse_client,
                     self.freeze_unfreeze_timeout,
                     (
                         f"ALTER TABLE {table.escaped_sql_identifier} "
@@ -316,6 +319,13 @@ class FreezeUnfreezeTablesStepBase(Step[None]):
                         f" SETTINGS distributed_ddl_task_timeout={self.freeze_unfreeze_timeout}"
                     ).encode(),
                 )
+
+        await run_partition_cmd_on_every_node(
+            clients=self.clients,
+            fn=freeze_partitions,
+            per_node_concurrency_limit=1,
+            versions=versions,
+        )
 
 
 @dataclasses.dataclass
@@ -811,8 +821,68 @@ class DeleteDanglingObjectStorageFilesStep(Step[None]):
                 await disk_object_storage.delete_item(key_to_remove)
 
 
+@dataclasses.dataclass
+class GetVersionsStep(Step[List[ClickHouseVersion]]):
+    """Get the version of ClickHouse running on every node."""
+
+    clients: Sequence[ClickHouseClient]
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> List[ClickHouseVersion]:
+        return await asyncio.gather(*(get_version(client) for client in self.clients))
+
+
+async def get_version(clickhouse_client: ClickHouseClient) -> ClickHouseVersion:
+    rows = await clickhouse_client.execute(b"SELECT version()")
+    assert isinstance(rows[0][0], str)
+    major, minor = rows[0][0].split(".")[:2]
+    return int(major), int(minor)
+
+
 async def execute_with_timeout(client: ClickHouseClient, timeout: float, query: bytes) -> None:
     # we use a session because we can't use the SETTINGS clause with all types of queries
     session_id = secrets.token_hex()
     await client.execute(f"SET receive_timeout={timeout}".encode(), session_id=session_id)
     await client.execute(query, session_id=session_id, timeout=timeout)
+
+
+CLICKHOUSE_VERSION_PARTITION_CMDS_NOT_REPLICATED = (23, 8)
+
+
+async def run_partition_cmd_on_every_node(
+    versions: Sequence[ClickHouseVersion],
+    clients: Sequence[ClickHouseClient],
+    fn: Callable[[ClickHouseClient], Iterable[Awaitable[None]]],
+    per_node_concurrency_limit: int,
+) -> None:
+    """Run a ClickHouse partition command on every node.
+
+    In ClickHouse 23.8, the following "partition commands" went from replicated
+    to non-replicated:
+    ```sql
+    ALTER TABLE ... MOVE PARTITION
+    ALTER TABLE ... DROP DETACHED PARTITION
+    ALTER TABLE ... FREEZE
+    ALTER TABLE ... FREEZE PARTITION
+    ALTER TABLE ... UNFREEZE
+    ALTER TABLE ... UNFREEZE PARTITION
+    ALTER TABLE ... REPLACE PARTITION
+    ```
+
+    To run one of these on the cluster, use `run_partition_cmd_on_every_node`.
+    The following commands were never replicated and should use
+    `run_on_every_node` instead:
+    ```sql
+    ALTER TABLE ... ATTACH PARTITION
+    ALTER TABLE ... FETCH PARTITION
+    ALTER TABLE ... DROP PARTITION
+    ```
+    """
+    assert len(versions) == len(clients)
+    old_client = next(
+        (client for version, client in zip(versions, clients) if version < CLICKHOUSE_VERSION_PARTITION_CMDS_NOT_REPLICATED),
+        None,
+    )
+    if old_client is None:
+        await run_on_every_node(clients, fn, per_node_concurrency_limit)
+    else:
+        await gather_limited(per_node_concurrency_limit, fn(old_client))
