@@ -533,6 +533,36 @@ class RestoreDeltasStep(Step[None]):
         await cluster.wait_successful_results(start_results=start_results, result_class=ipc.NodeResult)
 
 
+def _prune_manifests(manifests: List[ipc.BackupManifest], retention: Retention) -> List[ipc.BackupManifest]:
+    manifests = sorted(manifests, key=lambda m: (m.start, m.end, m.filename), reverse=True)
+    if retention.minimum_backups is not None and retention.minimum_backups >= len(manifests):
+        return manifests
+
+    while manifests:
+        if retention.maximum_backups is not None:
+            if retention.maximum_backups < len(manifests):
+                manifests.pop()
+                continue
+
+        # Ok, so now we have at most <maximum_backups> (if set) backups
+        # Do we have too _few_ backups to delete any more?
+        if retention.minimum_backups is not None:
+            if retention.minimum_backups >= len(manifests):
+                break
+
+        if retention.keep_days is not None:
+            now = utils.now()
+            manifest = manifests[-1]
+            if (now - manifest.end).days > retention.keep_days:
+                manifests.pop()
+                continue
+
+        # We don't have any other criteria to filter the backup manifests with
+        break
+
+    return manifests
+
+
 @dataclasses.dataclass
 class ComputeKeptBackupsStep(Step[Sequence[ipc.BackupManifest]]):
     """
@@ -554,31 +584,10 @@ class ComputeKeptBackupsStep(Step[Sequence[ipc.BackupManifest]]):
     async def compute_kept_basebackups(self, context: StepsContext) -> List[ipc.BackupManifest]:
         all_backup_names = context.get_result(ListBackupsStep)
         kept_backup_names = all_backup_names.difference(set(self.explicit_delete))
-        manifests = [await download_backup_manifest(self.json_storage, backup_name) for backup_name in kept_backup_names]
-        manifests = sorted(manifests, key=lambda m: (m.start, m.end, m.filename), reverse=True)
-        if self.retention.minimum_backups is not None and self.retention.minimum_backups >= len(manifests):
-            return manifests
-        now = utils.now()
-
-        while manifests:
-            if self.retention.maximum_backups is not None:
-                if self.retention.maximum_backups < len(manifests):
-                    manifests.pop()
-                    continue
-
-            # Ok, so now we have at most <maximum_backups> (if set) backups
-            # Do we have too _few_ backups to delete any more?
-            if self.retention.minimum_backups is not None:
-                if self.retention.minimum_backups >= len(manifests):
-                    break
-
-            if self.retention.keep_days is not None:
-                manifest = manifests[-1]
-                if (now - manifest.end).days > self.retention.keep_days:
-                    manifests.pop()
-                    continue
-            # We don't have any other criteria to filter the backup manifests with
-            break
+        manifests = []
+        for backup_name in kept_backup_names:
+            manifests.append(await download_backup_manifest(self.json_storage, backup_name))
+            manifests = _prune_manifests(manifests, self.retention)
 
         return manifests
 
