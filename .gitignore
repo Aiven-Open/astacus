@@ -146,3 +146,4 @@ astacus/proto/*_pb2.py
 .idea
 
 .vscode/
+tags
