@@ -7,8 +7,10 @@ from pathlib import Path
 from typing import List, Union
 
 import importlib
+import os
 import re
 import subprocess
+import sys
 
 # These test keys are from copied from pghoard
 
@@ -89,3 +91,10 @@ def get_clickhouse_version(command: List[Union[str, Path]]) -> tuple[int, ...]:
 
 def is_cassandra_driver_importable() -> bool:
     return importlib.util.find_spec("cassandra") is not None
+
+
+def format_astacus_command(*arg: str) -> List[str]:
+    # If we're gathering coverage, run subprocesses under coverage run
+    if os.environ.get("COVERAGE_RUN", None):
+        return [sys.executable, "-m", "coverage", "run", "-m", "astacus.main"] + list(arg)
+    return [sys.executable, "-m", "astacus.main"] + list(arg)

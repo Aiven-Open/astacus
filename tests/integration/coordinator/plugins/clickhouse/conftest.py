@@ -25,7 +25,12 @@ from pathlib import Path
 from tests.conftest import CLICKHOUSE_PATH_OPTION, CLICKHOUSE_RESTORE_PATH_OPTION
 from tests.integration.conftest import get_command_path, Ports, run_process_and_wait_for_pattern, Service, ServiceCluster
 from tests.system.conftest import background_process, wait_url_up
-from tests.utils import CONSTANT_TEST_RSA_PRIVATE_KEY, CONSTANT_TEST_RSA_PUBLIC_KEY, get_clickhouse_version
+from tests.utils import (
+    CONSTANT_TEST_RSA_PRIVATE_KEY,
+    CONSTANT_TEST_RSA_PUBLIC_KEY,
+    format_astacus_command,
+    get_clickhouse_version,
+)
 from typing import AsyncIterator, Awaitable, Iterator, List, Optional, Sequence, Union
 
 import argparse
@@ -39,7 +44,6 @@ import pytest
 import rohmu
 import secrets
 import subprocess
-import sys
 import tempfile
 import urllib.parse
 
@@ -444,7 +448,7 @@ async def _astacus(*, config: GlobalConfig) -> AsyncIterator[Service]:
     assert config.object_storage is not None
     config_path = Path(config.object_storage.temporary_directory) / f"astacus_{config.uvicorn.port}.json"
     config_path.write_text(config.json())
-    cmd = [sys.executable, "-m", "astacus.main", "server", "-c", str(config_path)]
+    cmd = format_astacus_command("server", "-c", str(config_path))
     async with background_process(*cmd, env={"PYTHONPATH": astacus_source_root}) as process:
         await wait_url_up(f"http://localhost:{config.uvicorn.port}")
         storage = config.object_storage.storages[config.object_storage.default_storage]

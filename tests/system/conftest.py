@@ -6,7 +6,7 @@ from astacus.common.utils import AstacusModel, exponential_backoff
 from contextlib import asynccontextmanager
 from httpx import URL
 from pathlib import Path
-from tests.utils import create_rohmu_config
+from tests.utils import create_rohmu_config, format_astacus_command
 from types import MappingProxyType
 from typing import Any, AsyncIterator, List, Mapping, Optional, Union
 
@@ -17,7 +17,6 @@ import logging
 import os.path
 import pytest
 import subprocess
-import sys
 
 logger = logging.getLogger(__name__)
 
@@ -139,14 +138,7 @@ async def _astacus(*, tmpdir, index: int) -> AsyncIterator[TestNode]:
     node = ASTACUS_NODES[index]
     a_conf_path = create_astacus_config(tmpdir=tmpdir, node=node)
     astacus_source_root = os.path.join(os.path.dirname(__file__), "..", "..")
-
-    # simulate this (for some reason, in podman the 'astacus' command
-    # is not to be found, I suppose the package hasn't been
-    # initialized)
-    #
-    # cmd = ["astacus", "server", "-c", str(a_conf_path)]
-    cmd = [sys.executable, "-m", "astacus.main", "server", "-c", str(a_conf_path)]
-
+    cmd = format_astacus_command("server", "-c", str(a_conf_path))
     async with background_process(*cmd, env={"PYTHONPATH": astacus_source_root}) as process:
         await wait_url_up(node.url)
         yield node
@@ -178,12 +170,7 @@ def astacus_run(
     check: bool = True,
     capture_output: bool = False,
 ) -> subprocess.CompletedProcess:
-    # simulate this (for some reason, in podman the 'astacus' command
-    # is not to be found, I suppose the package hasn't been
-    # initialized)
-    #
-    # cmd = ["astacus", "--url", astacus.url, "-w", "10"]
-    cmd = [sys.executable, "-m", "astacus.main", "--url", astacus.url, "-w", "10"]
+    cmd = format_astacus_command("--url", astacus.url, "-w", "10")
     return subprocess.run(cmd + list(args), check=check, capture_output=capture_output, env={"PYTHONPATH": rootdir})
 
 

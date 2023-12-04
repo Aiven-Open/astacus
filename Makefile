@@ -55,14 +55,17 @@ copyright:
 	$(eval MISSING_COPYRIGHT := $(shell git ls-files "*.py" | grep -v __init__.py | xargs grep -EL "Copyright \(c\) 20.* Aiven|Aiven license OK"))
 	@if [ "$(MISSING_COPYRIGHT)" != "" ]; then echo Missing Copyright statement in files: $(MISSING_COPYRIGHT) ; false; fi
 
+# Normal 'coverage run' sets COVERAGE_RUN; we do the same here
+# explicitly to be able to detect if we want to gather coverage, or not.
+#
+# pytest-cov is not parallel-mode-aware, so pretend its result was just one of many.
 .PHONY: unittest
 unittest: $(GENERATED)
-	rm -rf htmlcov
-	python3 -m pytest --cov=./ \
-		--cov-report=html \
-		--cov-report term-missing \
-		--cov-report xml:coverage.xml \
-		-s -vvv -x tests/
+	coverage erase
+	COVERAGE_RUN=1 \
+		python3 -m pytest --cov=./ --cov-append -s -vvv -x tests/
+	mv .coverage .coverage.root
+	coverage combine
 
 .PHONY: test
 test: lint copyright unittest
