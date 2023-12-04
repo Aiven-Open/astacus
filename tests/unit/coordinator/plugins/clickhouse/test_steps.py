@@ -796,6 +796,7 @@ async def test_creates_all_replicated_databases_and_tables_in_manifest() -> None
         b" ENGINE = Replicated('/clickhouse/databases/db%2Dtwo', '{my_shard}', '{my_replica}')",
         b"SET allow_experimental_geo_types=true",
         b"SET allow_experimental_object_type=true",
+        b"SET allow_suspicious_codecs=true",
         b"SET allow_suspicious_low_cardinality_types=true",
         b"SET flatten_nested=0",
         b"CREATE TABLE db-one.table-uno ...",
@@ -853,6 +854,7 @@ async def test_creates_all_replicated_databases_and_tables_in_manifest_with_cust
         b"SETTINGS cluster_username='alice', cluster_password='alice_secret'",
         b"SET allow_experimental_geo_types=true",
         b"SET allow_experimental_object_type=true",
+        b"SET allow_suspicious_codecs=true",
         b"SET allow_suspicious_low_cardinality_types=true",
         b"SET flatten_nested=0",
         b"CREATE TABLE db-one.table-uno ...",
@@ -895,6 +897,7 @@ async def test_drops_each_database_on_all_servers_before_recreating_it() -> None
     queries_expected_on_a_single_node = [
         b"SET allow_experimental_geo_types=true",
         b"SET allow_experimental_object_type=true",
+        b"SET allow_suspicious_codecs=true",
         b"SET allow_suspicious_low_cardinality_types=true",
         b"SET flatten_nested=0",
         b"CREATE TABLE db-one.table-uno ...",
