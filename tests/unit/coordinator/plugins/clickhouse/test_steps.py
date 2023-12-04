@@ -43,6 +43,7 @@ from astacus.coordinator.plugins.clickhouse.steps import (
     ClickHouseManifestStep,
     ClickHouseVersion,
     CollectObjectStorageFilesStep,
+    DATABASES_LIST_QUERY,
     DeleteDanglingObjectStorageFilesStep,
     FreezeTablesStep,
     FreezeUnfreezeTablesStepBase,
@@ -251,21 +252,18 @@ async def test_retrieve_access_entities_fails_from_concurrent_updates() -> None:
 async def test_retrieve_tables() -> None:
     clients: Sequence[StubClickHouseClient] = [StubClickHouseClient(), StubClickHouseClient()]
     clients[0].set_response(
+        DATABASES_LIST_QUERY,
+        [
+            [b64_str(b"db-empty"), "00000000-0000-0000-0000-000000000010"],
+            [b64_str(b"db-one"), "00000000-0000-0000-0000-000000000011"],
+            [b64_str(b"db-two"), "00000000-0000-0000-0000-000000000012"],
+        ],
+    )
+    clients[0].set_response(
         TABLES_LIST_QUERY,
         [
-            # This special row is what we get for a database without tables
-            [
-                b64_str(b"db-empty"),
-                "00000000-0000-0000-0000-000000000010",
-                b64_str(b""),
-                "",
-                "00000000-0000-0000-0000-000000000000",
-                b64_str(b""),
-                [],
-            ],
             [
                 b64_str(b"db-one"),
-                "00000000-0000-0000-0000-000000000011",
                 b64_str(b"table-uno"),
                 "ReplicatedMergeTree",
                 "00000000-0000-0000-0000-100000000001",
@@ -277,7 +275,6 @@ async def test_retrieve_tables() -> None:
             ],
             [
                 b64_str(b"db-one"),
-                "00000000-0000-0000-0000-000000000011",
                 b64_str(b"table-dos"),
                 "MergeTree",
                 "00000000-0000-0000-0000-100000000002",
@@ -286,7 +283,6 @@ async def test_retrieve_tables() -> None:
             ],
             [
                 b64_str(b"db-two"),
-                "00000000-0000-0000-0000-000000000012",
                 b64_str(b"table-eins"),
                 "ReplicatedMergeTree",
                 "00000000-0000-0000-0000-200000000001",
@@ -344,6 +340,7 @@ async def test_retrieve_tables() -> None:
 @pytest.mark.asyncio
 async def test_retrieve_tables_without_any_database_or_table() -> None:
     clients = [StubClickHouseClient(), StubClickHouseClient()]
+    clients[0].set_response(DATABASES_LIST_QUERY, [])
     clients[0].set_response(TABLES_LIST_QUERY, [])
     step = RetrieveDatabasesAndTablesStep(clients=clients)
     context = StepsContext()
@@ -354,19 +351,12 @@ async def test_retrieve_tables_without_any_database_or_table() -> None:
 async def test_retrieve_tables_without_any_table() -> None:
     clients = [StubClickHouseClient(), StubClickHouseClient()]
     clients[0].set_response(
-        TABLES_LIST_QUERY,
+        DATABASES_LIST_QUERY,
         [
-            [
-                b64_str(b"db-empty"),
-                "00000000-0000-0000-0000-000000000010",
-                b64_str(b""),
-                "",
-                "00000000-0000-0000-0000-000000000000",
-                b64_str(b""),
-                [],
-            ],
+            [b64_str(b"db-empty"), "00000000-0000-0000-0000-000000000010"],
         ],
     )
+    clients[0].set_response(TABLES_LIST_QUERY, [])
     clients[0].set_response(
         b"SHOW CREATE DATABASE `db-empty`",
         [

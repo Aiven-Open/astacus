@@ -51,9 +51,15 @@ logger = logging.getLogger(__name__)
 DatabasesAndTables = Tuple[List[ReplicatedDatabase], List[Table]]
 ClickHouseVersion = Tuple[int, int]
 
-TABLES_LIST_QUERY = b"""SELECT
+DATABASES_LIST_QUERY = b"""SELECT
     base64Encode(system.databases.name),
-    system.databases.uuid,
+    system.databases.uuid
+FROM system.databases
+WHERE system.databases.engine == 'Replicated'
+"""
+
+TABLES_LIST_QUERY = b"""SELECT
+    base64Encode(system.tables.database),
     base64Encode(system.tables.name),
     system.tables.engine,
     system.tables.uuid,
@@ -61,11 +67,11 @@ TABLES_LIST_QUERY = b"""SELECT
     arrayZip(
         arrayMap(x -> base64Encode(x), system.tables.dependencies_database),
         arrayMap(x -> base64Encode(x), system.tables.dependencies_table))
-FROM system.databases LEFT JOIN system.tables ON system.tables.database == system.databases.name
+FROM system.tables
 WHERE
-    system.databases.engine == 'Replicated'
+    system.tables.database in (SELECT name FROM system.databases WHERE engine == 'Replicated')
     AND NOT system.tables.is_temporary
-ORDER BY (system.databases.name,system.tables.name)
+ORDER BY (system.tables.database,system.tables.name)
 SETTINGS show_table_uuid_in_table_create_query_if_not_nil=true
 """
 _T = TypeVar("_T")
@@ -160,48 +166,46 @@ class RetrieveDatabasesAndTablesStep(Step[DatabasesAndTables]):
         # However, the schema could be modified between now and the freeze step.
         databases: Dict[bytes, ReplicatedDatabase] = {}
         tables: List[Table] = []
-        rows = await clickhouse_client.execute(TABLES_LIST_QUERY)
+        database_rows = await clickhouse_client.execute(DATABASES_LIST_QUERY)
+        for base64_db_name, db_uuid_str in database_rows:
+            assert isinstance(base64_db_name, str)
+            assert isinstance(db_uuid_str, str)
+            db_uuid = uuid.UUID(db_uuid_str)
+            db_name = b64decode(base64_db_name)
+            shard, replica = await get_shard_and_replica(clickhouse_client, db_name)
+            databases[db_name] = ReplicatedDatabase(
+                name=db_name,
+                uuid=db_uuid,
+                shard=shard,
+                replica=replica,
+            )
+        table_rows = await clickhouse_client.execute(TABLES_LIST_QUERY)
         for (
             base64_db_name,
-            db_uuid_str,
             base64_table_name,
             table_engine,
             table_uuid,
             base64_table_query,
             base64_dependencies,
-        ) in rows:
+        ) in table_rows:
             assert isinstance(base64_db_name, str)
-            assert isinstance(db_uuid_str, str)
             assert isinstance(base64_table_name, str)
             assert isinstance(table_engine, str)
             assert isinstance(base64_table_query, str)
             assert isinstance(base64_dependencies, list)
-            db_uuid = uuid.UUID(db_uuid_str)
             db_name = b64decode(base64_db_name)
             if db_name not in databases:
-                shard, replica = await get_shard_and_replica(clickhouse_client, db_name)
-                databases[db_name] = ReplicatedDatabase(
-                    name=db_name,
-                    uuid=db_uuid,
-                    shard=shard,
-                    replica=replica,
+                raise TransientException("Database created while listing tables")
+            tables.append(
+                Table(
+                    database=db_name,
+                    name=b64decode(base64_table_name),
+                    engine=table_engine,
+                    uuid=uuid.UUID(cast(str, table_uuid)),
+                    create_query=b64decode(base64_table_query),
+                    dependencies=[(b64decode(d), b64decode(t)) for d, t in base64_dependencies],
                 )
-            # Thanks to the LEFT JOIN, an empty database without table will still return a row.
-            # Unlike standard SQL, the table properties will have a default value instead of NULL,
-            # that's why we skip tables with an empty name.
-            # We need these rows and the LEFT JOIN that makes them: we want to list all
-            # Replicated databases, including those without any table.
-            if base64_table_name != "":
-                tables.append(
-                    Table(
-                        database=db_name,
-                        name=b64decode(base64_table_name),
-                        engine=table_engine,
-                        uuid=uuid.UUID(cast(str, table_uuid)),
-                        create_query=b64decode(base64_table_query),
-                        dependencies=[(b64decode(d), b64decode(t)) for d, t in base64_dependencies],
-                    )
-                )
+            )
         databases_list = sorted(databases.values(), key=lambda d: d.name)
         return databases_list, tables
 
