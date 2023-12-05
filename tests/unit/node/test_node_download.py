@@ -8,8 +8,6 @@ from astacus.common.progress import Progress
 from astacus.common.snapshot import SnapshotGroup
 from astacus.common.storage import FileStorage
 from astacus.node.download import Downloader
-from astacus.node.memory_snapshot import MemorySnapshot
-from astacus.node.snapshot import Snapshot
 from astacus.node.sqlite_snapshot import SQLiteSnapshot
 from astacus.node.uploader import Uploader
 from fastapi.testclient import TestClient
@@ -20,12 +18,10 @@ from tests.unit.node.conftest import build_snapshot_and_snapshotter, create_file
 import pytest
 
 
-@pytest.mark.parametrize("snapshot_cls", [MemorySnapshot, SQLiteSnapshot])
 @pytest.mark.parametrize("src_is_dst", [True, False])
 def test_download(
     storage: FileStorage,
     uploader: Uploader,
-    snapshot_cls: type[Snapshot],
     root: Path,
     src: Path,
     dst: Path,
@@ -43,7 +39,7 @@ def test_download(
             (Path("foobig2"), b"foobig2" * magic.DEFAULT_EMBEDDED_FILE_SIZE),
         ],
     )
-    snapshot, snapshotter = build_snapshot_and_snapshotter(src, dst, db, snapshot_cls, [SnapshotGroup("**")])
+    snapshot, snapshotter = build_snapshot_and_snapshotter(src, dst, db, SQLiteSnapshot, [SnapshotGroup("**")])
     with snapshotter.lock:
         snapshotter.perform_snapshot(progress=Progress())
         ss1 = snapshotter.get_snapshot_state()
@@ -60,7 +56,7 @@ def test_download(
 
     db2 = Path(root / "db2")
 
-    snapshot, snapshotter = build_snapshot_and_snapshotter(dst2, dst3, db2, snapshot_cls, [SnapshotGroup("**")])
+    snapshot, snapshotter = build_snapshot_and_snapshotter(dst2, dst3, db2, SQLiteSnapshot, [SnapshotGroup("**")])
     downloader = Downloader(storage=storage, snapshotter=snapshotter, dst=dst2, parallel=1)
     with snapshotter.lock:
         downloader.download_from_storage(progress=Progress(), snapshotstate=ss1)

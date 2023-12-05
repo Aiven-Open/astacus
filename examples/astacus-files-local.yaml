@@ -9,6 +9,7 @@ coordinator:
 node:
  root: /tmp/astacus/src
  root_link: /tmp/astacus/src-link
+ db_path: /tmp/astacus
  parallel:
   downloads: 4
   hashes: 4

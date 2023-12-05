@@ -66,7 +66,7 @@ class NodeConfig(AstacusModel):
 
     # Same as root_link for the delta snapshotter.
     delta_root_link: Optional[Path]
-    db_path: Optional[Path]
+    db_path: Path
 
     # These can be either globally or locally set
     object_storage: Optional[RohmuConfig] = None

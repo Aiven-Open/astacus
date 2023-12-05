@@ -31,7 +31,8 @@
             "downloads": 2,
             "uploads": 2
         },
-        "root": "/tmp/astacus/m3"
+        "root": "/tmp/astacus/m3",
+        "db_path": "/tmp/astacus"
     },
     "object_storage": {
         "compression": {

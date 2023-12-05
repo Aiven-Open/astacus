@@ -4,8 +4,6 @@ See LICENSE for details
 """
 from astacus.common.progress import Progress
 from astacus.common.snapshot import SnapshotGroup
-from astacus.node.memory_snapshot import MemorySnapshot
-from astacus.node.snapshot import Snapshot
 from astacus.node.snapshotter import hash_hexdigest_readable
 from astacus.node.sqlite_snapshot import SQLiteSnapshot
 from io import BytesIO
@@ -17,9 +15,8 @@ import base64
 import pytest
 
 
-@pytest.mark.parametrize("snapshot_cls", [MemorySnapshot, SQLiteSnapshot])
 @pytest.mark.parametrize("src_is_dst", [True, False])
-def test_snapshotter(snapshot_cls: type[Snapshot], src: Path, dst: Path, db: Path, src_is_dst: bool) -> None:
+def test_snapshotter(src: Path, dst: Path, db: Path, src_is_dst: bool) -> None:
     if src_is_dst:
         dst = src
     groups = [
@@ -27,7 +24,7 @@ def test_snapshotter(snapshot_cls: type[Snapshot], src: Path, dst: Path, db: Pat
         SnapshotGroup(root_glob="bb*", embedded_file_size_max=1),
         SnapshotGroup(root_glob="folder2/*c", embedded_file_size_max=None),
     ]
-    snapshot, snapshotter = build_snapshot_and_snapshotter(src, dst, db, snapshot_cls, groups)
+    snapshot, snapshotter = build_snapshot_and_snapshotter(src, dst, db, SQLiteSnapshot, groups)
     matched_under_embedded_file_size_max = [(Path("folder1") / "aaa", b"aaaaa"), (Path("folder2") / "ccc", b"ccccc")]
     matched_over_embedded_file_size_max = [(Path("bbb"), b"bbbbb")]
     not_matched = [(Path("ddd"), b"ddddd"), (Path("eee"), b"eeeee")]
@@ -59,13 +56,11 @@ def test_snapshotter(snapshot_cls: type[Snapshot], src: Path, dst: Path, db: Pat
         assert snapshotfile.content_b64 == base64.b64encode(content).decode()
 
 
-@pytest.mark.parametrize("snapshot_cls", [MemorySnapshot, SQLiteSnapshot])
 @pytest.mark.parametrize("src_is_dst", [True, False])
 @pytest.mark.parametrize("new_file_size", [1024, 2048])
 @pytest.mark.parametrize("embedded_file_size_max", [None, 1, 1500, 3000])
 @pytest.mark.parametrize("path", [Path("abc123"), Path("folder") / "abc123"])
 def test_snapshotter_updates_changed_file(
-    snapshot_cls: type[Snapshot],
     src: Path,
     dst: Path,
     db: Path,
@@ -79,7 +74,7 @@ def test_snapshotter_updates_changed_file(
     contents = b"x" * 1024
     create_files_at_path(src, [(path, contents)])
     groups = [SnapshotGroup(root_glob="**", embedded_file_size_max=embedded_file_size_max)]
-    snapshot, snapshotter = build_snapshot_and_snapshotter(src, dst, db, snapshot_cls, groups)
+    snapshot, snapshotter = build_snapshot_and_snapshotter(src, dst, db, SQLiteSnapshot, groups)
     snapshotter.perform_snapshot(progress=Progress())
     assert len(snapshot) == 1
     assert snapshot.get_file(path) is not None
@@ -105,16 +100,13 @@ def test_snapshotter_updates_changed_file(
     assert snapshotfile.file_size == st.st_size
 
 
-@pytest.mark.parametrize("snapshot_cls", [MemorySnapshot, SQLiteSnapshot])
 @pytest.mark.parametrize("src_is_dst", [True, False])
 @pytest.mark.parametrize("path", [Path("abc123"), Path("folder") / "abc123"])
-def test_snapshotter_removes_removed_file(
-    snapshot_cls: type[Snapshot], src: Path, dst: Path, db: Path, src_is_dst: bool, path: Path
-) -> None:
+def test_snapshotter_removes_removed_file(src: Path, dst: Path, db: Path, src_is_dst: bool, path: Path) -> None:
     if src_is_dst:
         dst = src
     create_files_at_path(src, [(path, b"abc123")])
-    snapshot, snapshotter = build_snapshot_and_snapshotter(src, dst, db, snapshot_cls, [SnapshotGroup("**")])
+    snapshot, snapshotter = build_snapshot_and_snapshotter(src, dst, db, SQLiteSnapshot, [SnapshotGroup("**")])
     snapshotter.perform_snapshot(progress=Progress())
     assert len(snapshot) == 1
     assert snapshot.get_file(path) is not None
@@ -125,10 +117,7 @@ def test_snapshotter_removes_removed_file(
     assert not (dst / path).exists()
 
 
-@pytest.mark.parametrize("snapshot_cls", [MemorySnapshot, SQLiteSnapshot])
-def test_snapshotter_release_hash_unlinks_files_but_keeps_metadata(
-    snapshot_cls: type[Snapshot], src: Path, dst: Path, db: Path
-) -> None:
+def test_snapshotter_release_hash_unlinks_files_but_keeps_metadata(src: Path, dst: Path, db: Path) -> None:
     keep = Path("keep_this")
     release = Path("release_this")
     create_files_at_path(src, [(keep, b"this will be kept")])
@@ -136,7 +125,7 @@ def test_snapshotter_release_hash_unlinks_files_but_keeps_metadata(
     create_files_at_path(src, [(release, b"this will be released")])
     create_files_at_path(dst, [(release, b"this will be released")])
     groups = [SnapshotGroup(root_glob="**", embedded_file_size_max=0)]
-    snapshot, snapshotter = build_snapshot_and_snapshotter(src, dst, db, snapshot_cls, groups)
+    snapshot, snapshotter = build_snapshot_and_snapshotter(src, dst, db, SQLiteSnapshot, groups)
     snapshotter.perform_snapshot(progress=Progress())
     to_release = snapshot.get_file(release)
     assert (dst / release).exists()

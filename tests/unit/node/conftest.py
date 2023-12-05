@@ -8,7 +8,6 @@ from astacus.common.snapshot import SnapshotGroup
 from astacus.common.storage import FileStorage
 from astacus.node.api import router as node_router
 from astacus.node.config import NodeConfig
-from astacus.node.memory_snapshot import MemorySnapshot, MemorySnapshotter
 from astacus.node.snapshot import Snapshot
 from astacus.node.snapshotter import Snapshotter
 from astacus.node.sqlite_snapshot import SQLiteSnapshot, SQLiteSnapshotter
@@ -25,6 +24,7 @@ def fixture_app(tmpdir) -> FastAPI:
     app = FastAPI()
     app.include_router(node_router, prefix="/node", tags=["node"])
     root = Path(tmpdir) / "root"
+    db_path = Path(tmpdir) / "db_path"
     backup_root = Path(tmpdir) / "backup-root"
     backup_root.mkdir()
     tmp_path = Path(tmpdir) / "backup-tmp"
@@ -37,6 +37,7 @@ def fixture_app(tmpdir) -> FastAPI:
         {
             "az": "testaz",
             "root": str(root),
+            "db_path": str(db_path),
             "object_storage": {
                 "temporary_directory": str(tmp_path),
                 "default_storage": "x",
@@ -102,11 +103,7 @@ def build_snapshot_and_snapshotter(
     snapshot_cls: type[Snapshot],
     groups: list[SnapshotGroup],
 ) -> tuple[Snapshot, Snapshotter]:
-    if snapshot_cls is MemorySnapshot:
-        ms = MemorySnapshot(dst)
-        snapshot: Snapshot = ms
-        snapshotter: Snapshotter = MemorySnapshotter(src=src, dst=dst, snapshot=ms, groups=groups, parallel=2)
-    elif snapshot_cls is SQLiteSnapshot:
+    if snapshot_cls is SQLiteSnapshot:
         snapshot = SQLiteSnapshot(dst, db)
         snapshotter = SQLiteSnapshotter(src=src, dst=dst, snapshot=snapshot, groups=groups, parallel=2)
     else:

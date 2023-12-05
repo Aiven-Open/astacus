@@ -7,8 +7,6 @@ from astacus.common import ipc, magic, utils
 from astacus.common.progress import Progress
 from astacus.common.snapshot import SnapshotGroup
 from astacus.common.storage import JsonObject
-from astacus.node.memory_snapshot import MemorySnapshot
-from astacus.node.snapshot import Snapshot
 from astacus.node.snapshot_op import SnapshotOp
 from astacus.node.sqlite_snapshot import SQLiteSnapshot
 from astacus.node.uploader import Uploader
@@ -22,11 +20,9 @@ import pytest
 
 
 @pytest.mark.timeout(2)
-@pytest.mark.parametrize("snapshot_cls", [MemorySnapshot, SQLiteSnapshot])
 @pytest.mark.parametrize("src_is_dst", [True, False])
 def test_snapshot(
     uploader: Uploader,
-    snapshot_cls: type[Snapshot],
     src: Path,
     dst: Path,
     db: Path,
@@ -35,7 +31,7 @@ def test_snapshot(
     if src_is_dst:
         dst = src
 
-    snapshot, snapshotter = build_snapshot_and_snapshotter(src, dst, db, snapshot_cls, [SnapshotGroup("**")])
+    snapshot, snapshotter = build_snapshot_and_snapshotter(src, dst, db, SQLiteSnapshot, [SnapshotGroup("**")])
     with snapshotter.lock:
         # Start with empty
         snapshotter.perform_snapshot(progress=Progress())
@@ -166,10 +162,8 @@ def test_api_snapshot_error(client, mocker):
         (magic.DEFAULT_EMBEDDED_FILE_SIZE + 1, 1),
     ],
 )
-@pytest.mark.parametrize("snapshot_cls", [MemorySnapshot, SQLiteSnapshot])
 @pytest.mark.parametrize("src_is_dst", [True, False])
 def test_snapshot_file_size_changed(
-    snapshot_cls: type[Snapshot],
     src: Path,
     dst: Path,
     db: Path,
@@ -180,7 +174,7 @@ def test_snapshot_file_size_changed(
     if src_is_dst:
         dst = src
 
-    snapshot, snapshotter = build_snapshot_and_snapshotter(src, dst, db, snapshot_cls, [SnapshotGroup("**")])
+    snapshot, snapshotter = build_snapshot_and_snapshotter(src, dst, db, SQLiteSnapshot, [SnapshotGroup("**")])
     path = src / "shrinky"
     with snapshotter.lock:
         path.write_text("foobar" * magic.DEFAULT_EMBEDDED_FILE_SIZE)

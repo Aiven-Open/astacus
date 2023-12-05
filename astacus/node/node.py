@@ -10,7 +10,6 @@ from astacus.common import ipc, magic, op, statsd, utils
 from astacus.common.dependencies import get_request_app_state, get_request_url
 from astacus.common.snapshot import SnapshotGroup
 from astacus.common.statsd import StatsClient
-from astacus.node.memory_snapshot import MemorySnapshot, MemorySnapshotter
 from astacus.node.snapshot import Snapshot
 from astacus.node.sqlite_snapshot import SQLiteSnapshot, SQLiteSnapshotter
 from fastapi import BackgroundTasks, Depends
@@ -114,8 +113,6 @@ class Node(op.OpMixin):
         root_link = path if path is not None else self.config.root / magic.ASTACUS_TMPDIR
 
         def _create_snapshot() -> Snapshot:
-            if self.config.db_path is None:
-                return MemorySnapshot(root_link)
             snapshotter_db_name = f"{key}.db"
             return SQLiteSnapshot(root_link, self.config.db_path / snapshotter_db_name)
 
@@ -130,6 +127,4 @@ class Node(op.OpMixin):
     def _get_snapshotter_for_snapshot(self, snapshot: Snapshot, groups: Sequence[SnapshotGroup]) -> Snapshotter:
         if isinstance(snapshot, SQLiteSnapshot):
             return SQLiteSnapshotter(groups, self.config.root, snapshot.dst, snapshot, self.config.parallel.hashes)
-        if isinstance(snapshot, MemorySnapshot):
-            return MemorySnapshotter(groups, self.config.root, snapshot.dst, snapshot, self.config.parallel.hashes)
         raise NotImplementedError(f"Unknown snapshot type {type(snapshot)}")
