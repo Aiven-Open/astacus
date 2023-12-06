@@ -7,12 +7,12 @@ See LICENSE for details
 from astacus.common import magic
 from astacus.common.ipc import SnapshotFile, SnapshotHash
 from astacus.common.progress import Progress
-from astacus.common.snapshot import SnapshotGroup
 from astacus.node.snapshot import Snapshot
 from astacus.node.snapshotter import Snapshotter
 from contextlib import closing
+from functools import cached_property
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Iterable
 from typing_extensions import override
 
 import logging
@@ -24,31 +24,8 @@ logger = logging.getLogger(__name__)
 
 class SQLiteSnapshot(Snapshot):
     def __init__(self, dst: Path, db: Path) -> None:
-        self.db = db
-        if db.exists():
-            # We could probably use an old db again since everything should be
-            # in a transaction, but there is little benefit so let's be safe and
-            # just recreate it.
-            db.unlink()
-        else:
-            db.parent.mkdir(parents=True, exist_ok=True)
-        self._con = sqlite3.connect(db, isolation_level=None, check_same_thread=False)
-        self._con.executescript(
-            """
-            begin;
-            create table snapshot_files (
-                relative_path text not null,
-                file_size integer not null,
-                mtime_ns integer not null,
-                hexdigest text not null,
-                content_b64 text,
-                primary key (relative_path)
-            );
-            create index snapshot_files_hexdigest on snapshot_files(hexdigest);
-            commit;
-            """
-        )
         super().__init__(dst)
+        self.db = db
 
     def __len__(self) -> int:
         return self._con.execute("select count(*) from snapshot_files;").fetchone()[0]
@@ -99,14 +76,35 @@ class SQLiteSnapshot(Snapshot):
         ):
             yield SnapshotHash(hexdigest=hexdigest, size=file_size)
 
+    @cached_property
+    def _con(self) -> sqlite3.Connection:
+        if self.db.exists():
+            # We could probably use an old db again since everything should be
+            # in a transaction, but there is little benefit so let's be safe and
+            # just recreate it.
+            self.db.unlink()
+        else:
+            self.db.parent.mkdir(parents=True, exist_ok=True)
+        con = sqlite3.connect(self.db, isolation_level=None, check_same_thread=False)
+        con.executescript(
+            """
+            begin;
+            create table snapshot_files (
+                relative_path text not null,
+                file_size integer not null,
+                mtime_ns integer not null,
+                hexdigest text not null,
+                content_b64 text,
+                primary key (relative_path)
+            );
+            create index snapshot_files_hexdigest on snapshot_files(hexdigest);
+            commit;
+            """
+        )
+        return con
+
 
 class SQLiteSnapshotter(Snapshotter[SQLiteSnapshot]):
-    def __init__(
-        self, groups: Sequence[SnapshotGroup], src: Path, dst: Path, snapshot: SQLiteSnapshot, parallel: int
-    ) -> None:
-        super().__init__(groups, src, dst, snapshot, parallel)
-        self._con = snapshot.get_connection()
-
     def perform_snapshot(self, *, progress: Progress) -> None:
         files = self._list_files_and_create_directories()
         with self._con:
@@ -247,6 +245,10 @@ class SQLiteSnapshotter(Snapshotter[SQLiteSnapshot]):
                     assert isinstance(relative_path, str)
                     (self._dst / relative_path).unlink(missing_ok=True)
                 cur.execute("drop table hexdigests;")
+
+    @property
+    def _con(self) -> sqlite3.Connection:
+        return self.snapshot.get_connection()
 
 
 def row_to_path_and_snapshotfile(row: tuple) -> tuple[Path, SnapshotFile | None]:
