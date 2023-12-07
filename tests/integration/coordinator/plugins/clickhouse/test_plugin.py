@@ -171,6 +171,8 @@ async def setup_cluster_content(clients: List[HttpClickHouseClient], use_named_c
         b"SETTINGS index_granularity=8192 "
         b"SETTINGS flatten_nested=1"
     )
+    # add a function table
+    await clients[0].execute(b"CREATE TABLE default.from_function_table AS numbers(3)")
     # add a table with data in object storage
     await clients[0].execute(
         b"CREATE TABLE default.in_object_storage (thekey UInt32, thedata String) "
@@ -276,6 +278,13 @@ async def test_restores_table_with_nested_fields(restored_cluster: List[ClickHou
     assert response == [[123, [{"a": 4, "b": 5}]]]
     response = await client.execute(b"SELECT thekey, thedata.a, thedata.b FROM default.array_tuple_flatten ORDER BY thekey")
     assert response == [[123, [4], [5]]]
+
+
+@pytest.mark.asyncio
+async def test_restores_function_table(restored_cluster: List[ClickHouseClient]) -> None:
+    client = restored_cluster[0]
+    response = await client.execute(b"SELECT * FROM default.from_function_table")
+    assert response == [["0"], ["1"], ["2"]]
 
 
 async def check_object_storage_data(cluster: Sequence[ClickHouseClient]) -> None:
