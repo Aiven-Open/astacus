@@ -30,6 +30,7 @@ class TestNode(AstacusModel):
     # Where do root/link/etc for this node reside in filesystem
     path: Optional[Path]
     root_path: Optional[Path]
+    db_path: Optional[Path]
 
 
 ASTACUS_NODES = [
@@ -84,6 +85,7 @@ def create_astacus_config_dict(
         "node": {
             "root": str(root_path),
             "root_link": str(link_path),
+            "db_path": str(node.db_path),
         },
         "object_storage": create_rohmu_config(tmpdir).jsondict(),
         "uvicorn": {
@@ -106,6 +108,9 @@ def create_astacus_config(
     node.root_path = root_path
     link_path = a / "link"
     link_path.mkdir(exist_ok=True)
+    db_path = a / "snapshotter_db"
+    db_path.mkdir(exist_ok=True)
+    node.db_path = db_path
     a_conf = create_astacus_config_dict(
         tmpdir=Path(tmpdir), root_path=root_path, link_path=link_path, node=node, plugin_config=plugin_config
     )

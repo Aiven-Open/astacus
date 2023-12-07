@@ -481,6 +481,9 @@ def create_astacus_configs(
     astacus_backup_storage_path = storage_path / "astacus_backup"
     astacus_backup_storage_path.mkdir(exist_ok=True)
     node_ports = [ports.allocate() for _ in clickhouse_cluster.services]
+    snapshotter_db_paths = [astacus_backup_storage_path / f"{s.host}_{s.port}" for s in clickhouse_cluster.services]
+    for p in snapshotter_db_paths:
+        p.mkdir(exist_ok=True)
     disk_storages = {
         "default": rohmu.S3ObjectStorageConfig(
             storage_type=rohmu.StorageDriver.s3,
@@ -564,6 +567,7 @@ def create_astacus_configs(
             ),
             node=NodeConfig(
                 root=clickhouse_service.data_dir,
+                db_path=db_path,
             ),
             object_storage=RohmuConfig(
                 temporary_directory=str(storage_tmp_path),
@@ -580,7 +584,7 @@ def create_astacus_configs(
                 log_level="debug",
             ),
         )
-        for node_port, clickhouse_service in zip(node_ports, clickhouse_cluster.services)
+        for node_port, db_path, clickhouse_service in zip(node_ports, snapshotter_db_paths, clickhouse_cluster.services)
     ]
 
 

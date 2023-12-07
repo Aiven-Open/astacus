@@ -33,6 +33,7 @@ coordinator:
 node:
  root: /tmp/astacus/cassandra
  root_link: /tmp/astacus/cassandra
+ db_path: /tmp/astacus
  cassandra:
   nodetool_command: ["nodetool"]
   start_command: ["systemctl", "start", "cassandra"]
