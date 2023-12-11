@@ -39,7 +39,7 @@ def _iter_backups(storage: JsonStorage, backup_prefix: str) -> Iterator[ipc.List
         if not name.startswith(backup_prefix):
             continue
         pname = name[len(backup_prefix) :]
-        manifest = ipc.BackupManifest.parse_obj(storage.download_json(name))
+        manifest = ipc.BackupManifest.parse_obj(storage.download_and_read_json(name))
         files = sum(x.files for x in manifest.snapshot_results)
         total_size = sum(x.total_size for x in manifest.snapshot_results)
         upload_size = sum(x.total_size for x in manifest.upload_results)

@@ -24,6 +24,9 @@ exists, its contents stay the same.
 
 from .exceptions import NotFoundException
 from .storage import Json, JsonStorage, MultiStorage
+from pathlib import Path
+
+import json
 
 
 class CachingJsonStorage(JsonStorage):
@@ -58,14 +61,26 @@ class CachingJsonStorage(JsonStorage):
         self.backend_storage.delete_json(name)
         self._backend_json_set_remove(name)
 
-    def download_json(self, name: str) -> Json:
+    def download_json(self, name: str) -> Path:
         if name not in self._backend_json_set:
             raise NotFoundException()
         try:
             return self.cache_storage.download_json(name)
         except NotFoundException:
             pass
-        data = self.backend_storage.download_json(name)
+        file = self.backend_storage.download_json(name)
+        with open(file, "rb") as f:
+            self.cache_storage.upload_json(name, json.load(f))
+        return file
+
+    def download_and_read_json(self, name: str) -> Json:
+        if name not in self._backend_json_set:
+            raise NotFoundException()
+        try:
+            return self.cache_storage.download_and_read_json(name)
+        except NotFoundException:
+            pass
+        data = self.backend_storage.download_and_read_json(name)
         self.cache_storage.upload_json(name, data)
         return data
 

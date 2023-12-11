@@ -75,7 +75,11 @@ class JsonStorage(ABC):
         ...
 
     @abstractmethod
-    def download_json(self, name: str) -> Json:
+    def download_json(self, name: str) -> Path:
+        ...
+
+    @abstractmethod
+    def download_and_read_json(self, name: str) -> Json:
         ...
 
     @abstractmethod
@@ -166,8 +170,16 @@ class FileStorage(Storage):
         self._json_to_path(name).unlink()
 
     @file_error_wrapper
-    def download_json(self, name: str) -> Json:
+    def download_json(self, name: str) -> Path:
         logger.info("download_json %r", name)
+        path = self._json_to_path(name)
+        if not path.exists():
+            raise NotFoundException
+        return path
+
+    @file_error_wrapper
+    def download_and_read_json(self, name: str) -> Json:
+        logger.info("download_and_read_json %r", name)
         path = self._json_to_path(name)
         with open(path) as f:
             return json.load(f)

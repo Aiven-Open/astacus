@@ -172,7 +172,7 @@ class DownloadOp(NodeOp[ipc.SnapshotDownloadRequest, ipc.NodeResult]):
     def download(self) -> None:
         assert self.snapshotter is not None
         # Actual 'restore from backup'
-        manifest = ipc.BackupManifest.parse_obj(self.storage.download_json(self.req.backup_name))
+        manifest = ipc.BackupManifest.parse_obj(self.storage.download_and_read_json(self.req.backup_name))
         snapshotstate = manifest.snapshot_results[self.req.snapshot_index].state
         assert snapshotstate is not None
 

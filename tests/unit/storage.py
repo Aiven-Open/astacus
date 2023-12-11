@@ -10,11 +10,15 @@ from typing import BinaryIO
 import dataclasses
 import json
 import os
+import tempfile
 
 
-@dataclasses.dataclass(frozen=True)
 class MemoryJsonStorage(JsonStorage):
-    items: dict[str, str]
+    def __init__(self, items: dict[str, str]):
+        # since this is just used for testing we can be a bit lazy about when
+        # the directory is cleaned up and on gc is fine.
+        self.dir = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
+        self.items = items
 
     def delete_json(self, name: str) -> None:
         try:
@@ -22,7 +26,18 @@ class MemoryJsonStorage(JsonStorage):
         except KeyError as e:
             raise exceptions.NotFoundException from e
 
-    def download_json(self, name: str) -> Json:
+    def download_json(self, name: str) -> Path:
+        try:
+            data = self.items[name]
+        except KeyError as e:
+            raise exceptions.NotFoundException from e
+        else:
+            path = Path(self.dir.name) / name
+            with path.open("w") as file:
+                file.write(data)
+            return path
+
+    def download_and_read_json(self, name: str) -> Json:
         try:
             data = self.items[name]
         except KeyError as e:

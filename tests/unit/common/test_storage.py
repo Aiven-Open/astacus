@@ -62,9 +62,9 @@ def _test_hexdigeststorage(storage: FileStorage) -> None:
 def _test_jsonstorage(storage: JsonStorage) -> None:
     assert storage.list_jsons() == []
     storage.upload_json(TEST_JSON, TEST_JSON_DATA)
-    assert storage.download_json(TEST_JSON) == TEST_JSON_DATA
+    assert storage.download_and_read_json(TEST_JSON) == TEST_JSON_DATA
     with pytest.raises(exceptions.NotFoundException):
-        storage.download_json(TEST_JSON + "x")
+        storage.download_and_read_json(TEST_JSON + "x")
     assert storage.list_jsons() == [TEST_JSON]
     storage.delete_json(TEST_JSON)
     with pytest.raises(exceptions.NotFoundException):
@@ -106,7 +106,7 @@ def test_caching_storage(tmpdir: py.path.local, mocker: MockerFixture) -> None:
     # Nor list hexdigests
     mocklist = mocker.patch.object(storage.backend_storage, "list_jsons")
 
-    assert storage.download_json(TEST_JSON) == TEST_JSON_DATA
+    assert storage.download_and_read_json(TEST_JSON) == TEST_JSON_DATA
     assert storage.list_jsons() == [TEST_JSON]
     assert not mockdown.called
     assert not mocklist.called

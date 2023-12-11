@@ -10,6 +10,7 @@ from .storage import Json, MultiStorage, Storage, StorageUploadResult
 from .utils import AstacusModel
 from astacus.common import exceptions
 from enum import Enum
+from pathlib import Path
 from pydantic import Field
 from rohmu import errors, rohmufile
 from rohmu.compressor import CompressionStream
@@ -184,7 +185,14 @@ class RohmuStorage(Storage):
         key = os.path.join(self.json_key, name)
         self.storage.delete_key(key)
 
-    def download_json(self, name: str) -> Json:
+    def download_json(self, name: str) -> Path:
+        key = os.path.join(self.json_key, name)
+        path = Path(self.config.temporary_directory) / name
+        with path.open("wb") as f:
+            self._download_key_to_file(key, f)
+        return Path(f.name)
+
+    def download_and_read_json(self, name: str) -> Json:
         key = os.path.join(self.json_key, name)
         f = io.BytesIO()
         self._download_key_to_file(key, f)

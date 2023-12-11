@@ -19,6 +19,7 @@ from astacus.coordinator.plugins import get_plugin
 from astacus.coordinator.state import coordinator_state, CoordinatorState
 from fastapi import BackgroundTasks, Depends, HTTPException
 from functools import cached_property
+from pathlib import Path
 from starlette.datastructures import URL
 from typing import Any, Awaitable, Callable, Dict, Iterator, List, Optional, Sequence
 from urllib.parse import urlunsplit
@@ -110,8 +111,11 @@ class CacheClearingJsonStorage(JsonStorage):
         finally:
             self.state.cached_list_response = None
 
-    def download_json(self, name: str) -> Json:
+    def download_json(self, name: str) -> Path:
         return self.storage.download_json(name)
+
+    def download_and_read_json(self, name: str) -> Json:
+        return self.storage.download_and_read_json(name)
 
     def list_jsons(self) -> list[str]:
         return self.storage.list_jsons()
@@ -286,20 +290,22 @@ class SteppedCoordinatorOp(LockedCoordinatorOp):
 
     async def try_run(self, cluster: Cluster, context: StepsContext) -> bool:
         op_name = self.__class__.__name__
-        for i, step in enumerate(self.steps, 1):
-            step_name = step.__class__.__name__
-            if self.state.shutting_down:
-                logger.info("Step %s not even started due to shutdown", step_name)
-                return False
-            logger.info("Step %d/%d: %s", i, len(self.steps), step_name)
-            async with self.stats.async_timing_manager("astacus_step_duration", {"op": op_name, "step": step_name}):
-                with self._progress_handler(cluster, step):
-                    try:
-                        r = await step.run_step(cluster, context)
-                    except (StepFailedError, WaitResultError) as e:
-                        logger.info("Step %s failed: %s", step, str(e))
-                        return False
-            context.set_result(step.__class__, r)
+        async with contextlib.AsyncExitStack() as stack:
+            for i, step in enumerate(self.steps, 1):
+                step_name = step.__class__.__name__
+                if self.state.shutting_down:
+                    logger.info("Step %s not even started due to shutdown", step_name)
+                    return False
+                logger.info("Step %d/%d: %s", i, len(self.steps), step_name)
+                async with self.stats.async_timing_manager("astacus_step_duration", {"op": op_name, "step": step_name}):
+                    with self._progress_handler(cluster, step):
+                        try:
+                            r = await step.run_step(cluster, context)
+                        except (StepFailedError, WaitResultError) as e:
+                            logger.info("Step %s failed: %s", step, str(e))
+                            return False
+                context.set_result(step.__class__, r)
+                stack.push_async_callback(step.cleanup_step, context)
         return True
 
     @contextlib.contextmanager

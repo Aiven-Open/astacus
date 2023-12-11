@@ -11,6 +11,7 @@ from astacus.common.progress import Progress
 from astacus.common.utils import now
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
+from astacus.coordinator.manifest import BackupManifestFileWrapper
 from astacus.coordinator.plugins.base import (
     BackupManifestStep,
     ComputeKeptBackupsStep,
@@ -31,10 +32,12 @@ from astacus.coordinator.plugins.base import (
 from astacus.node.snapshotter import hash_hexdigest_readable
 from http import HTTPStatus
 from io import BytesIO
+from pathlib import Path
 from pydantic import Field
 from tests.unit.storage import MemoryHexDigestStorage, MemoryJsonStorage
 from typing import AbstractSet, Callable, List, Optional, Sequence
 from unittest import mock
+from uuid import uuid4
 
 import dataclasses
 import datetime
@@ -42,6 +45,7 @@ import httpx
 import json
 import pytest
 import respx
+import tempfile
 
 
 class DummyStep(Step[int]):
@@ -356,10 +360,16 @@ async def test_delete_dangling_hexdigests_step(
     expected_hashes: dict[str, bytes],
 ) -> None:
     async_digest_storage = AsyncHexDigestStorage(storage=MemoryHexDigestStorage(items=stored_hashes))
-    context.set_result(ComputeKeptBackupsStep, kept_backups)
-    step = DeleteDanglingHexdigestsStep(hexdigest_storage=async_digest_storage)
-    await step.run_step(single_node_cluster, context)
-    assert stored_hashes == expected_hashes
+    with tempfile.TemporaryDirectory() as tmpdir:
+        kept_backups_files = []
+        for backup in kept_backups:
+            backup_path = Path(tmpdir) / str(uuid4())
+            backup_path.write_text(backup.json())
+            kept_backups_files.append(BackupManifestFileWrapper(backup_path))
+        context.set_result(ComputeKeptBackupsStep, kept_backups_files)
+        step = DeleteDanglingHexdigestsStep(hexdigest_storage=async_digest_storage)
+        await step.run_step(single_node_cluster, context)
+        assert stored_hashes == expected_hashes
 
 
 @pytest.mark.asyncio
