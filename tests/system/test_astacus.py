@@ -27,7 +27,7 @@ A1_FILES_AND_CONTENTS = [
 
 # This test is the slowest, so rather fail fast in real unittests before getting here
 @pytest.mark.order("last")
-def test_astacus(astacus1: TestNode, astacus2: TestNode, astacus3: TestNode, rootdir: str):
+def test_astacus(astacus1: TestNode, astacus2: TestNode, astacus3: TestNode, rootdir: str) -> None:
     assert astacus1.root_path
     assert astacus2.root_path
     assert astacus3.root_path

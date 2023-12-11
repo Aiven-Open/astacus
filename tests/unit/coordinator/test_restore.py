@@ -7,13 +7,16 @@ Test that the coordinator restore endpoint works.
 """
 from astacus.common import exceptions, ipc
 from astacus.common.ipc import Plugin
+from astacus.common.rohmustorage import MultiRohmuStorage
 from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins.base import get_node_to_backup_index
 from contextlib import nullcontext as does_not_raise
 from dataclasses import dataclass
 from datetime import datetime, UTC
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, ContextManager, Optional
 
 import httpx
 import json
@@ -66,7 +69,7 @@ class RestoreTest:
         RestoreTest(partial=True),
     ],
 )
-def test_restore(rt, app, client, mstorage):
+def test_restore(rt: RestoreTest, app: FastAPI, client: TestClient, mstorage: MultiRohmuStorage) -> None:
     # pylint: disable=too-many-statements
     # Create fake backup (not pretty but sufficient?)
     storage = mstorage.get_storage(rt.storage_name)
@@ -124,7 +127,7 @@ def test_restore(rt, app, client, mstorage):
                     status_code=200 if rt.fail_at != 5 else 500,
                 )
 
-        req = {}
+        req: dict[str, Any] = {}
         if rt.storage_name:
             req["storage"] = rt.storage_name
         if rt.partial:
@@ -173,7 +176,9 @@ def test_restore(rt, app, client, mstorage):
         (["foo", "foo", "bar", "bar"], ["1", "3", "3", "3"], None, pytest.raises(exceptions.InsufficientNodesException)),
     ],
 )
-def test_node_to_backup_index(node_azlist, backup_azlist, expected_index, exception):
+def test_node_to_backup_index(
+    node_azlist: list[str], backup_azlist: list[str], expected_index: list[int], exception: ContextManager
+) -> None:
     snapshot_results = [ipc.SnapshotResult(az=az) for az in backup_azlist]
     nodes = [CoordinatorNode(url="unused", az=az) for az in node_azlist]
     with exception:
@@ -204,7 +209,9 @@ def test_node_to_backup_index(node_azlist, backup_azlist, expected_index, except
         ({"backup_index": 1, "node_url": "url123"}, [None, None, 1], pytest.raises(exceptions.NotFoundException)),
     ],
 )
-def test_partial_node_to_backup_index(partial_node_spec, expected_index, exception):
+def test_partial_node_to_backup_index(
+    partial_node_spec: dict[str, Any], expected_index: list[int | None], exception: ContextManager
+) -> None:
     num_nodes = 3
     snapshot_results = [ipc.SnapshotResult(hostname=f"host{i}") for i in range(num_nodes)]
     nodes = [CoordinatorNode(url=f"url{i}") for i in range(num_nodes)]

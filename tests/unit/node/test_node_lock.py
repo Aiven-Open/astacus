@@ -4,7 +4,10 @@ See LICENSE for details
 """
 
 
-def test_api_lock_unlock(client):
+from fastapi.testclient import TestClient
+
+
+def test_api_lock_unlock(client: TestClient) -> None:
     # Play with lock
     response = client.post("/node/lock")
     assert response.status_code == 422, response.json()

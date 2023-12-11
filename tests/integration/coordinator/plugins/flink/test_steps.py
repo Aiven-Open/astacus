@@ -13,7 +13,7 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_restore_data(zookeeper_client: KazooZooKeeperClient):
+async def test_restore_data(zookeeper_client: KazooZooKeeperClient) -> None:
     table_id1 = str(uuid4()).partition("-")[0]
     table_id2 = str(uuid4()).partition("-")[0]
     data = {

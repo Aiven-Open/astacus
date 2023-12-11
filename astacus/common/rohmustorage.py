@@ -208,7 +208,7 @@ class MultiRohmuStorage(MultiStorage[RohmuStorage]):
     def __init__(self, *, config: RohmuConfig) -> None:
         self.config = config
 
-    def get_storage(self, name: str) -> RohmuStorage:
+    def get_storage(self, name: str | None) -> RohmuStorage:
         return RohmuStorage(config=self.config, storage=name)
 
     def get_default_storage_name(self) -> str:

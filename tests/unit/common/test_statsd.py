@@ -26,9 +26,9 @@ class _Protocol(asyncio.DatagramProtocol):
 
 
 @pytest.mark.asyncio
-async def test_statsd():
+async def test_statsd() -> None:
     loop = asyncio.get_running_loop()
-    received = asyncio.Queue()
+    received: asyncio.Queue[bytes] = asyncio.Queue()
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(("", 0))

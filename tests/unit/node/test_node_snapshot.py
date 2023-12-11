@@ -27,7 +27,7 @@ def test_snapshot(
     dst: Path,
     db: Path,
     src_is_dst: bool,
-):
+) -> None:
     if src_is_dst:
         dst = src
 
@@ -89,7 +89,7 @@ def test_snapshot(
         assert not hashes_empty
 
 
-def test_api_snapshot_and_upload(client: TestClient, mocker: MockerFixture):
+def test_api_snapshot_and_upload(client: TestClient, mocker: MockerFixture) -> None:
     url = "http://addr/result"
     m = mocker.patch.object(utils, "http_request")
     response = client.post("/node/snapshot")
@@ -129,7 +129,7 @@ def test_api_snapshot_and_upload(client: TestClient, mocker: MockerFixture):
     assert result2.progress.finished_successfully
 
 
-def test_api_snapshot_error(client, mocker):
+def test_api_snapshot_error(client: TestClient, mocker: MockerFixture) -> None:
     req_json = {"root_globs": ["*"]}
     response = client.post("/node/lock?locker=x&ttl=10")
     assert response.status_code == 200, response.json()
@@ -170,7 +170,7 @@ def test_snapshot_file_size_changed(
     src_is_dst: bool,
     truncate_to,
     hashes_in_second_snapshot: int,
-):
+) -> None:
     if src_is_dst:
         dst = src
 

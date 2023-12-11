@@ -14,10 +14,13 @@ from astacus.common.rohmustorage import RohmuConfig, RohmuStorage
 from astacus.common.storage import FileStorage, Json, JsonStorage
 from contextlib import nullcontext as does_not_raise
 from pathlib import Path
+from pytest_mock import MockerFixture
 from rohmu.object_storage import google
 from tests.utils import create_rohmu_config
-from unittest.mock import patch
+from typing import ContextManager
+from unittest.mock import Mock, patch
 
+import py
 import pytest
 
 TEST_HEXDIGEST = "deadbeef"
@@ -27,7 +30,7 @@ TEST_JSON = "jsonblob"
 TEST_JSON_DATA: Json = {"foo": 7, "array": [1, 2, 3], "true": True}
 
 
-def create_storage(*, tmpdir, engine, **kw):
+def create_storage(*, tmpdir: py.path.local, engine: str, **kw):
     if engine == "rohmu":
         config = create_rohmu_config(tmpdir, **kw)
         return RohmuStorage(config=config)
@@ -43,7 +46,7 @@ def create_storage(*, tmpdir, engine, **kw):
     raise NotImplementedError(f"unknown storage {engine}")
 
 
-def _test_hexdigeststorage(storage: FileStorage):
+def _test_hexdigeststorage(storage: FileStorage) -> None:
     storage.upload_hexdigest_bytes(TEST_HEXDIGEST, TEXT_HEXDIGEST_DATA)
     assert storage.download_hexdigest_bytes(TEST_HEXDIGEST) == TEXT_HEXDIGEST_DATA
     # Ensure that download attempts of nonexistent keys give NotFoundException
@@ -56,7 +59,7 @@ def _test_hexdigeststorage(storage: FileStorage):
     assert storage.list_hexdigests() == []
 
 
-def _test_jsonstorage(storage: JsonStorage):
+def _test_jsonstorage(storage: JsonStorage) -> None:
     assert storage.list_jsons() == []
     storage.upload_json(TEST_JSON, TEST_JSON_DATA)
     assert storage.download_json(TEST_JSON) == TEST_JSON_DATA
@@ -80,7 +83,7 @@ def _test_jsonstorage(storage: JsonStorage):
         ("rohmu", {"compression": False, "encryption": False}, pytest.raises(exceptions.CompressionOrEncryptionRequired)),
     ],
 )
-def test_storage(tmpdir, engine, kw, ex):
+def test_storage(tmpdir: py.path.local, engine: str, kw: dict[str, bool], ex: ContextManager | None) -> None:
     if ex is None:
         ex = does_not_raise()
     with ex:
@@ -91,7 +94,7 @@ def test_storage(tmpdir, engine, kw, ex):
             _test_jsonstorage(storage)
 
 
-def test_caching_storage(tmpdir, mocker):
+def test_caching_storage(tmpdir: py.path.local, mocker: MockerFixture) -> None:
     storage = create_storage(tmpdir=tmpdir, engine="cache")
     storage.upload_json(TEST_JSON, TEST_JSON_DATA)
 
@@ -111,7 +114,7 @@ def test_caching_storage(tmpdir, mocker):
 
 @patch("rohmu.object_storage.google.get_credentials")
 @patch.object(google.GoogleTransfer, "_init_google_client")
-def test_proxy_storage(mock_google_client, mock_get_credentials):
+def test_proxy_storage(mock_google_client: Mock, mock_get_credentials: Mock) -> None:
     rs = RohmuStorage(
         config=RohmuConfig.parse_obj(
             {

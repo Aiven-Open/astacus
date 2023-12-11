@@ -8,18 +8,20 @@ Test that the coordinator lock endpoint works.
 
 from astacus.common.magic import LockCall
 from astacus.common.statsd import StatsClient
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from unittest.mock import patch
 
 import respx
 
 
-def test_status_nonexistent(client):
+def test_status_nonexistent(client: TestClient) -> None:
     response = client.get("/lock/123")
     assert response.status_code == 404
     assert response.json() == {"detail": {"code": "operation_id_mismatch", "message": "Unknown operation id", "op": 123}}
 
 
-def test_lock_no_nodes(app, client):
+def test_lock_no_nodes(app: FastAPI, client: TestClient) -> None:
     nodes = app.state.coordinator_config.nodes
     nodes.clear()
 
@@ -35,7 +37,7 @@ def test_lock_no_nodes(app, client):
     assert response.json() == {"state": "done"}
 
 
-def test_lock_ok(app, client):
+def test_lock_ok(app: FastAPI, client: TestClient) -> None:
     nodes = app.state.coordinator_config.nodes
     with respx.mock:
         for node in nodes:
@@ -50,7 +52,7 @@ def test_lock_ok(app, client):
         assert app.state.coordinator_state.op_info.op_id == 1
 
 
-def test_lock_onefail(app, client):
+def test_lock_onefail(app: FastAPI, client: TestClient) -> None:
     nodes = app.state.coordinator_config.nodes
     with respx.mock:
         for i, node in enumerate(nodes):
