@@ -6,6 +6,9 @@ Test that the cleanup endpoint behaves as advertised
 """
 
 from astacus.common import ipc
+from astacus.common.rohmustorage import MultiRohmuStorage
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 import pytest
 import respx
@@ -13,7 +16,16 @@ import respx
 FAILS = [1, None]
 
 
-def _run(*, client, populated_mstorage, app, fail_at=None, retention, exp_jsons, exp_digests):
+def _run(
+    *,
+    client: TestClient,
+    populated_mstorage: MultiRohmuStorage,
+    app: FastAPI,
+    fail_at: int | None = None,
+    retention: ipc.Retention,
+    exp_jsons: int,
+    exp_digests: int,
+):
     app.state.coordinator_config.retention = retention
     assert len(populated_mstorage.get_storage("x").list_jsons()) == 2
     populated_mstorage.get_storage("x").upload_hexdigest_bytes("TOBEDELETED", b"x")
@@ -44,7 +56,7 @@ def _run(*, client, populated_mstorage, app, fail_at=None, retention, exp_jsons,
 
 
 @pytest.mark.parametrize("fail_at", FAILS)
-def test_api_cleanup_flow(fail_at, client, populated_mstorage, app):
+def test_api_cleanup_flow(fail_at: int | None, client: TestClient, populated_mstorage: MultiRohmuStorage, app: FastAPI):
     _run(
         fail_at=fail_at,
         client=client,
@@ -69,7 +81,9 @@ def test_api_cleanup_flow(fail_at, client, populated_mstorage, app):
         (ipc.Retention(maximum_backups=1, keep_days=10000), 1, 1),
     ],
 )
-def test_api_cleanup_retention(data, client, populated_mstorage, app):
+def test_api_cleanup_retention(
+    data: tuple[ipc.Retention, int, int], client: TestClient, populated_mstorage: MultiRohmuStorage, app: FastAPI
+):
     retention, exp_jsons, exp_digests = data
     _run(
         client=client,

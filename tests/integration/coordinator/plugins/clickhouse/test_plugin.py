@@ -347,7 +347,7 @@ async def test_cleanup_does_not_break_object_storage_disk_files(
     ports: Ports,
     clickhouse_command: ClickHouseCommand,
     minio_bucket: MinioBucket,
-):
+) -> None:
     with tempfile.TemporaryDirectory(prefix="storage_") as storage_path_str:
         storage_path = Path(storage_path_str)
         async with create_zookeeper(ports) as zookeeper:

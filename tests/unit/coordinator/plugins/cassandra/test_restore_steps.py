@@ -9,8 +9,9 @@ from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins import base
 from astacus.coordinator.plugins.cassandra import restore_steps
 from astacus.coordinator.plugins.cassandra.model import CassandraConfigurationNode, CassandraManifest, CassandraManifestNode
+from pytest_mock import MockerFixture
 from tests.unit.coordinator.plugins.cassandra.builders import build_keyspace
-from types import SimpleNamespace
+from unittest.mock import Mock
 from uuid import UUID
 
 import datetime
@@ -51,7 +52,7 @@ _pr_node = ipc.PartialRestoreRequestNode
 @pytest.mark.parametrize("override_tokens", [False, True])
 @pytest.mark.parametrize("replace_backup_nodes", [False, True])
 @pytest.mark.asyncio
-async def test_step_start_cassandra(mocker, override_tokens, replace_backup_nodes):
+async def test_step_start_cassandra(mocker: MockerFixture, override_tokens: bool, replace_backup_nodes: bool) -> None:
     plugin_manifest = CassandraManifest(
         cassandra_schema=CassandraSchema(keyspaces=[]),
         nodes=[_manifest_node(1)],
@@ -93,9 +94,9 @@ async def test_step_start_cassandra(mocker, override_tokens, replace_backup_node
     step = restore_steps.StartCassandraStep(
         replace_backup_nodes=replace_backup_nodes, override_tokens=override_tokens, cassandra_nodes=[_configuration_node(1)]
     )
-    context = SimpleNamespace(get_result=get_result)
-    cluster = SimpleNamespace(nodes=nodes)
-    result = await step.run_step(cluster, context)
+    context = Mock(get_result=get_result)
+    cluster = Mock(nodes=nodes)
+    result = await step.run_step(cluster, context)  # type: ignore[func-returns-value]
     assert result is None
     run_subop.assert_awaited_once_with(
         cluster,
@@ -107,7 +108,7 @@ async def test_step_start_cassandra(mocker, override_tokens, replace_backup_node
 
 
 @pytest.mark.asyncio
-async def test_step_stop_replaced_nodes(mocker):
+async def test_step_stop_replaced_nodes(mocker: MockerFixture) -> None:
     # Node 3 is replacing node 1.
     manifest_nodes = [_manifest_node(1), _manifest_node(2)]
     cassandra_nodes = [_configuration_node(1), _configuration_node(2), _configuration_node(3)]
@@ -129,8 +130,8 @@ async def test_step_stop_replaced_nodes(mocker):
     run_subop = mocker.patch.object(restore_steps, "run_subop")
 
     step = restore_steps.StopReplacedNodesStep(partial_restore_nodes=partial_restore_nodes, cassandra_nodes=cassandra_nodes)
-    context = SimpleNamespace(get_result=get_result)
-    cluster = SimpleNamespace(nodes=nodes)
+    context = Mock(get_result=get_result)
+    cluster = Mock(nodes=nodes)
     result = await step.run_step(cluster, context)
     assert result == [_coordinator_node(1)]
     run_subop.assert_awaited_once_with(
@@ -158,7 +159,7 @@ class AsyncIterableWrapper:
 
 @pytest.mark.parametrize("steps,success", [([True], True), ([False, True], True), ([False], False)])
 @pytest.mark.asyncio
-async def test_step_wait_cassandra_up(mocker, steps, success):
+async def test_step_wait_cassandra_up(mocker: MockerFixture, steps: list[bool], success: bool) -> None:
     get_schema_steps = steps[:]
 
     async def get_schema_hash(cluster):
@@ -167,13 +168,17 @@ async def test_step_wait_cassandra_up(mocker, steps, success):
 
     mocker.patch.object(restore_steps, "get_schema_hash", new=get_schema_hash)
 
-    mocker.patch.object(restore_steps.utils, "exponential_backoff", return_value=AsyncIterableWrapper(steps))
+    mocker.patch.object(
+        restore_steps.utils,  # type: ignore[attr-defined]
+        "exponential_backoff",
+        return_value=AsyncIterableWrapper(steps),
+    )
 
     step = restore_steps.WaitCassandraUpStep(duration=123)
-    context = None
-    cluster = None
+    context = Mock()
+    cluster = Mock()
     if success:
-        result = await step.run_step(cluster, context)
+        result = await step.run_step(cluster, context)  # type: ignore[func-returns-value]
         assert result is None
     else:
         with pytest.raises(base.StepFailedError):

@@ -30,7 +30,7 @@ def pytest_addoption(parser: Parser) -> None:
     )
 
 
-def pytest_runtest_setup(item):
+def pytest_runtest_setup(item: pytest.Item) -> None:
     if any(item.iter_markers(name="x86_64")) and platform.machine() != "x86_64":
         pytest.skip("x86_64 arch required")
 

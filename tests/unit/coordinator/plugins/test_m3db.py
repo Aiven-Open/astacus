@@ -135,7 +135,7 @@ class RestoreTest:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("rt", [RestoreTest(fail_at=i) for i in range(3)] + [RestoreTest()])
-async def test_m3_restore(coordinator: Coordinator, plugin: M3DBPlugin, etcd_client: ETCDClient, rt: RestoreTest):
+async def test_m3_restore(coordinator: Coordinator, plugin: M3DBPlugin, etcd_client: ETCDClient, rt: RestoreTest) -> None:
     partial_restore_nodes: Optional[List[ipc.PartialRestoreRequestNode]] = None
     if rt.partial:
         partial_restore_nodes = [ipc.PartialRestoreRequestNode(backup_index=0, node_index=0)]

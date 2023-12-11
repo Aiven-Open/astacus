@@ -2,6 +2,7 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
+from _pytest.config import Config
 from astacus.common.utils import AstacusModel, exponential_backoff
 from contextlib import asynccontextmanager
 from httpx import URL
@@ -15,6 +16,7 @@ import httpx
 import json
 import logging
 import os.path
+import py
 import pytest
 import subprocess
 
@@ -134,12 +136,12 @@ async def wait_url_up(url: Union[URL, str]) -> None:
 
 
 @pytest.fixture(name="rootdir")
-def fixture_rootdir(pytestconfig) -> str:
+def fixture_rootdir(pytestconfig: Config) -> str:
     return os.path.join(os.path.dirname(__file__), "..", "..")
 
 
 @asynccontextmanager
-async def _astacus(*, tmpdir, index: int) -> AsyncIterator[TestNode]:
+async def _astacus(*, tmpdir: py.path.local, index: int) -> AsyncIterator[TestNode]:
     node = ASTACUS_NODES[index]
     a_conf_path = create_astacus_config(tmpdir=tmpdir, node=node)
     astacus_source_root = os.path.join(os.path.dirname(__file__), "..", "..")
@@ -151,19 +153,19 @@ async def _astacus(*, tmpdir, index: int) -> AsyncIterator[TestNode]:
 
 
 @pytest.fixture(name="astacus1")
-async def fixture_astacus1(tmpdir) -> AsyncIterator[TestNode]:
+async def fixture_astacus1(tmpdir: py.path.local) -> AsyncIterator[TestNode]:
     async with _astacus(tmpdir=tmpdir, index=0) as a:
         yield a
 
 
 @pytest.fixture(name="astacus2")
-async def fixture_astacus2(tmpdir) -> AsyncIterator[TestNode]:
+async def fixture_astacus2(tmpdir: py.path.local) -> AsyncIterator[TestNode]:
     async with _astacus(tmpdir=tmpdir, index=1) as a:
         yield a
 
 
 @pytest.fixture(name="astacus3")
-async def fixture_astacus3(tmpdir) -> AsyncIterator[TestNode]:
+async def fixture_astacus3(tmpdir: py.path.local) -> AsyncIterator[TestNode]:
     async with _astacus(tmpdir=tmpdir, index=2) as a:
         yield a
 

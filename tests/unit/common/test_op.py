@@ -11,18 +11,19 @@ from astacus.common.exceptions import ExpiredOperationException
 from astacus.common.statsd import StatsClient
 from starlette.background import BackgroundTasks
 from starlette.datastructures import URL
+from unittest.mock import Mock
 
 import pytest
 
 
-class MockOp:
+class MockOp(op.Op):
     status = None
     op_id = 1
 
-    def set_status(self, state, *, from_status=None):
+    def set_status(self, status, *, from_status=None):
         if from_status and from_status != self.status:
             return
-        self.status = state
+        self.status = status
 
     def set_status_fail(self):
         self.status = op.Op.Status.fail
@@ -42,13 +43,15 @@ class MockOp:
     ],
 )
 @pytest.mark.parametrize("is_async", [False, True])
-async def test_opmixin_start_op(is_async, fun_ex, expect_status, expect_ex):
+async def test_opmixin_start_op(
+    is_async: bool, fun_ex: type[Exception] | None, expect_status: op.Op.Status, expect_ex: type[Exception] | None
+) -> None:
     mixin = op.OpMixin()
     mixin.state = op.OpState()
     mixin.stats = StatsClient(config=None)
     mixin.request_url = URL()
     mixin.background_tasks = BackgroundTasks()
-    op_obj = MockOp()
+    op_obj = MockOp(info=Mock(), op_id=0, stats=Mock())
 
     def _sync():
         if fun_ex:

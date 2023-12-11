@@ -5,6 +5,7 @@ See LICENSE for details
 
 from astacus.common.cassandra import schema
 from cassandra import metadata as cm
+from pytest_mock import MockerFixture
 from typing import Mapping
 
 import pytest
@@ -12,7 +13,7 @@ import pytest
 # pylint: disable=protected-access
 
 
-def test_schema(mocker):
+def test_schema(mocker: MockerFixture) -> None:
     cut = schema.CassandraUserType(name="cut", cql_create_self="CREATE-USER-TYPE", field_types=["type1", "type2"])
     cfunction = schema.CassandraFunction(name="cf", cql_create_self="CREATE-FUNCTION", argument_types=["atype1", "atype2"])
 
@@ -26,7 +27,7 @@ def test_schema(mocker):
 
     ctrigger = schema.CassandraTrigger(name="ctrigger", cql_create_self="CREATE-TRIGGER")
 
-    cmv = schema.CassandraIndex(name="cmv", cql_create_self="CREATE-MATERIALIZED-VIEW")
+    cmv = schema.CassandraMaterializedView(name="cmv", cql_create_self="CREATE-MATERIALIZED-VIEW")
 
     ctable = schema.CassandraTable(
         name="ctable", cql_create_self="CREATE-TABLE", indexes=[cindex], materialized_views=[cmv], triggers=[ctrigger]
@@ -96,7 +97,7 @@ def test_schema_keyspace_from_metadata(
     assert keyspace.user_types == []
 
 
-def test_schema_keyspace_iterate_user_types_in_restore_order():
+def test_schema_keyspace_iterate_user_types_in_restore_order() -> None:
     ut1 = schema.CassandraUserType(name="ut1", cql_create_self="", field_types=[])
     ut2 = schema.CassandraUserType(name="ut2", cql_create_self="", field_types=["ut3", "map<str,frozen<ut1>>"])
     ut3 = schema.CassandraUserType(name="ut3", cql_create_self="", field_types=["ut4"])
@@ -131,6 +132,6 @@ def test_schema_keyspace_iterate_user_types_in_restore_order():
         ('"q""u""o""t""e""d"', ['q"u"o"t"e"d']),
     ],
 )
-def test_iterate_identifiers_in_cql_type_definition(definition, identifiers):
+def test_iterate_identifiers_in_cql_type_definition(definition: str, identifiers: list[str]) -> None:
     got_identifiers = list(schema._iterate_identifiers_in_cql_type_definition(definition))
     assert got_identifiers == identifiers
