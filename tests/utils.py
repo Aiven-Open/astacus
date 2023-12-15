@@ -4,17 +4,18 @@ See LICENSE for details
 """
 from astacus.common.rohmustorage import RohmuConfig
 from pathlib import Path
-from typing import List, Union
+from typing import Final, List, Union
 
 import importlib
 import os
+import py
 import re
 import subprocess
 import sys
 
 # These test keys are from copied from pghoard
 
-CONSTANT_TEST_RSA_PUBLIC_KEY = """\
+CONSTANT_TEST_RSA_PUBLIC_KEY: Final = """\
 -----BEGIN PUBLIC KEY-----
 MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDQ9yu7rNmu0GFMYeQq9Jo2B3d9
 hv5t4a+54TbbxpJlks8T27ipgsaIjqiQP7+uXNfU6UCzGFEHs9R5OELtO3Hq0Dn+
@@ -22,7 +23,7 @@ JGdxJlJ1prxVkvjCICCpiOkhc2ytmn3PWRuVf2VyeAddslEWHuXhZPptvIr593kF
 lWN+9KPe+5bXS8of+wIDAQAB
 -----END PUBLIC KEY-----"""
 
-CONSTANT_TEST_RSA_PRIVATE_KEY = """\
+CONSTANT_TEST_RSA_PRIVATE_KEY: Final = """\
 -----BEGIN PRIVATE KEY-----
 MIICdwIBADANBgkqhkiG9w0BAQEFAASCAmEwggJdAgEAAoGBAND3K7us2a7QYUxh
 5Cr0mjYHd32G/m3hr7nhNtvGkmWSzxPbuKmCxoiOqJA/v65c19TpQLMYUQez1Hk4
@@ -41,7 +42,7 @@ nkMAHqg9PS372Cs=
 -----END PRIVATE KEY-----"""
 
 
-def create_rohmu_config(tmpdir, *, compression=True, encryption=True) -> RohmuConfig:
+def create_rohmu_config(tmpdir: py.path.local, *, compression: bool = True, encryption: bool = True) -> RohmuConfig:
     x_path = Path(tmpdir) / "rohmu-x"
     x_path.mkdir(exist_ok=True)
     y_path = Path(tmpdir) / "rohmu-y"

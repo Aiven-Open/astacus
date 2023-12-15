@@ -15,19 +15,6 @@ from starlette.datastructures import URL
 import pytest
 
 
-class MockOp:
-    status = None
-    op_id = 1
-
-    def set_status(self, state, *, from_status=None):
-        if from_status and from_status != self.status:
-            return
-        self.status = state
-
-    def set_status_fail(self):
-        self.status = op.Op.Status.fail
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "fun_ex,expect_status,expect_ex",
@@ -42,13 +29,15 @@ class MockOp:
     ],
 )
 @pytest.mark.parametrize("is_async", [False, True])
-async def test_opmixin_start_op(is_async, fun_ex, expect_status, expect_ex):
+async def test_opmixin_start_op(
+    is_async: bool, fun_ex: type[Exception] | None, expect_status: op.Op.Status, expect_ex: type[Exception] | None
+) -> None:
     mixin = op.OpMixin()
     mixin.state = op.OpState()
     mixin.stats = StatsClient(config=None)
     mixin.request_url = URL()
     mixin.background_tasks = BackgroundTasks()
-    op_obj = MockOp()
+    op_obj = op.Op(info=op.Op.Info(op_id=1), op_id=1, stats=StatsClient(config=None))
 
     def _sync():
         if fun_ex:
@@ -66,4 +55,4 @@ async def test_opmixin_start_op(is_async, fun_ex, expect_status, expect_ex):
         await mixin.background_tasks()
     except Exception as ex:  # pylint: disable=broad-except
         assert expect_ex and isinstance(ex, expect_ex)
-    assert op_obj.status == expect_status
+    assert op_obj.info.op_status == expect_status

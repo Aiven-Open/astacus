@@ -23,7 +23,7 @@ dst_pnode = m3placement.M3PlacementNode(
 )
 
 
-def create_dummy_placement():
+def create_dummy_placement() -> m3_placement_pb2.Placement:
     placement = m3_placement_pb2.Placement()
     instance = placement.instances["node-id1"]
     instance.id = "node-id1"
@@ -32,7 +32,7 @@ def create_dummy_placement():
     return placement
 
 
-def test_rewrite_single_m3_placement_node():
+def test_rewrite_single_m3_placement_node() -> None:
     placement = create_dummy_placement()
     m3placement.rewrite_single_m3_placement_node(
         placement, src_pnode=src_pnode, dst_pnode=dst_pnode, dst_isolation_group="az22"
@@ -43,7 +43,7 @@ def test_rewrite_single_m3_placement_node():
     assert instance2.isolation_group == "az22"
 
 
-def test_rewrite_m3_placement_bytes():
+def test_rewrite_m3_placement_bytes() -> None:
     value = create_dummy_placement().SerializeToString()
     assert isinstance(value, bytes)
     expected_bytes = [b"endpoint22", b"hostname22", b"az22"]

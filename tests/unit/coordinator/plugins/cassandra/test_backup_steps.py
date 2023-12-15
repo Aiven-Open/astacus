@@ -9,9 +9,10 @@ from astacus.common.cassandra.schema import CassandraSchema
 from astacus.coordinator.plugins.cassandra import backup_steps
 from astacus.coordinator.plugins.cassandra.model import CassandraConfigurationNode
 from dataclasses import dataclass
+from pytest_mock import MockerFixture
 from tests.unit.coordinator.plugins.cassandra.builders import build_keyspace
-from types import SimpleNamespace
 from typing import Mapping, Optional
+from unittest.mock import Mock
 from uuid import UUID
 
 import pytest
@@ -45,10 +46,10 @@ class RetrieveTestCase:
     + [RetrieveTestCase(name=f"match by {field}", field=field) for field in ["address", "host_id", "listen_address"]],
     ids=str,
 )
-def test_retrieve_manifest_from_cassandra(mocker, case):
+def test_retrieve_manifest_from_cassandra(mocker: MockerFixture, case: RetrieveTestCase) -> None:
     mocker.patch.object(CassandraSchema, "from_cassandra_session", return_value=CassandraSchema(keyspaces=[]))
     cassandra_nodes = [
-        SimpleNamespace(
+        Mock(
             host_id=UUID(f"1234567812345678123456781234567{node}"),
             address=f"1.2.3.{node}" if not case.duplicate_address else "127.0.0.1",
             listen_address="la" if node == 0 else None,
@@ -58,14 +59,14 @@ def test_retrieve_manifest_from_cassandra(mocker, case):
         for node in range(case.populate_nodes)
     ]
     token_to_host_owner_map_items = [
-        (SimpleNamespace(value=f"token{token}"), cassandra_nodes[node])
+        (Mock(value=f"token{token}"), cassandra_nodes[node])
         for node in range(case.populate_nodes)
         for token in range(case.populate_tokens)
         if ((node + node * token) // case.populate_rf) % case.populate_nodes == 0
     ]
 
-    mocked_map = SimpleNamespace(items=mocker.Mock(return_value=token_to_host_owner_map_items))
-    cas = SimpleNamespace(cluster_metadata=SimpleNamespace(token_map=SimpleNamespace(token_to_host_owner=mocked_map)))
+    mocked_map = Mock(items=mocker.Mock(return_value=token_to_host_owner_map_items))
+    cas = Mock(cluster_metadata=Mock(token_map=Mock(token_to_host_owner=mocked_map)))
 
     nodes = []
     for cassandra_node in cassandra_nodes:

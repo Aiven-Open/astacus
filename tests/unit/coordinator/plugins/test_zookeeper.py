@@ -173,7 +173,7 @@ async def test_fake_zookeeper_client_get_children_watch() -> None:
 
 
 @pytest.mark.asyncio
-async def test_fake_zookeeper_transaction():
+async def test_fake_zookeeper_transaction() -> None:
     client = FakeZooKeeperClient()
     async with client.connect() as connection:
         transaction = connection.transaction()
@@ -185,7 +185,7 @@ async def test_fake_zookeeper_transaction():
 
 
 @pytest.mark.asyncio
-async def test_fake_zookeeper_transaction_is_atomic():
+async def test_fake_zookeeper_transaction_is_atomic() -> None:
     client = FakeZooKeeperClient()
     async with client.connect() as connection:
         await connection.create("/key_2", b"old content")
@@ -203,7 +203,7 @@ async def test_fake_zookeeper_transaction_is_atomic():
 
 
 @pytest.mark.asyncio
-async def test_fake_zookeeper_transaction_does_not_implicitly_create_parents():
+async def test_fake_zookeeper_transaction_does_not_implicitly_create_parents() -> None:
     client = FakeZooKeeperClient()
     async with client.connect() as connection:
         transaction = connection.transaction()
@@ -213,7 +213,7 @@ async def test_fake_zookeeper_transaction_does_not_implicitly_create_parents():
 
 
 @pytest.mark.asyncio
-async def test_fake_zookeeper_transaction_generates_trigger():
+async def test_fake_zookeeper_transaction_generates_trigger() -> None:
     client = FakeZooKeeperClient()
     change_watch = ChangeWatch()
     async with client.connect() as connection:

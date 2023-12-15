@@ -32,12 +32,12 @@ import pytest
         (16676, None, None, False),
     ],
 )
-def test_increase_worth_reporting(old_value, new_value, total, exp):
+def test_increase_worth_reporting(old_value: int, new_value: int | None, total: int | None, exp: bool) -> None:
     assert progress.increase_worth_reporting(old_value, new_value, total=total) == exp
 
 
 @pytest.mark.parametrize("is_final", [True, False])
-def test_progress_merge(is_final):
+def test_progress_merge(is_final: bool) -> None:
     p1 = progress.Progress(handled=0, failed=1000, total=10, final=True)
     p2 = progress.Progress(handled=100, failed=100, total=1000, final=is_final)
     p3 = progress.Progress(handled=1000, failed=10, total=10000, final=True)

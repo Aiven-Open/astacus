@@ -23,13 +23,14 @@ from astacus.coordinator.list import compute_deduplicated_snapshot_file_stats, l
 from fastapi.testclient import TestClient
 from os import PathLike
 from pathlib import Path
+from pytest_mock import MockerFixture
 from tests.utils import create_rohmu_config
 
 import datetime
 import pytest
 
 
-def test_api_list(client: TestClient, populated_mstorage: MultiRohmuStorage, mocker) -> None:
+def test_api_list(client: TestClient, populated_mstorage: MultiRohmuStorage, mocker: MockerFixture) -> None:
     assert populated_mstorage
 
     def _run():

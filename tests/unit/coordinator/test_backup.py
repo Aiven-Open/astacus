@@ -9,11 +9,14 @@ Test that the coordinator backup endpoint works.
 from astacus.common import ipc, utils
 from astacus.common.ipc import SnapshotHash
 from astacus.common.progress import Progress
+from astacus.common.rohmustorage import RohmuStorage
 from astacus.common.statsd import StatsClient
 from astacus.coordinator.api import OpName
 from astacus.coordinator.plugins.base import build_node_index_datas, NodeIndexData
 from astacus.node.api import metadata
-from unittest.mock import patch
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from unittest.mock import Mock, patch
 
 import itertools
 import pytest
@@ -23,7 +26,7 @@ FAILS = [1, 2, 3, 4, 5, None]
 
 
 @pytest.mark.parametrize("fail_at", FAILS)
-def test_backup(fail_at, app, client, storage):
+def test_backup(fail_at: int | None, app: FastAPI, client: TestClient, storage: RohmuStorage) -> None:
     nodes = app.state.coordinator_config.nodes
     with respx.mock:
         for node in nodes:
@@ -96,7 +99,7 @@ def test_backup(fail_at, app, client, storage):
 _progress_done = Progress(final=True)
 
 
-def _ssresults(*kwarg_list):
+def _ssresults(*kwarg_list) -> list[ipc.SnapshotResult]:
     return [
         ipc.SnapshotResult(progress=_progress_done, hostname="host-{i}", start=utils.now(), **kw)
         for i, kw in enumerate(kwarg_list, 1)
@@ -153,12 +156,16 @@ def _ssresults(*kwarg_list):
         ),
     ],
 )
-def test_upload_optimization(hexdigests, snapshot_results, uploads):
-    assert uploads == build_node_index_datas(hexdigests=hexdigests, snapshots=snapshot_results, node_indices=[0, 1, 2, 3])
+def test_upload_optimization(
+    hexdigests: list[str], snapshot_results: list[ipc.SnapshotResult], uploads: list[NodeIndexData]
+) -> None:
+    assert uploads == build_node_index_datas(
+        hexdigests=set(hexdigests), snapshots=snapshot_results, node_indices=[0, 1, 2, 3]
+    )
 
 
 @patch("astacus.common.utils.monotonic_time")
-def test_backup_stats(mock_time, app, client):
+def test_backup_stats(mock_time: Mock, app: FastAPI, client: TestClient) -> None:
     mock_time.side_effect = itertools.count(start=0.0, step=0.5)
     nodes = app.state.coordinator_config.nodes
     with respx.mock:

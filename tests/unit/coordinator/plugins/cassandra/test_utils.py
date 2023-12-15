@@ -6,14 +6,15 @@ See LICENSE for details
 from astacus.common import ipc
 from astacus.coordinator.plugins.base import StepFailedError
 from astacus.coordinator.plugins.cassandra import utils
-from types import SimpleNamespace
+from pytest_mock import MockerFixture
+from unittest.mock import Mock
 
 import pytest
 
 
 @pytest.mark.parametrize("start_ok", [False, True])
 @pytest.mark.asyncio
-async def test_run_subop(mocker, start_ok):
+async def test_run_subop(mocker: MockerFixture, start_ok: bool) -> None:
     async def request_from_nodes(*args, **kwargs):
         if start_ok:
             return 42
@@ -23,7 +24,7 @@ async def test_run_subop(mocker, start_ok):
         assert start_results == 42
         return 7
 
-    cluster = SimpleNamespace(request_from_nodes=request_from_nodes, wait_successful_results=wait_successful_results)
+    cluster = Mock(request_from_nodes=request_from_nodes, wait_successful_results=wait_successful_results)
     try:
         result = await utils.run_subop(cluster=cluster, subop=ipc.CassandraSubOp.stop_cassandra, result_class=ipc.NodeResult)
     except StepFailedError:
@@ -42,7 +43,7 @@ async def test_run_subop(mocker, start_ok):
     ],
 )
 @pytest.mark.asyncio
-async def test_get_schema_hash(mocker, hashes, result):
-    mocker.patch.object(utils, "run_subop", return_value=[SimpleNamespace(schema_hash=hash) for hash in hashes])
-    actual_result = await utils.get_schema_hash(None)
+async def test_get_schema_hash(mocker: MockerFixture, hashes: list[int], result: tuple[str, str]) -> None:
+    mocker.patch.object(utils, "run_subop", return_value=[Mock(schema_hash=hash) for hash in hashes])
+    actual_result = await utils.get_schema_hash(mocker.Mock())
     assert actual_result == result

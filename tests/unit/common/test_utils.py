@@ -10,9 +10,11 @@ from astacus.common import utils
 from astacus.common.utils import AsyncSleeper, build_netloc, parse_umask
 from datetime import timedelta
 from pathlib import Path
+from pytest_mock import MockerFixture
 
 import asyncio
 import logging
+import py
 import pytest
 import tempfile
 import time
@@ -52,7 +54,7 @@ async def test_httpx_request_connect_failure():
 
 
 @pytest.mark.asyncio
-async def test_async_sleeper():
+async def test_async_sleeper() -> None:
     sleeper = AsyncSleeper()
 
     async def wait_and_wake():
@@ -69,8 +71,8 @@ async def test_async_sleeper():
 
 
 @pytest.mark.asyncio
-async def test_exponential_backoff(mocker):
-    _waits = []
+async def test_exponential_backoff(mocker: MockerFixture) -> None:
+    _waits: list[float] = []
     base = 42
 
     def _time_monotonic():
@@ -115,7 +117,7 @@ async def test_exponential_backoff(mocker):
         (timedelta(seconds=0), ""),
     ],
 )
-def test_timedelta_as_short_str(v, s):
+def test_timedelta_as_short_str(v: timedelta, s: str) -> None:
     assert utils.timedelta_as_short_str(v) == s
 
 
@@ -130,11 +132,11 @@ def test_timedelta_as_short_str(v, s):
         (1, "1 B"),
     ],
 )
-def test_size_as_short_str(v, s):
+def test_size_as_short_str(v: int, s: str) -> None:
     assert utils.size_as_short_str(v) == s
 
 
-def test_sizelimitedfile():
+def test_sizelimitedfile() -> None:
     with tempfile.NamedTemporaryFile() as f:
         f.write(b"foobarbaz")
         f.flush()
@@ -150,7 +152,7 @@ def test_sizelimitedfile():
         assert lf.read() == b"bar"
 
 
-def test_open_path_with_atomic_rename(tmpdir):
+def test_open_path_with_atomic_rename(tmpdir: py.path.local) -> None:
     # default is bytes
     f1_path = f"{tmpdir}/f1"
     with utils.open_path_with_atomic_rename(f1_path) as f1:
@@ -170,10 +172,15 @@ def test_open_path_with_atomic_rename(tmpdir):
 
     # erroneous cases should not produce file at all
     f3_path = f"{tmpdir}/f3"
-    with pytest.raises(AssertionError):
+
+    class TestException(RuntimeError):
+        pass
+
+    with pytest.raises(TestException):
         with utils.open_path_with_atomic_rename(f3_path):
-            assert False
-    assert not Path(f3_path).exists()
+            raise TestException()
+    # This version of MyPy works poorly with pytest.raises
+    assert not Path(f3_path).exists()  # type: ignore[unreachable]
 
 
 def test_parse_umask() -> None:

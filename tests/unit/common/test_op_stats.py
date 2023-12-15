@@ -40,7 +40,7 @@ class DummyStep3(DummyStep):
 
 
 @pytest.mark.asyncio
-async def test_op_stats():
+async def test_op_stats() -> None:
     stats = StatsClient(config=None)
     coordinator = Coordinator(
         request_url=URL(),
@@ -73,7 +73,7 @@ class DummyOp(op.Op):
     pass
 
 
-def test_status_fail_stats():
+def test_status_fail_stats() -> None:
     stats = StatsClient(config=None)
     operation = DummyOp(info=op.Op.Info(op_id=1, op_name="DummyOp"), op_id=1, stats=stats)
 
