@@ -146,6 +146,12 @@ async def setup_cluster_content(clients: List[HttpClickHouseClient], use_named_c
         b"SETTINGS index_granularity=8192 "
         b"SETTINGS allow_experimental_object_type=1"
     )
+    # test that we can re-create a table requiring custom merge tree settings.
+    await clients[0].execute(
+        b"CREATE TABLE default.with_nullable_key (thekey Nullable(UInt32), thedata String) "
+        b"ENGINE = ReplicatedMergeTree ORDER BY (thekey) "
+        b"SETTINGS allow_nullable_key=true"
+    )
     # test that we correctly restore nested fields
     await clients[0].execute(
         b"CREATE TABLE default.nested_not_flatten (thekey UInt32, thedata Nested(a UInt32, b UInt32)) "
@@ -265,6 +271,13 @@ async def test_restores_table_with_experimental_types(restored_cluster: List[Cli
     for client, expected_data in zip(restored_cluster, cluster_data):
         response = await client.execute(b"SELECT thekey, thedata FROM default.with_experimental_types ORDER BY thekey")
         assert response == expected_data
+
+
+@pytest.mark.asyncio
+async def test_restores_table_with_nullable_key(restored_cluster: List[ClickHouseClient]) -> None:
+    for client in restored_cluster:
+        response = await client.execute(b"SELECT thekey, thedata FROM default.with_nullable_key ORDER BY thekey")
+        assert response == []
 
 
 @pytest.mark.asyncio
