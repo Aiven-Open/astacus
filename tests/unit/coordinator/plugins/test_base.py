@@ -21,6 +21,7 @@ from astacus.coordinator.plugins.base import (
     ListBackupsStep,
     ListDeltaBackupsStep,
     ListHexdigestsStep,
+    ManifestMin,
     SnapshotReleaseStep,
     SnapshotStep,
     Step,
@@ -118,7 +119,7 @@ def named_manifest(filename: str) -> ipc.BackupManifest:
     return make_manifest(some_isoformat, some_isoformat, filename=filename)
 
 
-def manifest_with_hashes(hashes: dict[str, bytes]) -> ipc.BackupManifest:
+def manifest_with_hashes(hashes: dict[str, bytes], index: int) -> ipc.BackupManifest:
     return ipc.BackupManifest(
         start=datetime.datetime.fromisoformat("2020-01-05T15:30Z"),
         end=datetime.datetime.fromisoformat("2020-01-05T15:30Z"),
@@ -128,7 +129,7 @@ def manifest_with_hashes(hashes: dict[str, bytes]) -> ipc.BackupManifest:
         ],
         upload_results=[],
         plugin=Plugin.files,
-        filename="some-manifest",
+        filename=f"some-manifest-{index}",
     )
 
 
@@ -342,7 +343,7 @@ async def test_delete_backup_and_delta_manifests(
         ([], {"a": b"a"}, {}),
         ([], {"a": b"a"}, {}),
         (
-            [manifest_with_hashes({"a": b"a"}), manifest_with_hashes({"b": b"b"})],
+            [manifest_with_hashes({"a": b"a"}, 0), manifest_with_hashes({"b": b"b"}, 1)],
             {"a": b"a", "b": b"b", "c": b"c"},
             {"a": b"a", "b": b"b"},
         ),
@@ -356,8 +357,9 @@ async def test_delete_dangling_hexdigests_step(
     expected_hashes: dict[str, bytes],
 ) -> None:
     async_digest_storage = AsyncHexDigestStorage(storage=MemoryHexDigestStorage(items=stored_hashes))
-    context.set_result(ComputeKeptBackupsStep, kept_backups)
-    step = DeleteDanglingHexdigestsStep(hexdigest_storage=async_digest_storage)
+    async_json_storage = AsyncJsonStorage(storage=MemoryJsonStorage(items={b.filename: b.json() for b in kept_backups}))
+    context.set_result(ComputeKeptBackupsStep, [ManifestMin.from_manifest(b) for b in kept_backups])
+    step = DeleteDanglingHexdigestsStep(json_storage=async_json_storage, hexdigest_storage=async_digest_storage)
     await step.run_step(single_node_cluster, context)
     assert stored_hashes == expected_hashes
 

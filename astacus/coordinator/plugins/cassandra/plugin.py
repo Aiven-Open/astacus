@@ -220,5 +220,8 @@ class CassandraPlugin(CoordinatorPlugin):
                 retain_deltas=True,
             ),
             base.DeleteBackupAndDeltaManifestsStep(json_storage=context.json_storage),
-            base.DeleteDanglingHexdigestsStep(hexdigest_storage=context.hexdigest_storage),
+            base.DeleteDanglingHexdigestsStep(
+                json_storage=context.json_storage,
+                hexdigest_storage=context.hexdigest_storage,
+            ),
         ]

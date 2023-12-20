@@ -23,9 +23,11 @@ from .manifest import (
 from .parts import list_parts_to_attach
 from .replication import DatabaseReplica, get_databases_replicas, get_shard_and_replica, sync_replicated_database
 from astacus.common import ipc
+from astacus.common.asyncstorage import AsyncJsonStorage
 from astacus.common.exceptions import TransientException
 from astacus.common.limiter import gather_limited
 from astacus.coordinator.cluster import Cluster
+from astacus.coordinator.manifest import download_backup_manifest
 from astacus.coordinator.plugins.base import (
     BackupManifestStep,
     ComputeKeptBackupsStep,
@@ -784,6 +786,7 @@ class DeleteDanglingObjectStorageFilesStep(Step[None]):
     """
 
     disks: Disks
+    json_storage: AsyncJsonStorage
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         backup_manifests = context.get_result(ComputeKeptBackupsStep)
@@ -793,14 +796,15 @@ class DeleteDanglingObjectStorageFilesStep(Step[None]):
             # than the latest backup, so we don't do anything.
             return
         newest_backup_start_time = max((backup_manifest.start for backup_manifest in backup_manifests))
-        clickhouse_manifests = [
-            ClickHouseManifest.from_plugin_data(backup_manifest.plugin_data) for backup_manifest in backup_manifests
-        ]
+
         kept_paths: dict[str, set[Path]] = {}
-        for clickhouse_manifest in clickhouse_manifests:
+        for manifest_min in backup_manifests:
+            manifest_data = await download_backup_manifest(self.json_storage, manifest_min.filename)
+            clickhouse_manifest = ClickHouseManifest.from_plugin_data(manifest_data.plugin_data)
             for object_storage_files in clickhouse_manifest.object_storage_files:
                 disk_kept_paths = kept_paths.setdefault(object_storage_files.disk_name, set())
                 disk_kept_paths.update((file.path for file in object_storage_files.files))
+
         for disk_name, disk_kept_paths in sorted(kept_paths.items()):
             disk_object_storage = self.disks.get_object_storage(disk_name=disk_name)
             if disk_object_storage is None:

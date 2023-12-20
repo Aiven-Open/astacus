@@ -49,7 +49,10 @@ class CoordinatorPlugin(AstacusModel):
                 explicit_delete=explicit_delete,
             ),
             DeleteBackupManifestsStep(json_storage=context.json_storage),
-            DeleteDanglingHexdigestsStep(hexdigest_storage=context.hexdigest_storage),
+            DeleteDanglingHexdigestsStep(
+                json_storage=context.json_storage,
+                hexdigest_storage=context.hexdigest_storage,
+            ),
         ]
 
 
@@ -533,7 +536,18 @@ class RestoreDeltasStep(Step[None]):
         await cluster.wait_successful_results(start_results=start_results, result_class=ipc.NodeResult)
 
 
-def _prune_manifests(manifests: List[ipc.BackupManifest], retention: Retention) -> List[ipc.BackupManifest]:
+@dataclasses.dataclass
+class ManifestMin:
+    start: datetime.datetime
+    end: datetime.datetime
+    filename: str
+
+    @classmethod
+    def from_manifest(cls, manifest: ipc.BackupManifest) -> ManifestMin:
+        return cls(start=manifest.start, end=manifest.end, filename=manifest.filename)
+
+
+def _prune_manifests(manifests: List[ManifestMin], retention: Retention) -> List[ManifestMin]:
     manifests = sorted(manifests, key=lambda m: (m.start, m.end, m.filename), reverse=True)
     if retention.minimum_backups is not None and retention.minimum_backups >= len(manifests):
         return manifests
@@ -564,7 +578,7 @@ def _prune_manifests(manifests: List[ipc.BackupManifest], retention: Retention) 
 
 
 @dataclasses.dataclass
-class ComputeKeptBackupsStep(Step[Sequence[ipc.BackupManifest]]):
+class ComputeKeptBackupsStep(Step[Sequence[ManifestMin]]):
     """
     Return a list of backup manifests we want to keep, after excluding the explicitly deleted
     backups and applying the retention rules.
@@ -575,32 +589,29 @@ class ComputeKeptBackupsStep(Step[Sequence[ipc.BackupManifest]]):
     explicit_delete: Sequence[str]
     retain_deltas: bool = False
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> Sequence[ipc.BackupManifest]:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> Sequence[ManifestMin]:
         kept_manifests = await self.compute_kept_basebackups(context)
         if self.retain_deltas:
             kept_manifests += await self.compute_kept_deltas(kept_manifests, context)
         return kept_manifests
 
-    async def compute_kept_basebackups(self, context: StepsContext) -> List[ipc.BackupManifest]:
+    async def compute_kept_basebackups(self, context: StepsContext) -> List[ManifestMin]:
         all_backup_names = context.get_result(ListBackupsStep)
         kept_backup_names = all_backup_names.difference(set(self.explicit_delete))
         manifests = []
         for backup_name in kept_backup_names:
-            manifests.append(await download_backup_manifest(self.json_storage, backup_name))
-            manifests = _prune_manifests(manifests, self.retention)
+            manifests.append(ManifestMin.from_manifest(await download_backup_manifest(self.json_storage, backup_name)))
 
-        return manifests
+        return _prune_manifests(manifests, self.retention)
 
-    async def compute_kept_deltas(
-        self, kept_backups: Sequence[ipc.BackupManifest], context: StepsContext
-    ) -> List[ipc.BackupManifest]:
+    async def compute_kept_deltas(self, kept_backups: Sequence[ManifestMin], context: StepsContext) -> List[ManifestMin]:
         if not kept_backups:
             return []
         all_delta_names = context.get_result(ListDeltaBackupsStep)
         oldest_kept_backup = min(kept_backups, key=lambda b: b.start)
-        kept_deltas: List[ipc.BackupManifest] = []
+        kept_deltas: List[ManifestMin] = []
         for delta_name in all_delta_names:
-            delta_manifest = await download_backup_manifest(self.json_storage, delta_name)
+            delta_manifest = ManifestMin.from_manifest(await download_backup_manifest(self.json_storage, delta_name))
             if delta_manifest.end < oldest_kept_backup.end:
                 continue
             kept_deltas.append(delta_manifest)
@@ -641,17 +652,18 @@ class DeleteDanglingHexdigestsStep(Step[None]):
     """
 
     hexdigest_storage: AsyncHexDigestStorage
+    json_storage: AsyncJsonStorage
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         kept_manifests = context.get_result(ComputeKeptBackupsStep)
         logger.info("listing extra hexdigests")
-        kept_hexdigests: set[str] = set()
-        for manifest in kept_manifests:
+        extra_hexdigests = set(await self.hexdigest_storage.list_hexdigests())
+        for manifest_min in kept_manifests:
+            manifest = await download_backup_manifest(self.json_storage, manifest_min.filename)
             for result in manifest.snapshot_results:
                 assert result.hashes is not None
-                kept_hexdigests = kept_hexdigests | set(h.hexdigest for h in result.hashes if h.hexdigest)
-        all_hexdigests = await self.hexdigest_storage.list_hexdigests()
-        extra_hexdigests = set(all_hexdigests).difference(kept_hexdigests)
+                for hash_ in result.hashes:
+                    extra_hexdigests.discard(hash_.hexdigest)
         logger.info("deleting %d hexdigests from object storage", len(extra_hexdigests))
         for i, hexdigest in enumerate(extra_hexdigests, 1):
             # Due to rate limiting, it might be better to not do this in parallel

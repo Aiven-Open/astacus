@@ -218,6 +218,9 @@ class ClickHousePlugin(CoordinatorPlugin):
                 explicit_delete=explicit_delete,
             ),
             DeleteBackupManifestsStep(json_storage=context.json_storage),
-            DeleteDanglingHexdigestsStep(hexdigest_storage=context.hexdigest_storage),
-            DeleteDanglingObjectStorageFilesStep(disks=disks),
+            DeleteDanglingHexdigestsStep(
+                json_storage=context.json_storage,
+                hexdigest_storage=context.hexdigest_storage,
+            ),
+            DeleteDanglingObjectStorageFilesStep(disks=disks, json_storage=context.json_storage),
         ]
