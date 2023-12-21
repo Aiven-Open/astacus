@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+from astacus.common.asyncstorage import AsyncJsonStorage
 from astacus.common.exceptions import TransientException
 from astacus.common.ipc import BackupManifest, Plugin, SnapshotFile, SnapshotResult, SnapshotState
 from astacus.coordinator.cluster import Cluster
@@ -9,6 +10,7 @@ from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins.base import (
     BackupManifestStep,
     ComputeKeptBackupsStep,
+    ManifestMin,
     SnapshotStep,
     StepFailedError,
     StepsContext,
@@ -69,6 +71,7 @@ from astacus.coordinator.plugins.clickhouse.steps import (
 from astacus.coordinator.plugins.zookeeper import FakeZooKeeperClient, ZooKeeperClient
 from base64 import b64encode
 from pathlib import Path
+from tests.unit.storage import MemoryJsonStorage
 from typing import Awaitable, Iterable, Optional, Sequence
 from unittest import mock
 from unittest.mock import _Call as MockCall  # pylint: disable=protected-access
@@ -1171,57 +1174,56 @@ async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
             ),
         ]
     )
+    manifests = [
+        BackupManifest(
+            start=datetime.datetime(2020, 1, 2, 10, tzinfo=datetime.timezone.utc),
+            end=datetime.datetime(2020, 1, 2, 11, tzinfo=datetime.timezone.utc),
+            attempt=1,
+            snapshot_results=[],
+            upload_results=[],
+            plugin=Plugin.clickhouse,
+            plugin_data=ClickHouseManifest(
+                version=ClickHouseBackupVersion.V2,
+                object_storage_files=[
+                    ClickHouseObjectStorageFiles(
+                        disk_name="remote",
+                        files=[
+                            ClickHouseObjectStorageFile(path=Path("abc/defghi")),
+                            ClickHouseObjectStorageFile(path=Path("jkl/mnopqr")),
+                        ],
+                    )
+                ],
+            ).to_plugin_data(),
+            filename="backup-2",
+        ),
+        BackupManifest(
+            start=datetime.datetime(2020, 1, 3, 10, tzinfo=datetime.timezone.utc),
+            end=datetime.datetime(2020, 1, 3, 11, tzinfo=datetime.timezone.utc),
+            attempt=1,
+            snapshot_results=[],
+            upload_results=[],
+            plugin=Plugin.clickhouse,
+            plugin_data=ClickHouseManifest(
+                version=ClickHouseBackupVersion.V2,
+                object_storage_files=[
+                    ClickHouseObjectStorageFiles(
+                        disk_name="remote",
+                        files=[
+                            ClickHouseObjectStorageFile(path=Path("jkl/mnopqr")),
+                            ClickHouseObjectStorageFile(path=Path("stu/vwxyza")),
+                        ],
+                    )
+                ],
+            ).to_plugin_data(),
+            filename="backup-3",
+        ),
+    ]
+    async_json_storage = AsyncJsonStorage(storage=MemoryJsonStorage(items={b.filename: b.json() for b in manifests}))
     disks = Disks(disks=[create_object_storage_disk("remote", object_storage)])
-    step = DeleteDanglingObjectStorageFilesStep(disks=disks)
+    step = DeleteDanglingObjectStorageFilesStep(disks=disks, json_storage=async_json_storage)
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
-    context.set_result(
-        ComputeKeptBackupsStep,
-        [
-            BackupManifest(
-                start=datetime.datetime(2020, 1, 2, 10, tzinfo=datetime.timezone.utc),
-                end=datetime.datetime(2020, 1, 2, 11, tzinfo=datetime.timezone.utc),
-                attempt=1,
-                snapshot_results=[],
-                upload_results=[],
-                plugin=Plugin.clickhouse,
-                plugin_data=ClickHouseManifest(
-                    version=ClickHouseBackupVersion.V2,
-                    object_storage_files=[
-                        ClickHouseObjectStorageFiles(
-                            disk_name="remote",
-                            files=[
-                                ClickHouseObjectStorageFile(path=Path("abc/defghi")),
-                                ClickHouseObjectStorageFile(path=Path("jkl/mnopqr")),
-                            ],
-                        )
-                    ],
-                ).to_plugin_data(),
-                filename="backup-2",
-            ),
-            BackupManifest(
-                start=datetime.datetime(2020, 1, 3, 10, tzinfo=datetime.timezone.utc),
-                end=datetime.datetime(2020, 1, 3, 11, tzinfo=datetime.timezone.utc),
-                attempt=1,
-                snapshot_results=[],
-                upload_results=[],
-                plugin=Plugin.clickhouse,
-                plugin_data=ClickHouseManifest(
-                    version=ClickHouseBackupVersion.V2,
-                    object_storage_files=[
-                        ClickHouseObjectStorageFiles(
-                            disk_name="remote",
-                            files=[
-                                ClickHouseObjectStorageFile(path=Path("jkl/mnopqr")),
-                                ClickHouseObjectStorageFile(path=Path("stu/vwxyza")),
-                            ],
-                        )
-                    ],
-                ).to_plugin_data(),
-                filename="backup-3",
-            ),
-        ],
-    )
+    context.set_result(ComputeKeptBackupsStep, [ManifestMin.from_manifest(b) for b in manifests])
     await step.run_step(cluster, context)
     assert await object_storage.list_items() == [
         # Only not_used/and_old was deleted
