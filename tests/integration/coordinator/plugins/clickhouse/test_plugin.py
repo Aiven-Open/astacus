@@ -147,6 +147,7 @@ async def setup_cluster_content(clients: List[HttpClickHouseClient], use_named_c
         b"SETTINGS allow_experimental_object_type=1"
     )
     # test that we can re-create a table requiring custom merge tree settings.
+    # Unlike other cases, we don't have to SET a global settings because it's merge tree setting.
     await clients[0].execute(
         b"CREATE TABLE default.with_nullable_key (thekey Nullable(UInt32), thedata String) "
         b"ENGINE = ReplicatedMergeTree ORDER BY (thekey) "
