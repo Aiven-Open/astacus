@@ -518,7 +518,6 @@ class RestoreReplicatedDatabasesStep(Step[None]):
             b"SET allow_experimental_object_type=true",
             b"SET allow_suspicious_codecs=true",
             b"SET allow_suspicious_low_cardinality_types=true",
-            b"SET merge_tree_allow_nullable_key=true",
             # If a table was created with flatten_nested=0, we must be careful to not re-create the
             # table with flatten_nested=1, since this would recreate the table with a different schema.
             # If a table was created with flatten_nested=1, the query in system.tables.create_table_query
