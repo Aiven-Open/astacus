@@ -110,6 +110,11 @@ def _run_server(args) -> bool:
                     "fmt": '%(levelprefix)s %(client_addr)s - "%(request_line)s" %(status_code)s',
                 },
             },
+            "filters": {
+                "access_log_level": {
+                    "()": "astacus.common.access_log.AccessLogLevelFilter",
+                },
+            },
             "handlers": {
                 "default": {
                     "class": "logging.StreamHandler",
@@ -119,6 +124,7 @@ def _run_server(args) -> bool:
                 "access": {
                     "class": "logging.StreamHandler",
                     "formatter": "access",
+                    "filters": ["access_log_level"],
                     "stream": "ext://sys.stdout",
                 },
             },
