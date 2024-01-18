@@ -124,14 +124,19 @@ def _run_server(args) -> bool:
                 "access": {
                     "class": "logging.StreamHandler",
                     "formatter": "access",
-                    "filters": ["access_log_level"],
+                    "level": log_level,
                     "stream": "ext://sys.stdout",
                 },
             },
             "loggers": {
                 "": {"handlers": ["default"], "level": log_level},
                 "uvicorn.error": {"level": log_level},
-                "uvicorn.access": {"handlers": ["access"], "level": log_level, "propagate": False},
+                "uvicorn.access": {
+                    "handlers": ["access"],
+                    "filters": ["access_log_level"],
+                    "level": log_level,
+                    "propagate": False,
+                },
                 "kazoo.client": {"level": kazoo_log_level},
             },
         },
