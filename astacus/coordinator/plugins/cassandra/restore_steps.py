@@ -14,7 +14,7 @@ from astacus.common.cassandra.config import BACKUP_GLOB
 from astacus.common.cassandra.schema import CassandraKeyspace
 from astacus.common.cassandra.utils import SYSTEM_KEYSPACES
 from astacus.common.magic import JSON_DELTA_PREFIX
-from astacus.coordinator.cluster import Cluster
+from astacus.coordinator.cluster import Cluster, WaitResultError
 from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins.base import (
     BackupManifestStep,
@@ -204,7 +204,10 @@ class WaitCassandraUpStep(Step[None]):
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         last_err = None
         async for _ in utils.exponential_backoff(initial=1, maximum=60, duration=self.duration):
-            current_hash, err = await get_schema_hash(cluster=cluster)
+            try:
+                current_hash, err = await get_schema_hash(cluster=cluster)
+            except WaitResultError as e:
+                current_hash, err = "", str(e)
             if current_hash:
                 return
             if err:
