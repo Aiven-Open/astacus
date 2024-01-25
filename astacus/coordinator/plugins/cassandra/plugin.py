@@ -167,12 +167,12 @@ class CassandraPlugin(CoordinatorPlugin):
                 partial_restore_nodes=req.partial_restore_nodes,
             ),
             restore_steps.StopReplacedNodesStep(partial_restore_nodes=req.partial_restore_nodes, cassandra_nodes=self.nodes),
-            restore_steps.UploadFinalDeltaStep(json_storage=context.json_storage, storage_name=context.storage_name),
-            restore_steps.RestoreFinalDeltasStep(
-                json_storage=context.json_storage,
-                storage_name=context.storage_name,
-                partial_restore_nodes=req.partial_restore_nodes,
-            ),
+            # restore_steps.UploadFinalDeltaStep(json_storage=context.json_storage, storage_name=context.storage_name),
+            # restore_steps.RestoreFinalDeltasStep(
+            #     json_storage=context.json_storage,
+            #     storage_name=context.storage_name,
+            #     partial_restore_nodes=req.partial_restore_nodes,
+            # ),
             restore_steps.StartCassandraStep(replace_backup_nodes=True, override_tokens=True, cassandra_nodes=self.nodes),
             restore_steps.WaitCassandraUpStep(duration=self.restore_start_timeout),
         ]
