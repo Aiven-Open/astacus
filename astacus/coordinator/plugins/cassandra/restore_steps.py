@@ -29,6 +29,7 @@ from cassandra import metadata as cm
 from dataclasses import dataclass, field
 from typing import Iterable, List, Optional, Type
 
+import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
@@ -81,6 +82,7 @@ class StopReplacedNodesStep(Step[List[CoordinatorNode]]):
 
         if nodes_to_stop:
             await run_subop(cluster, ipc.CassandraSubOp.stop_cassandra, nodes=nodes_to_stop, result_class=ipc.NodeResult)
+            await asyncio.sleep(30)  # temp workaround: make sure the stopped nodes are seen as DOWN in gossip
         return nodes_to_stop
 
     def find_matching_cassandra_index(self, backup_node: CassandraManifestNode) -> Optional[int]:
@@ -202,10 +204,16 @@ class WaitCassandraUpStep(Step[None]):
     duration: int
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
+        node_to_backup_index = context.get_result(MapNodesStep)
         last_err = None
         async for _ in utils.exponential_backoff(initial=1, maximum=60, duration=self.duration):
+            restoring_nodes = [
+                cluster.nodes[node_index]
+                for node_index, backup_index in enumerate(node_to_backup_index)
+                if backup_index is not None
+            ]
             try:
-                current_hash, err = await get_schema_hash(cluster=cluster)
+                current_hash, err = await get_schema_hash(cluster=cluster, nodes=restoring_nodes)
             except WaitResultError as e:
                 current_hash, err = "", str(e)
             if current_hash:
