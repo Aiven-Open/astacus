@@ -174,7 +174,9 @@ class CassandraPlugin(CoordinatorPlugin):
                 partial_restore_nodes=req.partial_restore_nodes,
             ),
             restore_steps.StartCassandraStep(replace_backup_nodes=True, override_tokens=True, cassandra_nodes=self.nodes),
-            restore_steps.WaitCassandraUpStep(duration=self.restore_start_timeout),
+            restore_steps.WaitCassandraUpStep(
+                duration=self.restore_start_timeout, replaced_node_step=restore_steps.StopReplacedNodesStep
+            ),
         ]
 
     def get_restore_schema_from_manifest_steps(

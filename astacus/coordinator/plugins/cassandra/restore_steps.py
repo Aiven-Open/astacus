@@ -200,11 +200,26 @@ class StartCassandraStep(Step[None]):
 @dataclass
 class WaitCassandraUpStep(Step[None]):
     duration: int
+    # Only StopReplacedNodesStep's result can be directly substracted from cluster.nodes
+    # thus retricting the type to Optional[StopReplacedNodesStep]
+    replaced_node_step: Optional[Type[StopReplacedNodesStep]] = None
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         last_err = None
+
+        nodes = None
+        if self.replaced_node_step:
+            replaced_nodes = context.get_result(self.replaced_node_step)
+            if len(replaced_nodes) != 1:
+                raise StepFailedError(f"Multiple node replacement not supported: {replaced_nodes}")
+            replaced_node = replaced_nodes[0]
+            if replaced_node not in cluster.nodes:
+                logger.warning("Replaced %s is not part of the cluster.nodes: %s", replaced_node, cluster.nodes)
+            else:
+                nodes = [n for n in cluster.nodes if n != replaced_node]
+
         async for _ in utils.exponential_backoff(initial=1, maximum=60, duration=self.duration):
-            current_hash, err = await get_schema_hash(cluster=cluster)
+            current_hash, err = await get_schema_hash(cluster=cluster, nodes=nodes)
             if current_hash:
                 return
             if err:
