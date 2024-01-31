@@ -26,6 +26,7 @@ from pytest_mock import MockerFixture
 from tests.utils import create_rohmu_config
 
 import datetime
+import json
 import pytest
 
 
@@ -216,7 +217,9 @@ def fixture_backup_manifest() -> BackupManifest:
 
 def test_compute_deduplicated_snapshot_file_stats(backup_manifest: BackupManifest) -> None:
     """Test backup stats are computed correctly in the presence of duplicate snapshot files."""
-    num_files, total_size = compute_deduplicated_snapshot_file_stats(backup_manifest)
+    manifest_json = json.loads(backup_manifest.json())
+    snapshot_results_json = manifest_json["snapshot_results"]
+    num_files, total_size = compute_deduplicated_snapshot_file_stats(snapshot_results_json)
     assert (num_files, total_size) == (6, 6000)
 
 
