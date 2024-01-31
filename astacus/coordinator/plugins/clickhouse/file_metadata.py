@@ -6,7 +6,6 @@ When using remote storage disk in ClickHouse, the actual data is in object stora
 but there are still metadata files in local storage. This module contains functions
 required to parse these metadata files.
 """
-from pathlib import Path
 from typing import Sequence
 
 import dataclasses
@@ -37,7 +36,7 @@ class InvalidFileMetadata(ValueError):
 @dataclasses.dataclass(frozen=True)
 class ObjectMetadata:
     size_bytes: int
-    relative_path: Path
+    relative_path: str
 
 
 @dataclasses.dataclass(frozen=True)
@@ -55,7 +54,7 @@ class FileMetadata:
         objects_metadata = [
             ObjectMetadata(
                 size_bytes=int(object_match.group("size_bytes")),
-                relative_path=Path(object_match.group("relative_path").decode()),
+                relative_path=object_match.group("relative_path").decode(),
             )
             for object_match in OBJECT_METADATA_RE.finditer(file_match.group("objects"))
         ]

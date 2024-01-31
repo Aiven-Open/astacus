@@ -23,7 +23,7 @@ class Snapshot(ABC):
         ...
 
     @abstractmethod
-    def get_file(self, relative_path: Path) -> SnapshotFile | None:
+    def get_file(self, relative_path: str) -> SnapshotFile | None:
         ...
 
     @abstractmethod
@@ -34,7 +34,7 @@ class Snapshot(ABC):
     def get_all_files(self) -> Iterable[SnapshotFile]:
         ...
 
-    def get_all_paths(self) -> Iterable[Path]:
+    def get_all_paths(self) -> Iterable[str]:
         return (file.relative_path for file in self.get_all_files())
 
     @abstractmethod

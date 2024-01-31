@@ -47,7 +47,7 @@ class Snapshotter(ABC, Generic[T]):
     def get_snapshot_state(self) -> SnapshotState:
         return SnapshotState(root_globs=self._groups.root_globs(), files=list(self.snapshot.get_all_files()))
 
-    def _file_in_src(self, relative_path: Path) -> SnapshotFile:
+    def _file_in_src(self, relative_path: str) -> SnapshotFile:
         src_path = self._src / relative_path
         st = src_path.stat()
         return SnapshotFile(relative_path=relative_path, mtime_ns=st.st_mtime_ns, file_size=st.st_size)
@@ -77,7 +77,7 @@ class Snapshotter(ABC, Generic[T]):
                 raise ValueError("All SnapshotGroups containing a common file must have the same embedded_file_size_max")
         return head.embedded_file_size_max
 
-    def _maybe_link(self, relpath: Path) -> None:
+    def _maybe_link(self, relpath: str) -> None:
         """Links the src to the dst if we are not in same root mode.
         If dst exists, it is unlinked first.
         """

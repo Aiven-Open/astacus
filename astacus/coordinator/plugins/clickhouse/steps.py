@@ -38,7 +38,6 @@ from astacus.coordinator.plugins.base import (
 )
 from astacus.coordinator.plugins.zookeeper import ChangeWatch, TransactionError, ZooKeeperClient
 from base64 import b64decode
-from pathlib import Path
 from typing import Any, Awaitable, Callable, cast, Dict, Iterable, Iterator, List, Mapping, Sequence, Tuple, TypeVar
 
 import asyncio
@@ -236,7 +235,7 @@ class CollectObjectStorageFilesStep(Step[list[ClickHouseObjectStorageFiles]]):
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> list[ClickHouseObjectStorageFiles]:
         snapshot_results: Sequence[ipc.SnapshotResult] = context.get_result(SnapshotStep)
-        object_storage_files: dict[str, set[Path]] = {}
+        object_storage_files: dict[str, set[str]] = {}
         for snapshot_result in snapshot_results:
             assert snapshot_result.state is not None
             for snapshot_file in snapshot_result.state.files:
@@ -796,7 +795,7 @@ class DeleteDanglingObjectStorageFilesStep(Step[None]):
             return
         newest_backup_start_time = max((backup_manifest.start for backup_manifest in backup_manifests))
 
-        kept_paths: dict[str, set[Path]] = {}
+        kept_paths: dict[str, set[str]] = {}
         for manifest_min in backup_manifests:
             manifest_data = await download_backup_manifest(self.json_storage, manifest_min.filename)
             clickhouse_manifest = ClickHouseManifest.from_plugin_data(manifest_data.plugin_data)

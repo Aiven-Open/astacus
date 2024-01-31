@@ -4,7 +4,6 @@ See LICENSE for details
 """
 from abc import ABC, abstractmethod
 from astacus.common.rohmustorage import RohmuStorageConfig
-from pathlib import Path
 from rohmu import BaseTransfer
 from rohmu.errors import FileNotFoundFromStorageError
 from starlette.concurrency import run_in_threadpool
@@ -22,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 @dataclasses.dataclass(frozen=True)
 class ObjectStorageItem:
-    key: Path
+    key: str
     last_modified: datetime.datetime
 
 
@@ -36,11 +35,11 @@ class AsyncObjectStorage(ABC):
         ...
 
     @abstractmethod
-    async def delete_item(self, key: Path) -> None:
+    async def delete_item(self, key: str) -> None:
         ...
 
     @abstractmethod
-    async def copy_items_from(self, source: "AsyncObjectStorage", keys: Sequence[Path]) -> None:
+    async def copy_items_from(self, source: "AsyncObjectStorage", keys: Sequence[str]) -> None:
         ...
 
 
@@ -82,21 +81,20 @@ class RohmuAsyncObjectStorage(AsyncObjectStorage):
 
     async def list_items(self) -> list[ObjectStorageItem]:
         items = await run_in_threadpool(self.storage.list_iter, key="", with_metadata=True, deep=True)
-        return [ObjectStorageItem(key=Path(item["name"]), last_modified=item["last_modified"]) for item in items]
+        return [ObjectStorageItem(key=item["name"], last_modified=item["last_modified"]) for item in items]
 
-    async def delete_item(self, key: Path) -> None:
-        await run_in_threadpool(self.storage.delete_key, str(key))
+    async def delete_item(self, key: str) -> None:
+        await run_in_threadpool(self.storage.delete_key, key)
 
-    async def copy_items_from(self, source: "AsyncObjectStorage", keys: Sequence[Path]) -> None:
+    async def copy_items_from(self, source: "AsyncObjectStorage", keys: Sequence[str]) -> None:
         if not isinstance(source, RohmuAsyncObjectStorage):
             raise NotImplementedError("Copying items is only supported from another RohmuAsyncObjectStorage")
-        str_keys = [str(key) for key in keys]
-        await run_in_threadpool(self.storage.copy_items_from, source.storage, str_keys)
+        await run_in_threadpool(self.storage.copy_items_from, source.storage, keys)
 
 
 @dataclasses.dataclass(frozen=True)
 class MemoryAsyncObjectStorage(AsyncObjectStorage):
-    items: dict[Path, ObjectStorageItem] = dataclasses.field(default_factory=dict)
+    items: dict[str, ObjectStorageItem] = dataclasses.field(default_factory=dict)
 
     @classmethod
     def from_items(cls, items: Sequence[ObjectStorageItem]) -> Self:
@@ -114,13 +112,13 @@ class MemoryAsyncObjectStorage(AsyncObjectStorage):
     async def list_items(self) -> list[ObjectStorageItem]:
         return list(self.items.values())
 
-    async def delete_item(self, key: Path) -> None:
+    async def delete_item(self, key: str) -> None:
         if key not in self.items:
             raise FileNotFoundFromStorageError(key)
         logger.info("deleting item: %r", key)
         self.items.pop(key)
 
-    async def copy_items_from(self, source: "AsyncObjectStorage", keys: Sequence[Path]) -> None:
+    async def copy_items_from(self, source: "AsyncObjectStorage", keys: Sequence[str]) -> None:
         keys_set = set(keys)
         for source_item in await source.list_items():
             if source_item.key in keys_set:
