@@ -10,21 +10,21 @@ from pathlib import Path
 
 import os
 
-POSITIVE_TEST_CASES: list[tuple[Path, str]] = [
-    (Path("foo"), "foo"),
-    (Path("foo"), "*"),
-    (Path("foo/bar"), "*/bar"),
-    (Path("foo"), "**"),
-    (Path("foo/bar"), "**"),
-    (Path("foo/bar/baz"), "**/*"),
-    (Path("foo/bar"), "**/*"),
-    (Path("foo/bar"), "**/**"),
+POSITIVE_TEST_CASES: list[tuple[str, str]] = [
+    ("foo", "foo"),
+    ("foo", "*"),
+    ("foo/bar", "*/bar"),
+    ("foo", "**"),
+    ("foo/bar", "**"),
+    ("foo/bar/baz", "**/*"),
+    ("foo/bar", "**/*"),
+    ("foo/bar", "**/**"),
 ]
 
-NEGATIVE_TEST_CASES: list[tuple[Path, str]] = [
-    (Path("foo/bar/baz"), "*/*"),
-    (Path("foo"), "foobar"),
-    (Path("foo"), "*/foo"),
+NEGATIVE_TEST_CASES: list[tuple[str, str]] = [
+    ("foo/bar/baz", "*/*"),
+    ("foo", "foobar"),
+    ("foo", "*/foo"),
 ]
 
 
@@ -58,9 +58,9 @@ def test_CompiledGroups() -> None:
 
 def test_CompiledGroup_glob(tmp_path: Path) -> None:
     for p, _ in POSITIVE_TEST_CASES + NEGATIVE_TEST_CASES:
-        p = tmp_path / p
-        p.mkdir(parents=True, exist_ok=True)
-        p.touch()
+        absolute_p = tmp_path / p
+        absolute_p.mkdir(parents=True, exist_ok=True)
+        absolute_p.touch()
     for p, glob in POSITIVE_TEST_CASES:
         group = SnapshotGroup(root_glob=glob)
         assert str(p) in CompiledGroup.compile(group).glob(tmp_path)

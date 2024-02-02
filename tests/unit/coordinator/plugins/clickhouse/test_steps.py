@@ -126,9 +126,9 @@ SAMPLE_OBJET_STORAGE_FILES = [
     ClickHouseObjectStorageFiles(
         disk_name="remote",
         files=[
-            ClickHouseObjectStorageFile(path=Path("abc/defghi")),
-            ClickHouseObjectStorageFile(path=Path("jkl/mnopqr")),
-            ClickHouseObjectStorageFile(path=Path("stu/vwxyza")),
+            ClickHouseObjectStorageFile(path="abc/defghi"),
+            ClickHouseObjectStorageFile(path="jkl/mnopqr"),
+            ClickHouseObjectStorageFile(path="stu/vwxyza"),
         ],
     )
 ]
@@ -407,10 +407,10 @@ async def test_retrieve_macros() -> None:
     ]
 
 
-def create_remote_file(path: Path, remote_path: Path) -> SnapshotFile:
+def create_remote_file(path: str, remote_path: str) -> SnapshotFile:
     metadata = f"""3\n1\t100\n100\t{remote_path}\n1\n0\n""".encode()
     return SnapshotFile(
-        relative_path=Path("disks/remote") / path,
+        relative_path=f"disks/remote/{path}",
         file_size=len(metadata),
         mtime_ns=1,
         content_b64=base64.b64encode(metadata).decode(),
@@ -434,12 +434,12 @@ async def test_collect_object_storage_file_steps() -> None:
                 root_globs=["dont", "care"],
                 files=[
                     create_remote_file(
-                        Path(f"store/{table_uuid_parts}/all_0_0_0/columns.txt"),
-                        Path("abc/defghi"),
+                        f"store/{table_uuid_parts}/all_0_0_0/columns.txt",
+                        "abc/defghi",
                     ),
                     create_remote_file(
-                        Path(f"store/{table_uuid_parts}/all_0_0_0/data.bin"),
-                        Path("jkl/mnopqr"),
+                        f"store/{table_uuid_parts}/all_0_0_0/data.bin",
+                        "jkl/mnopqr",
                     ),
                 ],
             )
@@ -449,12 +449,12 @@ async def test_collect_object_storage_file_steps() -> None:
                 root_globs=["dont", "care"],
                 files=[
                     create_remote_file(
-                        Path(f"store/{table_uuid_parts}/all_0_0_0/columns.txt"),
-                        Path("abc/defghi"),
+                        f"store/{table_uuid_parts}/all_0_0_0/columns.txt",
+                        "abc/defghi",
                     ),
                     create_remote_file(
-                        Path(f"store/{table_uuid_parts}/all_0_0_0/data.bin"),
-                        Path("stu/vwxyza"),
+                        f"store/{table_uuid_parts}/all_0_0_0/data.bin",
+                        "stu/vwxyza",
                     ),
                 ],
             )
@@ -481,14 +481,12 @@ async def test_move_frozen_parts_steps() -> None:
                 root_globs=["dont", "care"],
                 files=[
                     SnapshotFile(
-                        relative_path=Path(f"shadow/astacus/store/{table_uuid_parts}/detached/all_0_0_0/columns.txt"),
+                        relative_path=f"shadow/astacus/store/{table_uuid_parts}/detached/all_0_0_0/columns.txt",
                         file_size=100,
                         mtime_ns=1,
                     ),
                     SnapshotFile(
-                        relative_path=Path(
-                            f"disks/remote/shadow/astacus/store/{table_uuid_parts}/detached/all_0_0_0/data.bin"
-                        ),
+                        relative_path=f"disks/remote/shadow/astacus/store/{table_uuid_parts}/detached/all_0_0_0/data.bin",
                         file_size=100,
                         mtime_ns=1,
                     ),
@@ -503,12 +501,12 @@ async def test_move_frozen_parts_steps() -> None:
         root_globs=["dont", "care"],
         files=[
             SnapshotFile(
-                relative_path=Path(f"store/{table_uuid_parts}/all_0_0_0/columns.txt"),
+                relative_path=f"store/{table_uuid_parts}/all_0_0_0/columns.txt",
                 file_size=100,
                 mtime_ns=1,
             ),
             SnapshotFile(
-                relative_path=Path(f"disks/remote/store/{table_uuid_parts}/all_0_0_0/data.bin"),
+                relative_path=f"disks/remote/store/{table_uuid_parts}/all_0_0_0/data.bin",
                 file_size=100,
                 mtime_ns=1,
             ),
@@ -1071,12 +1069,12 @@ async def test_attaches_all_mergetree_parts_in_manifest() -> None:
                         root_globs=["dont", "care"],
                         files=[
                             SnapshotFile(
-                                relative_path=Path(f"store/000/{first_table_uuid}/detached/all_0_0_0/data.bin"),
+                                relative_path=f"store/000/{first_table_uuid}/detached/all_0_0_0/data.bin",
                                 file_size=0,
                                 mtime_ns=0,
                             ),
                             SnapshotFile(
-                                relative_path=Path(f"store/000/{second_table_uuid}/detached/all_1_1_0/data.bin"),
+                                relative_path=f"store/000/{second_table_uuid}/detached/all_1_1_0/data.bin",
                                 file_size=0,
                                 mtime_ns=0,
                             ),
@@ -1088,12 +1086,12 @@ async def test_attaches_all_mergetree_parts_in_manifest() -> None:
                         root_globs=["dont", "care"],
                         files=[
                             SnapshotFile(
-                                relative_path=Path(f"store/000/{first_table_uuid}/detached/all_0_0_0/data.bin"),
+                                relative_path=f"store/000/{first_table_uuid}/detached/all_0_0_0/data.bin",
                                 file_size=0,
                                 mtime_ns=0,
                             ),
                             SnapshotFile(
-                                relative_path=Path(f"store/000/{second_table_uuid}/detached/all_1_1_1/data.bin"),
+                                relative_path=f"store/000/{second_table_uuid}/detached/all_1_1_1/data.bin",
                                 file_size=0,
                                 mtime_ns=0,
                             ),
@@ -1156,19 +1154,13 @@ async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
     object_storage = MemoryAsyncObjectStorage.from_items(
         [
             ObjectStorageItem(
-                key=Path("not_used/and_old"), last_modified=datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)
+                key="not_used/and_old", last_modified=datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)
             ),
+            ObjectStorageItem(key="abc/defghi", last_modified=datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)),
+            ObjectStorageItem(key="jkl/mnopqr", last_modified=datetime.datetime(2020, 1, 2, tzinfo=datetime.timezone.utc)),
+            ObjectStorageItem(key="stu/vwxyza", last_modified=datetime.datetime(2020, 1, 3, tzinfo=datetime.timezone.utc)),
             ObjectStorageItem(
-                key=Path("abc/defghi"), last_modified=datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)
-            ),
-            ObjectStorageItem(
-                key=Path("jkl/mnopqr"), last_modified=datetime.datetime(2020, 1, 2, tzinfo=datetime.timezone.utc)
-            ),
-            ObjectStorageItem(
-                key=Path("stu/vwxyza"), last_modified=datetime.datetime(2020, 1, 3, tzinfo=datetime.timezone.utc)
-            ),
-            ObjectStorageItem(
-                key=Path("not_used/and_new"), last_modified=datetime.datetime(2020, 1, 4, tzinfo=datetime.timezone.utc)
+                key="not_used/and_new", last_modified=datetime.datetime(2020, 1, 4, tzinfo=datetime.timezone.utc)
             ),
         ]
     )
@@ -1186,8 +1178,8 @@ async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
                     ClickHouseObjectStorageFiles(
                         disk_name="remote",
                         files=[
-                            ClickHouseObjectStorageFile(path=Path("abc/defghi")),
-                            ClickHouseObjectStorageFile(path=Path("jkl/mnopqr")),
+                            ClickHouseObjectStorageFile(path="abc/defghi"),
+                            ClickHouseObjectStorageFile(path="jkl/mnopqr"),
                         ],
                     )
                 ],
@@ -1207,8 +1199,8 @@ async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
                     ClickHouseObjectStorageFiles(
                         disk_name="remote",
                         files=[
-                            ClickHouseObjectStorageFile(path=Path("jkl/mnopqr")),
-                            ClickHouseObjectStorageFile(path=Path("stu/vwxyza")),
+                            ClickHouseObjectStorageFile(path="jkl/mnopqr"),
+                            ClickHouseObjectStorageFile(path="stu/vwxyza"),
                         ],
                     )
                 ],
@@ -1225,12 +1217,10 @@ async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
     await step.run_step(cluster, context)
     assert await object_storage.list_items() == [
         # Only not_used/and_old was deleted
-        ObjectStorageItem(key=Path("abc/defghi"), last_modified=datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)),
-        ObjectStorageItem(key=Path("jkl/mnopqr"), last_modified=datetime.datetime(2020, 1, 2, tzinfo=datetime.timezone.utc)),
-        ObjectStorageItem(key=Path("stu/vwxyza"), last_modified=datetime.datetime(2020, 1, 3, tzinfo=datetime.timezone.utc)),
-        ObjectStorageItem(
-            key=Path("not_used/and_new"), last_modified=datetime.datetime(2020, 1, 4, tzinfo=datetime.timezone.utc)
-        ),
+        ObjectStorageItem(key="abc/defghi", last_modified=datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)),
+        ObjectStorageItem(key="jkl/mnopqr", last_modified=datetime.datetime(2020, 1, 2, tzinfo=datetime.timezone.utc)),
+        ObjectStorageItem(key="stu/vwxyza", last_modified=datetime.datetime(2020, 1, 3, tzinfo=datetime.timezone.utc)),
+        ObjectStorageItem(key="not_used/and_new", last_modified=datetime.datetime(2020, 1, 4, tzinfo=datetime.timezone.utc)),
     ]
 
 

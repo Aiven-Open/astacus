@@ -7,7 +7,6 @@ from astacus.coordinator.plugins.clickhouse.disks import Disks
 from astacus.coordinator.plugins.clickhouse.manifest import Table
 from astacus.coordinator.plugins.clickhouse.parts import get_part_servers, list_parts_to_attach, Part, PartFile
 from astacus.coordinator.plugins.clickhouse.replication import DatabaseReplica
-from pathlib import Path
 from typing import List
 from uuid import UUID
 
@@ -22,7 +21,7 @@ def create_part_files(*, table_uuid: UUID, part_name: str, digest_seed: str) -> 
     uuid_head = str(table_uuid)[:3]
     return [
         SnapshotFile(
-            relative_path=Path(f"store/{uuid_head}/{str(table_uuid)}/detached/{part_name}/{filename}"),
+            relative_path=f"store/{uuid_head}/{str(table_uuid)}/detached/{part_name}/{filename}",
             file_size=file_size,
             mtime_ns=0,
             hexdigest=hashlib.sha256(f"{digest_seed}-{part_name}-{filename}".encode()).hexdigest(),

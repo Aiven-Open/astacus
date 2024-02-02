@@ -7,7 +7,6 @@ from .config import DiskConfiguration, DiskType
 from .escaping import escape_for_file_name, unescape_from_file_name
 from astacus.common.magic import DEFAULT_EMBEDDED_FILE_SIZE
 from astacus.common.snapshot import SnapshotGroup
-from pathlib import Path
 from typing import Optional, Sequence
 from uuid import UUID
 
@@ -16,7 +15,7 @@ import re
 
 
 class PartFilePathError(ValueError):
-    def __init__(self, file_path: Path, error: str):
+    def __init__(self, file_path: str, error: str):
         super().__init__(f"Unexpected part file path {file_path}: {error}")
 
 
@@ -52,7 +51,7 @@ class ParsedPath:
     part_name: bytes
     file_parts: tuple[str, ...]
 
-    def to_path(self) -> Path:
+    def to_path(self) -> str:
         parts = []
         if self.freeze_name is not None:
             parts.append("shadow")
@@ -64,7 +63,7 @@ class ParsedPath:
         if self.detached:
             parts.append("detached")
         parts.append(escape_for_file_name(self.part_name))
-        return Path(*self.disk.path_parts, *parts, *self.file_parts)
+        return "/".join([*self.disk.path_parts, *parts, *self.file_parts])
 
 
 @dataclasses.dataclass(frozen=True)
@@ -103,7 +102,7 @@ class Disks:
                 return disk
         return None
 
-    def parse_part_file_path(self, file_path: Path) -> ParsedPath:
+    def parse_part_file_path(self, file_path: str) -> ParsedPath:
         """
         Parse component of a file path relative to one of the ClickHouse disks.
 
@@ -114,7 +113,7 @@ class Disks:
             - [disk_path]/store/123/12345678-1234-1234-1234-12345678abcd/all_1_1_0/[file.ext]
             - [disk_path]/store/123/12345678-1234-1234-1234-12345678abcd/detached/all_1_1_0/[file.ext]
         """
-        parts = file_path.parts
+        parts = tuple(file_path.split("/"))
         disk = self._get_disk(parts)
         if disk is None:
             raise PartFilePathError(file_path, "should start with a disk path")
@@ -142,7 +141,7 @@ class Disks:
             table_uuid=UUID(parts[uuid_index]),
             detached=detached,
             part_name=unescape_from_file_name(parts[part_name_index]),
-            file_parts=parts[part_name_index + 1 :],
+            file_parts=tuple(parts[part_name_index + 1 :]),
         )
 
     @classmethod

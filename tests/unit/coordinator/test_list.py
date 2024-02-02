@@ -22,11 +22,11 @@ from astacus.coordinator import api
 from astacus.coordinator.list import compute_deduplicated_snapshot_file_stats, list_backups
 from fastapi.testclient import TestClient
 from os import PathLike
-from pathlib import Path
 from pytest_mock import MockerFixture
 from tests.utils import create_rohmu_config
 
 import datetime
+import json
 import pytest
 
 
@@ -121,26 +121,26 @@ def fixture_backup_manifest() -> BackupManifest:
                     files=[
                         # First table
                         SnapshotFile(
-                            relative_path=Path("store/000/00000000-0000-0000-0000-100000000001/detached/all_0_0_0/data.bin"),
+                            relative_path="store/000/00000000-0000-0000-0000-100000000001/detached/all_0_0_0/data.bin",
                             file_size=1000,
                             mtime_ns=0,
                             hexdigest="1000",
                         ),
                         SnapshotFile(
-                            relative_path=Path("store/000/00000000-0000-0000-0000-100000000001/detached/all_1_1_0/data.bin"),
+                            relative_path="store/000/00000000-0000-0000-0000-100000000001/detached/all_1_1_0/data.bin",
                             file_size=1000,
                             mtime_ns=0,
                             hexdigest="1110",
                         ),
                         SnapshotFile(
-                            relative_path=Path("store/000/00000000-0000-0000-0000-100000000001/detached/all_1_0_0/data.bin"),
+                            relative_path="store/000/00000000-0000-0000-0000-100000000001/detached/all_1_0_0/data.bin",
                             file_size=1000,
                             mtime_ns=0,
                             hexdigest="1100",
                         ),
                         # Second table
                         SnapshotFile(
-                            relative_path=Path("store/000/00000000-0000-0000-0000-100000000002/detached/all_0_0_0/data.bin"),
+                            relative_path="store/000/00000000-0000-0000-0000-100000000002/detached/all_0_0_0/data.bin",
                             file_size=1000,
                             mtime_ns=0,
                             hexdigest="2000",
@@ -163,33 +163,33 @@ def fixture_backup_manifest() -> BackupManifest:
                     files=[
                         # First table
                         SnapshotFile(
-                            relative_path=Path("store/000/00000000-0000-0000-0000-100000000001/detached/all_0_0_0/data.bin"),
+                            relative_path="store/000/00000000-0000-0000-0000-100000000001/detached/all_0_0_0/data.bin",
                             file_size=1000,
                             mtime_ns=0,
                             hexdigest="1000",
                         ),
                         SnapshotFile(
-                            relative_path=Path("store/000/00000000-0000-0000-0000-100000000001/detached/all_1_1_0/data.bin"),
+                            relative_path="store/000/00000000-0000-0000-0000-100000000001/detached/all_1_1_0/data.bin",
                             file_size=1000,
                             mtime_ns=0,
                             hexdigest="1110",
                         ),
                         # Second table
                         SnapshotFile(
-                            relative_path=Path("store/000/00000000-0000-0000-0000-100000000002/detached/all_0_0_0/data.bin"),
+                            relative_path="store/000/00000000-0000-0000-0000-100000000002/detached/all_0_0_0/data.bin",
                             file_size=1000,
                             mtime_ns=0,
                             hexdigest="2000",
                         ),
                         SnapshotFile(
-                            relative_path=Path("store/000/00000000-0000-0000-0000-100000000002/detached/all_1_1_0/data.bin"),
+                            relative_path="store/000/00000000-0000-0000-0000-100000000002/detached/all_1_1_0/data.bin",
                             file_size=1000,
                             mtime_ns=0,
                             hexdigest="2110",
                         ),
                         # Third table with same hexdigest as second one
                         SnapshotFile(
-                            relative_path=Path("store/000/00000000-0000-0000-0000-100000000003/detached/all_0_0_0/data.bin"),
+                            relative_path="store/000/00000000-0000-0000-0000-100000000003/detached/all_0_0_0/data.bin",
                             file_size=1000,
                             mtime_ns=0,
                             hexdigest="2000",
@@ -217,7 +217,9 @@ def fixture_backup_manifest() -> BackupManifest:
 
 def test_compute_deduplicated_snapshot_file_stats(backup_manifest: BackupManifest) -> None:
     """Test backup stats are computed correctly in the presence of duplicate snapshot files."""
-    num_files, total_size = compute_deduplicated_snapshot_file_stats(backup_manifest)
+    manifest_json = json.loads(backup_manifest.json())
+    snapshot_results_json = manifest_json["snapshot_results"]
+    num_files, total_size = compute_deduplicated_snapshot_file_stats(snapshot_results_json)
     assert (num_files, total_size) == (6, 6000)
 
 

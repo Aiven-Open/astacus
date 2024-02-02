@@ -5,7 +5,6 @@ See LICENSE for details
 from astacus.common.utils import AstacusModel
 from astacus.coordinator.plugins.clickhouse.client import escape_sql_identifier
 from base64 import b64decode, b64encode
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
 
@@ -96,11 +95,11 @@ class ClickHouseBackupVersion(enum.Enum):
 
 
 class ClickHouseObjectStorageFile(AstacusModel):
-    path: Path
+    path: str
 
     @classmethod
     def from_plugin_data(cls, data: dict[str, Any]) -> "ClickHouseObjectStorageFile":
-        return ClickHouseObjectStorageFile(path=Path(data["path"]))
+        return ClickHouseObjectStorageFile(path=data["path"])
 
 
 class ClickHouseObjectStorageFiles(AstacusModel):

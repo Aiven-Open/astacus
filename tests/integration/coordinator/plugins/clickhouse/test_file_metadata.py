@@ -3,7 +3,6 @@ Copyright (c) 2023 Aiven Ltd
 See LICENSE for details
 """
 from astacus.coordinator.plugins.clickhouse.file_metadata import FileMetadata, InvalidFileMetadata, ObjectMetadata
-from pathlib import Path
 
 import pytest
 
@@ -12,8 +11,8 @@ def test_file_metadata_from_bytes() -> None:
     expected = FileMetadata(
         metadata_version=3,
         objects=[
-            ObjectMetadata(size_bytes=100, relative_path=Path("abc/0123456789abcdef")),
-            ObjectMetadata(size_bytes=200, relative_path=Path("def/aaaaaaaaaaaaaaaa")),
+            ObjectMetadata(size_bytes=100, relative_path="abc/0123456789abcdef"),
+            ObjectMetadata(size_bytes=200, relative_path="def/aaaaaaaaaaaaaaaa"),
         ],
         ref_count=1,
         read_only=False,

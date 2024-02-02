@@ -33,10 +33,10 @@ def test_download(
     create_files_at_path(
         src,
         [
-            (Path("foo"), b"foo"),
-            (Path("foo2"), b"foo2"),
-            (Path("foobig"), b"foobig" * magic.DEFAULT_EMBEDDED_FILE_SIZE),
-            (Path("foobig2"), b"foobig2" * magic.DEFAULT_EMBEDDED_FILE_SIZE),
+            ("foo", b"foo"),
+            ("foo2", b"foo2"),
+            ("foobig", b"foobig" * magic.DEFAULT_EMBEDDED_FILE_SIZE),
+            ("foobig2", b"foobig2" * magic.DEFAULT_EMBEDDED_FILE_SIZE),
         ],
     )
     snapshot, snapshotter = build_snapshot_and_snapshotter(src, dst, db, SQLiteSnapshot, [SnapshotGroup("**")])

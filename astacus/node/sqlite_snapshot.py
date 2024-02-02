@@ -30,8 +30,8 @@ class SQLiteSnapshot(Snapshot):
     def __len__(self) -> int:
         return self._con.execute("select count(*) from snapshot_files;").fetchone()[0]
 
-    def get_file(self, relative_path: Path) -> SnapshotFile | None:
-        cur = self._con.execute("select * from snapshot_files where relative_path = ?;", (str(relative_path),))
+    def get_file(self, relative_path: str) -> SnapshotFile | None:
+        cur = self._con.execute("select * from snapshot_files where relative_path = ?;", (relative_path,))
         row = cur.fetchone()
         return row_to_snapshotfile(row) if row else None
 
@@ -53,10 +53,8 @@ class SQLiteSnapshot(Snapshot):
         return map(row_to_snapshotfile, self._con.execute("select * from snapshot_files order by relative_path;"))
 
     @override
-    def get_all_paths(self) -> Iterable[Path]:
-        return (
-            Path(row[0]) for row in self._con.execute("select relative_path from snapshot_files order by relative_path;")
-        )
+    def get_all_paths(self) -> Iterable[str]:
+        return (row[0] for row in self._con.execute("select relative_path from snapshot_files order by relative_path;"))
 
     @override
     def get_total_size(self) -> int:
@@ -115,7 +113,7 @@ class SQLiteSnapshotter(Snapshotter[SQLiteSnapshot]):
             self._upsert_files(with_digests)
             self._con.execute("drop table if exists new_files;")
 
-    def _list_files_and_create_directories(self) -> Iterable[Path]:
+    def _list_files_and_create_directories(self) -> Iterable[str]:
         """List all files, and create directories in src."""
         logger.info("Listing files in %s", self._src)
         for dir_, _, files in os.walk(self._src):
@@ -125,11 +123,11 @@ class SQLiteSnapshotter(Snapshotter[SQLiteSnapshot]):
             rel_dir = dir_path.relative_to(self._src)
             (self._dst / rel_dir).mkdir(parents=True, exist_ok=True)
             for f in files:
-                rel_path = rel_dir / f
+                rel_path = str(rel_dir / f)
                 if not (dir_path / f).is_symlink() and self._groups.any_match(rel_path):
                     yield rel_path
 
-    def _compare_current_snapshot(self, files: Iterable[Path]) -> Iterable[tuple[Path, SnapshotFile | None]]:
+    def _compare_current_snapshot(self, files: Iterable[str]) -> Iterable[tuple[str, SnapshotFile | None]]:
         with closing(self._con.cursor()) as cur:
             cur.execute(
                 """
@@ -149,7 +147,7 @@ class SQLiteSnapshotter(Snapshotter[SQLiteSnapshot]):
                 );
                 """
             )
-            cur.executemany("insert into current_files (relative_path) values (?);", ((str(f),) for f in files))
+            cur.executemany("insert into current_files (relative_path) values (?);", ((f,) for f in files))
             cur.execute(
                 """
                 delete from snapshot_files
@@ -192,11 +190,11 @@ class SQLiteSnapshotter(Snapshotter[SQLiteSnapshot]):
             )
             for row in cur:
                 if row[1] is None:
-                    yield Path(row[0]), None
+                    yield row[0], None
                 else:
-                    yield Path(row[0]), row_to_snapshotfile(row)
+                    yield row[0], row_to_snapshotfile(row)
 
-    def _compare_with_src(self, files: Iterable[tuple[Path, SnapshotFile | None]]) -> Iterable[SnapshotFile]:
+    def _compare_with_src(self, files: Iterable[tuple[str, SnapshotFile | None]]) -> Iterable[SnapshotFile]:
         logger.info("Checking metadata for files in %s", self._dst)
         for relpath, existing in files:
             try:
@@ -251,13 +249,13 @@ class SQLiteSnapshotter(Snapshotter[SQLiteSnapshot]):
         return self.snapshot.get_connection()
 
 
-def row_to_path_and_snapshotfile(row: tuple) -> tuple[Path, SnapshotFile | None]:
-    return Path(row[0]), row_to_snapshotfile(row)
+def row_to_path_and_snapshotfile(row: tuple) -> tuple[str, SnapshotFile | None]:
+    return row[0], row_to_snapshotfile(row)
 
 
 def row_to_snapshotfile(row: tuple) -> SnapshotFile:
-    return SnapshotFile(relative_path=Path(row[0]), file_size=row[1], mtime_ns=row[2], hexdigest=row[3], content_b64=row[4])
+    return SnapshotFile(relative_path=row[0], file_size=row[1], mtime_ns=row[2], hexdigest=row[3], content_b64=row[4])
 
 
 def snapshotfile_to_row(file: SnapshotFile) -> tuple[str, int, int, str, str | None]:
-    return (str(file.relative_path), file.file_size, file.mtime_ns, file.hexdigest, file.content_b64)
+    return (file.relative_path, file.file_size, file.mtime_ns, file.hexdigest, file.content_b64)

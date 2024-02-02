@@ -41,10 +41,10 @@ def test_snapshot(
         create_files_at_path(
             src,
             [
-                (Path("foo"), b"foo"),
-                (Path("foo2"), b"foo2"),
-                (Path("foobig"), b"foobig" * magic.DEFAULT_EMBEDDED_FILE_SIZE),
-                (Path("foobig2"), b"foobig2" * magic.DEFAULT_EMBEDDED_FILE_SIZE),
+                ("foo", b"foo"),
+                ("foo2", b"foo2"),
+                ("foobig", b"foobig" * magic.DEFAULT_EMBEDDED_FILE_SIZE),
+                ("foobig2", b"foobig2" * magic.DEFAULT_EMBEDDED_FILE_SIZE),
             ],
         )
         snapshotter.perform_snapshot(progress=Progress())
@@ -66,7 +66,7 @@ def test_snapshot(
         while True:
             (src / "foo").write_text("barfoo")  # same length
             snapshotter.perform_snapshot(progress=Progress())
-            if snapshot.get_file(Path("foo")) is not None:
+            if snapshot.get_file("foo") is not None:
                 # Sometimes fails on first iteration(s) due to same mtime
                 # (inaccurate timestamps)
                 break

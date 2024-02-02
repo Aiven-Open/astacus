@@ -25,9 +25,9 @@ def test_snapshotter(src: Path, dst: Path, db: Path, src_is_dst: bool) -> None:
         SnapshotGroup(root_glob="folder2/*c", embedded_file_size_max=None),
     ]
     snapshot, snapshotter = build_snapshot_and_snapshotter(src, dst, db, SQLiteSnapshot, groups)
-    matched_under_embedded_file_size_max = [(Path("folder1") / "aaa", b"aaaaa"), (Path("folder2") / "ccc", b"ccccc")]
-    matched_over_embedded_file_size_max = [(Path("bbb"), b"bbbbb")]
-    not_matched = [(Path("ddd"), b"ddddd"), (Path("eee"), b"eeeee")]
+    matched_under_embedded_file_size_max = [("folder1/aaa", b"aaaaa"), ("folder2/ccc", b"ccccc")]
+    matched_over_embedded_file_size_max = [("bbb", b"bbbbb")]
+    not_matched = [("ddd", b"ddddd"), ("eee", b"eeeee")]
     create_files_at_path(src, matched_under_embedded_file_size_max + matched_over_embedded_file_size_max + not_matched)
     snapshotter.perform_snapshot(progress=Progress())
     assert len(snapshot) == 3
@@ -59,7 +59,7 @@ def test_snapshotter(src: Path, dst: Path, db: Path, src_is_dst: bool) -> None:
 @pytest.mark.parametrize("src_is_dst", [True, False])
 @pytest.mark.parametrize("new_file_size", [1024, 2048])
 @pytest.mark.parametrize("embedded_file_size_max", [None, 1, 1500, 3000])
-@pytest.mark.parametrize("path", [Path("abc123"), Path("folder") / "abc123"])
+@pytest.mark.parametrize("path", ["abc123", "folder/abc123"])
 def test_snapshotter_updates_changed_file(
     src: Path,
     dst: Path,
@@ -67,7 +67,7 @@ def test_snapshotter_updates_changed_file(
     src_is_dst: bool,
     new_file_size: int,
     embedded_file_size_max: int,
-    path: Path,
+    path: str,
 ) -> None:
     if src_is_dst:
         dst = src
@@ -101,8 +101,8 @@ def test_snapshotter_updates_changed_file(
 
 
 @pytest.mark.parametrize("src_is_dst", [True, False])
-@pytest.mark.parametrize("path", [Path("abc123"), Path("folder") / "abc123"])
-def test_snapshotter_removes_removed_file(src: Path, dst: Path, db: Path, src_is_dst: bool, path: Path) -> None:
+@pytest.mark.parametrize("path", ["abc123", "folder/abc123"])
+def test_snapshotter_removes_removed_file(src: Path, dst: Path, db: Path, src_is_dst: bool, path: str) -> None:
     if src_is_dst:
         dst = src
     create_files_at_path(src, [(path, b"abc123")])
@@ -118,8 +118,8 @@ def test_snapshotter_removes_removed_file(src: Path, dst: Path, db: Path, src_is
 
 
 def test_snapshotter_release_hash_unlinks_files_but_keeps_metadata(src: Path, dst: Path, db: Path) -> None:
-    keep = Path("keep_this")
-    release = Path("release_this")
+    keep = "keep_this"
+    release = "release_this"
     create_files_at_path(src, [(keep, b"this will be kept")])
     create_files_at_path(dst, [(keep, b"this will be kept")])
     create_files_at_path(src, [(release, b"this will be released")])

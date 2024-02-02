@@ -15,7 +15,6 @@ from dataclasses import dataclass
 from datetime import datetime, UTC
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from pathlib import Path
 from typing import Any, Callable, ContextManager, Optional
 
 import httpx
@@ -34,7 +33,7 @@ BACKUP_MANIFEST = ipc.BackupManifest(
         ipc.SnapshotResult(
             state=ipc.SnapshotState(
                 root_globs=["*"],
-                files=[ipc.SnapshotFile(relative_path=Path("foo"), file_size=6, mtime_ns=0, hexdigest="DEADBEEF")],
+                files=[ipc.SnapshotFile(relative_path="foo", file_size=6, mtime_ns=0, hexdigest="DEADBEEF")],
             ),
             hashes=[ipc.SnapshotHash(hexdigest="DEADBEEF", size=6)],
             files=1,

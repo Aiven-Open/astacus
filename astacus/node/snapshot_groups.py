@@ -28,8 +28,8 @@ class CompiledGroup:
     def compile(cls, group: SnapshotGroup) -> Self:
         return cls(group, glob_compile(group.root_glob))
 
-    def matches(self, relative_path: Path) -> bool:
-        return bool(self.regex.match(str(relative_path))) and relative_path.name not in self.group.excluded_names
+    def matches(self, relative_path: str) -> bool:
+        return bool(self.regex.match(relative_path)) and relative_path.rpartition("/")[2] not in self.group.excluded_names
 
     def glob(self, root_dir: Optional[Path] = None) -> Iterable[str]:
         for path in iglob(self.group.root_glob, root_dir=root_dir, flags=WCMATCH_FLAGS):
@@ -45,10 +45,10 @@ class CompiledGroups:
     def compile(cls, groups: Sequence[SnapshotGroup]) -> Self:
         return cls([CompiledGroup.compile(group) for group in groups])
 
-    def get_matching(self, relative_path: Path) -> list[SnapshotGroup]:
+    def get_matching(self, relative_path: str) -> list[SnapshotGroup]:
         return [group.group for group in self.groups if group.matches(relative_path)]
 
-    def any_match(self, relative_path: Path) -> bool:
+    def any_match(self, relative_path: str) -> bool:
         return any(group.matches(relative_path) for group in self.groups)
 
     def root_globs(self) -> list[str]:

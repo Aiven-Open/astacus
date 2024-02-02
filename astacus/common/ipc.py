@@ -74,7 +74,7 @@ class MetadataResult(AstacusModel):
 
 @functools.total_ordering
 class SnapshotFile(AstacusModel):
-    relative_path: Path
+    relative_path: str
     file_size: int
     mtime_ns: int
     hexdigest: str = ""

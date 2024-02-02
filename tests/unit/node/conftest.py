@@ -112,7 +112,7 @@ def build_snapshot_and_snapshotter(
     return snapshot, snapshotter
 
 
-def create_files_at_path(dir_: Path, files: list[tuple[Path, bytes]]) -> None:
+def create_files_at_path(dir_: Path, files: list[tuple[str, bytes]]) -> None:
     for relpath, content in files:
         path = dir_ / relpath
         path.parent.mkdir(parents=True, exist_ok=True)
