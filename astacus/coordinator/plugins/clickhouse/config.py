@@ -4,34 +4,36 @@ See LICENSE for details
 """
 from .client import ClickHouseClient, HttpClickHouseClient
 from astacus.common.rohmustorage import RohmuStorageConfig
-from astacus.common.utils import AstacusModel, build_netloc
+from astacus.common.utils import build_netloc
 from astacus.coordinator.plugins.zookeeper import KazooZooKeeperClient, ZooKeeperClient
 from astacus.coordinator.plugins.zookeeper_config import ZooKeeperConfiguration
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import List, Optional
 
 import enum
+import msgspec
 
 
-class ClickHouseNode(AstacusModel):
+class ClickHouseNode(msgspec.Struct, kw_only=True, frozen=True):
     host: str
     port: int
 
 
-class ClickHouseConfiguration(AstacusModel):
+class ClickHouseConfiguration(msgspec.Struct, kw_only=True, frozen=True):
     username: Optional[str] = None
     password: Optional[str] = None
-    nodes: List[ClickHouseNode] = []
+    nodes: Sequence[ClickHouseNode] = msgspec.field(default_factory=list)
 
 
-class ReplicatedDatabaseSettings(AstacusModel):
-    max_broken_tables_ratio: Optional[float]
-    max_replication_lag_to_enqueue: Optional[int]
-    wait_entry_commited_timeout_sec: Optional[int]
-    cluster_username: Optional[str]
-    cluster_password: Optional[str]
-    cluster_secret: Optional[str]
-    collection_name: Optional[str]
+class ReplicatedDatabaseSettings(msgspec.Struct, kw_only=True, frozen=True):
+    max_broken_tables_ratio: Optional[float] = None
+    max_replication_lag_to_enqueue: Optional[int] = None
+    wait_entry_commited_timeout_sec: Optional[int] = None
+    cluster_username: Optional[str] = None
+    cluster_password: Optional[str] = None
+    cluster_secret: Optional[str] = None
+    collection_name: Optional[str] = None
 
 
 class DiskType(enum.Enum):
@@ -39,12 +41,12 @@ class DiskType(enum.Enum):
     object_storage = "object_storage"
 
 
-class DiskObjectStorageConfiguration(AstacusModel):
+class DiskObjectStorageConfiguration(msgspec.Struct, kw_only=True, frozen=True):
     default_storage: str
-    storages: dict[str, RohmuStorageConfig]
+    storages: Mapping[str, RohmuStorageConfig]
 
 
-class DiskConfiguration(AstacusModel):
+class DiskConfiguration(msgspec.Struct, kw_only=True, frozen=True):
     class Config:
         use_enum_values = False
 

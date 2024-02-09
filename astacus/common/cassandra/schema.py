@@ -5,16 +5,16 @@ See LICENSE for details
 Schema-related parts are based on basebackup_schema.py of Cashew
 
 """
-
 from .client import CassandraSession
 from .utils import is_system_keyspace
-from astacus.common.utils import AstacusModel
 from cassandra import metadata as cm
+from collections.abc import Sequence
 from typing import Any, Dict, Iterator, List, Mapping, Set
 
 import hashlib
 import itertools
 import logging
+import msgspec
 import re
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ QUOTED_IDENTIFIER_RE = '"(?:[^"]|"")+"'
 IDENTIFIER_RE = f"(?:{UNQUOTED_IDENTIFIER_RE}|{QUOTED_IDENTIFIER_RE})"
 
 
-class CassandraNamed(AstacusModel):
+class CassandraNamed(msgspec.Struct, kw_only=True):
     """~abstract baseclass for something that has a name, and has cql for creating itself."""
 
     name: str
@@ -300,8 +300,8 @@ class CassandraKeyspace(CassandraNamed):
             table.restore_post_data_in_keyspace(cas, keyspace_metadata)
 
 
-class CassandraSchema(AstacusModel):
-    keyspaces: List[CassandraKeyspace]
+class CassandraSchema(msgspec.Struct, kw_only=True, frozen=True):
+    keyspaces: Sequence[CassandraKeyspace]
 
     @classmethod
     def from_cassandra_session(cls, cas: CassandraSession) -> "CassandraSchema":
@@ -331,7 +331,7 @@ class CassandraSchema(AstacusModel):
         ensure the dumping in general works.
 
         """
-        return hashlib.sha256(self.json().encode("utf-8")).hexdigest()
+        return hashlib.sha256(msgspec.json.encode(self)).hexdigest()
 
     def restore_pre_data(self, cas: CassandraSession) -> None:
         """First part of Cassandra schema restoration.

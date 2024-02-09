@@ -10,12 +10,9 @@ Notable things:
 - ~state machine (of sorts)
 
 """
-
 from . import magic
 from .exceptions import ExpiredOperationException
 from .statsd import StatsClient
-from .utils import AstacusModel
-from dataclasses import dataclass, field
 from enum import Enum
 from fastapi import HTTPException
 from starlette.background import BackgroundTasks
@@ -27,6 +24,7 @@ import asyncio
 import contextlib
 import inspect
 import logging
+import msgspec
 
 logger = logging.getLogger(__name__)
 
@@ -38,12 +36,12 @@ class Op:
         fail = "fail"
         done = "done"
 
-    class Info(AstacusModel):
+    class Info(msgspec.Struct, kw_only=True):
         op_id: int = 0
         op_name: str = ""
-        op_status: Optional["Op.Status"]
+        op_status: Optional["Op.Status"] = None
 
-    class StartResult(AstacusModel):
+    class StartResult(msgspec.Struct, kw_only=True):
         op_id: int
         status_url: str
 
@@ -76,12 +74,8 @@ class Op:
         self.set_status(self.Status.fail)
 
 
-Op.Info.update_forward_refs()
-
-
-@dataclass
-class OpState:
-    op_info: Op.Info = field(default_factory=Op.Info)
+class OpState(msgspec.Struct, kw_only=True):
+    op_info: Op.Info = msgspec.field(default_factory=Op.Info)
     op: Optional[Op] = None
     next_op_id: int = 1
 
@@ -103,7 +97,7 @@ class OpMixin:
         finally:
             self.state.next_op_id += 1
 
-    def start_op(self, *, op: Op, op_name: str, fun: Callable[[], Any]) -> Op.StartResult:
+    def start_op(self, *, op: Op, op_name: str, fun: Callable[[], Any]) -> Any:
         info = self.state.op_info
         info.op_id = op.op_id
         info.op_name = op_name
@@ -146,7 +140,7 @@ class OpMixin:
         else:
             self.background_tasks.add_task(_sync_wrapper)
 
-        return Op.StartResult(op_id=op.op_id, status_url=status_url)
+        return msgspec.to_builtins(Op.StartResult(op_id=op.op_id, status_url=status_url))
 
     def get_op_and_op_info(self, *, op_id, op_name=None):
         op_info = self.state.op_info

@@ -31,6 +31,7 @@ from starlette.datastructures import URL
 from tests.unit.common.test_m3placement import create_dummy_placement
 from typing import List, Optional
 
+import msgspec
 import pytest
 import respx
 
@@ -77,7 +78,7 @@ def fixture_coordinator() -> Coordinator:
     return Coordinator(
         request_url=URL("/"),
         background_tasks=BackgroundTasks(),
-        config=CoordinatorConfig.parse_obj(COORDINATOR_CONFIG),
+        config=msgspec.convert(COORDINATOR_CONFIG, CoordinatorConfig),
         state=CoordinatorState(),
         stats=StatsClient(config=None),
         hexdigest_mstorage=MultiStorage(),
@@ -87,7 +88,7 @@ def fixture_coordinator() -> Coordinator:
 
 @pytest.fixture(name="plugin")
 def fixture_plugin(coordinator: Coordinator) -> M3DBPlugin:
-    return M3DBPlugin.parse_obj(coordinator.config.plugin_config)
+    return msgspec.convert(coordinator.config.plugin_config, M3DBPlugin)
 
 
 @pytest.fixture(name="etcd_client")
@@ -151,15 +152,16 @@ async def test_m3_restore(coordinator: Coordinator, plugin: M3DBPlugin, etcd_cli
     context = StepsContext()
     context.set_result(
         BackupManifestStep,
-        ipc.BackupManifest.parse_obj(
+        msgspec.convert(
             {
                 "plugin": "m3db",
                 "plugin_data": PLUGIN_DATA,
                 "attempt": 1,
                 "snapshot_results": [],
-                "start": "2020-01-01 12:00",
+                "start": "2020-01-01 12:00:00",
                 "upload_results": [],
-            }
+            },
+            ipc.BackupManifest,
         ),
     )
     fail_at = rt.fail_at

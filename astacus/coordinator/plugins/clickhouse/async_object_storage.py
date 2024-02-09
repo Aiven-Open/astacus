@@ -3,6 +3,7 @@ Copyright (c) 2023 Aiven Ltd
 See LICENSE for details
 """
 from abc import ABC, abstractmethod
+from astacus.common.msgspec_glue import enc_hook
 from astacus.common.rohmustorage import RohmuStorageConfig
 from rohmu import BaseTransfer
 from rohmu.errors import FileNotFoundFromStorageError
@@ -13,6 +14,7 @@ import contextlib
 import dataclasses
 import datetime
 import logging
+import msgspec
 import rohmu
 import threading
 
@@ -46,7 +48,9 @@ class AsyncObjectStorage(ABC):
 class ThreadSafeRohmuStorage:
     def __init__(self, config: RohmuStorageConfig) -> None:
         self.config = config
-        self._storage = rohmu.get_transfer_from_model(config)
+        rohmu_config = rohmu.get_transfer_model(msgspec.to_builtins(config, enc_hook=enc_hook))
+        rohmu_config.storage_type = rohmu_config.storage_type.value
+        self._storage = rohmu.get_transfer_from_model(rohmu_config)
         self._storage_lock = threading.Lock()
 
     def list_iter(self, key: str, *, with_metadata: bool = True, deep: bool = False) -> Iterator[Mapping[str, Any]]:

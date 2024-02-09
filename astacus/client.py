@@ -5,13 +5,13 @@ See LICENSE for details
 Client commands for Astacus tool
 
 """
-
 from astacus.common import ipc, magic, utils
 from astacus.common.utils import exponential_backoff, http_request
 from tabulate import tabulate
 
 import json as _json
 import logging
+import msgspec
 import time
 
 logger = logging.getLogger(__name__)
@@ -142,14 +142,14 @@ def _run_list(args, list_path: str) -> bool:
     r = http_request(f"{args.url}/{list_path}{storage_name}", caller="client._run_list")
     if r is None:
         return False
-    print_list_result(ipc.ListResponse.parse_obj(r))
+    print_list_result(msgspec.convert(r, ipc.ListResponse))
     return True
 
 
 def _run_cleanup(args) -> bool:
     json = {}  # type: ignore
     # Copy retention fields from argparser arguments to the json request, if set
-    for k in ipc.Retention().dict().keys():
+    for k in msgspec.to_builtins(ipc.Retention()).keys():
         v = getattr(args, k, None)
         if v:
             json.setdefault("retention", {})[k] = v

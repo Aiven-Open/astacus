@@ -2,21 +2,20 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
-
 from astacus.common.cassandra.config import CassandraClientConfiguration
 from astacus.common.magic import StrEnum
 from astacus.common.rohmustorage import RohmuConfig
 from astacus.common.statsd import StatsdConfig
-from astacus.common.utils import AstacusModel
 from fastapi import Request
 from pathlib import Path
-from pydantic import DirectoryPath, Field, validator
 from typing import List, Optional
+
+import msgspec
 
 APP_KEY = "node_config"
 
 
-class NodeParallel(AstacusModel):
+class NodeParallel(msgspec.Struct, kw_only=True, frozen=True):
     # Optional parallelization of operations
     downloads: int = 1
     hashes: int = 1
@@ -28,7 +27,7 @@ class CassandraAccessLevel(StrEnum):
     write = "write"
 
 
-class CassandraNodeConfig(AstacusModel):
+class CassandraNodeConfig(msgspec.Struct, kw_only=True):
     # Used in subop=get-schema-hash
     client: CassandraClientConfiguration
 
@@ -45,16 +44,13 @@ class CassandraNodeConfig(AstacusModel):
     # Specify a safe default, let the users override it when restoring.
     access_level: CassandraAccessLevel = CassandraAccessLevel.read
 
-    @classmethod
-    @validator("client")
-    def ensure_config_path_specified(cls, v):
-        assert v.config_path, "config_path must be specified for client in node section"
-        return v
+    def __post_init__(self):
+        assert self.client.config_path, "config_path must be specified for client in node section"
 
 
-class NodeConfig(AstacusModel):
+class NodeConfig(msgspec.Struct, kw_only=True):
     # Where is the root of the file hierarchy we care about
-    root: DirectoryPath
+    root: Path
 
     # Which availability zone is this node in (optional)
     az: str = ""
@@ -62,17 +58,17 @@ class NodeConfig(AstacusModel):
     # Where do we hardlink things from the file hierarchy we care about
     # By default, .astacus subdirectory is created in root if this is not set
     # Directory is created if it does not exist
-    root_link: Optional[Path]
+    root_link: Optional[Path] = None
 
     # Same as root_link for the delta snapshotter.
-    delta_root_link: Optional[Path]
+    delta_root_link: Optional[Path] = None
     db_path: Path
 
     # These can be either globally or locally set
     object_storage: Optional[RohmuConfig] = None
     statsd: Optional[StatsdConfig] = None
 
-    parallel: NodeParallel = Field(default_factory=NodeParallel)
+    parallel: NodeParallel = msgspec.field(default_factory=NodeParallel)
 
     # Copy the owner of created files and folders from the owner of root,
     # this requires the right to run this command:
@@ -81,7 +77,7 @@ class NodeConfig(AstacusModel):
 
     # Cassandra configuration is optional; for now, in node part of
     # the code, there are no plugins. (This may change later.)
-    cassandra: Optional[CassandraNodeConfig]
+    cassandra: Optional[CassandraNodeConfig] = None
 
 
 def node_config(request: Request) -> NodeConfig:

@@ -2,7 +2,6 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
-
 from astacus.common import ipc, magic, utils
 from astacus.common.progress import Progress
 from astacus.common.snapshot import SnapshotGroup
@@ -15,6 +14,7 @@ from pathlib import Path
 from pytest_mock import MockerFixture
 from tests.unit.node.conftest import build_snapshot_and_snapshotter, create_files_at_path
 
+import msgspec
 import pytest
 
 
@@ -97,6 +97,6 @@ def test_api_clear(client: TestClient, mocker: MockerFixture) -> None:
     assert response.status_code == 200, response.json()
 
     # Decode the (result endpoint) response using the model
-    response = m.call_args[1]["data"]
-    result = ipc.NodeResult.parse_raw(response)
+    data = m.call_args[1]["data"]
+    result = msgspec.convert(data, type=ipc.NodeResult)
     assert result.progress.finished_successfully

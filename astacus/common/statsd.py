@@ -15,10 +15,10 @@ This is combination of:
 
 """
 from .magic import StrEnum
-from .utils import AstacusModel
 from contextlib import asynccontextmanager, contextmanager
 from typing import Optional, Union
 
+import msgspec
 import socket
 import time
 
@@ -31,11 +31,11 @@ class MessageFormat(StrEnum):
 Tags = dict[str, Union[int, str, None]]
 
 
-class StatsdConfig(AstacusModel):
+class StatsdConfig(msgspec.Struct, kw_only=True, frozen=True):
     host: str = "127.0.0.1"
     port: int = 8125
     message_format: MessageFormat = MessageFormat.telegraf
-    tags: Tags = {}
+    tags: Tags = msgspec.field(default_factory=dict)
 
 
 class StatsClient:

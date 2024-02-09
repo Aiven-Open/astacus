@@ -2,16 +2,17 @@
 Copyright (c) 2022 Aiven Ltd
 See LICENSE for details
 """
-
 from astacus.common.exceptions import TransientException
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import BackupManifestStep, Step, StepsContext
 from astacus.coordinator.plugins.flink.manifest import FlinkManifest
 from astacus.coordinator.plugins.zookeeper import ChangeWatch, ZooKeeperClient, ZooKeeperConnection
-from typing import Any, Dict, List
+from collections.abc import Sequence
+from typing import Any, Dict
 
 import dataclasses
 import logging
+import msgspec
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ class RetrieveDataStep(Step[Dict[str, Any]]):
     """
 
     zookeeper_client: ZooKeeperClient
-    zookeeper_paths: List[str]
+    zookeeper_paths: Sequence[str]
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> Dict[str, Any]:
         async with self.zookeeper_client.connect() as connection:
@@ -67,7 +68,7 @@ class PrepareFlinkManifestStep(Step[Dict[str, Any]]):
     """
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> Dict[str, Any]:
-        return FlinkManifest(data=context.get_result(RetrieveDataStep)).dict()
+        return msgspec.to_builtins(FlinkManifest(data=context.get_result(RetrieveDataStep)))
 
 
 @dataclasses.dataclass
@@ -78,7 +79,7 @@ class FlinkManifestStep(Step[FlinkManifest]):
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> FlinkManifest:
         backup_manifest = context.get_result(BackupManifestStep)
-        return FlinkManifest.parse_obj(backup_manifest.plugin_data)
+        return msgspec.convert(backup_manifest.plugin_data, FlinkManifest)
 
 
 @dataclasses.dataclass
@@ -88,7 +89,7 @@ class RestoreDataStep(Step[None]):
     """
 
     zookeeper_client: ZooKeeperClient
-    zookeeper_paths: List[str]
+    zookeeper_paths: Sequence[str]
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         flink_manifest = context.get_result(FlinkManifestStep)

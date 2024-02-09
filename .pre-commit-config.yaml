@@ -42,7 +42,7 @@ repos:
           - --rcfile=.pylintrc
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.0.0
+    rev: v1.8.0
     hooks:
       - id: mypy
         exclude: ^setup.py|^vendor/|^astacus/proto/
@@ -53,3 +53,4 @@ repos:
           - types-urllib3>=1.26.25.4
           - typing_extensions>=3.10.0
           - pydantic==1.10.2
+          - msgspec==0.18.6

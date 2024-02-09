@@ -2,8 +2,8 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
-
 from astacus.common import magic
+from astacus.common.msgspec_glue import dec_hook
 from astacus.common.snapshot import SnapshotGroup
 from astacus.common.storage import FileStorage
 from astacus.node.api import router as node_router
@@ -16,6 +16,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pathlib import Path
 
+import msgspec
 import py
 import pytest
 
@@ -34,7 +35,7 @@ def fixture_app(tmpdir: py.path.local) -> FastAPI:
     (root / "foo2").write_text("foobar")
     (root / "foobig").write_text("foobar" * magic.DEFAULT_EMBEDDED_FILE_SIZE)
     (root / "foobig2").write_text("foobar" * magic.DEFAULT_EMBEDDED_FILE_SIZE)
-    app.state.node_config = NodeConfig.parse_obj(
+    app.state.node_config = msgspec.convert(
         {
             "az": "testaz",
             "root": str(root),
@@ -50,7 +51,9 @@ def fixture_app(tmpdir: py.path.local) -> FastAPI:
                     }
                 },
             },
-        }
+        },
+        NodeConfig,
+        dec_hook=dec_hook,
     )
     return app
 

@@ -5,19 +5,16 @@ See LICENSE for details
 
 """
 from .exceptions import NotFoundException
-from .utils import AstacusModel
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from pathlib import Path
-from typing import BinaryIO, Callable, Generic, ParamSpec, TypeAlias, TypeVar
+from typing import BinaryIO, Callable, ContextManager, Generic, ParamSpec, TypeAlias, TypeVar
 
+import contextlib
 import io
-
-try:
-    import ujson as json  # type: ignore [import]
-except ImportError:
-    import json
-
 import logging
+import mmap
+import msgspec
 import os
 import threading
 
@@ -31,7 +28,7 @@ JsonScalar: TypeAlias = str | int | float | None
 Json: TypeAlias = JsonScalar | JsonObject | JsonArray
 
 
-class StorageUploadResult(AstacusModel):
+class StorageUploadResult(msgspec.Struct, kw_only=True, frozen=True):
     size: int
     stored_size: int
 
@@ -75,7 +72,7 @@ class JsonStorage(ABC):
         ...
 
     @abstractmethod
-    def download_json(self, name: str) -> Json:
+    def open_json_bytes(self, name: str) -> ContextManager[bytearray]:
         ...
 
     @abstractmethod
@@ -83,15 +80,12 @@ class JsonStorage(ABC):
         ...
 
     @abstractmethod
-    def upload_json_str(self, name: str, data: str) -> bool:
+    def upload_json_bytes(self, name: str, data: bytes | bytearray) -> bool:
         ...
 
-    def upload_json(self, name: str, data: AstacusModel | Json) -> bool:
-        if isinstance(data, AstacusModel):
-            text = data.json()
-        else:
-            text = json.dumps(data)
-        return self.upload_json_str(name, text)
+    def upload_json(self, name: str, data: msgspec.Struct) -> bool:
+        json_bytes = msgspec.json.encode(data)
+        return self.upload_json_bytes(name, json_bytes)
 
 
 class Storage(HexDigestStorage, JsonStorage, ABC):
@@ -165,20 +159,26 @@ class FileStorage(Storage):
         logger.info("delete_json %r", name)
         self._json_to_path(name).unlink()
 
-    @file_error_wrapper
-    def download_json(self, name: str) -> Json:
-        logger.info("download_json %r", name)
+    @contextlib.contextmanager
+    def open_json_bytes(self, name: str) -> Iterator[bytearray]:
+        logger.info("download_json_file %r", name)
         path = self._json_to_path(name)
-        with open(path) as f:
-            return json.load(f)
+        try:
+            with open(path, "rb") as f:
+                with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as f_content:
+                    # https://docs.python.org/3/library/mmap.html
+                    # > Memory-mapped file objects behave like both bytearray and like file objects.
+                    yield f_content  # type: ignore
+        except FileNotFoundError as ex:
+            raise NotFoundException from ex
 
     def list_jsons(self) -> list[str]:
         return self._list(self.json_suffix)
 
-    def upload_json_str(self, name: str, data: str) -> bool:
-        logger.info("upload_json_str %r", name)
+    def upload_json_bytes(self, name: str, data: bytes | bytearray) -> bool:
+        logger.info("upload_json_bytes %r", name)
         path = self._json_to_path(name)
-        with path.open(mode="w") as f:
+        with path.open(mode="wb") as f:
             f.write(data)
         return True
 

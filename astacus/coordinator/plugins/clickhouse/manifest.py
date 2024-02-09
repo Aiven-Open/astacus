@@ -2,17 +2,18 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
-from astacus.common.utils import AstacusModel
 from astacus.coordinator.plugins.clickhouse.client import escape_sql_identifier
 from base64 import b64decode, b64encode
+from collections.abc import Sequence
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
 
 import enum
+import msgspec
 import uuid
 
 
-class AccessEntity(AstacusModel):
+class AccessEntity(msgspec.Struct, kw_only=True, frozen=True):
     """
     An access entity can be a user, a role, a quota, etc.
     See `RetrieveAccessEntitiesStep` for more info.
@@ -33,10 +34,10 @@ class AccessEntity(AstacusModel):
         )
 
 
-class ReplicatedDatabase(AstacusModel):
+class ReplicatedDatabase(msgspec.Struct, kw_only=True, frozen=True):
     name: bytes
     # This is optional because of older backups without uuids
-    uuid: Optional[UUID]
+    uuid: Optional[UUID] = None
     # These contain macros, not per-server final values
     shard: bytes
     replica: bytes
@@ -51,7 +52,7 @@ class ReplicatedDatabase(AstacusModel):
         )
 
 
-class Table(AstacusModel):
+class Table(msgspec.Struct, kw_only=True, frozen=True):
     database: bytes
     name: bytes
     engine: str
@@ -94,7 +95,7 @@ class ClickHouseBackupVersion(enum.Enum):
     V2 = "v2"
 
 
-class ClickHouseObjectStorageFile(AstacusModel):
+class ClickHouseObjectStorageFile(msgspec.Struct, kw_only=True, frozen=True):
     path: str
 
     @classmethod
@@ -102,9 +103,9 @@ class ClickHouseObjectStorageFile(AstacusModel):
         return ClickHouseObjectStorageFile(path=data["path"])
 
 
-class ClickHouseObjectStorageFiles(AstacusModel):
+class ClickHouseObjectStorageFiles(msgspec.Struct, kw_only=True, frozen=True):
     disk_name: str
-    files: list[ClickHouseObjectStorageFile]
+    files: Sequence[ClickHouseObjectStorageFile]
 
     @classmethod
     def from_plugin_data(cls, data: dict[str, Any]) -> "ClickHouseObjectStorageFiles":
@@ -114,18 +115,18 @@ class ClickHouseObjectStorageFiles(AstacusModel):
         )
 
 
-class ClickHouseManifest(AstacusModel):
+class ClickHouseManifest(msgspec.Struct, kw_only=True, frozen=True):
     class Config:
         use_enum_values = False
 
     version: ClickHouseBackupVersion
-    access_entities: List[AccessEntity] = []
-    replicated_databases: List[ReplicatedDatabase] = []
-    tables: List[Table] = []
-    object_storage_files: list[ClickHouseObjectStorageFiles] = []
+    access_entities: Sequence[AccessEntity] = msgspec.field(default_factory=list)
+    replicated_databases: Sequence[ReplicatedDatabase] = msgspec.field(default_factory=list)
+    tables: Sequence[Table] = msgspec.field(default_factory=list)
+    object_storage_files: Sequence[ClickHouseObjectStorageFiles] = msgspec.field(default_factory=list)
 
     def to_plugin_data(self) -> Dict[str, Any]:
-        return encode_manifest_data(self.dict())
+        return encode_manifest_data(msgspec.to_builtins(self))
 
     @classmethod
     def from_plugin_data(cls, data: Dict[str, Any]) -> "ClickHouseManifest":

@@ -4,14 +4,13 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 
 """
-
-from .utils import AstacusModel
 from pyparsing import Iterable
 from typing import Optional
 from typing_extensions import Self, TypeVar
 
 import logging
 import math
+import msgspec
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +41,7 @@ def increase_worth_reporting(value: int, new_value: Optional[int] = None, *, tot
 T = TypeVar("T")
 
 
-class Progress(AstacusModel):
+class Progress(msgspec.Struct, kw_only=True):
     """JSON-encodable progress meter of sorts"""
 
     handled: int = 0

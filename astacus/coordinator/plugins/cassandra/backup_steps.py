@@ -4,7 +4,6 @@ See LICENSE for details
 cassandra backup/restore plugin steps
 
 """
-
 from .model import CassandraConfigurationNode, CassandraManifest, CassandraManifestNode
 from .utils import get_schema_hash
 from astacus.common import exceptions
@@ -12,6 +11,7 @@ from astacus.common.cassandra.client import CassandraClient, CassandraSession
 from astacus.common.cassandra.schema import CassandraKeyspace, CassandraSchema
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import Step, StepFailedError, StepsContext
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
@@ -114,7 +114,7 @@ class AssertSchemaUnchanged(Step[None]):
 @dataclass
 class PrepareCassandraManifestStep(Step[Dict]):
     client: CassandraClient
-    nodes: List[CassandraConfigurationNode]
+    nodes: Sequence[CassandraConfigurationNode]
     datacenter: Optional[str]
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> Dict:

@@ -2,27 +2,28 @@
 Copyright (c) 2022 Aiven Ltd
 See LICENSE for details
 """
-from astacus.common.utils import AstacusModel, build_netloc
+from astacus.common.utils import build_netloc
 from astacus.coordinator.plugins.zookeeper import KazooZooKeeperClient, ZooKeeperClient, ZooKeeperUser
-from pydantic import SecretStr
-from typing import List
+from collections.abc import Sequence
+
+import msgspec
 
 
-class ZooKeeperNode(AstacusModel):
+class ZooKeeperNode(msgspec.Struct, kw_only=True, frozen=True):
     host: str
     port: int
 
 
-class ZooKeeperConfigurationUser(AstacusModel):
+class ZooKeeperConfigurationUser(msgspec.Struct, kw_only=True, frozen=True):
     username: str
-    password: SecretStr
+    password: str  # faxme: secret = msgspec.field()
 
     def to_dataclass(self) -> ZooKeeperUser:
-        return ZooKeeperUser(self.username, self.password.get_secret_value())
+        return ZooKeeperUser(self.username, self.password)
 
 
-class ZooKeeperConfiguration(AstacusModel):
-    nodes: List[ZooKeeperNode] = []
+class ZooKeeperConfiguration(msgspec.Struct, kw_only=True, frozen=True):
+    nodes: Sequence[ZooKeeperNode] = msgspec.field(default_factory=list)
     user: ZooKeeperConfigurationUser | None = None
 
 

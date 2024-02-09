@@ -6,19 +6,24 @@ See LICENSE for details
 Rohmu-specific actual object storage implementation
 
 """
-from .storage import Json, MultiStorage, Storage, StorageUploadResult
-from .utils import AstacusModel
+from .msgspec_glue import enc_hook
+from .storage import MultiStorage, Storage, StorageUploadResult
 from astacus.common import exceptions
-from enum import Enum
-from pydantic import Field
-from rohmu import errors, rohmufile
+from collections.abc import Iterator, Mapping
+from enum import StrEnum
+from pathlib import Path
+from rohmu import errors, rohmufile, StorageDriver
+from rohmu.common.models import ProxyType
 from rohmu.compressor import CompressionStream
 from rohmu.encryptor import EncryptorStream
-from typing import BinaryIO, Dict, Optional, Union
+from rohmu.object_storage.config import S3_MULTIPART_CHUNK_SIZE, S3AddressingStyle
+from typing import Any, BinaryIO, Optional, Union
 
+import contextlib
 import io
-import json
 import logging
+import mmap
+import msgspec
 import os
 import rohmu
 import tempfile
@@ -26,58 +31,115 @@ import tempfile
 logger = logging.getLogger(__name__)
 
 
-class RohmuModel(AstacusModel):
-    class Config:
-        # As we're keen to both export and decode json, just using enum
-        # values is much saner than the alternatives
-        use_enum_values = True
+class ProxyInfo(msgspec.Struct, kw_only=True, frozen=True):
+    host: str
+    port: int
+    type: ProxyType
+    user: Optional[str] = None
+    password: Optional[str] = msgspec.field(default=None, name="pass")  # pydantic.Field(None, alias="pass")
+
+
+class LocalObjectStorageConfig(
+    msgspec.Struct, kw_only=True, frozen=True, tag=StorageDriver.local.value, tag_field="storage_type"
+):
+    # Don't use pydantic DirectoryPath, that class checks the dir exists at the wrong time
+    directory: Path
+    prefix: Optional[str] = None
+
+
+class S3ObjectStorageConfig(msgspec.Struct, kw_only=True, frozen=True, tag=StorageDriver.s3.value, tag_field="storage_type"):
+    region: str
+    bucket_name: Optional[str] = None
+    aws_access_key_id: Optional[str] = None
+    aws_secret_access_key: Optional[str] = None  # repr=False
+    prefix: Optional[str] = None
+    host: Optional[str] = None
+    port: Optional[str] = None
+    addressing_style: S3AddressingStyle = S3AddressingStyle.path
+    is_secure: bool = False
+    is_verify_tls: bool = False
+    cert_path: Optional[Path] = None
+    segment_size: int = S3_MULTIPART_CHUNK_SIZE
+    encrypted: bool = False
+    proxy_info: Optional[ProxyInfo] = None
+    connect_timeout: Optional[str] = None
+    read_timeout: Optional[str] = None
+    aws_session_token: Optional[str] = None  # repr=False
+
+    def __post_init__(self) -> None:
+        if not self.is_verify_tls and self.cert_path is not None:
+            raise ValueError("cert_path is set but is_verify_tls is False")
+
+
+class AzureObjectStorageConfig(
+    msgspec.Struct, kw_only=True, frozen=True, tag=StorageDriver.azure.value, tag_field="storage_type"
+):
+    bucket_name: Optional[str] = None
+    account_name: str
+    account_key: Optional[str] = None  # repr=False
+    sas_token: Optional[str] = None  # repr=False
+    prefix: Optional[str] = None
+    azure_cloud: Optional[str] = None
+    proxy_info: Optional[ProxyInfo] = None
+
+
+class GoogleObjectStorageConfig(
+    msgspec.Struct, kw_only=True, frozen=True, tag=StorageDriver.google.value, tag_field="storage_type"
+):
+    project_id: str
+    bucket_name: Optional[str] = None
+    # Don't use pydantic FilePath, that class checks the file exists at the wrong time
+    credential_file: Optional[Path] = None
+    credentials: Optional[Mapping[str, Any]] = None  # repr=False
+    proxy_info: Optional[ProxyInfo] = None
+    prefix: Optional[str] = None
 
 
 RohmuStorageConfig = Union[
-    rohmu.LocalObjectStorageConfig,
-    rohmu.S3ObjectStorageConfig,
-    rohmu.AzureObjectStorageConfig,
-    rohmu.GoogleObjectStorageConfig,
+    LocalObjectStorageConfig,
+    S3ObjectStorageConfig,
+    AzureObjectStorageConfig,
+    GoogleObjectStorageConfig,
 ]
 
 
-class RohmuEncryptionKey(RohmuModel):
+class RohmuEncryptionKey(msgspec.Struct, kw_only=True, frozen=True):
     # public RSA key
     public: str
     # private RSA key
     private: str
 
 
-class RohmuCompressionType(Enum):
+class RohmuCompressionType(StrEnum):
     lzma = "lzma"
     snappy = "snappy"
     zstd = "zstd"
 
 
-class RohmuCompression(RohmuModel):
+class RohmuCompression(msgspec.Struct, kw_only=True, frozen=True):
     algorithm: Optional[RohmuCompressionType] = None
     level: int = 0
     # threads: int = 0
 
 
-class RohmuConfig(RohmuModel):
+class RohmuConfig(msgspec.Struct, kw_only=True, frozen=True):
     temporary_directory: str
 
     # Targets we support for backing up
     default_storage: str
-    storages: Dict[str, RohmuStorageConfig]
+    storages: Mapping[str, RohmuStorageConfig]
 
     # Encryption (optional)
     encryption_key_id: Optional[str] = None
-    encryption_keys: Dict[str, RohmuEncryptionKey] = {}
+    encryption_keys: Mapping[str, RohmuEncryptionKey] = msgspec.field(default_factory=dict)
 
     # Compression (optional)
-    compression: RohmuCompression = RohmuCompression()
+    compression: RohmuCompression = msgspec.field(default_factory=RohmuCompression)
 
 
-class RohmuMetadata(RohmuModel):
-    encryption_key_id: Optional[str] = Field(None, alias="encryption-key-id")
-    compression_algorithm: Optional[RohmuCompressionType] = Field(None, alias="compression-algorithm")
+class RohmuMetadata(msgspec.Struct, kw_only=True):
+    encryption_key_id: Optional[str] = msgspec.field(default=None, name="encryption-key-id")
+    compression_algorithm: Optional[RohmuCompressionType] = msgspec.field(default=None, name="compression-algorithm")
 
 
 def rohmu_error_wrapper(fun):
@@ -144,7 +206,7 @@ class RohmuStorage(Storage):
             metadata.encryption_key_id = encryption_key_id
             rsa_public_key = self._public_key_lookup(encryption_key_id)
             wrapped_file = EncryptorStream(wrapped_file, rsa_public_key)
-        rohmu_metadata = metadata.dict(exclude_defaults=True, by_alias=True)
+        rohmu_metadata = msgspec.to_builtins(metadata)
         self.storage.store_file_object(key, wrapped_file, metadata=rohmu_metadata)
         return StorageUploadResult(size=file_size, stored_size=wrapped_file.tell())
 
@@ -155,7 +217,9 @@ class RohmuStorage(Storage):
             storage = self.config.default_storage
         self.storage_name = storage
         self.storage_config = self.config.storages[storage]
-        self.storage = rohmu.get_transfer_from_model(self.storage_config)
+        storage_config = rohmu.get_transfer_model(msgspec.to_builtins(self.storage_config, enc_hook=enc_hook))
+        storage_config.storage_type = storage_config.storage_type.value
+        self.storage = rohmu.get_transfer_from_model(storage_config)
 
     def copy(self) -> "RohmuStorage":
         return RohmuStorage(config=self.config, storage=self.storage_name)
@@ -184,23 +248,24 @@ class RohmuStorage(Storage):
         key = os.path.join(self.json_key, name)
         self.storage.delete_key(key)
 
-    def download_json(self, name: str) -> Json:
+    @contextlib.contextmanager
+    def open_json_bytes(self, name: str) -> Iterator[bytearray]:
         key = os.path.join(self.json_key, name)
-        f = io.BytesIO()
-        self._download_key_to_file(key, f)
-        f.seek(0)
-        return json.load(f)
+        with tempfile.TemporaryFile(dir=self.config.temporary_directory) as temp_file:
+            self._download_key_to_file(key, temp_file)
+            temp_file.seek(0)
+            with mmap.mmap(temp_file.fileno(), 0, access=mmap.ACCESS_READ) as mapped_file:
+                # https://docs.python.org/3/library/mmap.html
+                # > Memory-mapped file objects behave like both bytearray and like file objects.
+                yield mapped_file  # type: ignore
 
     def list_jsons(self) -> list[str]:
         return self._list_key(self.json_key)
 
-    def upload_json_str(self, name: str, data: str) -> bool:
+    def upload_json_bytes(self, name: str, data: bytes | bytearray) -> bool:
         key = os.path.join(self.json_key, name)
-        f = io.BytesIO()
-        encoded_data = data.encode()
-        f.write(encoded_data)
-        f.seek(0)
-        self._upload_key_from_file(key, f, len(encoded_data))
+        f = io.BytesIO(data)
+        self._upload_key_from_file(key, f, len(data))
         return True
 
 

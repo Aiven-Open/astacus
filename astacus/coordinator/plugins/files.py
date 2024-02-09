@@ -30,12 +30,12 @@ from .base import (
 from astacus.common import ipc
 from astacus.common.ipc import Plugin
 from astacus.common.snapshot import SnapshotGroup
-from typing import Any, List, Sequence
+from typing import Any, Sequence
 
 
-class FilesPlugin(CoordinatorPlugin):
+class FilesPlugin(CoordinatorPlugin, frozen=True):
     # list of globs, e.g. ["**/*.dat"] we want to back up from root
-    root_globs: List[str]
+    root_globs: Sequence[str]
 
     def get_backup_steps(self, *, context: OperationContext) -> Sequence[Step[Any]]:
         return [

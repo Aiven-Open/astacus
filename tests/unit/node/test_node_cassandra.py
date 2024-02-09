@@ -2,7 +2,6 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
-
 from astacus.common import ipc
 from astacus.common.cassandra.config import SNAPSHOT_NAME
 from astacus.common.cassandra.utils import SYSTEM_KEYSPACES
@@ -16,6 +15,7 @@ from tests.unit.conftest import CassandraTestConfig
 from types import ModuleType
 from typing import Callable, Sequence
 
+import msgspec
 import py
 import pytest
 import subprocess
@@ -211,7 +211,7 @@ class TestCassandraRestoreSSTables:
         self.assert_request_succeeded(ctenv, req)
 
     def assert_request_succeeded(self, ctenv: CassandraTestEnv, req: ipc.CassandraRestoreSSTablesRequest) -> None:
-        response = ctenv.post(subop=ipc.CassandraSubOp.restore_sstables, json=req.dict())
+        response = ctenv.post(subop=ipc.CassandraSubOp.restore_sstables, json=msgspec.to_builtins(req))
         status = ctenv.get_status(response)
         assert status.status_code == 200, response.json()
 

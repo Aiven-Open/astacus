@@ -7,22 +7,21 @@ ETCD backup/restore base; while in theory someone might want to backup
 etcd in isolation, this isn't really the tool for it.
 
 """
-
 from astacus.common.etcd import ETCDClient
-from astacus.common.utils import AstacusModel
 from base64 import b64decode, b64encode
 from typing import List, Optional
 
 import asyncio
 import base64
+import msgspec
 
 
-class ETCDConfiguration(AstacusModel):
+class ETCDConfiguration(msgspec.Struct, kw_only=True, frozen=True):
     # etcd v3 API has to be reachable using this URL by coordinator
     etcd_url: str
 
 
-class ETCDKey(AstacusModel):
+class ETCDKey(msgspec.Struct, kw_only=True):
     key_b64: str
     value_b64: str
 
@@ -41,12 +40,12 @@ class ETCDKey(AstacusModel):
         self.value_b64 = base64.b64encode(value).decode()
 
 
-class ETCDPrefixDump(AstacusModel):
+class ETCDPrefixDump(msgspec.Struct, kw_only=True, frozen=True):
     prefix_b64: str
     keys: List[ETCDKey]
 
 
-class ETCDDump(AstacusModel):
+class ETCDDump(msgspec.Struct, kw_only=True, frozen=True):
     prefixes: List[ETCDPrefixDump]
 
 
@@ -55,7 +54,7 @@ async def get_etcd_dump(client: ETCDClient, prefixes: List[bytes]) -> Optional[E
     prefix_ranges = await asyncio.gather(*prefix_dump_coros)
     if any(True for prefix_range in prefix_ranges if prefix_range is None):
         return None
-    return ETCDDump(prefixes=prefix_ranges)
+    return ETCDDump(prefixes=prefix_ranges)  # type: ignore
 
 
 async def restore_etcd_dump(client: ETCDClient, dump: ETCDDump) -> bool:

@@ -7,26 +7,24 @@ This state represents the state of the node.
 By design it cannot be persisted to disk, but e.g. op_info can be if necessary.
 
 """
-
 from astacus.common import utils
 from astacus.common.op import OpState
-from dataclasses import dataclass
 from fastapi import Request
 from threading import Lock
 from typing import Optional
 
+import msgspec
 import time
 
 APP_KEY = "node_state"
 APP_LOCK_KEY = "node_lock"
 
 
-class LockEntry(utils.AstacusModel):
+class LockEntry(msgspec.Struct, kw_only=True):
     locker: str = ""
     locked_until: float = 0
 
 
-@dataclass
 class NodeState(OpState):
     mutate_lock = Lock()
     _lock: Optional[LockEntry] = None

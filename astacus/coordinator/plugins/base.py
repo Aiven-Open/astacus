@@ -9,18 +9,18 @@ from __future__ import annotations
 
 from astacus.common import exceptions, ipc, magic, utils
 from astacus.common.asyncstorage import AsyncHexDigestStorage, AsyncJsonStorage
-from astacus.common.ipc import Retention
+from astacus.common.ipc import ManifestMin, Retention
 from astacus.common.snapshot import SnapshotGroup
-from astacus.common.utils import AstacusModel
 from astacus.coordinator.cluster import Cluster, Result
 from astacus.coordinator.config import CoordinatorNode
-from astacus.coordinator.manifest import download_backup_manifest
+from astacus.coordinator.manifest import download_backup_manifest, download_backup_min_manifest
 from collections import Counter
 from typing import Any, Counter as TCounter, Dict, Generic, List, Optional, Sequence, Set, Type, TypeVar
 
 import dataclasses
 import datetime
 import logging
+import msgspec
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ T = TypeVar("T")
 StepResult_co = TypeVar("StepResult_co", covariant=True)
 
 
-class CoordinatorPlugin(AstacusModel):
+class CoordinatorPlugin(msgspec.Struct, kw_only=True, frozen=True):
     def get_backup_steps(self, *, context: OperationContext) -> Sequence[Step[Any]]:
         raise NotImplementedError
 
@@ -204,7 +204,7 @@ class SnapshotReleaseStep(Step[List[ipc.NodeResult]]):
         )
         return await cluster.wait_successful_results(start_results=start_results, result_class=ipc.NodeResult)
 
-    def _hexdigests_from_hashes(self, hashes: Optional[List[ipc.SnapshotHash]]) -> Sequence[str]:
+    def _hexdigests_from_hashes(self, hashes: Optional[Sequence[ipc.SnapshotHash]]) -> Sequence[str]:
         assert hashes is not None
         return [h.hexdigest for h in hashes]
 
@@ -284,7 +284,7 @@ class MapNodesStep(Step[List[Optional[int]]]):
     Create an index mapping nodes from cluster configuration to nodes in the backup manifest.
     """
 
-    partial_restore_nodes: Optional[List[ipc.PartialRestoreRequestNode]] = None
+    partial_restore_nodes: Optional[Sequence[ipc.PartialRestoreRequestNode]] = None
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> List[Optional[int]]:
         # AZ distribution should in theory be forced to match, but in
@@ -310,7 +310,7 @@ class RestoreStep(Step[List[ipc.NodeResult]]):
     """
 
     storage_name: str
-    partial_restore_nodes: Optional[List[ipc.PartialRestoreRequestNode]] = None
+    partial_restore_nodes: Optional[Sequence[ipc.PartialRestoreRequestNode]] = None
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> List[ipc.NodeResult]:
         # AZ distribution should in theory be forced to match, but in
@@ -420,7 +420,7 @@ class RestoreDeltasStep(Step[None]):
     # Delta restore is plugin-dependent, allow to customize it.
     restore_delta_url: str
     restore_delta_request: ipc.NodeRequest
-    partial_restore_nodes: Optional[List[ipc.PartialRestoreRequestNode]] = None
+    partial_restore_nodes: Optional[Sequence[ipc.PartialRestoreRequestNode]] = None
     delta_manifests_step: Type[Step[List[ipc.BackupManifest]]] = DeltaManifestsStep
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
@@ -536,17 +536,6 @@ class RestoreDeltasStep(Step[None]):
         await cluster.wait_successful_results(start_results=start_results, result_class=ipc.NodeResult)
 
 
-@dataclasses.dataclass
-class ManifestMin:
-    start: datetime.datetime
-    end: datetime.datetime
-    filename: str
-
-    @classmethod
-    def from_manifest(cls, manifest: ipc.BackupManifest) -> ManifestMin:
-        return cls(start=manifest.start, end=manifest.end, filename=manifest.filename)
-
-
 def _prune_manifests(manifests: List[ManifestMin], retention: Retention) -> List[ManifestMin]:
     manifests = sorted(manifests, key=lambda m: (m.start, m.end, m.filename), reverse=True)
     if retention.minimum_backups is not None and retention.minimum_backups >= len(manifests):
@@ -600,7 +589,7 @@ class ComputeKeptBackupsStep(Step[Sequence[ManifestMin]]):
         kept_backup_names = all_backup_names.difference(set(self.explicit_delete))
         manifests = []
         for backup_name in kept_backup_names:
-            manifests.append(ManifestMin.from_manifest(await download_backup_manifest(self.json_storage, backup_name)))
+            manifests.append(await download_backup_min_manifest(self.json_storage, backup_name))
 
         return _prune_manifests(manifests, self.retention)
 
@@ -611,7 +600,7 @@ class ComputeKeptBackupsStep(Step[Sequence[ManifestMin]]):
         oldest_kept_backup = min(kept_backups, key=lambda b: b.start)
         kept_deltas: List[ManifestMin] = []
         for delta_name in all_delta_names:
-            delta_manifest = ManifestMin.from_manifest(await download_backup_manifest(self.json_storage, delta_name))
+            delta_manifest = await download_backup_min_manifest(self.json_storage, delta_name)
             if delta_manifest.end < oldest_kept_backup.end:
                 continue
             kept_deltas.append(delta_manifest)
@@ -675,9 +664,9 @@ class DeleteDanglingHexdigestsStep(Step[None]):
 
 def get_node_to_backup_index(
     *,
-    partial_restore_nodes: Optional[List[ipc.PartialRestoreRequestNode]],
-    snapshot_results: List[ipc.SnapshotResult],
-    nodes: List[CoordinatorNode],
+    partial_restore_nodes: Optional[Sequence[ipc.PartialRestoreRequestNode]],
+    snapshot_results: Sequence[ipc.SnapshotResult],
+    nodes: Sequence[CoordinatorNode],
 ) -> List[Optional[int]]:
     if partial_restore_nodes:
         return get_node_to_backup_index_from_partial_restore_nodes(
@@ -707,9 +696,9 @@ def get_node_to_backup_index(
 
 def get_node_to_backup_index_from_partial_restore_nodes(
     *,
-    partial_restore_nodes: List[ipc.PartialRestoreRequestNode],
-    snapshot_results: List[ipc.SnapshotResult],
-    nodes: List[CoordinatorNode],
+    partial_restore_nodes: Sequence[ipc.PartialRestoreRequestNode],
+    snapshot_results: Sequence[ipc.SnapshotResult],
+    nodes: Sequence[CoordinatorNode],
 ) -> List[Optional[int]]:
     node_to_backup_index: List[Optional[int]] = [None] * len(nodes)
     hostname_to_backup_index: Dict[Optional[str], int] = {}
@@ -751,8 +740,8 @@ def get_node_to_backup_index_from_partial_restore_nodes(
 
 def get_node_to_backup_index_from_azs(
     *,
-    snapshot_results: List[ipc.SnapshotResult],
-    nodes: List[CoordinatorNode],
+    snapshot_results: Sequence[ipc.SnapshotResult],
+    nodes: Sequence[CoordinatorNode],
     azs_in_backup: TCounter[str],
     azs_in_nodes: TCounter[str],
 ) -> List[Optional[int]]:
@@ -776,9 +765,9 @@ def get_node_to_backup_index_from_azs(
     return node_to_backup_index
 
 
-class NodeIndexData(utils.AstacusModel):
+class NodeIndexData(msgspec.Struct, kw_only=True):
     node_index: int
-    sshashes: List[ipc.SnapshotHash] = []
+    sshashes: list[ipc.SnapshotHash] = msgspec.field(default_factory=list)
     total_size: int = 0
 
     def append_sshash(self, sshash: ipc.SnapshotHash) -> None:
@@ -845,6 +834,6 @@ async def get_nodes_metadata(
 ) -> list[ipc.MetadataResult]:
     metadata_responses = await cluster.request_from_nodes("metadata", caller="get_nodes_metadata", method="get", nodes=nodes)
     return [
-        ipc.MetadataResult(version="", features=[]) if response is None else ipc.MetadataResult.parse_obj(response)
+        ipc.MetadataResult(version="", features=[]) if response is None else msgspec.convert(response, ipc.MetadataResult)
         for response in metadata_responses
     ]

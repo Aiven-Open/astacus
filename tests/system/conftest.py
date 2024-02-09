@@ -3,7 +3,8 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 from _pytest.config import Config
-from astacus.common.utils import AstacusModel, exponential_backoff
+from astacus.common.msgspec_glue import enc_hook
+from astacus.common.utils import exponential_backoff
 from contextlib import asynccontextmanager
 from httpx import URL
 from pathlib import Path
@@ -15,6 +16,7 @@ import asyncio
 import httpx
 import json
 import logging
+import msgspec
 import os.path
 import py
 import pytest
@@ -23,16 +25,16 @@ import subprocess
 logger = logging.getLogger(__name__)
 
 
-class TestNode(AstacusModel):
+class TestNode(msgspec.Struct):
     __test__ = False
     name: str
     url: str
     port: int
 
     # Where do root/link/etc for this node reside in filesystem
-    path: Optional[Path]
-    root_path: Optional[Path]
-    db_path: Optional[Path]
+    path: Optional[Path] = None
+    root_path: Optional[Path] = None
+    db_path: Optional[Path] = None
 
 
 ASTACUS_NODES = [
@@ -89,7 +91,7 @@ def create_astacus_config_dict(
             "root_link": str(link_path),
             "db_path": str(node.db_path),
         },
-        "object_storage": create_rohmu_config(tmpdir).jsondict(),
+        "object_storage": msgspec.to_builtins(create_rohmu_config(tmpdir), enc_hook=enc_hook),
         "uvicorn": {
             "port": node.port,
             "log_level": "debug",

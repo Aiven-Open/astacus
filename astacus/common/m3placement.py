@@ -10,11 +10,10 @@ desirable to use it outside and due to that it is stand-alone module,
 as opposed to part of astacus.coordinator.plugins.m3db.
 
 """
-
-from astacus.common.utils import AstacusModel
 from astacus.proto import m3_placement_pb2
-from pydantic import validator
 from typing import List
+
+import msgspec
 
 MAXIMUM_PROTOBUF_STR_LENGTH = 127
 
@@ -27,26 +26,28 @@ def non_empty_and_sane_length(value):
     return value
 
 
-class M3PlacementNode(AstacusModel):
+class M3PlacementNode(msgspec.Struct, kw_only=True, frozen=True):
     # In Aiven-internal case, most of these are redundant fields (we
     # could derive node_id and hostname from endpoint); however, for
     # generic case, we configure all of them (and expect them to be
     # configured).
 
     node_id: str
-    _validate_node_id = validator("node_id", allow_reuse=True)(non_empty_and_sane_length)
 
     endpoint: str
-    _validate_endpoint = validator("endpoint", allow_reuse=True)(non_empty_and_sane_length)
 
     hostname: str
-    _validate_hostname = validator("hostname", allow_reuse=True)(non_empty_and_sane_length)
+
+    def __post_init__(self) -> None:
+        non_empty_and_sane_length(self.node_id)
+        non_empty_and_sane_length(self.endpoint)
+        non_empty_and_sane_length(self.hostname)
 
     # isolation_group: str # redundant - it is available from generic node snapshot result as az
     # zone/weight: assumed to stay same
 
 
-class M3PlacementNodeReplacement(AstacusModel):
+class M3PlacementNodeReplacement(msgspec.Struct, kw_only=True, frozen=True):
     src_pnode: M3PlacementNode
     dst_pnode: M3PlacementNode
     dst_isolation_group: str = ""

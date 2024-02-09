@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+from astacus.common import ipc
 from astacus.common.asyncstorage import AsyncJsonStorage
 from astacus.common.exceptions import TransientException
 from astacus.common.ipc import BackupManifest, Plugin, SnapshotFile, SnapshotResult, SnapshotState
@@ -10,7 +11,6 @@ from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins.base import (
     BackupManifestStep,
     ComputeKeptBackupsStep,
-    ManifestMin,
     SnapshotStep,
     StepFailedError,
     StepsContext,
@@ -79,6 +79,7 @@ from unittest.mock import _Call as MockCall  # pylint: disable=protected-access
 import asyncio
 import base64
 import datetime
+import msgspec
 import pytest
 import sys
 import uuid
@@ -1208,12 +1209,14 @@ async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
             filename="backup-3",
         ),
     ]
-    async_json_storage = AsyncJsonStorage(storage=MemoryJsonStorage(items={b.filename: b.json() for b in manifests}))
+    async_json_storage = AsyncJsonStorage(
+        storage=MemoryJsonStorage(items={b.filename: msgspec.json.encode(b) for b in manifests})
+    )
     disks = Disks(disks=[create_object_storage_disk("remote", object_storage)])
     step = DeleteDanglingObjectStorageFilesStep(disks=disks, json_storage=async_json_storage)
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
-    context.set_result(ComputeKeptBackupsStep, [ManifestMin.from_manifest(b) for b in manifests])
+    context.set_result(ComputeKeptBackupsStep, [ipc.ManifestMin.from_manifest(b) for b in manifests])
     await step.run_step(cluster, context)
     assert await object_storage.list_items() == [
         # Only not_used/and_old was deleted

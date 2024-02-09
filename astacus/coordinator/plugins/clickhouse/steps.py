@@ -44,6 +44,7 @@ import asyncio
 import base64
 import dataclasses
 import logging
+import msgspec
 import secrets
 import uuid
 
@@ -404,14 +405,13 @@ class MoveFrozenPartsStep(Step[None]):
         for snapshot_result in snapshot_results:
             assert snapshot_result.state is not None
             snapshot_result.state.files = [
-                snapshot_file.copy(
-                    update={
-                        "relative_path": dataclasses.replace(
-                            self.disks.parse_part_file_path(snapshot_file.relative_path),
-                            freeze_name=None,
-                            detached=False,
-                        ).to_path()
-                    }
+                msgspec.structs.replace(
+                    snapshot_file,
+                    relative_path=dataclasses.replace(
+                        self.disks.parse_part_file_path(snapshot_file.relative_path),
+                        freeze_name=None,
+                        detached=False,
+                    ).to_path(),
                 )
                 for snapshot_file in snapshot_result.state.files
             ]
@@ -474,7 +474,7 @@ class RestoreReplicatedDatabasesStep(Step[None]):
 
         settings = [
             get_setting_repr(setting_name, value)
-            for setting_name, value in self.replicated_database_settings.dict().items()
+            for setting_name, value in msgspec.to_builtins(self.replicated_database_settings).items()
             if value is not None
         ]
         settings_str = ", ".join(settings)

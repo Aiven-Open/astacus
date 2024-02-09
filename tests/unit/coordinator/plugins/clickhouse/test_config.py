@@ -12,7 +12,6 @@ from astacus.coordinator.plugins.zookeeper_config import (
     ZooKeeperNode,
 )
 from kazoo.client import KazooClient
-from pydantic import SecretStr
 from typing import cast, List
 
 import pytest
@@ -31,7 +30,7 @@ def test_get_zookeeper_client() -> None:
 def test_get_authenticated_zookeeper_client() -> None:
     configuration = ZooKeeperConfiguration(
         nodes=[ZooKeeperNode(host="::1", port=5556)],
-        user=ZooKeeperConfigurationUser(username="local-user", password=SecretStr("secret")),
+        user=ZooKeeperConfigurationUser(username="local-user", password="secret"),
     )
     client = get_zookeeper_client(configuration)
     assert client is not None and isinstance(client, KazooZooKeeperClient)

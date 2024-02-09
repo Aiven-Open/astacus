@@ -7,11 +7,12 @@ from astacus.common import asyncstorage, exceptions, ipc, op, statsd, utils
 from astacus.common.cachingjsonstorage import MultiCachingJsonStorage
 from astacus.common.dependencies import get_request_url
 from astacus.common.magic import ErrorCode
+from astacus.common.msgspec_glue import dec_hook
 from astacus.common.op import Op
 from astacus.common.progress import Progress
 from astacus.common.rohmustorage import MultiRohmuStorage
 from astacus.common.statsd import StatsClient, Tags
-from astacus.common.storage import Json, JsonStorage, MultiFileStorage, MultiStorage
+from astacus.common.storage import JsonStorage, MultiFileStorage, MultiStorage
 from astacus.common.utils import AsyncSleeper
 from astacus.coordinator.cluster import Cluster, LockResult, WaitResultError
 from astacus.coordinator.config import coordinator_config, CoordinatorConfig, CoordinatorNode
@@ -25,7 +26,9 @@ from urllib.parse import urlunsplit
 
 import asyncio
 import contextlib
+import json
 import logging
+import msgspec
 import socket
 import time
 
@@ -83,7 +86,9 @@ class Coordinator(op.OpMixin):
         )
 
     def get_plugin(self) -> CoordinatorPlugin:
-        return get_plugin(self.config.plugin).parse_obj(self.config.plugin_config)
+        return msgspec.json.decode(
+            json.dumps(self.config.plugin_config), type=get_plugin(self.config.plugin), dec_hook=dec_hook
+        )
 
     def get_storage_name(self, *, requested_storage: str = ""):
         return requested_storage if requested_storage else self.json_mstorage.get_default_storage_name()
@@ -96,7 +101,7 @@ class Coordinator(op.OpMixin):
         return asyncstorage.AsyncJsonStorage(storage)
 
     def is_busy(self) -> bool:
-        return bool(self.state.op and self.state.op_info.op_status in (Op.Status.running.value, Op.Status.starting.value))
+        return bool(self.state.op and self.state.op_info.op_status in (Op.Status.running, Op.Status.starting))
 
 
 class CacheClearingJsonStorage(JsonStorage):
@@ -110,15 +115,17 @@ class CacheClearingJsonStorage(JsonStorage):
         finally:
             self.state.cached_list_response = None
 
-    def download_json(self, name: str) -> Json:
-        return self.storage.download_json(name)
+    @contextlib.contextmanager
+    def open_json_bytes(self, name: str) -> Iterator[bytearray]:
+        with self.storage.open_json_bytes(name) as json_bytes:
+            yield json_bytes
 
     def list_jsons(self) -> list[str]:
         return self.storage.list_jsons()
 
-    def upload_json_str(self, name: str, data: str) -> bool:
+    def upload_json_bytes(self, name: str, data: bytes | bytearray) -> bool:
         try:
-            return self.storage.upload_json_str(name, data)
+            return self.storage.upload_json_bytes(name, data)
         finally:
             self.state.cached_list_response = None
 

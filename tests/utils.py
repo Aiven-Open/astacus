@@ -2,11 +2,13 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
+from astacus.common.msgspec_glue import dec_hook
 from astacus.common.rohmustorage import RohmuConfig
 from pathlib import Path
 from typing import Final, List, Union
 
 import importlib
+import msgspec
 import os
 import py
 import re
@@ -74,7 +76,7 @@ def create_rohmu_config(tmpdir: py.path.local, *, compression: bool = True, encr
                 },
             }
         )
-    return RohmuConfig.parse_obj(config)
+    return msgspec.convert(config, RohmuConfig, dec_hook=dec_hook)
 
 
 def parse_clickhouse_version(command_output: bytes) -> tuple[int, ...]:

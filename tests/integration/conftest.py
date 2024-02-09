@@ -93,7 +93,9 @@ async def run_process_and_wait_for_pattern(
             try:
                 await asyncio.wait_for(pattern_found.wait(), timeout=timeout)
             except asyncio.TimeoutError as e:
-                raise Exception(f"Pattern {pattern!r} not found after {timeout:.3f}s in output of {str_args}") from e
+                raise Exception(  # pylint: disable=broad-exception-raised
+                    f"Pattern {pattern!r} not found after {timeout:.3f}s in output of {str_args}"
+                ) from e
             yield process
         finally:
             process.kill()
@@ -141,6 +143,7 @@ def fixture_ports() -> Ports:
     return Ports()
 
 
+@pytest.mark.asyncio
 @pytest.fixture(scope="module", name="zookeeper")
 async def fixture_zookeeper(ports: Ports) -> AsyncIterator[Service]:
     async with create_zookeeper(ports) as zookeeper:

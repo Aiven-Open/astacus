@@ -2,6 +2,7 @@
 Copyright (c) 2023 Aiven Ltd
 See LICENSE for details
 """
+from astacus.common.rohmustorage import LocalObjectStorageConfig
 from astacus.common.snapshot import SnapshotGroup
 from astacus.coordinator.plugins.clickhouse.config import DiskConfiguration, DiskObjectStorageConfiguration, DiskType
 from astacus.coordinator.plugins.clickhouse.disks import Disk, Disks, ParsedPath, PartFilePathError
@@ -9,7 +10,6 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-import rohmu
 
 SAMPLE_DEFAULT_DISK_CONFIGURATION = DiskConfiguration(type=DiskType.local, path=Path(), name="default")
 SAMPLE_SECONDARY_DISK_CONFIGURATION = DiskConfiguration(
@@ -21,12 +21,10 @@ SAMPLE_SECONDARY_DISK_CONFIGURATION = DiskConfiguration(
         # We're using local storage here because it's the only storage type
         # that does not try to do operation during its __init__...
         storages={
-            "default": rohmu.LocalObjectStorageConfig(
-                storage_type=rohmu.StorageDriver.local,
+            "default": LocalObjectStorageConfig(
                 directory=Path("default-bucket"),
             ),
-            "recovery": rohmu.LocalObjectStorageConfig(
-                storage_type=rohmu.StorageDriver.local,
+            "recovery": LocalObjectStorageConfig(
                 directory=Path("recovery-bucket"),
             ),
         },
@@ -189,7 +187,7 @@ def test_disk_can_load_default_object_storage_config() -> None:
     disk = Disk.from_disk_config(SAMPLE_SECONDARY_DISK_CONFIGURATION)
     assert disk.object_storage is not None
     config = disk.object_storage.get_config()
-    assert isinstance(config, rohmu.LocalObjectStorageConfig)
+    assert isinstance(config, LocalObjectStorageConfig)
     assert config.directory == Path("default-bucket")
 
 
@@ -197,7 +195,7 @@ def test_disk_can_load_alternate_object_storage_config() -> None:
     disk = Disk.from_disk_config(SAMPLE_SECONDARY_DISK_CONFIGURATION, storage_name="recovery")
     assert disk.object_storage is not None
     config = disk.object_storage.get_config()
-    assert isinstance(config, rohmu.LocalObjectStorageConfig)
+    assert isinstance(config, LocalObjectStorageConfig)
     assert config.directory == Path("recovery-bucket")
 
 
@@ -206,7 +204,7 @@ def test_disks_can_load_default_object_storage_config() -> None:
     storage = disks.get_object_storage(disk_name="secondary")
     assert storage is not None
     config = storage.get_config()
-    assert isinstance(config, rohmu.LocalObjectStorageConfig)
+    assert isinstance(config, LocalObjectStorageConfig)
     assert config.directory == Path("default-bucket")
 
 
@@ -215,5 +213,5 @@ def test_disks_can_load_alternate_object_storage_config() -> None:
     storage = disks.get_object_storage(disk_name="secondary")
     assert storage is not None
     config = storage.get_config()
-    assert isinstance(config, rohmu.LocalObjectStorageConfig)
+    assert isinstance(config, LocalObjectStorageConfig)
     assert config.directory == Path("recovery-bucket")

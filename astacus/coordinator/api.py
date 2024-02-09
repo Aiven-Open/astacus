@@ -2,7 +2,6 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
-
 from .cleanup import CleanupOp
 from .coordinator import BackupOp, Coordinator, DeltaBackupOp, RestoreOp
 from .list import list_backups, list_delta_backups
@@ -14,10 +13,13 @@ from astacus.common.magic import StrEnum
 from astacus.common.op import Op
 from astacus.config import APP_HASH_KEY, get_config_content_and_hash
 from asyncio import to_thread
-from fastapi import APIRouter, Depends, HTTPException, Request
+from collections.abc import Sequence
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from typing import Annotated, Optional
 from urllib.parse import urljoin
 
 import logging
+import msgspec
 import os
 import time
 
@@ -67,7 +69,9 @@ async def config_status(*, request: Request):
 @router.post("/lock")
 async def lock(*, locker: str, c: Coordinator = Depends(), op: LockOps = Depends()):
     result = c.start_op(op_name=OpName.lock, op=op, fun=op.lock)
-    return LockStartResult(unlock_url=urljoin(str(c.request_url), f"../unlock?locker={locker}"), **result.dict())
+    return msgspec.to_builtins(
+        LockStartResult(unlock_url=urljoin(str(c.request_url), f"../unlock?locker={locker}"), **msgspec.to_builtins(result))
+    )
 
 
 @router.post("/unlock")
@@ -88,13 +92,28 @@ async def delta_backup(*, c: Coordinator = Depends(), op: DeltaBackupOp = Depend
 
 
 @router.post("/restore")
-async def restore(*, c: Coordinator = Depends(), op: RestoreOp = Depends(RestoreOp.create)):
+async def restore(
+    *,
+    c: Coordinator = Depends(),
+    storage: Annotated[str, Body()] = "",
+    name: Annotated[str, Body()] = "",
+    partial_restore_nodes: Annotated[Optional[Sequence[ipc.PartialRestoreRequestNode]], Body()] = None,
+    stop_after_step: Annotated[Optional[str], Body()] = None,
+):
+    req = ipc.RestoreRequest(
+        storage=storage,
+        name=name,
+        partial_restore_nodes=partial_restore_nodes,
+        stop_after_step=stop_after_step,
+    )
+    op = RestoreOp(c=c, req=req)
     runner = await op.acquire_cluster_lock()
     return c.start_op(op_name=OpName.restore, op=op, fun=runner)
 
 
 @router.get("/list")
-async def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordinator = Depends(), request: Request):
+async def _list_backups(*, storage: Annotated[str, Body()] = "", c: Coordinator = Depends(), request: Request):
+    req = ipc.ListRequest(storage=storage)
     coordinator_config = c.config
     cached_list_response = c.state.cached_list_response
     if cached_list_response is not None:
@@ -113,21 +132,30 @@ async def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordina
         c.state.cached_list_response = CachedListResponse(
             coordinator_config=coordinator_config,
             list_request=req,
-            list_response=list_response,
+            list_response=msgspec.to_builtins(list_response),
         )
     finally:
         c.state.cached_list_running = False
-    return list_response
+    return msgspec.to_builtins(list_response)
 
 
 @router.get("/delta/list")
-async def _list_delta_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordinator = Depends(), request: Request):
+async def _list_delta_backups(*, storage: Annotated[str, Body()] = "", c: Coordinator = Depends(), request: Request):
+    req = ipc.ListRequest(storage=storage)
     # This is not supposed to be called very often, no caching necessary
     return await to_thread(list_delta_backups, req=req, json_mstorage=c.json_mstorage)
 
 
 @router.post("/cleanup")
-async def cleanup(*, op: CleanupOp = Depends(CleanupOp.create), c: Coordinator = Depends()):
+async def cleanup(
+    *,
+    storage: Annotated[str, Body()] = "",
+    retention: Annotated[Optional[ipc.Retention], Body()] = None,
+    explicit_delete: Annotated[Sequence[str], Body()] = (),
+    c: Coordinator = Depends(),
+):
+    req = ipc.CleanupRequest(storage=storage, retention=retention, explicit_delete=list(explicit_delete))
+    op = CleanupOp(c=c, req=req)
     runner = await op.acquire_cluster_lock()
     return c.start_op(op_name=OpName.cleanup, op=op, fun=runner)
 
@@ -138,7 +166,7 @@ def op_status(*, op_name: OpName, op_id: int, c: Coordinator = Depends()):
     op, op_info = c.get_op_and_op_info(op_id=op_id, op_name=op_name)
     result = {"state": op_info.op_status}
     if isinstance(op, (BackupOp, DeltaBackupOp, RestoreOp)):
-        result["progress"] = op.progress
+        result["progress"] = msgspec.to_builtins(op.progress)
     return result
 
 

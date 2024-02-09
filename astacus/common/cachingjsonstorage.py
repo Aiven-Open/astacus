@@ -21,9 +21,11 @@ assumption is that backups are immutable, that is, if file backup-X
 exists, its contents stay the same.
 
 """
-
 from .exceptions import NotFoundException
-from .storage import Json, JsonStorage, MultiStorage
+from .storage import JsonStorage, MultiStorage
+from collections.abc import Iterator
+
+import contextlib
 
 
 class CachingJsonStorage(JsonStorage):
@@ -58,25 +60,27 @@ class CachingJsonStorage(JsonStorage):
         self.backend_storage.delete_json(name)
         self._backend_json_set_remove(name)
 
-    def download_json(self, name: str) -> Json:
+    @contextlib.contextmanager
+    def open_json_bytes(self, name: str) -> Iterator[bytearray]:
         if name not in self._backend_json_set:
             raise NotFoundException()
         try:
-            return self.cache_storage.download_json(name)
+            with self.cache_storage.open_json_bytes(name) as json_bytes:
+                yield json_bytes
         except NotFoundException:
-            pass
-        data = self.backend_storage.download_json(name)
-        self.cache_storage.upload_json(name, data)
-        return data
+            with self.backend_storage.open_json_bytes(name) as json_bytes:
+                self.cache_storage.upload_json_bytes(name, json_bytes)
+            with self.cache_storage.open_json_bytes(name) as json_bytes:
+                yield json_bytes
 
     def list_jsons(self) -> list[str]:
         if self._backend_json_list is None:
             self._backend_json_list = sorted(self._backend_json_set)
         return self._backend_json_list
 
-    def upload_json_str(self, name: str, data: str) -> bool:
-        self.cache_storage.upload_json_str(name, data)
-        self.backend_storage.upload_json_str(name, data)
+    def upload_json_bytes(self, name: str, data: bytes) -> bool:
+        self.cache_storage.upload_json_bytes(name, data)
+        self.backend_storage.upload_json_bytes(name, data)
         self._backend_json_set_add(name)
         return True
 

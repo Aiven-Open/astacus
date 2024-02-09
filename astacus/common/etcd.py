@@ -6,15 +6,15 @@ See LICENSE for details
 Minimal etcdv3 client library on top of httpx
 
 """
-
-from .utils import AstacusModel, httpx_request
+from .utils import httpx_request
 from typing import Optional
 
 import base64
 import json
+import msgspec
 
 
-class KVRangeRequest(AstacusModel):
+class KVRangeRequest(msgspec.Struct, kw_only=True, frozen=True):
     key: str
     range_end: str = ""
 

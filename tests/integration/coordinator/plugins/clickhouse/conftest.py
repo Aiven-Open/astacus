@@ -5,7 +5,15 @@ See LICENSE for details
 from _pytest.fixtures import FixtureRequest
 from astacus.client import create_client_parsers
 from astacus.common.ipc import Plugin
-from astacus.common.rohmustorage import RohmuCompression, RohmuCompressionType, RohmuConfig, RohmuEncryptionKey
+from astacus.common.msgspec_glue import enc_hook
+from astacus.common.rohmustorage import (
+    LocalObjectStorageConfig,
+    RohmuCompression,
+    RohmuCompressionType,
+    RohmuConfig,
+    RohmuEncryptionKey,
+    S3ObjectStorageConfig,
+)
 from astacus.common.utils import build_netloc
 from astacus.config import GlobalConfig, UvicornConfig
 from astacus.coordinator.config import CoordinatorConfig, CoordinatorNode
@@ -40,8 +48,8 @@ import botocore.session
 import contextlib
 import dataclasses
 import logging
+import msgspec
 import pytest
-import rohmu
 import secrets
 import subprocess
 import tempfile
@@ -447,12 +455,12 @@ async def _astacus(*, config: GlobalConfig) -> AsyncIterator[Service]:
     astacus_source_root = Path(__file__).parent.parent.parent
     assert config.object_storage is not None
     config_path = Path(config.object_storage.temporary_directory) / f"astacus_{config.uvicorn.port}.json"
-    config_path.write_text(config.json())
+    config_path.write_bytes(msgspec.json.encode(config, enc_hook=enc_hook))
     cmd = format_astacus_command("server", "-c", str(config_path))
     async with background_process(*cmd, env={"PYTHONPATH": astacus_source_root}) as process:
         await wait_url_up(f"http://localhost:{config.uvicorn.port}")
         storage = config.object_storage.storages[config.object_storage.default_storage]
-        assert isinstance(storage, rohmu.LocalObjectStorageConfig)
+        assert isinstance(storage, LocalObjectStorageConfig)
         data_dir = storage.directory
         yield Service(process=process, port=config.uvicorn.port, data_dir=data_dir)
 
@@ -465,7 +473,7 @@ def run_astacus_command(astacus_cluster: ServiceCluster, *args: str) -> None:
     create_client_parsers(parser, parser.add_subparsers())
     parsed_args = parser.parse_args(all_args)
     if not parsed_args.func(parsed_args):
-        raise Exception(f"Command {all_args} on {astacus_url} failed")
+        raise Exception(f"Command {all_args} on {astacus_url} failed")  # pylint: disable=broad-exception-raised
 
 
 def create_astacus_configs(
@@ -485,11 +493,10 @@ def create_astacus_configs(
     for p in snapshotter_db_paths:
         p.mkdir(exist_ok=True)
     disk_storages = {
-        "default": rohmu.S3ObjectStorageConfig(
-            storage_type=rohmu.StorageDriver.s3,
+        "default": S3ObjectStorageConfig(
             region="fake",
             host=minio_bucket.host,
-            port=minio_bucket.port,
+            port=str(minio_bucket.port),
             aws_access_key_id=minio_bucket.access_key_id,
             aws_secret_access_key=minio_bucket.secret_access_key,
             bucket_name=minio_bucket.name,
@@ -497,21 +504,18 @@ def create_astacus_configs(
         )
     }
     backup_storages = {
-        "default": rohmu.LocalObjectStorageConfig(
-            storage_type=rohmu.StorageDriver.local,
+        "default": LocalObjectStorageConfig(
             directory=astacus_backup_storage_path,
         )
     }
     if restorable_source:
-        backup_storages["restorable"] = rohmu.LocalObjectStorageConfig(
-            storage_type=rohmu.StorageDriver.local,
+        backup_storages["restorable"] = LocalObjectStorageConfig(
             directory=restorable_source.astacus_storage_path,
         )
-        disk_storages["restorable"] = rohmu.S3ObjectStorageConfig(
-            storage_type=rohmu.StorageDriver.s3,
+        disk_storages["restorable"] = S3ObjectStorageConfig(
             region="fake",
             host=minio_bucket.host,
-            port=minio_bucket.port,
+            port=str(minio_bucket.port),
             aws_access_key_id=minio_bucket.access_key_id,
             aws_secret_access_key=minio_bucket.secret_access_key,
             bucket_name=minio_bucket.name,
@@ -524,46 +528,49 @@ def create_astacus_configs(
                 plugin=Plugin.clickhouse,
                 backup_attempts=1,
                 restore_attempts=1,
-                plugin_config=ClickHousePlugin(
-                    zookeeper=ZooKeeperConfiguration(nodes=[ZooKeeperNode(host=zookeeper.host, port=zookeeper.port)]),
-                    clickhouse=ClickHouseConfiguration(
-                        username=clickhouse_cluster.services[0].username,
-                        password=clickhouse_cluster.services[0].password,
-                        nodes=[
-                            ClickHouseNode(
-                                host=service.host,
-                                port=service.port,
-                            )
-                            for service in clickhouse_cluster.services
-                        ],
-                    ),
-                    replicated_databases_settings=ReplicatedDatabaseSettings(
-                        collection_name="default_cluster",
-                    )
-                    if clickhouse_cluster.use_named_collections
-                    else ReplicatedDatabaseSettings(
-                        cluster_username=clickhouse_cluster.services[0].username,
-                        cluster_password=clickhouse_cluster.services[0].password,
-                    ),
-                    disks=[
-                        DiskConfiguration(
-                            type=DiskType.local,
-                            path=Path(""),
-                            name="default",
+                plugin_config=msgspec.to_builtins(
+                    ClickHousePlugin(
+                        zookeeper=ZooKeeperConfiguration(nodes=[ZooKeeperNode(host=zookeeper.host, port=zookeeper.port)]),
+                        clickhouse=ClickHouseConfiguration(
+                            username=clickhouse_cluster.services[0].username,
+                            password=clickhouse_cluster.services[0].password,
+                            nodes=[
+                                ClickHouseNode(
+                                    host=service.host,
+                                    port=service.port,
+                                )
+                                for service in clickhouse_cluster.services
+                            ],
                         ),
-                        DiskConfiguration(
-                            type=DiskType.object_storage,
-                            path=Path("disks/remote"),
-                            name="remote",
-                            object_storage=DiskObjectStorageConfiguration(
-                                default_storage="default",
-                                storages=disk_storages,
+                        replicated_databases_settings=ReplicatedDatabaseSettings(
+                            collection_name="default_cluster",
+                        )
+                        if clickhouse_cluster.use_named_collections
+                        else ReplicatedDatabaseSettings(
+                            cluster_username=clickhouse_cluster.services[0].username,
+                            cluster_password=clickhouse_cluster.services[0].password,
+                        ),
+                        disks=[
+                            DiskConfiguration(
+                                type=DiskType.local,
+                                path=Path(""),
+                                name="default",
                             ),
-                        ),
-                    ],
-                    sync_databases_timeout=10.0,
-                    sync_tables_timeout=30.0,
-                ).jsondict(),
+                            DiskConfiguration(
+                                type=DiskType.object_storage,
+                                path=Path("disks/remote"),
+                                name="remote",
+                                object_storage=DiskObjectStorageConfiguration(
+                                    default_storage="default",
+                                    storages=disk_storages,
+                                ),
+                            ),
+                        ],
+                        sync_databases_timeout=10.0,
+                        sync_tables_timeout=30.0,
+                    ),
+                    enc_hook=enc_hook,
+                ),
             ),
             node=NodeConfig(
                 root=clickhouse_service.data_dir,

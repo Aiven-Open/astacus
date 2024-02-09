@@ -2,19 +2,20 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
-
 from astacus.common import ipc
 from astacus.common.rohmustorage import RohmuConfig
 from astacus.common.statsd import StatsdConfig
-from astacus.common.utils import AstacusModel
+from collections.abc import Sequence
 from fastapi import Request
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
+
+import msgspec
 
 APP_KEY = "coordinator_config"
 
 
-class PollConfig(AstacusModel):
+class PollConfig(msgspec.Struct, kw_only=True, frozen=True):
     # When polling for status, how often do we do it
     delay_start: int = 1
     delay_multiplier: int = 2
@@ -31,7 +32,7 @@ class PollConfig(AstacusModel):
     result_timeout: int = 300
 
 
-class CoordinatorNode(AstacusModel):
+class CoordinatorNode(msgspec.Struct, kw_only=True, frozen=True):
     # What is the Astacus url of the node
     url: str
 
@@ -42,16 +43,16 @@ class CoordinatorNode(AstacusModel):
     az: str = ""
 
 
-class CoordinatorConfig(AstacusModel):
-    retention: ipc.Retention = ipc.Retention(keep_days=7, minimum_backups=3)
+class CoordinatorConfig(msgspec.Struct, kw_only=True):
+    retention: ipc.Retention = msgspec.field(default_factory=lambda: ipc.Retention(keep_days=7, minimum_backups=3))
 
-    poll: PollConfig = PollConfig()
+    poll: PollConfig = msgspec.field(default_factory=PollConfig)
 
     plugin: ipc.Plugin
-    plugin_config: dict = {}
+    plugin_config: dict = msgspec.field(default_factory=dict)
 
     # Which nodes are we supposed to manage
-    nodes: List[CoordinatorNode] = []
+    nodes: Sequence[CoordinatorNode] = msgspec.field(default_factory=list)
 
     # How long cluster lock we acquire
     #
@@ -77,7 +78,7 @@ class CoordinatorConfig(AstacusModel):
     # Optional object storage cache directory used for caching json
     # manifest fetching
     # Directory is created if it does not exist
-    object_storage_cache: Optional[Path]
+    object_storage_cache: Optional[Path] = None
 
     # These can be either globally or locally set
     object_storage: Optional[RohmuConfig] = None

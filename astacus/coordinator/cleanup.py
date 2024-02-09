@@ -5,12 +5,13 @@ See LICENSE for details
 Database cleanup operation
 
 """
-
 from astacus.common import ipc
 from astacus.coordinator.coordinator import Coordinator, SteppedCoordinatorOp
 from fastapi import Depends
 
+import copy
 import logging
+import msgspec
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +23,10 @@ class CleanupOp(SteppedCoordinatorOp):
 
     def __init__(self, *, c: Coordinator, req: ipc.CleanupRequest) -> None:
         context = c.get_operation_context()
-        retention = c.config.retention.copy()
+        retention = copy.copy(c.config.retention)
         if req.retention is not None:
             # This returns only non-defaults -> non-Nones
-            for k, v in req.retention.dict().items():
+            for k, v in msgspec.to_builtins(req.retention).items():
                 setattr(retention, k, v)
         steps = c.get_plugin().get_cleanup_steps(context=context, retention=retention, explicit_delete=req.explicit_delete)
         super().__init__(c=c, attempts=1, steps=steps)

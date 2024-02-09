@@ -4,36 +4,38 @@ See LICENSE for details
 cassandra backup/restore plugin models
 
 """
-
 from astacus.common.cassandra.schema import CassandraSchema
-from astacus.common.utils import AstacusModel
-from pydantic import root_validator
-from typing import List, Optional
+from collections.abc import Sequence
+from typing import Optional
 from uuid import UUID
 
+import msgspec
 
-class CassandraConfigurationNode(AstacusModel):
+
+class CassandraConfigurationNode(msgspec.Struct, kw_only=True, frozen=True):
     # The configured node order has to be identified _somehow_;
     # otherwise, we cannot map the same data to same set of
     # tokens. One of these is required.
-    address: Optional[str]
-    host_id: Optional[UUID]
-    listen_address: Optional[str]
-    tokens: Optional[List[str]]
+    address: Optional[str] = None
+    host_id: Optional[UUID] = None
+    listen_address: Optional[str] = None
+    tokens: Optional[Sequence[str]] = None
 
-    @classmethod
-    @root_validator
-    def ensure_identifier_provided(cls, values: dict) -> dict:
-        assert any(values.get(k) for k in ["address", "host_id", "listen_address", "tokens"])
-        return values
+    def __post_init__(self) -> None:
+        assert (
+            self.address is not None
+            or self.host_id is not None
+            or self.listen_address is not None
+            or self.tokens is not None
+        )
 
 
-class CassandraManifestNode(AstacusModel):
+class CassandraManifestNode(msgspec.Struct, kw_only=True):
     address: str
     host_id: UUID
     listen_address: str
     rack: str
-    tokens: List[str]
+    tokens: list[str]
 
     def matches_configuration_node(self, node: CassandraConfigurationNode) -> bool:
         for attribute in ["address", "host_id", "listen_address", "tokens"]:
@@ -43,6 +45,6 @@ class CassandraManifestNode(AstacusModel):
         return True
 
 
-class CassandraManifest(AstacusModel):
+class CassandraManifest(msgspec.Struct, kw_only=True, frozen=True):
     cassandra_schema: CassandraSchema
-    nodes: List[CassandraManifestNode]
+    nodes: Sequence[CassandraManifestNode]

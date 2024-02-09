@@ -14,14 +14,12 @@ from abc import ABC
 from contextlib import contextmanager
 from multiprocessing.dummy import Pool  # fastapi + fork = bad idea
 from pathlib import Path
-from pydantic import BaseModel
 from typing import Any, AsyncIterable, Callable, Dict, Final, Iterable, Optional, TypeVar, Union
 
 import asyncio
 import datetime
 import httpcore
 import httpx
-import json as _json
 import logging
 import os
 import re
@@ -30,40 +28,6 @@ import tempfile
 import time
 
 logger = logging.getLogger(__name__)
-
-
-class AstacusModel(BaseModel):
-    class Config:
-        # As we're keen to both export and decode json, just using
-        # enum values for encode/decode is much saner than the default
-        # enumname.value (it is also slightly less safe but oh well)
-        use_enum_values = True
-
-        # Extra values should be errors, as they are most likely typos
-        # which lead to grief when not detected. However, if we ever
-        # start deprecating some old fields and not wanting to parse
-        # them, this might need to be revisited.
-        extra = "forbid"
-
-        # Validate field default values too
-        validate_all = True
-
-        # Validate also assignments
-        # validate_assignment = True
-        # TBD: Figure out why this doesn't work in some unit tests;
-        # possibly the tests themselves are broken
-
-    def jsondict(self, **kw):
-        # By default,
-        #
-        # .json() returns json string.
-        # .dict() returns Python dict, but it has things that are not
-        # json serializable.
-        #
-        # We provide json seralizable dict (super inefficiently) here.
-        #
-        # This is mostly used for test code so that should be fine
-        return _json.loads(self.json(**kw))
 
 
 def get_or_create_state(*, state: object, key: str, factory: Callable[[], Any]) -> Any:
@@ -330,8 +294,7 @@ def get_umask() -> int:
         proc_status = Path("/proc/self/status").read_text()
     except FileNotFoundError:
         return FALLBACK_UMASK
-    else:
-        return parse_umask(proc_status)
+    return parse_umask(proc_status)
 
 
 def parse_umask(proc_status: str) -> int:

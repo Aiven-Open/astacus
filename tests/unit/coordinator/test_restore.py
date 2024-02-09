@@ -19,7 +19,7 @@ from typing import Any, Callable, ContextManager, Optional
 
 import httpx
 import json
-import pydantic
+import msgspec
 import pytest
 import respx
 
@@ -195,9 +195,9 @@ def test_node_to_backup_index(
         ({"backup_index": 1, "node_url": "url2"}, [None, None, 1], does_not_raise()),
         ({"backup_hostname": "host1", "node_url": "url2"}, [None, None, 1], does_not_raise()),
         # errors - invalid node spec
-        ({}, None, pytest.raises(pydantic.ValidationError)),
-        ({"backup_index": 42, "backup_hostname": "foo", "node_index": 42}, None, pytest.raises(pydantic.ValidationError)),
-        ({"backup_index": 42, "node_index": 42, "node_url": "foo"}, None, pytest.raises(pydantic.ValidationError)),
+        ({}, None, pytest.raises(msgspec.ValidationError)),
+        ({"backup_index": 42, "backup_hostname": "foo", "node_index": 42}, None, pytest.raises(msgspec.ValidationError)),
+        ({"backup_index": 42, "node_index": 42, "node_url": "foo"}, None, pytest.raises(msgspec.ValidationError)),
         # out of range
         ({"backup_index": -1, "node_index": 2}, [None, None, 1], pytest.raises(exceptions.NotFoundException)),
         ({"backup_index": 1, "node_index": -2}, [None, None, 1], pytest.raises(exceptions.NotFoundException)),
@@ -215,7 +215,7 @@ def test_partial_node_to_backup_index(
     snapshot_results = [ipc.SnapshotResult(hostname=f"host{i}") for i in range(num_nodes)]
     nodes = [CoordinatorNode(url=f"url{i}") for i in range(num_nodes)]
     with exception:
-        partial_restore_nodes = [ipc.PartialRestoreRequestNode.parse_obj(partial_node_spec)]
+        partial_restore_nodes = [msgspec.convert(partial_node_spec, ipc.PartialRestoreRequestNode)]
         assert expected_index == get_node_to_backup_index(
             partial_restore_nodes=partial_restore_nodes, snapshot_results=snapshot_results, nodes=nodes
         )

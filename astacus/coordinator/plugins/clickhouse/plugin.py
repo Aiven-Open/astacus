@@ -56,15 +56,19 @@ from astacus.coordinator.plugins.zookeeper_config import ZooKeeperConfiguration
 from pathlib import Path
 from typing import Any, Sequence
 
+import msgspec
 
-class ClickHousePlugin(CoordinatorPlugin):
-    zookeeper: ZooKeeperConfiguration = ZooKeeperConfiguration()
-    clickhouse: ClickHouseConfiguration = ClickHouseConfiguration()
+
+class ClickHousePlugin(CoordinatorPlugin, frozen=True):
+    zookeeper: ZooKeeperConfiguration = msgspec.field(default_factory=ZooKeeperConfiguration)
+    clickhouse: ClickHouseConfiguration = msgspec.field(default_factory=ClickHouseConfiguration)
     replicated_access_zookeeper_path: str = "/clickhouse/access"
     replicated_databases_zookeeper_path: str = "/clickhouse/databases"
-    replicated_databases_settings: ReplicatedDatabaseSettings = ReplicatedDatabaseSettings()
+    replicated_databases_settings: ReplicatedDatabaseSettings = msgspec.field(default_factory=ReplicatedDatabaseSettings)
     freeze_name: str = "astacus"
-    disks: Sequence[DiskConfiguration] = [DiskConfiguration(type=DiskType.local, path=Path(""), name="default")]
+    disks: Sequence[DiskConfiguration] = msgspec.field(
+        default_factory=lambda: [DiskConfiguration(type=DiskType.local, path=Path(""), name="default")]
+    )
     drop_databases_timeout: float = 300.0
     # Deprecated parameter, ignored
     max_concurrent_drop_databases: int = 10

@@ -3,6 +3,7 @@ Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
 from astacus.coordinator.plugins.clickhouse.manifest import AccessEntity, Table
+from collections.abc import Sequence
 from typing import List
 
 # noinspection PyCompatibility
@@ -11,7 +12,7 @@ import re
 import uuid
 
 
-def tables_sorted_by_dependencies(tables: List[Table]) -> List[Table]:
+def tables_sorted_by_dependencies(tables: Sequence[Table]) -> List[Table]:
     """
     Takes a list of `(database_name: str, table: Table)` and returns a new list,
     sorted in a valid order to create each table sequentially.
@@ -31,7 +32,7 @@ def tables_sorted_by_dependencies(tables: List[Table]) -> List[Table]:
     return sorted(tables, key=lambda t: sort_order.index((t.database, t.name)))
 
 
-def access_entities_sorted_by_dependencies(access_entities: List[AccessEntity]) -> List[AccessEntity]:
+def access_entities_sorted_by_dependencies(access_entities: Sequence[AccessEntity]) -> List[AccessEntity]:
     """
     Takes a list of `AccessEntity` and returns a new list, sorted in a valid order to
     create each entity sequentially.

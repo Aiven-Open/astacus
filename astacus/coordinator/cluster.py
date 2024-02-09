@@ -16,6 +16,7 @@ import copy
 import httpx
 import json
 import logging
+import msgspec
 import urllib.parse
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ class Cluster:
     def __init__(
         self,
         *,
-        nodes: List[CoordinatorNode],
+        nodes: Sequence[CoordinatorNode],
         poll_config: Optional[PollConfig] = None,
         subresult_url: Optional[str] = None,
         subresult_sleeper: Optional[AsyncSleeper] = None,
@@ -109,14 +110,14 @@ class Cluster:
 
         # Now 'reqs' + 'urls' contains all we need to actually perform
         # requests we want to.
-        aws = [utils.httpx_request(url, caller=caller, data=req.json(), **kw) for req, url in zip(reqs, urls)]
+        aws = [utils.httpx_request(url, caller=caller, data=msgspec.json.encode(req), **kw) for req, url in zip(reqs, urls)]
         results = await asyncio.gather(*aws, return_exceptions=True)
 
         logger.info("request_from_nodes %r to %r => %r", reqs, urls, results)
         return results
 
     async def _request_lock_call_from_nodes(
-        self, *, call: LockCall, locker: str, ttl: int = 0, nodes: List[CoordinatorNode]
+        self, *, call: LockCall, locker: str, ttl: int = 0, nodes: Sequence[CoordinatorNode]
     ) -> LockResult:
         results = await self.request_from_nodes(
             f"{call}?locker={locker}&ttl={ttl}",
@@ -174,7 +175,7 @@ class Cluster:
                     "wait_successful_results: Incorrect start result for #%d/%d: %r", i, len(start_results), start_result
                 )
                 raise WaitResultError(f"incorrect start result for #{i}/{len(start_results)}: {start_result!r}")
-            parsed_start_result = op.Op.StartResult.parse_obj(start_result)
+            parsed_start_result = msgspec.convert(start_result, op.Op.StartResult)
             urls.append(parsed_start_result.status_url)
         if len(urls) != len(start_results):
             raise WaitResultError(f"incorrect number of results: {len(urls)} vs {len(start_results)}")
@@ -198,7 +199,7 @@ class Cluster:
                 progress_text = f"{result.progress!r}" if result is not None else "not started"
                 logger.info("%s node #%d/%d: %s", node_op_from_url(url), i, len(urls), progress_text)
                 r = await utils.httpx_request(
-                    url, caller="Nodes.wait_successful_results", timeout=self.poll_config.result_timeout
+                    url, caller="Nodes.wait_successful_results", timeout=self.poll_config.result_timeout, json=False
                 )
                 if r is None:
                     failures[i] += 1
@@ -206,7 +207,8 @@ class Cluster:
                         raise WaitResultError("too many failures")
                     continue
                 # We got something -> decode the result
-                result = result_class.parse_obj(r)
+                assert isinstance(r, httpx.Response)
+                result = msgspec.json.decode(r.content, type=result_class)
                 results[i] = result
                 failures[i] = 0
                 if self.progress_handler is not None:

@@ -2,7 +2,6 @@
 Copyright (c) 2022 Aiven Ltd
 See LICENSE for details
 """
-
 from astacus.common import ipc
 from astacus.common.cassandra.schema import CassandraSchema
 from astacus.coordinator.cluster import Cluster
@@ -16,6 +15,7 @@ from unittest.mock import Mock
 from uuid import UUID
 
 import datetime
+import msgspec
 import pytest
 
 # TBD: Eventually multinode configuration would be perhaps interesting to test too
@@ -65,7 +65,7 @@ async def test_step_start_cassandra(mocker: MockerFixture, override_tokens: bool
         snapshot_results=[ipc.SnapshotResult()],
         upload_results=[],
         plugin=ipc.Plugin.cassandra,
-        plugin_data=plugin_manifest.dict(),
+        plugin_data=msgspec.to_builtins(plugin_manifest),
     )
 
     nodes = [_coordinator_node(1)]

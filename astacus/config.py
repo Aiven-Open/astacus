@@ -9,9 +9,9 @@ Root-level astacus configuration, which includes
 """
 from astacus.common import magic
 from astacus.common.magic import StrEnum
+from astacus.common.msgspec_glue import dec_hook
 from astacus.common.rohmustorage import RohmuConfig
 from astacus.common.statsd import StatsdConfig
-from astacus.common.utils import AstacusModel
 from astacus.coordinator.config import APP_KEY as COORDINATOR_CONFIG_KEY, CoordinatorConfig
 from astacus.node.config import APP_KEY as NODE_CONFIG_KEY, NodeConfig
 from fastapi import FastAPI, Request
@@ -19,14 +19,13 @@ from pathlib import Path
 from typing import Optional, Tuple, Union
 
 import hashlib
-import io
-import yaml
+import msgspec
 
 APP_KEY = "global_config"
 APP_HASH_KEY = "global_config_hash"
 
 
-class UvicornConfig(AstacusModel):
+class UvicornConfig(msgspec.Struct, kw_only=True, frozen=True):
     class HTTPMode(StrEnum):
         auto = "auto"  # default, but sometimes leads to httptools
         h11 = "h11"
@@ -39,14 +38,14 @@ class UvicornConfig(AstacusModel):
     reload: bool = False
 
 
-class GlobalConfig(AstacusModel):
+class GlobalConfig(msgspec.Struct, kw_only=True, frozen=True):
     # These have to be provided in a configuration file
     coordinator: CoordinatorConfig
     node: NodeConfig
 
     # These, on the other hand, have defaults
     sentry_dsn: str = ""
-    uvicorn: UvicornConfig = UvicornConfig()
+    uvicorn: UvicornConfig = msgspec.field(default_factory=UvicornConfig)
 
     # These can be either globally or locally set
     object_storage: Optional[RohmuConfig] = None
@@ -57,17 +56,16 @@ def global_config(request: Request) -> GlobalConfig:
     return getattr(request.app.state, APP_KEY)
 
 
-def get_config_content_and_hash(config_path: Union[str, Path]) -> Tuple[str, str]:
+def get_config_content_and_hash(config_path: Union[str, Path]) -> Tuple[bytes, str]:
     with open(config_path, "rb") as fh:
         config_content = fh.read()
     config_hash = hashlib.sha256(config_content).hexdigest()
-    return config_content.decode(), config_hash
+    return config_content, config_hash
 
 
 def set_global_config_from_path(app: FastAPI, path: Union[str, Path]) -> GlobalConfig:
     config_content, config_hash = get_config_content_and_hash(path)
-    with io.StringIO(config_content) as config_file:
-        config = GlobalConfig.parse_obj(yaml.safe_load(config_file))
+    config = msgspec.yaml.decode(config_content, type=GlobalConfig, dec_hook=dec_hook)
     cconfig = config.coordinator
     nconfig = config.node
     setattr(app.state, APP_KEY, config)

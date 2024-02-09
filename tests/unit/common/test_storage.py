@@ -7,7 +7,6 @@ Test that RohmuStorage works as advertised.
 TBD: Test with something else than local files?
 
 """
-
 from astacus.common import exceptions
 from astacus.common.cachingjsonstorage import CachingJsonStorage
 from astacus.common.rohmustorage import RohmuConfig, RohmuStorage
@@ -20,6 +19,8 @@ from tests.utils import create_rohmu_config
 from typing import ContextManager
 from unittest.mock import Mock, patch
 
+import json
+import msgspec
 import py
 import pytest
 
@@ -61,10 +62,12 @@ def _test_hexdigeststorage(storage: FileStorage) -> None:
 
 def _test_jsonstorage(storage: JsonStorage) -> None:
     assert storage.list_jsons() == []
-    storage.upload_json(TEST_JSON, TEST_JSON_DATA)
-    assert storage.download_json(TEST_JSON) == TEST_JSON_DATA
+    storage.upload_json_bytes(TEST_JSON, json.dumps(TEST_JSON_DATA).encode())
+    with storage.open_json_bytes(TEST_JSON) as json_bytes:
+        assert json.loads(bytearray(json_bytes)) == TEST_JSON_DATA
     with pytest.raises(exceptions.NotFoundException):
-        storage.download_json(TEST_JSON + "x")
+        with storage.open_json_bytes(TEST_JSON + "x"):
+            pass
     assert storage.list_jsons() == [TEST_JSON]
     storage.delete_json(TEST_JSON)
     with pytest.raises(exceptions.NotFoundException):
@@ -96,17 +99,18 @@ def test_storage(tmpdir: py.path.local, engine: str, kw: dict[str, bool], ex: Co
 
 def test_caching_storage(tmpdir: py.path.local, mocker: MockerFixture) -> None:
     storage = create_storage(tmpdir=tmpdir, engine="cache")
-    storage.upload_json(TEST_JSON, TEST_JSON_DATA)
+    storage.upload_json_bytes(TEST_JSON, json.dumps(TEST_JSON_DATA).encode())
 
     storage = create_storage(tmpdir=tmpdir, engine="cache")
     assert storage.list_jsons() == [TEST_JSON]
 
     # We shouldn't wind up in download method of rohmu at all.
-    mockdown = mocker.patch.object(storage.backend_storage, "download_json")
+    mockdown = mocker.patch.object(storage.backend_storage, "open_json_bytes")
     # Nor list hexdigests
     mocklist = mocker.patch.object(storage.backend_storage, "list_jsons")
 
-    assert storage.download_json(TEST_JSON) == TEST_JSON_DATA
+    with storage.open_json_bytes(TEST_JSON) as json_bytes:
+        assert json.loads(bytes(json_bytes)) == TEST_JSON_DATA
     assert storage.list_jsons() == [TEST_JSON]
     assert not mockdown.called
     assert not mocklist.called
@@ -116,7 +120,7 @@ def test_caching_storage(tmpdir: py.path.local, mocker: MockerFixture) -> None:
 @patch.object(google.GoogleTransfer, "_init_google_client")
 def test_proxy_storage(mock_google_client: Mock, mock_get_credentials: Mock) -> None:
     rs = RohmuStorage(
-        config=RohmuConfig.parse_obj(
+        config=msgspec.convert(
             {
                 "temporary_directory": "/tmp/astacus/backup-tmp",
                 "default_storage": "x",
@@ -140,7 +144,8 @@ def test_proxy_storage(mock_google_client: Mock, mock_get_credentials: Mock) -> 
                         },
                     }
                 },
-            }
+            },
+            RohmuConfig,
         ),
         storage="x-proxy",
     )

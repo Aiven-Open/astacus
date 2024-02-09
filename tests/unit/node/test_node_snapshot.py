@@ -2,7 +2,6 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
-
 from astacus.common import ipc, magic, utils
 from astacus.common.progress import Progress
 from astacus.common.snapshot import SnapshotGroup
@@ -15,6 +14,7 @@ from pathlib import Path
 from pytest_mock import MockerFixture
 from tests.unit.node.conftest import build_snapshot_and_snapshotter, create_files_at_path
 
+import msgspec
 import os
 import pytest
 
@@ -95,7 +95,7 @@ def test_api_snapshot_and_upload(client: TestClient, mocker: MockerFixture) -> N
     response = client.post("/node/snapshot")
     assert response.status_code == 422, response.json()
 
-    req_json: JsonObject = {"root_globs": ["*"]}
+    req_json: JsonObject = {"groups": [{"root_glob": "*"}]}
     response = client.post("/node/snapshot", json=req_json)
     assert response.status_code == 409, response.json()
 
@@ -110,7 +110,7 @@ def test_api_snapshot_and_upload(client: TestClient, mocker: MockerFixture) -> N
 
     # Decode the (result endpoint) response using the model
     response = m.call_args[1]["data"]
-    result = ipc.SnapshotResult.parse_raw(response)
+    result = msgspec.convert(response, type=ipc.SnapshotResult)
     assert result.progress.finished_successfully
     assert result.hashes
     assert result.files
@@ -121,16 +121,17 @@ def test_api_snapshot_and_upload(client: TestClient, mocker: MockerFixture) -> N
     response = client.post("/node/upload")
     assert response.status_code == 422, response.json()
     response = client.post(
-        "/node/upload", json={"storage": "x", "hashes": [x.dict() for x in result.hashes], "result_url": url}
+        "/node/upload",
+        json={"storage": "x", "hashes": [msgspec.to_builtins(x) for x in result.hashes], "result_url": url},
     )
     assert response.status_code == 200, response.json()
     response = m.call_args[1]["data"]
-    result2 = ipc.SnapshotUploadResult.parse_raw(response)
+    result2 = msgspec.convert(response, type=ipc.SnapshotUploadResult)
     assert result2.progress.finished_successfully
 
 
 def test_api_snapshot_error(client: TestClient, mocker: MockerFixture) -> None:
-    req_json = {"root_globs": ["*"]}
+    req_json: JsonObject = {"groups": []}
     response = client.post("/node/lock?locker=x&ttl=10")
     assert response.status_code == 200, response.json()
     response = client.post("/node/snapshot", json=req_json)

@@ -13,7 +13,6 @@ from astacus.common.cassandra.client import CassandraClient
 from astacus.common.cassandra.config import SNAPSHOT_GLOB, SNAPSHOT_NAME
 from astacus.common.exceptions import TransientException
 from pathlib import Path
-from pydantic import DirectoryPath
 from typing import Callable, Tuple
 
 import contextlib
@@ -165,7 +164,7 @@ class CassandraRestoreSSTablesOp(NodeOp[ipc.CassandraRestoreSSTablesRequest, ipc
 
         self.result.progress.done()
 
-    def _match_table_by_name(self, keyspace_name: str, table_name_and_id: str) -> DirectoryPath:
+    def _match_table_by_name(self, keyspace_name: str, table_name_and_id: str) -> Path:
         table_name, _ = table_name_and_id.rsplit("-", 1)
 
         # This could be more efficient too; oh well.

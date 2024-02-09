@@ -15,12 +15,10 @@ https://github.com/samuelcolvin/pydantic/issues/3376
 
 
 """
-
-from astacus.common.utils import AstacusModel
 from pathlib import Path
-from pydantic import root_validator
 from typing import List, Optional
 
+import msgspec
 import yaml
 
 SNAPSHOT_NAME = "astacus-backup"
@@ -28,26 +26,23 @@ SNAPSHOT_GLOB = f"data/*/*/snapshots/{SNAPSHOT_NAME}"
 BACKUP_GLOB = "data/*/*/backups/"
 
 
-class CassandraClientConfiguration(AstacusModel):
-    config_path: Optional[Path]
+class CassandraClientConfiguration(msgspec.Struct, kw_only=True, frozen=True):
+    config_path: Optional[Path] = None
 
     # WhiteListRoundRobinPolicy contact points
-    hostnames: Optional[List[str]]
+    hostnames: Optional[List[str]] = None
 
-    port: Optional[int]
+    port: Optional[int] = None
 
     # PlainTextAuthProvider
     username: str
     password: str
 
     # If set, configure ssl access configuration which requires the ca cert
-    ca_cert_path: Optional[str]
+    ca_cert_path: Optional[str] = None
 
-    @classmethod
-    @root_validator
-    def config_or_hostname_port_provided(cls, values: dict) -> dict:
-        assert "config_path" in values or "port" in values, "Either config_path, or port must be provided"
-        return values
+    def __post_init__(self) -> None:
+        assert self.config_path is not None or self.port is not None, "Either config_path, or port must be provided"
 
     def get_port(self) -> int:
         if self.port:
