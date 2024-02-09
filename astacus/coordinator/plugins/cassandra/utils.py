@@ -41,10 +41,12 @@ async def run_subop(
     return await cluster.wait_successful_results(start_results=start_results, result_class=result_class)
 
 
-async def get_schema_hash(cluster: Cluster) -> Tuple[str, str]:
+async def get_schema_hash(cluster: Cluster, nodes: Optional[list[CoordinatorNode]] = None) -> Tuple[str, str]:
     hashes = [
         x.schema_hash
-        for x in await run_subop(cluster, ipc.CassandraSubOp.get_schema_hash, result_class=ipc.CassandraGetSchemaHashResult)
+        for x in await run_subop(
+            cluster, ipc.CassandraSubOp.get_schema_hash, result_class=ipc.CassandraGetSchemaHashResult, nodes=nodes
+        )
     ]
     if not hashes:
         return "", "Unable to retrieve schema hash at all"

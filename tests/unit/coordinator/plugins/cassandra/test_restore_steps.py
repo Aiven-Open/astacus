@@ -12,7 +12,8 @@ from astacus.coordinator.plugins.cassandra import restore_steps
 from astacus.coordinator.plugins.cassandra.model import CassandraConfigurationNode, CassandraManifest, CassandraManifestNode
 from pytest_mock import MockerFixture
 from tests.unit.coordinator.plugins.cassandra.builders import build_keyspace
-from unittest.mock import Mock
+from typing import List, Optional, Type
+from unittest.mock import Mock, patch
 from uuid import UUID
 
 import datetime
@@ -163,7 +164,7 @@ class AsyncIterableWrapper:
 async def test_step_wait_cassandra_up(mocker: MockerFixture, steps: list[bool], success: bool) -> None:
     get_schema_steps = steps[:]
 
-    async def get_schema_hash(cluster):
+    async def get_schema_hash(cluster, nodes):
         assert get_schema_steps
         return get_schema_steps.pop(0), "unused-error"
 
@@ -175,14 +176,41 @@ async def test_step_wait_cassandra_up(mocker: MockerFixture, steps: list[bool], 
         return_value=AsyncIterableWrapper(steps),
     )
 
-    step = restore_steps.WaitCassandraUpStep(duration=123)
-    cluster = Cluster(nodes=[])
+    step = restore_steps.WaitCassandraUpStep(duration=123, replaced_node_step=None)
     context = base.StepsContext()
+    stopped_nodes = [_coordinator_node(1)]
+    context.set_result(restore_steps.StopReplacedNodesStep, stopped_nodes)
+    cluster = Cluster(nodes=stopped_nodes + [_coordinator_node(2)])
     if success:
         await step.run_step(cluster, context)
     else:
         with pytest.raises(base.StepFailedError):
             await step.run_step(cluster, context)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "replaced_node_step, expected_nodes", [(restore_steps.StopReplacedNodesStep, [_coordinator_node(2)]), (None, None)]
+)
+async def test_stopped_nodes_for_wait_cassandra_up_step(
+    replaced_node_step: Optional[Type[restore_steps.StopReplacedNodesStep]],
+    expected_nodes: Optional[List[CoordinatorNode]],
+    context: base.StepsContext,
+) -> None:
+    cluster = Cluster(nodes=[_coordinator_node(2)])
+
+    if replaced_node_step:
+        stopped_nodes = [_coordinator_node(1)]
+        context.set_result(replaced_node_step, stopped_nodes)
+        cluster.nodes += stopped_nodes
+
+    step = restore_steps.WaitCassandraUpStep(duration=123, replaced_node_step=replaced_node_step)
+
+    with patch(
+        "astacus.coordinator.plugins.cassandra.restore_steps.get_schema_hash", return_value=("hash", "")
+    ) as mock_get_schema_hash:
+        await step.run_step(cluster, context)
+        mock_get_schema_hash.assert_called_once_with(cluster=cluster, nodes=expected_nodes)
 
 
 def test_rewrite_datacenters() -> None:
