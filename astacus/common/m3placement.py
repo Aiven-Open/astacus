@@ -10,11 +10,10 @@ desirable to use it outside and due to that it is stand-alone module,
 as opposed to part of astacus.coordinator.plugins.m3db.
 
 """
-
 from astacus.common.utils import AstacusModel
 from astacus.proto import m3_placement_pb2
+from collections.abc import Sequence
 from pydantic import validator
-from typing import List
 
 MAXIMUM_PROTOBUF_STR_LENGTH = 127
 
@@ -84,7 +83,7 @@ def rewrite_single_m3_placement_node(
     placement.instances[dst_pnode.node_id].CopyFrom(instance)
 
 
-def rewrite_m3_placement_bytes(value: bytes, replacements: List[M3PlacementNodeReplacement]):
+def rewrite_m3_placement_bytes(value: bytes, replacements: Sequence[M3PlacementNodeReplacement]):
     """rewrite whole binary m3 placement, with the set of node replacements"""
     placement = m3_placement_pb2.Placement()
     placement.ParseFromString(value)

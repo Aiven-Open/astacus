@@ -3,15 +3,16 @@ Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
 from astacus.common.utils import build_netloc, httpx_request
+from collections.abc import Mapping, Sequence
 from re import Match
-from typing import Dict, List, Mapping, Optional, Sequence, Union
+from typing import Optional, Union
 
 import copy
 import logging
 import re
 import urllib.parse
 
-Row = Sequence[Union[str, int, float, List, None]]
+Row = Sequence[Union[str, int, float, list, None]]
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +93,7 @@ class HttpClickHouseClient(ClickHouseClient):
             timeout=self.timeout if timeout is None else timeout,
             ignore_status_code=True,
         )
-        assert not isinstance(response, dict)
+        assert not isinstance(response, Mapping)
         if response is None:
             # We should find a better way to handler failure than the None from httpx_request
             raise ClickHouseClientQueryError(query, self.host, self.port)
@@ -113,9 +114,9 @@ class HttpClickHouseClient(ClickHouseClient):
 
 class StubClickHouseClient(ClickHouseClient):
     def __init__(self) -> None:
-        self.responses: Dict[bytes, List[Row]] = {}
+        self.responses: dict[bytes, Sequence[Row]] = {}
 
-    def set_response(self, query: bytes, rows: List[Row]) -> None:
+    def set_response(self, query: bytes, rows: Sequence[Row]) -> None:
         self.responses[query] = copy.deepcopy(rows)
 
     async def execute(

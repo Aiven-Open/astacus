@@ -14,8 +14,9 @@ from astacus.common.snapshot import SnapshotGroup
 from astacus.node.config import CassandraAccessLevel
 from astacus.node.snapshotter import Snapshotter
 from astacus.version import __version__
+from collections.abc import Sequence
 from fastapi import APIRouter, Depends, HTTPException
-from typing import Sequence, Union
+from typing import Union
 
 router = APIRouter()
 

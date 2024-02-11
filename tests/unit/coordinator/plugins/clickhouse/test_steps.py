@@ -70,9 +70,10 @@ from astacus.coordinator.plugins.clickhouse.steps import (
 )
 from astacus.coordinator.plugins.zookeeper import FakeZooKeeperClient, ZooKeeperClient
 from base64 import b64encode
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from tests.unit.storage import MemoryJsonStorage
-from typing import Awaitable, Iterable, Optional, Sequence
+from typing import Awaitable, Optional
 from unittest import mock
 from unittest.mock import _Call as MockCall  # pylint: disable=protected-access
 

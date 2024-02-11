@@ -4,8 +4,8 @@ See LICENSE for details
 """
 from .client import ClickHouseClient
 from base64 import b64decode
+from collections.abc import Mapping
 from re import Match
-from typing import Mapping
 
 import dataclasses
 import re

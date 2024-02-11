@@ -4,12 +4,13 @@ See LICENSE for details
 """
 from _pytest.config import Config
 from astacus.common.utils import AstacusModel, exponential_backoff
+from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from httpx import URL
 from pathlib import Path
 from tests.utils import create_rohmu_config, format_astacus_command
 from types import MappingProxyType
-from typing import Any, AsyncIterator, List, Mapping, Optional, Union
+from typing import Any, Optional, Union
 
 import asyncio
 import httpx
@@ -30,9 +31,9 @@ class TestNode(AstacusModel):
     port: int
 
     # Where do root/link/etc for this node reside in filesystem
-    path: Optional[Path]
-    root_path: Optional[Path]
-    db_path: Optional[Path]
+    path: Optional[Path] = None
+    root_path: Optional[Path] = None
+    db_path: Optional[Path] = None
 
 
 ASTACUS_NODES = [
@@ -178,9 +179,9 @@ def astacus_run(
     capture_output: bool = False,
 ) -> subprocess.CompletedProcess:
     cmd = format_astacus_command("--url", astacus.url, "-w", "10")
-    return subprocess.run(cmd + list(args), check=check, capture_output=capture_output, env={"PYTHONPATH": rootdir})
+    return subprocess.run([*cmd, *args], check=check, capture_output=capture_output, env={"PYTHONPATH": rootdir})
 
 
-def astacus_ls(astacus: TestNode) -> List[str]:
+def astacus_ls(astacus: TestNode) -> Sequence[str]:
     assert astacus.root_path
     return sorted(str(x.relative_to(astacus.root_path)) for x in astacus.root_path.glob("**/*"))

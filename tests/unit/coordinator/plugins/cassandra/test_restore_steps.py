@@ -10,9 +10,10 @@ from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins import base
 from astacus.coordinator.plugins.cassandra import restore_steps
 from astacus.coordinator.plugins.cassandra.model import CassandraConfigurationNode, CassandraManifest, CassandraManifestNode
+from collections.abc import Sequence
 from pytest_mock import MockerFixture
 from tests.unit.coordinator.plugins.cassandra.builders import build_keyspace
-from typing import List, Optional, Type
+from typing import Optional, Type
 from unittest.mock import Mock, patch
 from uuid import UUID
 
@@ -194,7 +195,7 @@ async def test_step_wait_cassandra_up(mocker: MockerFixture, steps: list[bool], 
 )
 async def test_stopped_nodes_for_wait_cassandra_up_step(
     replaced_node_step: Optional[Type[restore_steps.StopReplacedNodesStep]],
-    expected_nodes: Optional[List[CoordinatorNode]],
+    expected_nodes: Optional[Sequence[CoordinatorNode]],
     context: base.StepsContext,
 ) -> None:
     cluster = Cluster(nodes=[_coordinator_node(2)])
@@ -202,7 +203,7 @@ async def test_stopped_nodes_for_wait_cassandra_up_step(
     if replaced_node_step:
         stopped_nodes = [_coordinator_node(1)]
         context.set_result(replaced_node_step, stopped_nodes)
-        cluster.nodes += stopped_nodes
+        cluster.nodes = [*cluster.nodes, *stopped_nodes]
 
     step = restore_steps.WaitCassandraUpStep(duration=123, replaced_node_step=replaced_node_step)
 

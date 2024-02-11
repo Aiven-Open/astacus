@@ -17,10 +17,11 @@ from astacus.coordinator.cluster import Cluster, LockResult, WaitResultError
 from astacus.coordinator.config import coordinator_config, CoordinatorConfig, CoordinatorNode
 from astacus.coordinator.plugins import get_plugin
 from astacus.coordinator.state import coordinator_state, CoordinatorState
+from collections.abc import Iterator, Sequence
 from fastapi import BackgroundTasks, Depends, HTTPException
 from functools import cached_property
 from starlette.datastructures import URL
-from typing import Any, Awaitable, Callable, Dict, Iterator, List, Optional, Sequence
+from typing import Any, Awaitable, Callable, Optional
 from urllib.parse import urlunsplit
 
 import asyncio
@@ -190,7 +191,7 @@ class LockedCoordinatorOp(CoordinatorOp):
 
         return run
 
-    async def _create_relock_tasks(self, cluster: Cluster) -> List[asyncio.Task]:
+    async def _create_relock_tasks(self, cluster: Cluster) -> Sequence[asyncio.Task]:
         current_task = asyncio.current_task()
         assert current_task is not None
         return [
@@ -254,7 +255,7 @@ def get_subresult_url(request_url: URL, op_id: int) -> str:
 class SteppedCoordinatorOp(LockedCoordinatorOp):
     attempts: int
     steps: Sequence[Step[Any]]
-    step_progress: Dict[int, Progress]
+    step_progress: dict[int, Progress]
 
     def __init__(self, *, c: Coordinator = Depends(), attempts: int, steps: Sequence[Step[Any]]):
         super().__init__(c=c)

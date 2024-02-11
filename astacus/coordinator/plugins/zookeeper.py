@@ -4,9 +4,10 @@ See LICENSE for details
 """
 from astacus.common.exceptions import TransientException
 from asyncio import to_thread
+from collections.abc import AsyncIterator, Collection, Mapping, Sequence
 from kazoo.client import EventType, KazooClient, KeeperState, TransactionRequest, WatchedEvent
 from kazoo.retry import KazooRetry
-from typing import AsyncIterator, Callable, Collection, Dict, List, Optional, Tuple, Type, Union
+from typing import Callable, Optional, Type, Union
 
 import asyncio
 import contextlib
@@ -58,7 +59,7 @@ class ZooKeeperConnection:
         """
         raise NotImplementedError
 
-    async def get_children(self, path: str, watch: Optional[Watcher] = None) -> List[str]:
+    async def get_children(self, path: str, watch: Optional[Watcher] = None) -> Sequence[str]:
         """
         Returns the sorted list of all children of the given `path`.
 
@@ -183,7 +184,7 @@ class RuntimeInconsistency(TransientException):
 
 
 class KazooZooKeeperClient(ZooKeeperClient):
-    def __init__(self, *, hosts: List[str], user: ZooKeeperUser | None = None, timeout: float = 10):
+    def __init__(self, *, hosts: Sequence[str], user: ZooKeeperUser | None = None, timeout: float = 10):
         self.hosts = hosts
         self.user = user
         self.timeout = timeout
@@ -207,7 +208,7 @@ class KazooZooKeeperTransaction(ZooKeeperTransaction):
     async def commit(self) -> None:
         results = await to_thread(self.request.client.retry, self.request.commit)
         if any(isinstance(result, Exception) for result in results):
-            exceptions_map: Dict[Type, Callable[[str], TransientException]] = {
+            exceptions_map: Mapping[Type, Callable[[str], TransientException]] = {
                 kazoo.exceptions.RolledBackError: RolledBackError,
                 kazoo.exceptions.RuntimeInconsistency: RuntimeInconsistency,
                 kazoo.exceptions.NoNodeError: NoNodeError,
@@ -243,7 +244,7 @@ class KazooZooKeeperConnection(ZooKeeperConnection):
         except kazoo.exceptions.NoNodeError as e:
             raise NoNodeError(path) from e
 
-    async def get_children(self, path: str, watch: Optional[Watcher] = None) -> List[str]:
+    async def get_children(self, path: str, watch: Optional[Watcher] = None) -> Sequence[str]:
         try:
             return sorted(await to_thread(self.client.retry, self.client.get_children, path, watch=watch))
         except kazoo.exceptions.NoNodeError as e:
@@ -276,12 +277,12 @@ class KazooZooKeeperConnection(ZooKeeperConnection):
 
 
 class FakeZooKeeperClient(ZooKeeperClient):
-    Parts = Tuple[str, ...]
+    Parts = tuple[str, ...]
 
     def __init__(self) -> None:
-        self._storage: Dict[Tuple[str, ...], bytes] = {("",): b""}
+        self._storage: dict[tuple[str, ...], bytes] = {("",): b""}
         self._lock = asyncio.Lock()
-        self.connections: List["FakeZooKeeperConnection"] = []
+        self.connections: list["FakeZooKeeperConnection"] = []
 
     def connect(self) -> ZooKeeperConnection:
         return FakeZooKeeperConnection(self)
@@ -290,7 +291,7 @@ class FakeZooKeeperClient(ZooKeeperClient):
         pass
 
     @contextlib.asynccontextmanager
-    async def get_storage(self) -> AsyncIterator[Dict[Parts, bytes]]:
+    async def get_storage(self) -> AsyncIterator[dict[Parts, bytes]]:
         await self.inject_fault()
         async with self._lock:
             yield self._storage
@@ -312,7 +313,7 @@ class TransactionOperation(enum.Enum):
 class FakeZooKeeperTransaction(ZooKeeperTransaction):
     def __init__(self, connection: "FakeZooKeeperConnection") -> None:
         self.connection = connection
-        self.operations: List[Tuple[TransactionOperation, str, bytes]] = []
+        self.operations: list[tuple[TransactionOperation, str, bytes]] = []
         self.committed = False
 
     def create(self, path: str, value: bytes) -> None:
@@ -321,7 +322,7 @@ class FakeZooKeeperTransaction(ZooKeeperTransaction):
 
     async def commit(self) -> None:
         triggers = []
-        results: List[Union[bool, TransientException]] = []
+        results: list[Union[bool, TransientException]] = []
         async with self.connection.client.get_storage() as storage:
             storage_copy = storage.copy()
             for operation in self.operations:
@@ -351,7 +352,7 @@ class FakeZooKeeperTransaction(ZooKeeperTransaction):
 class FakeZooKeeperConnection(ZooKeeperConnection):
     def __init__(self, client: FakeZooKeeperClient):
         self.client = client
-        self.watches: Dict[Tuple[str, ...], List[Watcher]] = {}
+        self.watches: dict[tuple[str, ...], list[Watcher]] = {}
 
     async def __aenter__(self) -> "FakeZooKeeperConnection":
         self.client.connections.append(self)
@@ -371,7 +372,7 @@ class FakeZooKeeperConnection(ZooKeeperConnection):
                 self.watches.setdefault(parts, []).append(watch)
             return storage[parts]
 
-    async def get_children(self, path: str, watch: Optional[Watcher] = None) -> List[str]:
+    async def get_children(self, path: str, watch: Optional[Watcher] = None) -> Sequence[str]:
         # Since we have the "create" command, the watch can be triggered on the parent
         assert self in self.client.connections
         parts = parse_path(path)
@@ -422,13 +423,13 @@ class ChangeWatch:
         self.has_changed = True
 
 
-def parse_path(path: str) -> Tuple[str, ...]:
+def parse_path(path: str) -> tuple[str, ...]:
     return tuple(path.rstrip("/").split("/"))
 
 
 def create_locked(
-    path: str, value: bytes, storage: Dict[Tuple[str, ...], bytes], *, makepath: bool
-) -> Tuple[Tuple[str, ...], WatchedEvent]:
+    path: str, value: bytes, storage: dict[tuple[str, ...], bytes], *, makepath: bool
+) -> tuple[tuple[str, ...], WatchedEvent]:
     """Low level create operation, assumes the storage is already locked."""
     parts = parse_path(path)
     if parts in storage:
@@ -447,7 +448,7 @@ def create_locked(
 
 
 def delete_locked(
-    path: str, storage: Dict[Tuple[str, ...], bytes], *, recursive: bool
+    path: str, storage: dict[tuple[str, ...], bytes], *, recursive: bool
 ) -> list[tuple[tuple[str, ...], WatchedEvent]]:
     parts = parse_path(path)
     deleted_items = [existing_parts for existing_parts in sorted(storage.keys()) if existing_parts[: len(parts)] == parts]

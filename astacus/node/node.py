@@ -12,10 +12,11 @@ from astacus.common.snapshot import SnapshotGroup
 from astacus.common.statsd import StatsClient
 from astacus.node.snapshot import Snapshot
 from astacus.node.sqlite_snapshot import SQLiteSnapshot, SQLiteSnapshotter
+from collections.abc import Sequence
 from fastapi import BackgroundTasks, Depends
 from pathlib import Path
 from starlette.datastructures import URL
-from typing import Generic, Optional, Sequence, TypeVar
+from typing import Generic, Optional, TypeVar
 
 import logging
 

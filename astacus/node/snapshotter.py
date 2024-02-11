@@ -11,10 +11,11 @@ from astacus.common.progress import Progress
 from astacus.common.snapshot import SnapshotGroup
 from astacus.node.snapshot import Snapshot
 from astacus.node.snapshot_groups import CompiledGroups
+from collections.abc import Iterable, Sequence
 from multiprocessing import dummy
 from pathlib import Path
 from threading import Lock
-from typing import Generic, Iterable, Sequence, TypeVar
+from typing import Generic, TypeVar
 
 import base64
 import hashlib

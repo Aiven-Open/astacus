@@ -2,13 +2,13 @@
 Copyright (c) 2022 Aiven Ltd
 See LICENSE for details
 """
-
 from astacus.common.exceptions import TransientException
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import BackupManifestStep, Step, StepsContext
 from astacus.coordinator.plugins.flink.manifest import FlinkManifest
 from astacus.coordinator.plugins.zookeeper import ChangeWatch, ZooKeeperClient, ZooKeeperConnection
-from typing import Any, Dict, List
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 import dataclasses
 import logging
@@ -17,18 +17,18 @@ logger = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass
-class RetrieveDataStep(Step[Dict[str, Any]]):
+class RetrieveDataStep(Step[Mapping[str, Any]]):
     """
     Backups Flink tables from ZooKeeper.
     """
 
     zookeeper_client: ZooKeeperClient
-    zookeeper_paths: List[str]
+    zookeeper_paths: Sequence[str]
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> Dict[str, Any]:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> Mapping[str, Any]:
         async with self.zookeeper_client.connect() as connection:
             change_watch = ChangeWatch()
-            results: Dict[str, Any] = {}
+            results: dict[str, Any] = {}
             for zk_path in self.zookeeper_paths:
                 result = await self._get_result(zk_path, connection, change_watch)
                 if result:
@@ -37,8 +37,8 @@ class RetrieveDataStep(Step[Dict[str, Any]]):
                 raise TransientException("Concurrent modification during access entities retrieval")
         return results
 
-    async def _get_result(self, zk_path: str, connection: ZooKeeperConnection, change_watch: ChangeWatch) -> Dict[str, Any]:
-        result: Dict[str, Any] = {}
+    async def _get_result(self, zk_path: str, connection: ZooKeeperConnection, change_watch: ChangeWatch) -> dict[str, Any]:
+        result: dict[str, Any] = {}
         if await connection.exists(zk_path):
             result[zk_path] = await self._get_data_recursively(
                 zk_prefix=zk_path, current_node=zk_path, connection=connection, watch=change_watch
@@ -47,8 +47,8 @@ class RetrieveDataStep(Step[Dict[str, Any]]):
 
     async def _get_data_recursively(
         self, zk_prefix: str, current_node: str, connection: ZooKeeperConnection, watch: ChangeWatch
-    ) -> Dict[str, Any]:
-        result: Dict[str, Any] = {}
+    ) -> dict[str, Any]:
+        result: dict[str, Any] = {}
         if await connection.exists(zk_prefix):
             children = await connection.get_children(current_node, watch=watch)
             for child in children:
@@ -61,12 +61,12 @@ class RetrieveDataStep(Step[Dict[str, Any]]):
 
 
 @dataclasses.dataclass
-class PrepareFlinkManifestStep(Step[Dict[str, Any]]):
+class PrepareFlinkManifestStep(Step[dict[str, Any]]):
     """
     Collects data from previous steps into an uploadable manifest.
     """
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> Dict[str, Any]:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> dict[str, Any]:
         return FlinkManifest(data=context.get_result(RetrieveDataStep)).dict()
 
 
@@ -88,7 +88,7 @@ class RestoreDataStep(Step[None]):
     """
 
     zookeeper_client: ZooKeeperClient
-    zookeeper_paths: List[str]
+    zookeeper_paths: Sequence[str]
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         flink_manifest = context.get_result(FlinkManifestStep)
@@ -97,7 +97,9 @@ class RestoreDataStep(Step[None]):
                 for zk_path in self.zookeeper_paths:
                     await self._restore_data(connection, zk_path, flink_manifest.data, zk_path)
 
-    async def _restore_data(self, connection: ZooKeeperConnection, zk_path: str, data: Dict, current_node_path: str) -> None:
+    async def _restore_data(
+        self, connection: ZooKeeperConnection, zk_path: str, data: Mapping[str, Any], current_node_path: str
+    ) -> None:
         current_node = data.get(current_node_path)
         if isinstance(current_node, dict):
             await connection.create(zk_path, bytes())

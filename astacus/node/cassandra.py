@@ -122,7 +122,7 @@ class SimpleCassandraSubOp(NodeOp[ipc.NodeRequest, ipc.NodeResult]):
 
     def take_snapshot(self) -> None:
         assert self.config.cassandra
-        cmd = self.config.cassandra.nodetool_command[:]
+        cmd = list(self.config.cassandra.nodetool_command)
         cmd.extend(["snapshot", "-t", SNAPSHOT_NAME])
         subprocess.run(cmd, check=True)
         self.result.progress.done()
@@ -226,7 +226,7 @@ class CassandraStartOp(NodeOp[ipc.CassandraStartRequest, ipc.NodeResult]):
             config_fh.flush()
             progress.add_success()
 
-            subprocess.run(self.config.cassandra.start_command + [config_fh.name], check=True)
+            subprocess.run([*self.config.cassandra.start_command, config_fh.name], check=True)
             progress.add_success()
 
         progress.done()

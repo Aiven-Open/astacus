@@ -11,11 +11,12 @@ Shared utilities (between coordinator and node)
 from __future__ import annotations
 
 from abc import ABC
+from collections.abc import Mapping
 from contextlib import contextmanager
 from multiprocessing.dummy import Pool  # fastapi + fork = bad idea
 from pathlib import Path
 from pydantic import BaseModel
-from typing import Any, AsyncIterable, Callable, Dict, Final, Iterable, Optional, TypeVar, Union
+from typing import Any, AsyncIterable, Callable, Final, Iterable, Optional, TypeVar, Union
 
 import asyncio
 import datetime
@@ -107,7 +108,7 @@ async def httpx_request(
     json: bool = True,
     ignore_status_code: bool = False,
     **kw,
-) -> Optional[Union[httpx.Response, Dict]]:
+) -> Optional[Union[httpx.Response, Mapping[str, Any]]]:
     """Wrapper for httpx.request which handles timeouts as non-exceptions,
     and returns only valid results that we actually care about.
     """

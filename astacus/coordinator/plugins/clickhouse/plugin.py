@@ -53,8 +53,9 @@ from astacus.coordinator.plugins.base import (
     UploadManifestStep,
 )
 from astacus.coordinator.plugins.zookeeper_config import ZooKeeperConfiguration
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 
 class ClickHousePlugin(CoordinatorPlugin):

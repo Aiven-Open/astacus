@@ -9,12 +9,13 @@ Rohmu-specific actual object storage implementation
 from .storage import Json, MultiStorage, Storage, StorageUploadResult
 from .utils import AstacusModel
 from astacus.common import exceptions
+from collections.abc import Mapping
 from enum import Enum
 from pydantic import Field
 from rohmu import errors, rohmufile
 from rohmu.compressor import CompressionStream
 from rohmu.encryptor import EncryptorStream
-from typing import BinaryIO, Dict, Optional, Union
+from typing import BinaryIO, Optional, Union
 
 import io
 import json
@@ -65,11 +66,11 @@ class RohmuConfig(RohmuModel):
 
     # Targets we support for backing up
     default_storage: str
-    storages: Dict[str, RohmuStorageConfig]
+    storages: Mapping[str, RohmuStorageConfig]
 
     # Encryption (optional)
     encryption_key_id: Optional[str] = None
-    encryption_keys: Dict[str, RohmuEncryptionKey] = {}
+    encryption_keys: Mapping[str, RohmuEncryptionKey] = {}
 
     # Compression (optional)
     compression: RohmuCompression = RohmuCompression()

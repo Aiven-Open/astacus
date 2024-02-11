@@ -4,9 +4,10 @@ See LICENSE for details
 """
 from astacus.common.utils import build_netloc
 from astacus.coordinator.plugins.zookeeper import KazooZooKeeperClient
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from pathlib import Path
 from types import MappingProxyType
-from typing import AsyncIterator, Iterator, List, Mapping, Optional, Union
+from typing import Optional, Union
 
 import asyncio
 import contextlib
@@ -44,7 +45,7 @@ async def get_command_path(name: str) -> Optional[Path]:
     return None
 
 
-def get_zookeeper_command(*, java_path: Path, data_dir: Path, port: int) -> Optional[List[Union[str, Path]]]:
+def get_zookeeper_command(*, java_path: Path, data_dir: Path, port: int) -> Optional[Sequence[Union[str, Path]]]:
     zookeeper_jars = list(Path("/usr/share/zookeeper").glob("*.jar"))
     if zookeeper_jars:
         class_paths = [data_dir, *zookeeper_jars]
@@ -66,7 +67,7 @@ class PatternNotFoundError(Exception):
 @contextlib.asynccontextmanager
 async def run_process_and_wait_for_pattern(
     *,
-    args: List[Union[str, Path]],
+    args: Sequence[Union[str, Path]],
     cwd: Path,
     pattern: str,
     fail_pattern: Optional[str] = None,
@@ -118,7 +119,7 @@ class Service:
 
 @dataclasses.dataclass
 class ServiceCluster:
-    services: List[Service]
+    services: Sequence[Service]
 
 
 class Ports:

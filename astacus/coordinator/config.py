@@ -2,14 +2,14 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
-
 from astacus.common import ipc
 from astacus.common.rohmustorage import RohmuConfig
 from astacus.common.statsd import StatsdConfig
 from astacus.common.utils import AstacusModel
+from collections.abc import Sequence
 from fastapi import Request
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 APP_KEY = "coordinator_config"
 
@@ -51,7 +51,7 @@ class CoordinatorConfig(AstacusModel):
     plugin_config: dict = {}
 
     # Which nodes are we supposed to manage
-    nodes: List[CoordinatorNode] = []
+    nodes: Sequence[CoordinatorNode] = []
 
     # How long cluster lock we acquire
     #
@@ -77,7 +77,7 @@ class CoordinatorConfig(AstacusModel):
     # Optional object storage cache directory used for caching json
     # manifest fetching
     # Directory is created if it does not exist
-    object_storage_cache: Optional[Path]
+    object_storage_cache: Optional[Path] = None
 
     # These can be either globally or locally set
     object_storage: Optional[RohmuConfig] = None

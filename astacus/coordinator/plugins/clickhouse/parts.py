@@ -10,7 +10,8 @@ This does not support shards, but this is the right place to add support for the
 from .disks import Disks
 from .manifest import Table
 from astacus.common.ipc import SnapshotFile, SnapshotResult
-from typing import AbstractSet, Iterable, Mapping, Optional, Sequence, Set, Tuple
+from collections.abc import Iterable, Mapping, Sequence, Set
+from typing import Optional
 
 import dataclasses
 import uuid
@@ -19,7 +20,7 @@ import uuid
 @dataclasses.dataclass(frozen=True, slots=True)
 class PartFile:
     snapshot_file: SnapshotFile
-    servers: AbstractSet[int]
+    servers: Set[int]
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -33,18 +34,18 @@ class PartKey:
 class Part:
     table_uuid: uuid.UUID
     part_name: bytes
-    servers: AbstractSet[int]
+    servers: Set[int]
     snapshot_files: Sequence[SnapshotFile]
     total_size: int
 
 
-def get_part_servers(part_files: Iterable[PartFile]) -> AbstractSet[int]:
+def get_part_servers(part_files: Iterable[PartFile]) -> Set[int]:
     """
     Return the list of server indices where the part made of all these files is present.
 
     Raises a ValueError if not all servers contain all files.
     """
-    part_servers: Optional[AbstractSet[int]] = None
+    part_servers: Optional[Set[int]] = None
     for part_file in part_files:
         if part_servers is None:
             part_servers = part_file.servers
@@ -62,11 +63,11 @@ def list_parts_to_attach(
     snapshot_result: SnapshotResult,
     disks: Disks,
     tables_by_uuid: Mapping[uuid.UUID, Table],
-) -> Sequence[Tuple[str, bytes]]:
+) -> Sequence[tuple[str, bytes]]:
     """
     Returns a list of table identifiers and part names to attach from the snapshot.
     """
-    parts_to_attach: Set[Tuple[str, bytes]] = set()
+    parts_to_attach: set[tuple[str, bytes]] = set()
     assert snapshot_result.state is not None
     for snapshot_file in snapshot_result.state.files:
         parsed_path = disks.parse_part_file_path(snapshot_file.relative_path)

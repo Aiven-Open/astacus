@@ -25,11 +25,12 @@ from astacus.coordinator.plugins.m3db import (
     RewriteEtcdStep,
 )
 from astacus.coordinator.state import CoordinatorState
+from collections.abc import Sequence
 from dataclasses import dataclass
 from fastapi import BackgroundTasks
 from starlette.datastructures import URL
 from tests.unit.common.test_m3placement import create_dummy_placement
-from typing import List, Optional
+from typing import Optional
 
 import pytest
 import respx
@@ -136,7 +137,7 @@ class RestoreTest:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("rt", [RestoreTest(fail_at=i) for i in range(3)] + [RestoreTest()])
 async def test_m3_restore(coordinator: Coordinator, plugin: M3DBPlugin, etcd_client: ETCDClient, rt: RestoreTest) -> None:
-    partial_restore_nodes: Optional[List[ipc.PartialRestoreRequestNode]] = None
+    partial_restore_nodes: Optional[Sequence[ipc.PartialRestoreRequestNode]] = None
     if rt.partial:
         partial_restore_nodes = [ipc.PartialRestoreRequestNode(backup_index=0, node_index=0)]
     op = SteppedCoordinatorOp(

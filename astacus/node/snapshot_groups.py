@@ -7,8 +7,9 @@ Classes for working with snapshot groups.
 
 """
 from astacus.common.snapshot import SnapshotGroup
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Iterable, Optional, Sequence
+from typing import Iterable, Optional
 from typing_extensions import Self
 from wcmatch.glob import GLOBSTAR, iglob, translate
 

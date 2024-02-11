@@ -21,6 +21,7 @@ from astacus.coordinator.plugins.clickhouse.config import (
 from astacus.coordinator.plugins.clickhouse.plugin import ClickHousePlugin
 from astacus.coordinator.plugins.zookeeper_config import ZooKeeperConfiguration, ZooKeeperNode
 from astacus.node.config import NodeConfig
+from collections.abc import AsyncIterator, Iterator, Sequence
 from pathlib import Path
 from tests.conftest import CLICKHOUSE_PATH_OPTION, CLICKHOUSE_RESTORE_PATH_OPTION
 from tests.integration.conftest import get_command_path, Ports, run_process_and_wait_for_pattern, Service, ServiceCluster
@@ -31,7 +32,7 @@ from tests.utils import (
     format_astacus_command,
     get_clickhouse_version,
 )
-from typing import AsyncIterator, Awaitable, Iterator, List, Optional, Sequence, Union
+from typing import Awaitable, Optional, Union
 
 import argparse
 import asyncio
@@ -76,7 +77,7 @@ USER_CONFIG = """
     </clickhouse>
 """
 
-ClickHouseCommand = List[Union[str, Path]]
+ClickHouseCommand = Sequence[Union[str, Path]]
 
 
 @pytest.fixture(scope="module", name="clickhouse_command")
@@ -114,7 +115,7 @@ async def create_clickhouse_service(ports: Ports, command: ClickHouseCommand) ->
     http_port = ports.allocate()
     with tempfile.TemporaryDirectory(prefix=f"clickhouse_{http_port}_") as data_dir_str:
         data_dir = Path(data_dir_str)
-        command += ["--", f"--http_port={http_port}"]
+        command = [*command, "--", f"--http_port={http_port}"]
         async with run_process_and_wait_for_pattern(args=command, cwd=data_dir, pattern="Ready for connections.") as process:
             yield Service(process=process, port=http_port, data_dir=data_dir)
 
@@ -222,7 +223,7 @@ async def create_minio_service(ports: Ports) -> AsyncIterator[MinioService]:
             "MINIO_ROOT_USER": root_user,
             "MINIO_ROOT_PASSWORD": root_password,
         }
-        command: List[Union[str, Path]] = [
+        command: Sequence[Union[str, Path]] = [
             "/usr/bin/minio",
             "server",
             data_dir,
@@ -319,7 +320,9 @@ async def create_astacus_cluster(
         zookeeper, clickhouse_cluster, ports, Path(storage_path), minio_bucket, restorable_source
     )
     async with contextlib.AsyncExitStack() as stack:
-        astacus_services_coro: List[Awaitable] = [stack.enter_async_context(_astacus(config=config)) for config in configs]
+        astacus_services_coro: Sequence[Awaitable] = [
+            stack.enter_async_context(_astacus(config=config)) for config in configs
+        ]
         astacus_services = list(await asyncio.gather(*astacus_services_coro))
         yield ServiceCluster(services=astacus_services)
 
@@ -327,10 +330,10 @@ async def create_astacus_cluster(
 def create_clickhouse_configs(
     cluster_shards: Sequence[str],
     zookeeper: Service,
-    data_dirs: List[Path],
-    tcp_ports: List[int],
-    http_ports: List[int],
-    interserver_http_ports: List[int],
+    data_dirs: Sequence[Path],
+    tcp_ports: Sequence[int],
+    http_ports: Sequence[int],
+    interserver_http_ports: Sequence[int],
     use_named_collections: bool,
     minio_bucket: Optional[MinioBucket] = None,
     object_storage_prefix: str = "/",
@@ -479,7 +482,7 @@ def create_astacus_configs(
     storage_path: Path,
     minio_bucket: MinioBucket,
     restorable_source: RestorableSource | None = None,
-) -> List[GlobalConfig]:
+) -> Sequence[GlobalConfig]:
     storage_tmp_path = storage_path / "tmp"
     storage_tmp_path.mkdir(exist_ok=True)
     astacus_backup_storage_path = storage_path / "astacus_backup"

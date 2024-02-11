@@ -4,7 +4,6 @@ See LICENSE for details
 cassandra backup/restore plugin steps
 
 """
-
 from .model import CassandraConfigurationNode, CassandraManifest, CassandraManifestNode
 from .utils import delta_snapshot_groups, get_schema_hash, run_subop
 from astacus.common import ipc, utils
@@ -26,8 +25,9 @@ from astacus.coordinator.plugins.base import (
     StepsContext,
 )
 from cassandra import metadata as cm
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Iterable, List, Optional, Type
+from typing import Optional, Type
 
 import logging
 
@@ -60,11 +60,11 @@ class ParsePluginManifestStep(Step[CassandraManifest]):
 
 
 @dataclass
-class StopReplacedNodesStep(Step[List[CoordinatorNode]]):
-    partial_restore_nodes: Optional[List[ipc.PartialRestoreRequestNode]]
-    cassandra_nodes: List[CassandraConfigurationNode]
+class StopReplacedNodesStep(Step[Sequence[CoordinatorNode]]):
+    partial_restore_nodes: Optional[Sequence[ipc.PartialRestoreRequestNode]]
+    cassandra_nodes: Sequence[CassandraConfigurationNode]
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> List[CoordinatorNode]:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> Sequence[CoordinatorNode]:
         node_to_backup_index = context.get_result(MapNodesStep)
         cassandra_manifest = context.get_result(ParsePluginManifestStep)
 
@@ -91,11 +91,11 @@ class StopReplacedNodesStep(Step[List[CoordinatorNode]]):
 
 
 @dataclass
-class UploadFinalDeltaStep(Step[List[ipc.BackupManifest]]):
+class UploadFinalDeltaStep(Step[Sequence[ipc.BackupManifest]]):
     json_storage: AsyncJsonStorage
     storage_name: str
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> List[ipc.BackupManifest]:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> Sequence[ipc.BackupManifest]:
         replaced_nodes = context.get_result(StopReplacedNodesStep)
         if len(replaced_nodes) != 1:
             raise StepFailedError(f"Multiple node replacement not supported: {replaced_nodes}")
@@ -112,7 +112,7 @@ class UploadFinalDeltaStep(Step[List[ipc.BackupManifest]]):
 
     async def snapshot_delta(
         self, node: CoordinatorNode, *, cluster: Cluster, context: StepsContext
-    ) -> List[ipc.SnapshotResult]:
+    ) -> Sequence[ipc.SnapshotResult]:
         nodes_metadata = await get_nodes_metadata(cluster, nodes=[node])
         if len(nodes_metadata) != 1:
             raise StepFailedError(f"Unexpected node metadata results (expected only 1): {nodes_metadata}")
@@ -124,8 +124,8 @@ class UploadFinalDeltaStep(Step[List[ipc.BackupManifest]]):
         return await cluster.wait_successful_results(start_results=start_results, result_class=ipc.SnapshotResult)
 
     async def upload_delta(
-        self, node: CoordinatorNode, hashes: List[ipc.SnapshotHash], *, cluster: Cluster
-    ) -> List[ipc.SnapshotUploadResult]:
+        self, node: CoordinatorNode, hashes: Sequence[ipc.SnapshotHash], *, cluster: Cluster
+    ) -> Sequence[ipc.SnapshotUploadResult]:
         upload_req: ipc.NodeRequest = ipc.SnapshotUploadRequestV20221129(
             hashes=hashes, storage=self.storage_name, validate_file_hashes=False
         )
@@ -138,11 +138,11 @@ class UploadFinalDeltaStep(Step[List[ipc.BackupManifest]]):
 
     async def upload_manifest(
         self,
-        snapshot_results: List[ipc.SnapshotResult],
-        upload_results: List[ipc.SnapshotUploadResult],
+        snapshot_results: Sequence[ipc.SnapshotResult],
+        upload_results: Sequence[ipc.SnapshotUploadResult],
         *,
         context: StepsContext,
-    ) -> List[ipc.BackupManifest]:
+    ) -> Sequence[ipc.BackupManifest]:
         iso = context.attempt_start.isoformat(timespec="seconds")
         backup_name = f"{JSON_DELTA_PREFIX}{iso}"
         manifest = ipc.BackupManifest(
@@ -162,14 +162,14 @@ class UploadFinalDeltaStep(Step[List[ipc.BackupManifest]]):
 @dataclass
 class StartCassandraStep(Step[None]):
     override_tokens: bool
-    cassandra_nodes: List[CassandraConfigurationNode]
+    cassandra_nodes: Sequence[CassandraConfigurationNode]
     replace_backup_nodes: bool = False
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         node_to_backup_index = context.get_result(MapNodesStep)
 
-        reqs: List[ipc.NodeRequest] = []
-        nodes: List[CoordinatorNode] = []
+        reqs: list[ipc.NodeRequest] = []
+        nodes: list[CoordinatorNode] = []
         plugin_manifest = context.get_result(ParsePluginManifestStep)
         for node_index, backup_index in enumerate(node_to_backup_index):
             if backup_index is None:
@@ -177,7 +177,7 @@ class StartCassandraStep(Step[None]):
             coordinator = cluster.nodes[node_index]
             backup_node = plugin_manifest.nodes[backup_index]
             nodes.append(coordinator)
-            tokens: Optional[List[str]] = None
+            tokens: Optional[Sequence[str]] = None
             replace_address_first_boot: Optional[str] = None
             skip_bootstrap_streaming: Optional[bool] = None
             if self.override_tokens:
@@ -266,4 +266,4 @@ class RestoreCassandraDeltasStep(RestoreDeltasStep):
 class RestoreFinalDeltasStep(RestoreDeltasStep):
     restore_delta_url: str = f"cassandra/{ipc.CassandraSubOp.restore_sstables}"
     restore_delta_request: ipc.NodeRequest = field(default_factory=restore_cassandra_deltas_req)
-    delta_manifests_step: Type[Step[List[ipc.BackupManifest]]] = UploadFinalDeltaStep
+    delta_manifests_step: Type[Step[Sequence[ipc.BackupManifest]]] = UploadFinalDeltaStep

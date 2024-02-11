@@ -41,7 +41,7 @@ class Op:
     class Info(AstacusModel):
         op_id: int = 0
         op_name: str = ""
-        op_status: Optional["Op.Status"]
+        op_status: Optional["Op.Status"] = None
 
     class StartResult(AstacusModel):
         op_id: int

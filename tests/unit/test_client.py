@@ -3,8 +3,9 @@ Copyright (c) 2023 Aiven Ltd
 See LICENSE for details
 """
 from astacus.client import _reload_config
+from collections.abc import Mapping
 from freezegun import freeze_time
-from typing import Any, Mapping
+from typing import Any
 from unittest import mock
 
 import astacus.client

@@ -7,7 +7,8 @@ from .config import DiskConfiguration, DiskType
 from .escaping import escape_for_file_name, unescape_from_file_name
 from astacus.common.magic import DEFAULT_EMBEDDED_FILE_SIZE
 from astacus.common.snapshot import SnapshotGroup
-from typing import Optional, Sequence
+from collections.abc import Sequence
+from typing import Optional
 from uuid import UUID
 
 import dataclasses

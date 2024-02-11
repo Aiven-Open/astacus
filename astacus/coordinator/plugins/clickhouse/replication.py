@@ -8,8 +8,9 @@ from .manifest import ReplicatedDatabase
 from .sql import chain_of, named_group, one_of, TokenType
 from astacus.coordinator.plugins.base import StepFailedError
 from astacus.coordinator.plugins.zookeeper import ZooKeeperConnection
+from collections.abc import Mapping, Sequence
 from kazoo.client import EventType, WatchedEvent
-from typing import Mapping, Optional, Sequence
+from typing import Optional
 
 import asyncio
 import dataclasses

@@ -7,8 +7,9 @@ from astacus.common.rohmustorage import RohmuStorageConfig
 from astacus.common.utils import AstacusModel, build_netloc
 from astacus.coordinator.plugins.zookeeper import KazooZooKeeperClient, ZooKeeperClient
 from astacus.coordinator.plugins.zookeeper_config import ZooKeeperConfiguration
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import enum
 
@@ -21,17 +22,17 @@ class ClickHouseNode(AstacusModel):
 class ClickHouseConfiguration(AstacusModel):
     username: Optional[str] = None
     password: Optional[str] = None
-    nodes: List[ClickHouseNode] = []
+    nodes: Sequence[ClickHouseNode] = []
 
 
 class ReplicatedDatabaseSettings(AstacusModel):
-    max_broken_tables_ratio: Optional[float]
-    max_replication_lag_to_enqueue: Optional[int]
-    wait_entry_commited_timeout_sec: Optional[int]
-    cluster_username: Optional[str]
-    cluster_password: Optional[str]
-    cluster_secret: Optional[str]
-    collection_name: Optional[str]
+    max_broken_tables_ratio: Optional[float] = None
+    max_replication_lag_to_enqueue: Optional[int] = None
+    wait_entry_commited_timeout_sec: Optional[int] = None
+    cluster_username: Optional[str] = None
+    cluster_password: Optional[str] = None
+    cluster_secret: Optional[str] = None
+    collection_name: Optional[str] = None
 
 
 class DiskType(enum.Enum):
@@ -59,7 +60,7 @@ def get_zookeeper_client(configuration: ZooKeeperConfiguration) -> ZooKeeperClie
     return KazooZooKeeperClient(hosts=[build_netloc(node.host, node.port) for node in configuration.nodes], user=user)
 
 
-def get_clickhouse_clients(configuration: ClickHouseConfiguration) -> List[ClickHouseClient]:
+def get_clickhouse_clients(configuration: ClickHouseConfiguration) -> Sequence[ClickHouseClient]:
     return [
         HttpClickHouseClient(
             host=node.host,

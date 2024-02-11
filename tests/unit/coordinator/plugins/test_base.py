@@ -30,11 +30,12 @@ from astacus.coordinator.plugins.base import (
     UploadManifestStep,
 )
 from astacus.node.snapshotter import hash_hexdigest_readable
+from collections.abc import Sequence, Set
 from http import HTTPStatus
 from io import BytesIO
 from pydantic import Field
 from tests.unit.storage import MemoryHexDigestStorage, MemoryJsonStorage
-from typing import AbstractSet, Callable, List, Optional, Sequence
+from typing import Callable, Optional
 from unittest import mock
 
 import dataclasses
@@ -77,7 +78,7 @@ def get_sample_hashes() -> list[ipc.SnapshotHash]:
 
 class DefaultedSnapshotResult(ipc.SnapshotResult):
     end: Optional[datetime.datetime] = Field(default_factory=now)
-    hashes: Optional[List[ipc.SnapshotHash]] = None
+    hashes: Optional[Sequence[ipc.SnapshotHash]] = None
 
 
 @pytest.fixture(name="single_node_cluster")
@@ -156,7 +157,7 @@ async def test_upload_step_uses_new_request_if_supported(
     single_node_cluster: Cluster,
     context: StepsContext,
 ) -> None:
-    context.set_result(ListHexdigestsStep, {})
+    context.set_result(ListHexdigestsStep, set())
     sample_hashes = get_sample_hashes()
     context.set_result(
         SnapshotStep, [ipc.SnapshotResult(hostname="localhost", az="az1", files=1, total_size=2, hashes=sample_hashes)]
@@ -207,7 +208,7 @@ BACKUPS_FOR_RETENTION_TEST = {
 )
 async def test_compute_kept_backups(
     retention: ipc.Retention,
-    kept_backups: AbstractSet[str],
+    kept_backups: Set[str],
     single_node_cluster: Cluster,
     context: StepsContext,
 ) -> None:
@@ -252,7 +253,7 @@ BACKUPS_FOR_DELTA_RETENTION_TEST = {
 )
 async def test_compute_kept_deltas(
     explicit_delete: Sequence[str],
-    expected_kept_backups: AbstractSet[str],
+    expected_kept_backups: Set[str],
     single_node_cluster: Cluster,
     context: StepsContext,
 ):
@@ -370,7 +371,7 @@ async def test_delete_backup_and_delta_manifests_raises_when_delta_steps_are_mis
 ) -> None:
     async_json_storage = AsyncJsonStorage(storage=MemoryJsonStorage(items={}))
     context.set_result(ListBackupsStep, set())
-    context.set_result(ComputeKeptBackupsStep, set())
+    context.set_result(ComputeKeptBackupsStep, [])
     step = DeleteBackupAndDeltaManifestsStep(async_json_storage)
     with pytest.raises(Exception):
         await step.run_step(single_node_cluster, context)
