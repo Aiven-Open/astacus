@@ -55,7 +55,8 @@ async def get_etcd_dump(client: ETCDClient, prefixes: List[bytes]) -> Optional[E
     prefix_ranges = await asyncio.gather(*prefix_dump_coros)
     if any(True for prefix_range in prefix_ranges if prefix_range is None):
         return None
-    return ETCDDump(prefixes=prefix_ranges)
+    non_none_prefix_ranges = [prefix_range for prefix_range in prefix_ranges if prefix_range is not None]
+    return ETCDDump(prefixes=non_none_prefix_ranges)
 
 
 async def restore_etcd_dump(client: ETCDClient, dump: ETCDDump) -> bool:

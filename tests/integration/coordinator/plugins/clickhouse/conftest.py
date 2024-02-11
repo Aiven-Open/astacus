@@ -457,6 +457,10 @@ async def _astacus(*, config: GlobalConfig) -> AsyncIterator[Service]:
         yield Service(process=process, port=config.uvicorn.port, data_dir=data_dir)
 
 
+class AstacusCommandError(Exception):
+    pass
+
+
 def run_astacus_command(astacus_cluster: ServiceCluster, *args: str) -> None:
     first_astacus = astacus_cluster.services[0]
     astacus_url = f"http://localhost:{first_astacus.port}"
@@ -465,7 +469,7 @@ def run_astacus_command(astacus_cluster: ServiceCluster, *args: str) -> None:
     create_client_parsers(parser, parser.add_subparsers())
     parsed_args = parser.parse_args(all_args)
     if not parsed_args.func(parsed_args):
-        raise Exception(f"Command {all_args} on {astacus_url} failed")
+        raise AstacusCommandError(f"Command {all_args} on {astacus_url} failed")
 
 
 def create_astacus_configs(

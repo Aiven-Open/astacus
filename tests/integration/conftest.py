@@ -59,6 +59,10 @@ class FailPatternFoundError(Exception):
     pass
 
 
+class PatternNotFoundError(Exception):
+    pass
+
+
 @contextlib.asynccontextmanager
 async def run_process_and_wait_for_pattern(
     *,
@@ -93,7 +97,9 @@ async def run_process_and_wait_for_pattern(
             try:
                 await asyncio.wait_for(pattern_found.wait(), timeout=timeout)
             except asyncio.TimeoutError as e:
-                raise Exception(f"Pattern {pattern!r} not found after {timeout:.3f}s in output of {str_args}") from e
+                raise PatternNotFoundError(
+                    f"Pattern {pattern!r} not found after {timeout:.3f}s in output of {str_args}"
+                ) from e
             yield process
         finally:
             process.kill()

@@ -330,8 +330,7 @@ def get_umask() -> int:
         proc_status = Path("/proc/self/status").read_text()
     except FileNotFoundError:
         return FALLBACK_UMASK
-    else:
-        return parse_umask(proc_status)
+    return parse_umask(proc_status)
 
 
 def parse_umask(proc_status: str) -> int:

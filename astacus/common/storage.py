@@ -13,9 +13,9 @@ from typing import BinaryIO, Callable, Generic, ParamSpec, TypeAlias, TypeVar
 import io
 
 try:
-    import ujson as json  # type: ignore [import]
+    import ujson as json
 except ImportError:
-    import json
+    import json  # type: ignore[no-redef]
 
 import logging
 import os

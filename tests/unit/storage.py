@@ -27,8 +27,7 @@ class MemoryJsonStorage(JsonStorage):
             data = self.items[name]
         except KeyError as e:
             raise exceptions.NotFoundException from e
-        else:
-            return json.loads(data)
+        return json.loads(data)
 
     def list_jsons(self) -> list[str]:
         return sorted(self.items)
