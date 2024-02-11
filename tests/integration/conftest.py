@@ -7,7 +7,6 @@ from astacus.coordinator.plugins.zookeeper import KazooZooKeeperClient
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from pathlib import Path
 from types import MappingProxyType
-from typing import Optional, Union
 
 import asyncio
 import contextlib
@@ -32,7 +31,7 @@ def fixture_event_loop() -> Iterator[asyncio.AbstractEventLoop]:
     loop.close()
 
 
-async def get_command_path(name: str) -> Optional[Path]:
+async def get_command_path(name: str) -> Path | None:
     process = await asyncio.create_subprocess_exec(
         "which", name, stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE
     )
@@ -45,7 +44,7 @@ async def get_command_path(name: str) -> Optional[Path]:
     return None
 
 
-def get_zookeeper_command(*, java_path: Path, data_dir: Path, port: int) -> Optional[Sequence[Union[str, Path]]]:
+def get_zookeeper_command(*, java_path: Path, data_dir: Path, port: int) -> Sequence[str | Path] | None:
     zookeeper_jars = list(Path("/usr/share/zookeeper").glob("*.jar"))
     if zookeeper_jars:
         class_paths = [data_dir, *zookeeper_jars]
@@ -67,10 +66,10 @@ class PatternNotFoundError(Exception):
 @contextlib.asynccontextmanager
 async def run_process_and_wait_for_pattern(
     *,
-    args: Sequence[Union[str, Path]],
+    args: Sequence[str | Path],
     cwd: Path,
     pattern: str,
-    fail_pattern: Optional[str] = None,
+    fail_pattern: str | None = None,
     env: Mapping[str, str] = MappingProxyType({}),
     timeout: float = 10.0,
 ) -> AsyncIterator[subprocess.Popen[bytes]]:
@@ -113,8 +112,8 @@ class Service:
     data_dir: Path
     port: int
     host: str = "localhost"
-    username: Optional[str] = None
-    password: Optional[str] = None
+    username: str | None = None
+    password: str | None = None
 
 
 @dataclasses.dataclass

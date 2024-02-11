@@ -10,12 +10,13 @@ from astacus.common.ipc import Plugin
 from astacus.common.rohmustorage import MultiRohmuStorage
 from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins.base import get_node_to_backup_index
-from contextlib import nullcontext as does_not_raise
+from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext as does_not_raise
 from dataclasses import dataclass
 from datetime import datetime, UTC
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from typing import Any, Callable, ContextManager, Optional
+from typing import Any
 
 import httpx
 import json
@@ -49,9 +50,9 @@ BACKUP_MANIFEST = ipc.BackupManifest(
 
 @dataclass
 class RestoreTest:
-    fail_at: Optional[int] = None
+    fail_at: int | None = None
     partial: bool = False
-    storage_name: Optional[str] = None
+    storage_name: str | None = None
 
 
 @pytest.mark.parametrize(
@@ -81,8 +82,8 @@ def test_restore(rt: RestoreTest, app: FastAPI, client: TestClient, mstorage: Mu
             respx.post(f"{node.url}/lock?locker=x&ttl=600").respond(json={"locked": rt.fail_at != 1})
             if i == 0:
                 # Failure point 2: download call fails
-                def get_match_download(node_url: str) -> Callable[[httpx.Request], Optional[httpx.Response]]:
-                    def match_download(request: httpx.Request) -> Optional[httpx.Response]:
+                def get_match_download(node_url: str) -> Callable[[httpx.Request], httpx.Response | None]:
+                    def match_download(request: httpx.Request) -> httpx.Response | None:
                         if rt.fail_at == 2:
                             return None
                         if json.loads(request.read())["storage"] != storage.storage_name:
@@ -106,8 +107,8 @@ def test_restore(rt: RestoreTest, app: FastAPI, client: TestClient, mstorage: Mu
                 )
             else:
 
-                def get_match_clear(node_url: str) -> Callable[[httpx.Request], Optional[httpx.Response]]:
-                    def match_clear(request: httpx.Request) -> Optional[httpx.Response]:
+                def get_match_clear(node_url: str) -> Callable[[httpx.Request], httpx.Response | None]:
+                    def match_clear(request: httpx.Request) -> httpx.Response | None:
                         if rt.fail_at == 4:
                             return None
                         if json.loads(request.read())["root_globs"] != ["*"]:
@@ -176,7 +177,7 @@ def test_restore(rt: RestoreTest, app: FastAPI, client: TestClient, mstorage: Mu
     ],
 )
 def test_node_to_backup_index(
-    node_azlist: list[str], backup_azlist: list[str], expected_index: list[int], exception: ContextManager
+    node_azlist: list[str], backup_azlist: list[str], expected_index: list[int], exception: AbstractContextManager
 ) -> None:
     snapshot_results = [ipc.SnapshotResult(az=az) for az in backup_azlist]
     nodes = [CoordinatorNode(url="unused", az=az) for az in node_azlist]
@@ -209,7 +210,7 @@ def test_node_to_backup_index(
     ],
 )
 def test_partial_node_to_backup_index(
-    partial_node_spec: dict[str, Any], expected_index: list[int | None], exception: ContextManager
+    partial_node_spec: dict[str, Any], expected_index: list[int | None], exception: AbstractContextManager
 ) -> None:
     num_nodes = 3
     snapshot_results = [ipc.SnapshotResult(hostname=f"host{i}") for i in range(num_nodes)]

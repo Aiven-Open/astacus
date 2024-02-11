@@ -11,7 +11,6 @@ from .disks import Disks
 from .manifest import Table
 from astacus.common.ipc import SnapshotFile, SnapshotResult
 from collections.abc import Iterable, Mapping, Sequence, Set
-from typing import Optional
 
 import dataclasses
 import uuid
@@ -45,7 +44,7 @@ def get_part_servers(part_files: Iterable[PartFile]) -> Set[int]:
 
     Raises a ValueError if not all servers contain all files.
     """
-    part_servers: Optional[Set[int]] = None
+    part_servers: Set[int] | None = None
     for part_file in part_files:
         if part_servers is None:
             part_servers = part_file.servers

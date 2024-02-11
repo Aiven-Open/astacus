@@ -11,12 +11,12 @@ Shared utilities (between coordinator and node)
 from __future__ import annotations
 
 from abc import ABC
-from collections.abc import Mapping
+from collections.abc import AsyncIterable, Callable, Iterable, Mapping
 from contextlib import contextmanager
 from multiprocessing.dummy import Pool  # fastapi + fork = bad idea
 from pathlib import Path
 from pydantic import BaseModel
-from typing import Any, AsyncIterable, Callable, Final, Iterable, Optional, TypeVar, Union
+from typing import Any, Final, TypeVar
 
 import asyncio
 import datetime
@@ -100,7 +100,7 @@ def http_request(url, *, caller, method="get", timeout=10, ignore_status_code: b
 
 
 async def httpx_request(
-    url: Union[str, httpx.URL],
+    url: str | httpx.URL,
     *,
     caller: str,
     method: str = "get",
@@ -108,7 +108,7 @@ async def httpx_request(
     json: bool = True,
     ignore_status_code: bool = False,
     **kw,
-) -> Optional[Union[httpx.Response, Mapping[str, Any]]]:
+) -> httpx.Response | Mapping[str, Any] | None:
     """Wrapper for httpx.request which handles timeouts as non-exceptions,
     and returns only valid results that we actually care about.
     """
@@ -135,7 +135,7 @@ async def httpx_request(
         return None
 
 
-def build_netloc(host: str, port: Optional[int] = None) -> str:
+def build_netloc(host: str, port: int | None = None) -> str:
     """Create a netloc that can be passed to `url.parse.urlunsplit` while safely handling ipv6 addresses."""
     escaped_host = f"[{host}]" if ":" in host else host
     return escaped_host if port is None else f"{escaped_host}:{port}"
@@ -169,11 +169,11 @@ class AsyncSleeper:
 def exponential_backoff(
     *,
     initial: float,
-    retries: Optional[int] = None,
+    retries: int | None = None,
     multiplier: float = 2,
-    maximum: Optional[float] = None,
-    duration: Optional[float] = None,
-    async_sleeper: Optional[AsyncSleeper] = None,
+    maximum: float | None = None,
+    duration: float | None = None,
+    async_sleeper: AsyncSleeper | None = None,
 ) -> AnyIterable[int]:
     """Exponential backoff iterator which works with both 'for' and 'async for'
 

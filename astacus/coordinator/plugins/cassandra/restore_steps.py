@@ -27,7 +27,6 @@ from astacus.coordinator.plugins.base import (
 from cassandra import metadata as cm
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Optional, Type
 
 import logging
 
@@ -61,7 +60,7 @@ class ParsePluginManifestStep(Step[CassandraManifest]):
 
 @dataclass
 class StopReplacedNodesStep(Step[Sequence[CoordinatorNode]]):
-    partial_restore_nodes: Optional[Sequence[ipc.PartialRestoreRequestNode]]
+    partial_restore_nodes: Sequence[ipc.PartialRestoreRequestNode] | None
     cassandra_nodes: Sequence[CassandraConfigurationNode]
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> Sequence[CoordinatorNode]:
@@ -83,7 +82,7 @@ class StopReplacedNodesStep(Step[Sequence[CoordinatorNode]]):
             await run_subop(cluster, ipc.CassandraSubOp.stop_cassandra, nodes=nodes_to_stop, result_class=ipc.NodeResult)
         return nodes_to_stop
 
-    def find_matching_cassandra_index(self, backup_node: CassandraManifestNode) -> Optional[int]:
+    def find_matching_cassandra_index(self, backup_node: CassandraManifestNode) -> int | None:
         for cassandra_index, cassandra_node in enumerate(self.cassandra_nodes):
             if backup_node.matches_configuration_node(cassandra_node):
                 return cassandra_index
@@ -177,9 +176,9 @@ class StartCassandraStep(Step[None]):
             coordinator = cluster.nodes[node_index]
             backup_node = plugin_manifest.nodes[backup_index]
             nodes.append(coordinator)
-            tokens: Optional[Sequence[str]] = None
-            replace_address_first_boot: Optional[str] = None
-            skip_bootstrap_streaming: Optional[bool] = None
+            tokens: Sequence[str] | None = None
+            replace_address_first_boot: str | None = None
+            skip_bootstrap_streaming: bool | None = None
             if self.override_tokens:
                 tokens = backup_node.tokens
             backup_node_in_cluster = any(n for n in self.cassandra_nodes if backup_node.matches_configuration_node(n))
@@ -201,8 +200,8 @@ class StartCassandraStep(Step[None]):
 class WaitCassandraUpStep(Step[None]):
     duration: int
     # Only StopReplacedNodesStep's result can be directly substracted from cluster.nodes
-    # thus retricting the type to Optional[StopReplacedNodesStep]
-    replaced_node_step: Optional[Type[StopReplacedNodesStep]] = None
+    # thus retricting the type to StopReplacedNodesStep | None
+    replaced_node_step: type[StopReplacedNodesStep] | None = None
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         last_err = None
@@ -266,4 +265,4 @@ class RestoreCassandraDeltasStep(RestoreDeltasStep):
 class RestoreFinalDeltasStep(RestoreDeltasStep):
     restore_delta_url: str = f"cassandra/{ipc.CassandraSubOp.restore_sstables}"
     restore_delta_request: ipc.NodeRequest = field(default_factory=restore_cassandra_deltas_req)
-    delta_manifests_step: Type[Step[Sequence[ipc.BackupManifest]]] = UploadFinalDeltaStep
+    delta_manifests_step: type[Step[Sequence[ipc.BackupManifest]]] = UploadFinalDeltaStep

@@ -4,10 +4,9 @@ See LICENSE for details
 """
 from astacus.common.exceptions import TransientException
 from asyncio import to_thread
-from collections.abc import AsyncIterator, Collection, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Collection, Mapping, Sequence
 from kazoo.client import EventType, KazooClient, KeeperState, TransactionRequest, WatchedEvent
 from kazoo.retry import KazooRetry
-from typing import Callable, Optional, Type, Union
 
 import asyncio
 import contextlib
@@ -51,7 +50,7 @@ class ZooKeeperConnection:
     async def __aexit__(self, *exc_info) -> None:
         raise NotImplementedError
 
-    async def get(self, path: str, watch: Optional[Watcher] = None) -> bytes:
+    async def get(self, path: str, watch: Watcher | None = None) -> bytes:
         """
         Returns the value of the node with the specified `path`.
 
@@ -59,7 +58,7 @@ class ZooKeeperConnection:
         """
         raise NotImplementedError
 
-    async def get_children(self, path: str, watch: Optional[Watcher] = None) -> Sequence[str]:
+    async def get_children(self, path: str, watch: Watcher | None = None) -> Sequence[str]:
         """
         Returns the sorted list of all children of the given `path`.
 
@@ -165,7 +164,7 @@ class NotEmptyError(TransientException):
 
 
 class TransactionError(TransientException):
-    def __init__(self, results: Collection[Union[bool, TransientException]]):
+    def __init__(self, results: Collection[bool | TransientException]) -> None:
         super().__init__(results)
         self.message = f"Transaction failed: {results!r}"
         self.results = results
@@ -188,7 +187,7 @@ class KazooZooKeeperClient(ZooKeeperClient):
         self.hosts = hosts
         self.user = user
         self.timeout = timeout
-        self.client: Optional[KazooClient] = None
+        self.client: KazooClient | None = None
         self.lock = asyncio.Lock()
 
     def connect(self) -> ZooKeeperConnection:
@@ -208,13 +207,13 @@ class KazooZooKeeperTransaction(ZooKeeperTransaction):
     async def commit(self) -> None:
         results = await to_thread(self.request.client.retry, self.request.commit)
         if any(isinstance(result, Exception) for result in results):
-            exceptions_map: Mapping[Type, Callable[[str], TransientException]] = {
+            exceptions_map: Mapping[type, Callable[[str], TransientException]] = {
                 kazoo.exceptions.RolledBackError: RolledBackError,
                 kazoo.exceptions.RuntimeInconsistency: RuntimeInconsistency,
                 kazoo.exceptions.NoNodeError: NoNodeError,
                 kazoo.exceptions.NodeExistsError: NodeExistsError,
             }
-            mapped_results: Collection[Union[bool, TransientException]] = [
+            mapped_results: Collection[bool | TransientException] = [
                 exceptions_map[result.__class__](operation.path) if isinstance(result, Exception) else True
                 for result, operation in zip(results, self.request.operations)
             ]
@@ -237,14 +236,14 @@ class KazooZooKeeperConnection(ZooKeeperConnection):
         self.client.close()
         self.client = None
 
-    async def get(self, path: str, watch: Optional[Watcher] = None) -> bytes:
+    async def get(self, path: str, watch: Watcher | None = None) -> bytes:
         try:
             data, _ = await to_thread(self.client.retry, self.client.get, path, watch=watch)
             return data
         except kazoo.exceptions.NoNodeError as e:
             raise NoNodeError(path) from e
 
-    async def get_children(self, path: str, watch: Optional[Watcher] = None) -> Sequence[str]:
+    async def get_children(self, path: str, watch: Watcher | None = None) -> Sequence[str]:
         try:
             return sorted(await to_thread(self.client.retry, self.client.get_children, path, watch=watch))
         except kazoo.exceptions.NoNodeError as e:
@@ -322,7 +321,7 @@ class FakeZooKeeperTransaction(ZooKeeperTransaction):
 
     async def commit(self) -> None:
         triggers = []
-        results: list[Union[bool, TransientException]] = []
+        results: list[bool | TransientException] = []
         async with self.connection.client.get_storage() as storage:
             storage_copy = storage.copy()
             for operation in self.operations:
@@ -361,7 +360,7 @@ class FakeZooKeeperConnection(ZooKeeperConnection):
     async def __aexit__(self, *exc_info) -> None:
         self.client.connections.remove(self)
 
-    async def get(self, path: str, watch: Optional[Watcher] = None) -> bytes:
+    async def get(self, path: str, watch: Watcher | None = None) -> bytes:
         # We don't have the "set" command so we can ignore the watch
         assert self in self.client.connections
         parts = parse_path(path)
@@ -372,7 +371,7 @@ class FakeZooKeeperConnection(ZooKeeperConnection):
                 self.watches.setdefault(parts, []).append(watch)
             return storage[parts]
 
-    async def get_children(self, path: str, watch: Optional[Watcher] = None) -> Sequence[str]:
+    async def get_children(self, path: str, watch: Watcher | None = None) -> Sequence[str]:
         # Since we have the "create" command, the watch can be triggered on the parent
         assert self in self.client.connections
         parts = parse_path(path)

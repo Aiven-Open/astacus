@@ -10,7 +10,7 @@ from httpx import URL
 from pathlib import Path
 from tests.utils import create_rohmu_config, format_astacus_command
 from types import MappingProxyType
-from typing import Any, Optional, Union
+from typing import Any
 
 import asyncio
 import httpx
@@ -31,9 +31,9 @@ class TestNode(AstacusModel):
     port: int
 
     # Where do root/link/etc for this node reside in filesystem
-    path: Optional[Path] = None
-    root_path: Optional[Path] = None
-    db_path: Optional[Path] = None
+    path: Path | None = None
+    root_path: Path | None = None
+    db_path: Path | None = None
 
 
 ASTACUS_NODES = [
@@ -49,9 +49,7 @@ DEFAULT_PLUGIN_CONFIG = {
 
 
 @asynccontextmanager
-async def background_process(
-    program: Union[str, Path], *args: Union[str, Path], **kwargs
-) -> AsyncIterator[asyncio.subprocess.Process]:
+async def background_process(program: str | Path, *args: str | Path, **kwargs) -> AsyncIterator[asyncio.subprocess.Process]:
     # pylint: disable=bare-except
     proc = await asyncio.create_subprocess_exec(program, *args, **kwargs)
     try:
@@ -122,7 +120,7 @@ def create_astacus_config(
     return a_conf_path
 
 
-async def wait_url_up(url: Union[URL, str]) -> None:
+async def wait_url_up(url: str | URL) -> None:
     async with httpx.AsyncClient() as client:
         async for _ in exponential_backoff(initial=0.1, multiplier=1.3, retries=20):
             try:

@@ -5,22 +5,19 @@ See LICENSE for details
 from astacus.common.utils import build_netloc, httpx_request
 from collections.abc import Mapping, Sequence
 from re import Match
-from typing import Optional, Union
 
 import copy
 import logging
 import re
 import urllib.parse
 
-Row = Sequence[Union[str, int, float, list, None]]
+Row = Sequence[str | int | float | list | None]
 
 logger = logging.getLogger(__name__)
 
 
 class ClickHouseClient:
-    async def execute(
-        self, query: bytes, timeout: Optional[float] = None, session_id: Optional[str] = None
-    ) -> Sequence[Row]:
+    async def execute(self, query: bytes, timeout: float | None = None, session_id: str | None = None) -> Sequence[Row]:
         raise NotImplementedError
 
 
@@ -30,7 +27,7 @@ class ClickHouseClientQueryError(Exception):
     SETTING_CONSTRAINT_VIOLATION = 452
 
     def __init__(
-        self, query: bytes, host: str, port: int, *, status_code: Optional[int] = None, exception_code: Optional[int] = None
+        self, query: bytes, host: str, port: int, *, status_code: int | None = None, exception_code: int | None = None
     ) -> None:
         super().__init__(
             f"Query failed: {query!r} on {host}:{port}: status_code={status_code}, exception_code={exception_code}"
@@ -57,8 +54,8 @@ class HttpClickHouseClient(ClickHouseClient):
         *,
         host: str,
         port: int,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
+        username: str | None = None,
+        password: str | None = None,
         timeout: float = 10.0,
     ):
         self.host = host
@@ -67,9 +64,7 @@ class HttpClickHouseClient(ClickHouseClient):
         self.password = password
         self.timeout = timeout
 
-    async def execute(
-        self, query: bytes, timeout: Optional[float] = None, session_id: Optional[str] = None
-    ) -> Sequence[Row]:
+    async def execute(self, query: bytes, timeout: float | None = None, session_id: str | None = None) -> Sequence[Row]:
         assert isinstance(query, bytes)
         # Output format: https://clickhouse.tech/docs/en/interfaces/formats/#jsoncompact
         headers = [("X-ClickHouse-Database", "system"), ("X-ClickHouse-Format", "JSONCompact")]
@@ -119,9 +114,7 @@ class StubClickHouseClient(ClickHouseClient):
     def set_response(self, query: bytes, rows: Sequence[Row]) -> None:
         self.responses[query] = copy.deepcopy(rows)
 
-    async def execute(
-        self, query: bytes, timeout: Optional[float] = None, session_id: Optional[str] = None
-    ) -> Sequence[Row]:
+    async def execute(self, query: bytes, timeout: float | None = None, session_id: str | None = None) -> Sequence[Row]:
         assert isinstance(query, bytes)
         return copy.deepcopy(self.responses[query])
 

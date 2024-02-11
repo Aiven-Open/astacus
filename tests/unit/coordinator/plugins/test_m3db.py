@@ -30,7 +30,6 @@ from dataclasses import dataclass
 from fastapi import BackgroundTasks
 from starlette.datastructures import URL
 from tests.unit.common.test_m3placement import create_dummy_placement
-from typing import Optional
 
 import pytest
 import respx
@@ -98,7 +97,7 @@ def fixture_etcd_client(plugin: M3DBPlugin) -> ETCDClient:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fail_at", BACKUP_FAILS)
-async def test_m3_backup(coordinator: Coordinator, plugin: M3DBPlugin, etcd_client: ETCDClient, fail_at: Optional[int]):
+async def test_m3_backup(coordinator: Coordinator, plugin: M3DBPlugin, etcd_client: ETCDClient, fail_at: int | None):
     etcd_prefixes = get_etcd_prefixes(plugin.environment)
     op = SteppedCoordinatorOp(
         c=coordinator,
@@ -130,14 +129,14 @@ async def test_m3_backup(coordinator: Coordinator, plugin: M3DBPlugin, etcd_clie
 
 @dataclass
 class RestoreTest:
-    fail_at: Optional[int] = None
+    fail_at: int | None = None
     partial: bool = False
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("rt", [RestoreTest(fail_at=i) for i in range(3)] + [RestoreTest()])
 async def test_m3_restore(coordinator: Coordinator, plugin: M3DBPlugin, etcd_client: ETCDClient, rt: RestoreTest) -> None:
-    partial_restore_nodes: Optional[Sequence[ipc.PartialRestoreRequestNode]] = None
+    partial_restore_nodes: Sequence[ipc.PartialRestoreRequestNode] | None = None
     if rt.partial:
         partial_restore_nodes = [ipc.PartialRestoreRequestNode(backup_index=0, node_index=0)]
     op = SteppedCoordinatorOp(

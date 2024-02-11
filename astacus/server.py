@@ -19,7 +19,6 @@ from astacus.coordinator.state import app_coordinator_state
 from astacus.node.api import router as node_router
 from fastapi import FastAPI
 from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
-from typing import Optional
 
 import logging
 import os
@@ -29,7 +28,7 @@ import uvicorn
 
 logger = logging.getLogger(__name__)
 
-app: Optional[FastAPI] = None
+app: FastAPI | None = None
 
 
 def init_app():

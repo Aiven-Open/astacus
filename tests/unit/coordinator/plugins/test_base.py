@@ -30,12 +30,11 @@ from astacus.coordinator.plugins.base import (
     UploadManifestStep,
 )
 from astacus.node.snapshotter import hash_hexdigest_readable
-from collections.abc import Sequence, Set
+from collections.abc import Callable, Sequence, Set
 from http import HTTPStatus
 from io import BytesIO
 from pydantic import Field
 from tests.unit.storage import MemoryHexDigestStorage, MemoryJsonStorage
-from typing import Callable, Optional
 from unittest import mock
 
 import dataclasses
@@ -77,8 +76,8 @@ def get_sample_hashes() -> list[ipc.SnapshotHash]:
 
 
 class DefaultedSnapshotResult(ipc.SnapshotResult):
-    end: Optional[datetime.datetime] = Field(default_factory=now)
-    hashes: Optional[Sequence[ipc.SnapshotHash]] = None
+    end: datetime.datetime | None = Field(default_factory=now)
+    hashes: Sequence[ipc.SnapshotHash] | None = None
 
 
 @pytest.fixture(name="single_node_cluster")
@@ -405,7 +404,7 @@ async def test_upload_manifest_step_generates_correct_backup_name(
 )
 async def test_snapshot_release_step(
     node_features: Sequence[ipc.NodeFeatures],
-    expected_request: Optional[ipc.SnapshotReleaseRequest],
+    expected_request: ipc.SnapshotReleaseRequest | None,
     single_node_cluster: Cluster,
     context: StepsContext,
 ) -> None:

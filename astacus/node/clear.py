@@ -11,7 +11,6 @@ from .node import NodeOp
 from .snapshotter import Snapshotter
 from astacus.common import ipc
 from astacus.common.progress import Progress
-from typing import Optional
 
 import logging
 
@@ -19,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class ClearOp(NodeOp[ipc.SnapshotClearRequest, ipc.NodeResult]):
-    snapshotter: Optional[Snapshotter] = None
+    snapshotter: Snapshotter | None = None
     is_snaphot_outdated: bool = True
 
     def create_result(self) -> ipc.NodeResult:

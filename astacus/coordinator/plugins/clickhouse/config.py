@@ -9,7 +9,6 @@ from astacus.coordinator.plugins.zookeeper import KazooZooKeeperClient, ZooKeepe
 from astacus.coordinator.plugins.zookeeper_config import ZooKeeperConfiguration
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Optional
 
 import enum
 
@@ -20,19 +19,19 @@ class ClickHouseNode(AstacusModel):
 
 
 class ClickHouseConfiguration(AstacusModel):
-    username: Optional[str] = None
-    password: Optional[str] = None
+    username: str | None = None
+    password: str | None = None
     nodes: Sequence[ClickHouseNode] = []
 
 
 class ReplicatedDatabaseSettings(AstacusModel):
-    max_broken_tables_ratio: Optional[float] = None
-    max_replication_lag_to_enqueue: Optional[int] = None
-    wait_entry_commited_timeout_sec: Optional[int] = None
-    cluster_username: Optional[str] = None
-    cluster_password: Optional[str] = None
-    cluster_secret: Optional[str] = None
-    collection_name: Optional[str] = None
+    max_broken_tables_ratio: float | None = None
+    max_replication_lag_to_enqueue: int | None = None
+    wait_entry_commited_timeout_sec: int | None = None
+    cluster_username: str | None = None
+    cluster_password: str | None = None
+    cluster_secret: str | None = None
+    collection_name: str | None = None
 
 
 class DiskType(enum.Enum):
@@ -52,7 +51,7 @@ class DiskConfiguration(AstacusModel):
     type: DiskType
     path: Path
     name: str
-    object_storage: Optional[DiskObjectStorageConfiguration] = None
+    object_storage: DiskObjectStorageConfiguration | None = None
 
 
 def get_zookeeper_client(configuration: ZooKeeperConfiguration) -> ZooKeeperClient:

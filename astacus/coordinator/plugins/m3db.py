@@ -32,7 +32,7 @@ from astacus.common.utils import AstacusModel
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
 from collections.abc import Sequence
-from typing import Any, Optional
+from typing import Any
 
 import dataclasses
 import logging
@@ -134,11 +134,11 @@ class PrepareM3ManifestStep(Step[dict[str, Any]]):
 
 
 @dataclasses.dataclass
-class RewriteEtcdStep(Step[Optional[ETCDDump]]):
+class RewriteEtcdStep(Step[ETCDDump | None]):
     placement_nodes: Sequence[m3placement.M3PlacementNode]
-    partial_restore_nodes: Optional[Sequence[ipc.PartialRestoreRequestNode]]
+    partial_restore_nodes: Sequence[ipc.PartialRestoreRequestNode] | None
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> Optional[ETCDDump]:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> ETCDDump | None:
         if self.partial_restore_nodes:
             logger.info("Skipping etcd rewrite due to partial backup restoration")
             return None
@@ -163,7 +163,7 @@ class RewriteEtcdStep(Step[Optional[ETCDDump]]):
 @dataclasses.dataclass
 class RestoreEtcdStep(Step[None]):
     etcd_client: ETCDClient
-    partial_restore_nodes: Optional[Sequence[ipc.PartialRestoreRequestNode]]
+    partial_restore_nodes: Sequence[ipc.PartialRestoreRequestNode] | None
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         if self.partial_restore_nodes:
@@ -191,7 +191,7 @@ def validate_m3_config(placement_nodes: Sequence[m3placement.M3PlacementNode], n
 def rewrite_m3db_placement(
     *,
     key: ETCDKey,
-    node_to_backup_index: Sequence[Optional[int]],
+    node_to_backup_index: Sequence[int | None],
     src_placement_nodes: Sequence[m3placement.M3PlacementNode],
     dst_placement_nodes: Sequence[m3placement.M3PlacementNode],
     nodes: Sequence[CoordinatorNode],

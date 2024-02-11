@@ -6,7 +6,7 @@ from astacus.common.utils import AstacusModel
 from astacus.coordinator.plugins.clickhouse.client import escape_sql_identifier
 from base64 import b64decode, b64encode
 from collections.abc import Mapping, Sequence
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 import enum
@@ -37,7 +37,7 @@ class AccessEntity(AstacusModel):
 class ReplicatedDatabase(AstacusModel):
     name: bytes
     # This is optional because of older backups without uuids
-    uuid: Optional[UUID] = None
+    uuid: UUID | None = None
     # These contain macros, not per-server final values
     shard: bytes
     replica: bytes

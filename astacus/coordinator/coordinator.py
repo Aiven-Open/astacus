@@ -17,11 +17,11 @@ from astacus.coordinator.cluster import Cluster, LockResult, WaitResultError
 from astacus.coordinator.config import coordinator_config, CoordinatorConfig, CoordinatorNode
 from astacus.coordinator.plugins import get_plugin
 from astacus.coordinator.state import coordinator_state, CoordinatorState
-from collections.abc import Iterator, Sequence
+from collections.abc import Awaitable, Callable, Iterator, Sequence
 from fastapi import BackgroundTasks, Depends, HTTPException
 from functools import cached_property
 from starlette.datastructures import URL
-from typing import Any, Awaitable, Callable, Optional
+from typing import Any
 from urllib.parse import urlunsplit
 
 import asyncio
@@ -150,7 +150,7 @@ class CoordinatorOp(op.Op):
 
 
 class LockedCoordinatorOp(CoordinatorOp):
-    op_started: Optional[float]  # set when op_info.status is set to starting
+    op_started: float | None  # set when op_info.status is set to starting
 
     def __init__(self, *, c: Coordinator = Depends()):
         super().__init__(c=c)
@@ -230,7 +230,7 @@ class LockedCoordinatorOp(CoordinatorOp):
             else:
                 raise NotImplementedError(f"Unknown result from request_lock_call_from_nodes:{r!r}")
 
-    def set_status(self, status: op.Op.Status, *, from_status: Optional[op.Op.Status] = None) -> bool:
+    def set_status(self, status: op.Op.Status, *, from_status: op.Op.Status | None = None) -> bool:
         changed = super().set_status(status=status, from_status=from_status)
         if status == op.Op.Status.starting and changed:
             self.op_started = utils.monotonic_time()

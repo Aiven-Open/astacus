@@ -7,9 +7,8 @@ Classes for working with snapshot groups.
 
 """
 from astacus.common.snapshot import SnapshotGroup
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, Optional
 from typing_extensions import Self
 from wcmatch.glob import GLOBSTAR, iglob, translate
 
@@ -32,7 +31,7 @@ class CompiledGroup:
     def matches(self, relative_path: str) -> bool:
         return bool(self.regex.match(relative_path)) and relative_path.rpartition("/")[2] not in self.group.excluded_names
 
-    def glob(self, root_dir: Optional[Path] = None) -> Iterable[str]:
+    def glob(self, root_dir: Path | None = None) -> Iterable[str]:
         for path in iglob(self.group.root_glob, root_dir=root_dir, flags=WCMATCH_FLAGS):
             if os.path.basename(path) not in self.group.excluded_names:
                 yield path

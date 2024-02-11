@@ -8,9 +8,9 @@ from astacus.common.progress import Progress
 from astacus.common.statsd import StatsClient
 from astacus.common.utils import AsyncSleeper
 from astacus.coordinator.config import CoordinatorNode, PollConfig
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from enum import Enum
-from typing import Any, Callable, cast, Optional, Type, TypeVar, Union
+from typing import Any, cast, TypeAlias, TypeVar
 
 import asyncio
 import copy
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 NR = TypeVar("NR", bound=ipc.NodeResult)
-Result = Union[BaseException, httpx.Response, Mapping[str, Any]]
+Result: TypeAlias = BaseException | httpx.Response | Mapping[str, Any]
 
 
 class LockResult(Enum):
@@ -37,19 +37,19 @@ class Cluster:
         self,
         *,
         nodes: Sequence[CoordinatorNode],
-        poll_config: Optional[PollConfig] = None,
-        subresult_url: Optional[str] = None,
-        subresult_sleeper: Optional[AsyncSleeper] = None,
-        stats: Optional[StatsClient] = None,
+        poll_config: PollConfig | None = None,
+        subresult_url: str | None = None,
+        subresult_sleeper: AsyncSleeper | None = None,
+        stats: StatsClient | None = None,
     ):
         self.nodes = nodes
         self.poll_config = PollConfig() if poll_config is None else poll_config
         self.subresult_url = subresult_url
         self.subresult_sleeper = subresult_sleeper
         self.stats = stats
-        self.progress_handler: Optional[Callable[[Progress], None]] = None
+        self.progress_handler: Callable[[Progress], None] | None = None
 
-    def set_progress_handler(self, progress_handler: Optional[Callable[[Progress], None]]):
+    def set_progress_handler(self, progress_handler: Callable[[Progress], None] | None):
         self.progress_handler = progress_handler
 
     async def request_lock(self, *, locker: str, ttl: int) -> LockResult:
@@ -67,11 +67,11 @@ class Cluster:
         url: str,
         *,
         caller: str,
-        req: Optional[ipc.NodeRequest] = None,
-        reqs: Optional[Sequence[ipc.NodeRequest]] = None,
-        nodes: Optional[Sequence[CoordinatorNode]] = None,
+        req: ipc.NodeRequest | None = None,
+        reqs: Sequence[ipc.NodeRequest] | None = None,
+        nodes: Sequence[CoordinatorNode] | None = None,
         **kw,
-    ) -> Sequence[Optional[Result]]:
+    ) -> Sequence[Result | None]:
         """Perform asynchronously parallel request to the node components.
 
         The 'url' specifies sub-url under the node's own url. The set
@@ -165,7 +165,7 @@ class Cluster:
         return rv
 
     async def wait_successful_results(
-        self, *, start_results: Sequence[Optional[Result]], result_class: Type[NR]
+        self, *, start_results: Sequence[Result | None], result_class: type[NR]
     ) -> Sequence[NR]:
         urls = []
 
@@ -179,7 +179,7 @@ class Cluster:
             urls.append(parsed_start_result.status_url)
         if len(urls) != len(start_results):
             raise WaitResultError(f"incorrect number of results: {len(urls)} vs {len(start_results)}")
-        results: list[Optional[NR]] = [None] * len(urls)
+        results: list[NR | None] = [None] * len(urls)
         # Note that we don't have timeout mechanism here as such,
         # however, if re-locking times out, we will bail out. TBD if
         # we need timeout mechanism here anyway.

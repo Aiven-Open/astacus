@@ -13,7 +13,7 @@ from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import Step, StepFailedError, StepsContext
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import logging
 
@@ -33,7 +33,7 @@ def _remove_other_datacenters(keyspace: CassandraKeyspace, datacenter: str) -> N
 
 
 def _retrieve_manifest_from_cassandra(
-    cas: CassandraSession, config_nodes: Sequence[CassandraConfigurationNode], *, datacenter: Optional[str]
+    cas: CassandraSession, config_nodes: Sequence[CassandraConfigurationNode], *, datacenter: str | None
 ) -> CassandraManifest:
     host_id_to_node: dict[str, CassandraManifestNode] = {}
     for token, host in cas.cluster_metadata.token_map.token_to_host_owner.items():
@@ -115,7 +115,7 @@ class AssertSchemaUnchanged(Step[None]):
 class PrepareCassandraManifestStep(Step[dict[str, Any]]):
     client: CassandraClient
     nodes: Sequence[CassandraConfigurationNode]
-    datacenter: Optional[str]
+    datacenter: str | None
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> dict[str, Any]:
         result = await self.client.run_sync(_retrieve_manifest_from_cassandra, self.nodes, datacenter=self.datacenter)

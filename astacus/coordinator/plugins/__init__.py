@@ -1,9 +1,8 @@
 from .base import CoordinatorPlugin
 from astacus.common.ipc import Plugin
-from typing import Type
 
 
-def get_plugin(plugin: Plugin) -> Type[CoordinatorPlugin]:
+def get_plugin(plugin: Plugin) -> type[CoordinatorPlugin]:
     # pylint: disable=import-outside-toplevel
 
     if plugin == Plugin.cassandra:

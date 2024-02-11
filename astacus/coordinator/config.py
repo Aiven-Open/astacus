@@ -9,7 +9,6 @@ from astacus.common.utils import AstacusModel
 from collections.abc import Sequence
 from fastapi import Request
 from pathlib import Path
-from typing import Optional
 
 APP_KEY = "coordinator_config"
 
@@ -77,11 +76,11 @@ class CoordinatorConfig(AstacusModel):
     # Optional object storage cache directory used for caching json
     # manifest fetching
     # Directory is created if it does not exist
-    object_storage_cache: Optional[Path] = None
+    object_storage_cache: Path | None = None
 
     # These can be either globally or locally set
-    object_storage: Optional[RohmuConfig] = None
-    statsd: Optional[StatsdConfig] = None
+    object_storage: RohmuConfig | None = None
+    statsd: StatsdConfig | None = None
 
     # How long do we cache list results unless there is (successful)
     # backup? Probably even one hour (default) is sensible enough

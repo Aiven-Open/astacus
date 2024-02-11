@@ -13,10 +13,11 @@ from cassandra.auth import PlainTextAuthProvider
 from cassandra.cluster import Cluster, NoHostAvailable, Session
 from cassandra.policies import WhiteListRoundRobinPolicy
 from cassandra.query import SimpleStatement
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from ssl import CERT_REQUIRED
 from starlette.concurrency import run_in_threadpool
-from typing import Any, Callable, Generator
+from typing import Any
 
 import logging
 

@@ -2,7 +2,6 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
-
 from .clear import ClearOp
 from .download import DownloadOp
 from .node import Node
@@ -16,7 +15,7 @@ from astacus.node.snapshotter import Snapshotter
 from astacus.version import __version__
 from collections.abc import Sequence
 from fastapi import APIRouter, Depends, HTTPException
-from typing import Union
+from typing import TypeAlias
 
 router = APIRouter()
 
@@ -215,7 +214,7 @@ def delta_clear_result(*, op_id: int, n: Node = Depends()):
 
 @router.post("/cassandra/{subop}")
 def cassandra(
-    req: Union[ipc.NodeRequest, ipc.CassandraStartRequest, ipc.CassandraRestoreSSTablesRequest],
+    req: ipc.NodeRequest | ipc.CassandraStartRequest | ipc.CassandraRestoreSSTablesRequest,
     subop: ipc.CassandraSubOp,
     n: Node = Depends(),
 ):
@@ -255,7 +254,7 @@ def cassandra_result(*, subop: ipc.CassandraSubOp, op_id: int, n: Node = Depends
     return op.result
 
 
-SnapshotReq = Union[ipc.SnapshotRequestV2, ipc.SnapshotDownloadRequest, ipc.SnapshotClearRequest]
+SnapshotReq: TypeAlias = ipc.SnapshotRequestV2 | ipc.SnapshotDownloadRequest | ipc.SnapshotClearRequest
 
 
 def groups_from_snapshot_req(req: SnapshotReq) -> Sequence[SnapshotGroup]:

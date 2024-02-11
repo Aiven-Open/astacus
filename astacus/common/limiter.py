@@ -2,7 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
-from typing import Awaitable, Iterable
+from collections.abc import Awaitable, Iterable
 
 import asyncio
 

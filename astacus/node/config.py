@@ -11,7 +11,6 @@ from collections.abc import Sequence
 from fastapi import Request
 from pathlib import Path
 from pydantic import DirectoryPath, Field, validator
-from typing import Optional
 
 APP_KEY = "node_config"
 
@@ -62,15 +61,15 @@ class NodeConfig(AstacusModel):
     # Where do we hardlink things from the file hierarchy we care about
     # By default, .astacus subdirectory is created in root if this is not set
     # Directory is created if it does not exist
-    root_link: Optional[Path] = None
+    root_link: Path | None = None
 
     # Same as root_link for the delta snapshotter.
-    delta_root_link: Optional[Path] = None
+    delta_root_link: Path | None = None
     db_path: Path
 
     # These can be either globally or locally set
-    object_storage: Optional[RohmuConfig] = None
-    statsd: Optional[StatsdConfig] = None
+    object_storage: RohmuConfig | None = None
+    statsd: StatsdConfig | None = None
 
     parallel: NodeParallel = Field(default_factory=NodeParallel)
 
@@ -81,7 +80,7 @@ class NodeConfig(AstacusModel):
 
     # Cassandra configuration is optional; for now, in node part of
     # the code, there are no plugins. (This may change later.)
-    cassandra: Optional[CassandraNodeConfig] = None
+    cassandra: CassandraNodeConfig | None = None
 
 
 def node_config(request: Request) -> NodeConfig:

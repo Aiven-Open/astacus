@@ -38,8 +38,8 @@ from astacus.coordinator.plugins.base import (
 )
 from astacus.coordinator.plugins.zookeeper import ChangeWatch, TransactionError, ZooKeeperClient
 from base64 import b64decode
-from collections.abc import Iterable, Iterator, Mapping, Sequence
-from typing import Any, Awaitable, Callable, cast, TypeVar
+from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
+from typing import Any, cast, TypeVar
 
 import asyncio
 import base64

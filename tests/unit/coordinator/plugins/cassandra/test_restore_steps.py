@@ -13,7 +13,6 @@ from astacus.coordinator.plugins.cassandra.model import CassandraConfigurationNo
 from collections.abc import Sequence
 from pytest_mock import MockerFixture
 from tests.unit.coordinator.plugins.cassandra.builders import build_keyspace
-from typing import Optional, Type
 from unittest.mock import Mock, patch
 from uuid import UUID
 
@@ -194,8 +193,8 @@ async def test_step_wait_cassandra_up(mocker: MockerFixture, steps: list[bool], 
     "replaced_node_step, expected_nodes", [(restore_steps.StopReplacedNodesStep, [_coordinator_node(2)]), (None, None)]
 )
 async def test_stopped_nodes_for_wait_cassandra_up_step(
-    replaced_node_step: Optional[Type[restore_steps.StopReplacedNodesStep]],
-    expected_nodes: Optional[Sequence[CoordinatorNode]],
+    replaced_node_step: type[restore_steps.StopReplacedNodesStep] | None,
+    expected_nodes: Sequence[CoordinatorNode] | None,
     context: base.StepsContext,
 ) -> None:
     cluster = Cluster(nodes=[_coordinator_node(2)])

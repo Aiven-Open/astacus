@@ -15,12 +15,13 @@ from . import magic
 from .exceptions import ExpiredOperationException
 from .statsd import StatsClient
 from .utils import AstacusModel
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from fastapi import HTTPException
 from starlette.background import BackgroundTasks
 from starlette.datastructures import URL
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 from urllib.parse import urlunsplit
 
 import asyncio
@@ -59,7 +60,7 @@ class Op:
         if self.info.op_id != self.op_id:
             raise ExpiredOperationException("operation id mismatch")
 
-    def set_status(self, status: Status, *, from_status: Optional[Status] = None) -> bool:
+    def set_status(self, status: Status, *, from_status: Status | None = None) -> bool:
         assert self.op_id, "start_op() should be called before set_status()"
         self.check_op_id()
         if from_status and from_status != self.info.op_status:
@@ -82,7 +83,7 @@ Op.Info.update_forward_refs()
 @dataclass
 class OpState:
     op_info: Op.Info = field(default_factory=Op.Info)
-    op: Optional[Op] = None
+    op: Op | None = None
     next_op_id: int = 1
 
 

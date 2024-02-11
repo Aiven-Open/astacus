@@ -2,8 +2,6 @@
 Copyright (c) 2022 Aiven Ltd
 See LICENSE for details
 """
-from typing import Union
-
 import dataclasses
 import enum
 
@@ -35,19 +33,19 @@ class Token:
     value: bytes
 
 
-def named_group(name: str, pattern: Union[bytes, TokenType]) -> bytes:
+def named_group(name: str, pattern: bytes | TokenType) -> bytes:
     return b"(?P<" + name.encode() + b">" + _to_bytes_pattern(pattern) + b")"
 
 
-def chain_of(*patterns: Union[bytes, TokenType]) -> bytes:
+def chain_of(*patterns: bytes | TokenType) -> bytes:
     return rb"\s*".join(_to_bytes_pattern(pattern) for pattern in patterns)
 
 
-def one_of(*patterns: Union[bytes, TokenType]) -> bytes:
+def one_of(*patterns: bytes | TokenType) -> bytes:
     return _group(b"|".join(_group(_to_bytes_pattern(pattern)) for pattern in patterns))
 
 
-def _to_bytes_pattern(pattern: Union[bytes, TokenType]) -> bytes:
+def _to_bytes_pattern(pattern: bytes | TokenType) -> bytes:
     return pattern.value if isinstance(pattern, TokenType) else TokenType.Space.value.join(pattern.split(b" "))
 
 

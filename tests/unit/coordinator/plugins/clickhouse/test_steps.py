@@ -70,10 +70,9 @@ from astacus.coordinator.plugins.clickhouse.steps import (
 )
 from astacus.coordinator.plugins.zookeeper import FakeZooKeeperClient, ZooKeeperClient
 from base64 import b64encode
-from collections.abc import Iterable, Sequence
+from collections.abc import Awaitable, Iterable, Sequence
 from pathlib import Path
 from tests.unit.storage import MemoryJsonStorage
-from typing import Awaitable, Optional
 from unittest import mock
 from unittest.mock import _Call as MockCall  # pylint: disable=protected-access
 
@@ -222,7 +221,7 @@ class TrappedZooKeeperClient(FakeZooKeeperClient):
 
     def __init__(self) -> None:
         super().__init__()
-        self.calls_until_failure: Optional[int] = None
+        self.calls_until_failure: int | None = None
 
     async def inject_fault(self) -> None:
         if self.calls_until_failure == 0:

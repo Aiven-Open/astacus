@@ -12,9 +12,9 @@ from astacus.common import ipc
 from astacus.common.cassandra.client import CassandraClient
 from astacus.common.cassandra.config import SNAPSHOT_GLOB, SNAPSHOT_NAME
 from astacus.common.exceptions import TransientException
+from collections.abc import Callable
 from pathlib import Path
 from pydantic import DirectoryPath
-from typing import Callable, Tuple
 
 import contextlib
 import logging
@@ -28,12 +28,12 @@ logger = logging.getLogger(__name__)
 TABLES_GLOB = "data/*/*"
 
 
-def ks_table_from_snapshot_path(p: Path) -> Tuple[str, str]:
+def ks_table_from_snapshot_path(p: Path) -> tuple[str, str]:
     # /.../keyspace/table/snapshots/astacus
     return p.parts[-4], p.parts[-3]
 
 
-def ks_table_from_backup_path(p: Path) -> Tuple[str, str]:
+def ks_table_from_backup_path(p: Path) -> tuple[str, str]:
     # /.../keyspace/table/backups
     return p.parts[-3], p.parts[-2]
 

@@ -11,7 +11,7 @@ from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins.base import StepFailedError
 from collections.abc import Sequence
-from typing import Optional, Type, TypeVar
+from typing import TypeVar
 
 NR = TypeVar("NR", bound=ipc.NodeResult)
 
@@ -20,10 +20,10 @@ async def run_subop(
     cluster: Cluster,
     subop: ipc.CassandraSubOp,
     *,
-    nodes: Optional[Sequence[CoordinatorNode]] = None,
-    req: Optional[ipc.NodeRequest] = None,
-    reqs: Optional[Sequence[ipc.NodeRequest]] = None,
-    result_class: Type[NR],
+    nodes: Sequence[CoordinatorNode] | None = None,
+    req: ipc.NodeRequest | None = None,
+    reqs: Sequence[ipc.NodeRequest] | None = None,
+    result_class: type[NR],
 ) -> Sequence[NR]:
     if not req and not reqs:
         req = ipc.NodeRequest()
@@ -40,7 +40,7 @@ async def run_subop(
     return await cluster.wait_successful_results(start_results=start_results, result_class=result_class)
 
 
-async def get_schema_hash(cluster: Cluster, nodes: Optional[Sequence[CoordinatorNode]] = None) -> tuple[str, str]:
+async def get_schema_hash(cluster: Cluster, nodes: Sequence[CoordinatorNode] | None = None) -> tuple[str, str]:
     hashes = [
         x.schema_hash
         for x in await run_subop(

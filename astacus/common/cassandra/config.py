@@ -20,7 +20,6 @@ from astacus.common.utils import AstacusModel
 from collections.abc import Sequence
 from pathlib import Path
 from pydantic import root_validator
-from typing import Optional
 
 import yaml
 
@@ -30,19 +29,19 @@ BACKUP_GLOB = "data/*/*/backups/"
 
 
 class CassandraClientConfiguration(AstacusModel):
-    config_path: Optional[Path] = None
+    config_path: Path | None = None
 
     # WhiteListRoundRobinPolicy contact points
-    hostnames: Optional[Sequence[str]] = None
+    hostnames: Sequence[str] | None = None
 
-    port: Optional[int] = None
+    port: int | None = None
 
     # PlainTextAuthProvider
     username: str
     password: str
 
     # If set, configure ssl access configuration which requires the ca cert
-    ca_cert_path: Optional[str] = None
+    ca_cert_path: str | None = None
 
     @classmethod
     @root_validator

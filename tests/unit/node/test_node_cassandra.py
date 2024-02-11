@@ -8,14 +8,13 @@ from astacus.common.cassandra.config import SNAPSHOT_NAME
 from astacus.common.cassandra.utils import SYSTEM_KEYSPACES
 from astacus.node.api import READONLY_SUBOPS
 from astacus.node.config import CassandraAccessLevel, CassandraNodeConfig
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pytest_mock import MockerFixture
 from requests import Response
 from tests.unit.conftest import CassandraTestConfig
 from types import ModuleType
-from typing import Callable
 
 import py
 import pytest

@@ -7,8 +7,9 @@ See LICENSE for details
 from .exceptions import NotFoundException
 from .utils import AstacusModel
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from pathlib import Path
-from typing import BinaryIO, Callable, Generic, ParamSpec, TypeAlias, TypeVar
+from typing import BinaryIO, Generic, ParamSpec, TypeAlias, TypeVar
 
 import io
 

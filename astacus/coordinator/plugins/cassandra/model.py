@@ -8,7 +8,6 @@ from astacus.common.cassandra.schema import CassandraSchema
 from astacus.common.utils import AstacusModel
 from collections.abc import Sequence
 from pydantic import root_validator
-from typing import Optional
 from uuid import UUID
 
 
@@ -16,10 +15,10 @@ class CassandraConfigurationNode(AstacusModel):
     # The configured node order has to be identified _somehow_;
     # otherwise, we cannot map the same data to same set of
     # tokens. One of these is required.
-    address: Optional[str] = None
-    host_id: Optional[UUID] = None
-    listen_address: Optional[str] = None
-    tokens: Optional[Sequence[str]] = None
+    address: str | None = None
+    host_id: UUID | None = None
+    listen_address: str | None = None
+    tokens: Sequence[str] | None = None
 
     @classmethod
     @root_validator

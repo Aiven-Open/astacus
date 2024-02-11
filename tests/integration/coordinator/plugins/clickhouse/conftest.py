@@ -21,7 +21,7 @@ from astacus.coordinator.plugins.clickhouse.config import (
 from astacus.coordinator.plugins.clickhouse.plugin import ClickHousePlugin
 from astacus.coordinator.plugins.zookeeper_config import ZooKeeperConfiguration, ZooKeeperNode
 from astacus.node.config import NodeConfig
-from collections.abc import AsyncIterator, Iterator, Sequence
+from collections.abc import AsyncIterator, Awaitable, Iterator, Sequence
 from pathlib import Path
 from tests.conftest import CLICKHOUSE_PATH_OPTION, CLICKHOUSE_RESTORE_PATH_OPTION
 from tests.integration.conftest import get_command_path, Ports, run_process_and_wait_for_pattern, Service, ServiceCluster
@@ -32,7 +32,6 @@ from tests.utils import (
     format_astacus_command,
     get_clickhouse_version,
 )
-from typing import Awaitable, Optional, Union
 
 import argparse
 import asyncio
@@ -77,7 +76,7 @@ USER_CONFIG = """
     </clickhouse>
 """
 
-ClickHouseCommand = Sequence[Union[str, Path]]
+ClickHouseCommand = Sequence[str | Path]
 
 
 @pytest.fixture(scope="module", name="clickhouse_command")
@@ -223,7 +222,7 @@ async def create_minio_service(ports: Ports) -> AsyncIterator[MinioService]:
             "MINIO_ROOT_USER": root_user,
             "MINIO_ROOT_PASSWORD": root_password,
         }
-        command: Sequence[Union[str, Path]] = [
+        command: Sequence[str | Path] = [
             "/usr/bin/minio",
             "server",
             data_dir,
@@ -335,7 +334,7 @@ def create_clickhouse_configs(
     http_ports: Sequence[int],
     interserver_http_ports: Sequence[int],
     use_named_collections: bool,
-    minio_bucket: Optional[MinioBucket] = None,
+    minio_bucket: MinioBucket | None = None,
     object_storage_prefix: str = "/",
 ):
     replicas = "\n".join(

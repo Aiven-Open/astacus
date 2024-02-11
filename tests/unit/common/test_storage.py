@@ -12,12 +12,11 @@ from astacus.common import exceptions
 from astacus.common.cachingjsonstorage import CachingJsonStorage
 from astacus.common.rohmustorage import RohmuConfig, RohmuStorage
 from astacus.common.storage import FileStorage, Json, JsonStorage
-from contextlib import nullcontext as does_not_raise
+from contextlib import AbstractContextManager, nullcontext as does_not_raise
 from pathlib import Path
 from pytest_mock import MockerFixture
 from rohmu.object_storage import google
 from tests.utils import create_rohmu_config
-from typing import ContextManager
 from unittest.mock import Mock, patch
 
 import py
@@ -83,7 +82,7 @@ def _test_jsonstorage(storage: JsonStorage) -> None:
         ("rohmu", {"compression": False, "encryption": False}, pytest.raises(exceptions.CompressionOrEncryptionRequired)),
     ],
 )
-def test_storage(tmpdir: py.path.local, engine: str, kw: dict[str, bool], ex: ContextManager | None) -> None:
+def test_storage(tmpdir: py.path.local, engine: str, kw: dict[str, bool], ex: AbstractContextManager | None) -> None:
     if ex is None:
         ex = does_not_raise()
     with ex:

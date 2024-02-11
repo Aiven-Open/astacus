@@ -11,7 +11,6 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from pydantic import Field, root_validator
-from typing import Optional
 
 import functools
 import socket
@@ -41,14 +40,14 @@ class NodeFeatures(Enum):
 
 class Retention(AstacusModel):
     # If set, number of backups to retain always (even beyond days)
-    minimum_backups: Optional[int] = None
+    minimum_backups: int | None = None
 
     # If set, maximum number of backups to retain
-    maximum_backups: Optional[int] = None
+    maximum_backups: int | None = None
 
     # Backups older than this are deleted, unless it would reduce
     # number of backups to less than minimum_backups
-    keep_days: Optional[int] = None
+    keep_days: int | None = None
 
 
 # node generic base
@@ -78,7 +77,7 @@ class SnapshotFile(AstacusModel):
     file_size: int
     mtime_ns: int
     hexdigest: str = ""
-    content_b64: Optional[str] = None
+    content_b64: str | None = None
 
     def __lt__(self, o: "SnapshotFile") -> bool:
         # In our use case, paths uniquely identify files we care about
@@ -183,20 +182,20 @@ class SnapshotUploadResult(NodeResult):
 class SnapshotResult(NodeResult):
     # when was the operation started ( / done )
     start: datetime = Field(default_factory=now)
-    end: Optional[datetime] = None
+    end: datetime | None = None
 
     # The state is optional because it's written by the Snapshotter post-initialization.
     # If the backup failed, the related manifest doesn't exist: the state and the
     # summary attributes below will be set to none and their default values respectively.
     # Should be passed opaquely to restore.
-    state: Optional[SnapshotState] = Field(default_factory=SnapshotState)
+    state: SnapshotState | None = Field(default_factory=SnapshotState)
 
     # Summary data for manifest use
     files: int = 0
     total_size: int = 0
 
     # populated only if state is available
-    hashes: Optional[Sequence[SnapshotHash]] = None
+    hashes: Sequence[SnapshotHash] | None = None
 
 
 class SnapshotDownloadRequest(NodeRequest):
@@ -239,9 +238,9 @@ class CassandraSubOp(StrEnum):
 
 
 class CassandraStartRequest(NodeRequest):
-    tokens: Optional[Sequence[str]]
-    replace_address_first_boot: Optional[str]
-    skip_bootstrap_streaming: Optional[bool]
+    tokens: Sequence[str] | None = None
+    replace_address_first_boot: str | None = None
+    skip_bootstrap_streaming: bool | None = None
 
 
 class CassandraGetSchemaHashResult(NodeResult):
@@ -266,8 +265,8 @@ class PartialRestoreRequestNode(AstacusModel):
     #
     # index = index in configuration
     # hostname = hostname of the host that did the backup
-    backup_index: Optional[int] = None
-    backup_hostname: Optional[str] = None
+    backup_index: int | None = None
+    backup_hostname: str | None = None
 
     @root_validator
     def _check_only_one_backup_criteria(cls, values):
@@ -279,8 +278,8 @@ class PartialRestoreRequestNode(AstacusModel):
     #
     # index = index in configuration
     # url = URL of the Astacus endpoint for the particular node
-    node_index: Optional[int] = None
-    node_url: Optional[str] = None
+    node_index: int | None = None
+    node_url: str | None = None
 
     @root_validator
     def _check_only_one_node_criteria(cls, values):
@@ -292,8 +291,8 @@ class PartialRestoreRequestNode(AstacusModel):
 class RestoreRequest(AstacusModel):
     storage: str = ""
     name: str = ""
-    partial_restore_nodes: Optional[Sequence[PartialRestoreRequestNode]] = None
-    stop_after_step: Optional[str] = None
+    partial_restore_nodes: Sequence[PartialRestoreRequestNode] | None = None
+    stop_after_step: str | None = None
 
 
 # coordinator.plugins backup/restore
@@ -363,5 +362,5 @@ class ListResponse(AstacusModel):
 
 class CleanupRequest(AstacusModel):
     storage: str = ""
-    retention: Optional[Retention] = None
+    retention: Retention | None = None
     explicit_delete: Sequence[str] = []
