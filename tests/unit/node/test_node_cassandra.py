@@ -11,12 +11,12 @@ from astacus.node.config import CassandraAccessLevel, CassandraNodeConfig
 from collections.abc import Callable, Sequence
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pathlib import Path
 from pytest_mock import MockerFixture
 from requests import Response
 from tests.unit.conftest import CassandraTestConfig
 from types import ModuleType
 
-import py
 import pytest
 import subprocess
 
@@ -29,8 +29,8 @@ def fixture_astacus_node_cassandra() -> ModuleType:
 class CassandraTestEnv(CassandraTestConfig):
     cassandra_node_config: CassandraNodeConfig
 
-    def __init__(self, *, app: FastAPI, client: TestClient, mocker: MockerFixture, tmpdir: py.path.local) -> None:
-        super().__init__(mocker=mocker, tmpdir=tmpdir)
+    def __init__(self, *, app: FastAPI, client: TestClient, mocker: MockerFixture, tmp_path: Path) -> None:
+        super().__init__(mocker=mocker, tmp_path=tmp_path)
         self.app = app
         self.client = client
 
@@ -59,8 +59,8 @@ class CassandraTestEnv(CassandraTestConfig):
 
 
 @pytest.fixture(name="ctenv")
-def fixture_ctenv(app: FastAPI, client: TestClient, mocker: MockerFixture, tmpdir: py.path.local) -> CassandraTestEnv:
-    return CassandraTestEnv(app=app, client=client, mocker=mocker, tmpdir=tmpdir)
+def fixture_ctenv(app: FastAPI, client: TestClient, mocker: MockerFixture, tmp_path: Path) -> CassandraTestEnv:
+    return CassandraTestEnv(app=app, client=client, mocker=mocker, tmp_path=tmp_path)
 
 
 @pytest.mark.parametrize(

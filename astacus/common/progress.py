@@ -7,7 +7,7 @@ See LICENSE for details
 
 from .utils import AstacusModel
 from pyparsing import Iterable
-from typing_extensions import Self, TypeVar
+from typing import Self, TypeVar
 
 import logging
 import math

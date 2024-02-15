@@ -2,9 +2,10 @@
 Copyright (c) 2023 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.common.magic import DEFAULT_EMBEDDED_FILE_SIZE
 from collections.abc import Sequence
-from typing_extensions import Self
+from typing import Self
 
 import dataclasses
 

@@ -1,24 +1,19 @@
 """
-
-Copyright (c) 2020 Aiven Ltd
+Copyright (c) 2024 Aiven Ltd
 See LICENSE for details
-
-Rohmu-specific actual object storage implementation
-
 """
-from .storage import Json, MultiStorage, Storage, StorageUploadResult
-from .utils import AstacusModel
+
 from astacus.common import exceptions
+from astacus.common.storage.base import MultiStorage, Storage, StorageUploadResult
+from astacus.common.utils import AstacusModel
 from collections.abc import Mapping
 from enum import Enum
 from pydantic import Field
 from rohmu import errors, rohmufile
 from rohmu.compressor import CompressionStream
 from rohmu.encryptor import EncryptorStream
-from typing import BinaryIO, TypeAlias
+from typing import BinaryIO, Self, TypeAlias
 
-import io
-import json
 import logging
 import os
 import rohmu
@@ -96,23 +91,20 @@ def rohmu_error_wrapper(fun):
 
 
 class RohmuStorage(Storage):
-    """Implementation of the storage API, on top of rohmu."""
-
-    def __init__(self, config: RohmuConfig, *, storage: str | None = None) -> None:
+    def __init__(self, config: RohmuConfig, *, storage: str | None = None, prefix: str = "") -> None:
         assert config
         self.config = config
-        self.hexdigest_key = "data"
-        self.json_key = "json"
+        self.prefix = prefix
         self._choose_storage(storage)
         os.makedirs(config.temporary_directory, exist_ok=True)
         if not self.config.compression.algorithm and not self.config.encryption_key_id:
             raise exceptions.CompressionOrEncryptionRequired()
 
     @rohmu_error_wrapper
-    def _download_key_to_file(self, key, f: BinaryIO) -> bool:
-        raw_metadata: dict = self.storage.get_metadata_for_key(key)
+    def download_key_to_file(self, key, f: BinaryIO) -> bool:
+        raw_metadata: dict = self.storage.get_metadata_for_key(self._key(key))
         with tempfile.TemporaryFile(dir=self.config.temporary_directory) as temp_file:
-            self.storage.get_contents_to_fileobj(key, temp_file)
+            self.storage.get_contents_to_fileobj(self._key(key), temp_file)
             temp_file.seek(0)
             rohmufile.read_file(
                 input_obj=temp_file,
@@ -123,8 +115,8 @@ class RohmuStorage(Storage):
             )
         return True
 
-    def _list_key(self, key: str) -> list[str]:
-        return [os.path.basename(o["name"]) for o in self.storage.list_iter(key, with_metadata=False)]
+    def list_key(self) -> list[str]:
+        return [os.path.basename(o["name"]) for o in self.storage.list_iter(self.prefix, with_metadata=False)]
 
     def _private_key_lookup(self, key_id: str) -> str:
         return self.config.encryption_keys[key_id].private
@@ -133,7 +125,7 @@ class RohmuStorage(Storage):
         return self.config.encryption_keys[key_id].public
 
     @rohmu_error_wrapper
-    def _upload_key_from_file(self, key: str, f: BinaryIO, file_size: int) -> StorageUploadResult:
+    def upload_key_from_file(self, key: str, f: BinaryIO, file_size: int) -> StorageUploadResult:
         encryption_key_id = self.config.encryption_key_id
         compression = self.config.compression
         metadata = RohmuMetadata()
@@ -146,7 +138,7 @@ class RohmuStorage(Storage):
             rsa_public_key = self._public_key_lookup(encryption_key_id)
             wrapped_file = EncryptorStream(wrapped_file, rsa_public_key)
         rohmu_metadata = metadata.dict(exclude_defaults=True, by_alias=True)
-        self.storage.store_file_object(key, wrapped_file, metadata=rohmu_metadata)
+        self.storage.store_file_object(self._key(key), wrapped_file, metadata=rohmu_metadata)
         return StorageUploadResult(size=file_size, stored_size=wrapped_file.tell())
 
     storage_name: str = ""
@@ -158,62 +150,24 @@ class RohmuStorage(Storage):
         self.storage_config = self.config.storages[storage]
         self.storage = rohmu.get_transfer_from_model(self.storage_config)
 
-    def copy(self) -> "RohmuStorage":
-        return RohmuStorage(config=self.config, storage=self.storage_name)
-
-    # HexDigestStorage implementation
-
     @rohmu_error_wrapper
-    def delete_hexdigest(self, hexdigest: str) -> None:
-        key = os.path.join(self.hexdigest_key, hexdigest)
-        self.storage.delete_key(key)
+    def delete_key(self, key: str) -> None:
+        self.storage.delete_key(self._key(key))
 
-    def list_hexdigests(self) -> list[str]:
-        return self._list_key(self.hexdigest_key)
+    def copy(self) -> Self:
+        return self.__class__(config=self.config, storage=self.storage_name, prefix=self.prefix)
 
-    def download_hexdigest_to_file(self, hexdigest: str, f: BinaryIO) -> bool:
-        key = os.path.join(self.hexdigest_key, hexdigest)
-        return self._download_key_to_file(key, f)
-
-    def upload_hexdigest_from_file(self, hexdigest, f: BinaryIO, file_size: int) -> StorageUploadResult:
-        key = os.path.join(self.hexdigest_key, hexdigest)
-        return self._upload_key_from_file(key, f, file_size)
-
-    # JsonStorage implementation
-    @rohmu_error_wrapper
-    def delete_json(self, name: str) -> None:
-        key = os.path.join(self.json_key, name)
-        self.storage.delete_key(key)
-
-    def download_json(self, name: str) -> Json:
-        key = os.path.join(self.json_key, name)
-        f = io.BytesIO()
-        self._download_key_to_file(key, f)
-        f.seek(0)
-        return json.load(f)
-
-    def list_jsons(self) -> list[str]:
-        return self._list_key(self.json_key)
-
-    def upload_json_str(self, name: str, data: str) -> bool:
-        key = os.path.join(self.json_key, name)
-        f = io.BytesIO()
-        encoded_data = data.encode()
-        f.write(encoded_data)
-        f.seek(0)
-        self._upload_key_from_file(key, f, len(encoded_data))
-        return True
+    def _key(self, name: str) -> str:
+        return os.path.join(self.prefix, name)
 
 
-class MultiRohmuStorage(MultiStorage[RohmuStorage]):
-    def __init__(self, *, config: RohmuConfig) -> None:
+class RohmuMultiStorage(MultiStorage):
+    def __init__(self, config: RohmuConfig, prefix: str) -> None:
         self.config = config
+        self.prefix = prefix
 
-    def get_storage(self, name: str | None) -> RohmuStorage:
-        return RohmuStorage(config=self.config, storage=name)
-
-    def get_default_storage_name(self) -> str:
-        return self.config.default_storage
+    def get_storage(self, name: str) -> RohmuStorage:
+        return RohmuStorage(config=self.config, storage=name, prefix=self.prefix)
 
     def list_storages(self) -> list[str]:
-        return sorted(self.config.storages.keys())
+        return list(self.config.storages.keys())

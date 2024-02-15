@@ -9,8 +9,8 @@ Test that the coordinator backup endpoint works.
 from astacus.common import ipc, utils
 from astacus.common.ipc import SnapshotHash
 from astacus.common.progress import Progress
-from astacus.common.rohmustorage import RohmuStorage
 from astacus.common.statsd import StatsClient
+from astacus.common.storage.manager import StorageManager
 from astacus.coordinator.api import OpName
 from astacus.coordinator.plugins.base import build_node_index_datas, NodeIndexData
 from astacus.node.api import metadata
@@ -26,7 +26,7 @@ FAILS = [1, 2, 3, 4, 5, None]
 
 
 @pytest.mark.parametrize("fail_at", FAILS)
-def test_backup(fail_at: int | None, app: FastAPI, client: TestClient, storage: RohmuStorage) -> None:
+def test_backup(fail_at: int | None, app: FastAPI, client: TestClient, storage: StorageManager) -> None:
     nodes = app.state.coordinator_config.nodes
     with respx.mock:
         for node in nodes:
@@ -78,12 +78,12 @@ def test_backup(fail_at: int | None, app: FastAPI, client: TestClient, storage: 
             assert response.json().get("state") == "fail"
             assert response.json().get("progress") is not None
             assert response.json().get("progress")["final"]
-            assert not storage.list_jsons()
+            assert not storage.get_json_store().list_jsons()
         else:
             assert response.json().get("state") == "done"
             assert response.json().get("progress") is not None
             assert response.json().get("progress")["final"]
-            assert len(storage.list_jsons()) == 1
+            assert len(storage.get_json_store().list_jsons()) == 1
         if fail_at is None:
             assert response.json().get("progress")["handled"] == 10
             assert response.json().get("progress")["failed"] == 0

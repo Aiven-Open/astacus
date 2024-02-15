@@ -9,7 +9,6 @@ from pathlib import Path
 from pytest_mock import MockerFixture
 
 import logging
-import py
 import pytest
 import tempfile
 
@@ -17,8 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 class CassandraTestConfig:
-    def __init__(self, *, mocker: MockerFixture, tmpdir: py.path.local):
-        self.root = Path(tmpdir) / "root"
+    def __init__(self, *, mocker: MockerFixture, tmp_path: Path) -> None:
+        self.root = tmp_path / "root"
 
         # Create fake snapshot files that we want to see being moved/removed/..
         keyspace_path = self.root / "data" / "dummyks"
@@ -39,7 +38,7 @@ class CassandraTestConfig:
         self.other_snapshot_path = keyspace_path / "dummytable-123" / "snapshots" / f"not{SNAPSHOT_NAME}"
         self.other_snapshot_path.mkdir(parents=True)
 
-        self.cassandra_conf = Path(tmpdir / "cassandra.yaml")
+        self.cassandra_conf = tmp_path / "cassandra.yaml"
         self.cassandra_conf.write_text(
             """
 listen_address: 127.0.0.1
@@ -63,5 +62,5 @@ listen_address: 127.0.0.1
 
 
 @pytest.fixture(name="cassandra_test_config")
-def fixture_cassandra_test_config(mocker: MockerFixture, tmpdir: py.path.local) -> CassandraTestConfig:
-    return CassandraTestConfig(mocker=mocker, tmpdir=tmpdir)
+def fixture_cassandra_test_config(mocker: MockerFixture, tmp_path: Path) -> CassandraTestConfig:
+    return CassandraTestConfig(mocker=mocker, tmp_path=tmp_path)

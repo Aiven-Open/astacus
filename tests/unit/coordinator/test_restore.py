@@ -5,9 +5,10 @@ See LICENSE for details
 Test that the coordinator restore endpoint works.
 
 """
+
 from astacus.common import exceptions, ipc
 from astacus.common.ipc import Plugin
-from astacus.common.rohmustorage import MultiRohmuStorage
+from astacus.common.storage.manager import StorageManager
 from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins.base import get_node_to_backup_index
 from collections.abc import Callable
@@ -69,11 +70,11 @@ class RestoreTest:
         RestoreTest(partial=True),
     ],
 )
-def test_restore(rt: RestoreTest, app: FastAPI, client: TestClient, mstorage: MultiRohmuStorage) -> None:
+def test_restore(rt: RestoreTest, app: FastAPI, client: TestClient, storage: StorageManager) -> None:
     # pylint: disable=too-many-statements
     # Create fake backup (not pretty but sufficient?)
-    storage = mstorage.get_storage(rt.storage_name)
-    storage.upload_json(BACKUP_NAME, BACKUP_MANIFEST)
+    json_storage = storage.get_json_store(rt.storage_name)
+    json_storage.upload_json(BACKUP_NAME, BACKUP_MANIFEST)
     nodes = app.state.coordinator_config.nodes
     with respx.mock:
         for i, node in enumerate(nodes):
@@ -86,7 +87,7 @@ def test_restore(rt: RestoreTest, app: FastAPI, client: TestClient, mstorage: Mu
                     def match_download(request: httpx.Request) -> httpx.Response | None:
                         if rt.fail_at == 2:
                             return None
-                        if json.loads(request.read())["storage"] != storage.storage_name:
+                        if json.loads(request.read())["storage"] != (rt.storage_name or storage.default_storage_name):
                             return None
                         if json.loads(request.read())["root_globs"] != ["*"]:
                             return None
@@ -147,7 +148,7 @@ def test_restore(rt: RestoreTest, app: FastAPI, client: TestClient, mstorage: Mu
             assert response.json().get("progress") is not None
             assert response.json().get("progress")["final"]
         else:
-            assert response.json().get("state") == "done"
+            assert response.json().get("state") == "done", response.json()
             assert response.json().get("progress") is not None
             assert response.json().get("progress")["final"]
         if rt.fail_at == 5 or rt.fail_at is None:

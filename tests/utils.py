@@ -2,14 +2,14 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
-from astacus.common.rohmustorage import RohmuConfig
+
+from astacus.common.storage.rohmu import RohmuConfig
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Final
 
 import importlib
 import os
-import py
 import re
 import subprocess
 import sys
@@ -43,12 +43,12 @@ nkMAHqg9PS372Cs=
 -----END PRIVATE KEY-----"""
 
 
-def create_rohmu_config(tmpdir: py.path.local, *, compression: bool = True, encryption: bool = True) -> RohmuConfig:
-    x_path = Path(tmpdir) / "rohmu-x"
+def create_rohmu_config(tmp_path: Path, *, compression: bool = True, encryption: bool = True) -> RohmuConfig:
+    x_path = tmp_path / "rohmu-x"
     x_path.mkdir(exist_ok=True)
-    y_path = Path(tmpdir) / "rohmu-y"
+    y_path = tmp_path / "rohmu-y"
     y_path.mkdir(exist_ok=True)
-    tmp_path = Path(tmpdir) / "rohmu-tmp"
+    tmp_path = tmp_path / "rohmu-tmp"
     tmp_path.mkdir(exist_ok=True)
     config = {
         "temporary_directory": str(tmp_path),

@@ -2,9 +2,13 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
+
 from .test_restore import BACKUP_MANIFEST
 from astacus.common.ipc import Plugin
-from astacus.common.rohmustorage import MultiRohmuStorage, RohmuStorage
+from astacus.common.storage.cache import CachedMultiStorage
+from astacus.common.storage.file import FileMultiStorage
+from astacus.common.storage.manager import StorageManager
+from astacus.common.storage.rohmu import RohmuMultiStorage
 from astacus.coordinator.api import router
 from astacus.coordinator.config import CoordinatorConfig, CoordinatorNode
 from astacus.coordinator.coordinator import LockedCoordinatorOp
@@ -15,32 +19,33 @@ from pytest_mock import MockerFixture
 from tests.utils import create_rohmu_config
 
 import asyncio
-import py
 import pytest
 
 _original_asyncio_sleep = asyncio.sleep
 
 
 @pytest.fixture(name="storage")
-def fixture_storage(tmpdir: py.path.local) -> RohmuStorage:
-    return RohmuStorage(config=create_rohmu_config(tmpdir))
+def fixture_storage(tmp_path: Path) -> StorageManager:
+    config = create_rohmu_config(tmp_path)
+    return StorageManager(
+        default_storage_name=config.default_storage,
+        json_storage=CachedMultiStorage(
+            storage=RohmuMultiStorage(config=config, prefix="json"),
+            cache=FileMultiStorage(tmp_path / "cache"),
+        ),
+        hexdigest_storage=RohmuMultiStorage(config=config, prefix="hexdigest"),
+    )
 
 
-@pytest.fixture(name="mstorage")
-def fixture_mstorage(tmpdir: py.path.local) -> MultiRohmuStorage:
-    return MultiRohmuStorage(config=create_rohmu_config(tmpdir))
-
-
-@pytest.fixture(name="populated_mstorage")
-def fixture_populated_mstorage(mstorage: MultiRohmuStorage) -> MultiRohmuStorage:
-    x = mstorage.get_storage("x")
+@pytest.fixture(name="populated_storage")
+def fixture_populated_storage(storage: StorageManager) -> StorageManager:
+    x = storage.get_json_store("x")
     x.upload_json("backup-1", BACKUP_MANIFEST)
     x.upload_json("backup-2", BACKUP_MANIFEST)
-    x.upload_hexdigest_bytes("DEADBEEF", b"foobar")
-    y = mstorage.get_storage("y")
-    y.upload_json("backup-3", BACKUP_MANIFEST)
-    y.upload_hexdigest_bytes("DEADBEEF", b"foobar")
-    return mstorage
+    storage.get_hexdigest_store("x").upload_hexdigest_bytes("DEADBEEF", b"foobar")
+    storage.get_json_store("y").upload_json("backup-3", BACKUP_MANIFEST)
+    storage.get_hexdigest_store("y").upload_hexdigest_bytes("DEADBEEF", b"foobar")
+    return storage
 
 
 @pytest.fixture(name="client")
@@ -70,14 +75,14 @@ COORDINATOR_NODES = [
 
 
 @pytest.fixture(name="app")
-def fixture_app(mocker: MockerFixture, sleepless: None, storage: RohmuStorage, tmpdir: py.path.local) -> FastAPI:
+def fixture_app(mocker: MockerFixture, sleepless: None, tmp_path: Path) -> FastAPI:
     app = FastAPI()
     app.include_router(router, tags=["coordinator"])
     app.state.coordinator_config = CoordinatorConfig(
-        object_storage=create_rohmu_config(tmpdir),
+        object_storage=create_rohmu_config(tmp_path),
         plugin=Plugin.files,
         plugin_config={"root_globs": ["*"]},
-        object_storage_cache=Path(f"{tmpdir}/cache/is/somewhere"),
+        object_storage_cache=tmp_path / "cache",
     )
     app.state.coordinator_config.nodes = COORDINATOR_NODES[:]
     mocker.patch.object(LockedCoordinatorOp, "get_locker", return_value="x")

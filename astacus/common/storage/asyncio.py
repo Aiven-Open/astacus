@@ -5,12 +5,13 @@ See LICENSE for details
 
 """
 
-from astacus.common.storage import HexDigestStorage, Json, JsonStorage
+from astacus.common.storage.hexidigest import HexDigestStore
+from astacus.common.storage.json import Json, JsonStore
 from astacus.common.utils import AstacusModel
 from starlette.concurrency import run_in_threadpool
 
 
-class AsyncHexDigestStorage:
+class AsyncHexDigestStore:
     """Subset of the HexDigestStorage API proxied async -> sync via starlette threadpool
 
     Note that the access is not intentionally locked; therefore even
@@ -19,7 +20,7 @@ class AsyncHexDigestStorage:
 
     """
 
-    def __init__(self, storage: HexDigestStorage) -> None:
+    def __init__(self, storage: HexDigestStore) -> None:
         self.storage = storage
 
     async def delete_hexdigest(self, hexdigest: str) -> None:
@@ -29,7 +30,7 @@ class AsyncHexDigestStorage:
         return await run_in_threadpool(self.storage.list_hexdigests)
 
 
-class AsyncJsonStorage:
+class AsyncJsonStore:
     """Subset of the JsonStorage API proxied async -> sync via starlette threadpool
 
     Note that the access is not intentionally locked; therefore even
@@ -38,7 +39,7 @@ class AsyncJsonStorage:
 
     """
 
-    def __init__(self, storage: JsonStorage) -> None:
+    def __init__(self, storage: JsonStore) -> None:
         self.storage = storage
 
     async def delete_json(self, name: str) -> None:

@@ -6,10 +6,10 @@ See LICENSE for details
 Test that the plugin m3 specific flow (backup + restore) works
 
 """
+
 from astacus.common import ipc
 from astacus.common.etcd import b64encode_to_str, ETCDClient
 from astacus.common.statsd import StatsClient
-from astacus.common.storage import MultiStorage
 from astacus.coordinator.config import CoordinatorConfig
 from astacus.coordinator.coordinator import Coordinator, SteppedCoordinatorOp
 from astacus.coordinator.plugins import m3db
@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from fastapi import BackgroundTasks
 from starlette.datastructures import URL
 from tests.unit.common.test_m3placement import create_dummy_placement
+from unittest.mock import Mock
 
 import pytest
 import respx
@@ -80,8 +81,7 @@ def fixture_coordinator() -> Coordinator:
         config=CoordinatorConfig.parse_obj(COORDINATOR_CONFIG),
         state=CoordinatorState(),
         stats=StatsClient(config=None),
-        hexdigest_mstorage=MultiStorage(),
-        json_mstorage=MultiStorage(),
+        storage=Mock(),
     )
 
 

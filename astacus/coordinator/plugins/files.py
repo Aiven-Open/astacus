@@ -14,6 +14,7 @@ Configuration:
 ( which is also stored in the backup manifest, and used when restoring )
 
 """
+
 from .base import (
     BackupManifestStep,
     BackupNameStep,

@@ -7,10 +7,11 @@ Root-level astacus configuration, which includes
 - coordinator configuration
 - node configuration
 """
+
 from astacus.common import magic
 from astacus.common.magic import StrEnum
-from astacus.common.rohmustorage import RohmuConfig
 from astacus.common.statsd import StatsdConfig
+from astacus.common.storage.rohmu import RohmuConfig
 from astacus.common.utils import AstacusModel
 from astacus.coordinator.config import APP_KEY as COORDINATOR_CONFIG_KEY, CoordinatorConfig
 from astacus.node.config import APP_KEY as NODE_CONFIG_KEY, NodeConfig

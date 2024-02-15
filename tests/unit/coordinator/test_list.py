@@ -4,6 +4,7 @@ See LICENSE for details
 
 Test that the list endpoint behaves as advertised
 """
+
 from astacus.common.ipc import (
     BackupManifest,
     ListForStorage,
@@ -17,21 +18,19 @@ from astacus.common.ipc import (
     SnapshotState,
     SnapshotUploadResult,
 )
-from astacus.common.rohmustorage import MultiRohmuStorage
+from astacus.common.storage.manager import StorageManager
 from astacus.coordinator import api
 from astacus.coordinator.list import compute_deduplicated_snapshot_file_stats, list_backups
 from fastapi.testclient import TestClient
-from os import PathLike
 from pytest_mock import MockerFixture
-from tests.utils import create_rohmu_config
 
 import datetime
 import json
 import pytest
 
 
-def test_api_list(client: TestClient, populated_mstorage: MultiRohmuStorage, mocker: MockerFixture) -> None:
-    assert populated_mstorage
+def test_api_list(client: TestClient, populated_storage: StorageManager, mocker: MockerFixture) -> None:
+    assert populated_storage
 
     def _run():
         response = client.get("/list")
@@ -223,15 +222,13 @@ def test_compute_deduplicated_snapshot_file_stats(backup_manifest: BackupManifes
     assert (num_files, total_size) == (6, 6000)
 
 
-def test_api_list_deduplication(backup_manifest: BackupManifest, tmpdir: PathLike) -> None:
+def test_api_list_deduplication(backup_manifest: BackupManifest, storage: StorageManager) -> None:
     """Test the list backup operation correctly deduplicates snapshot files when computing stats."""
-    multi_rohmu_storage = MultiRohmuStorage(config=create_rohmu_config(tmpdir))
-    storage = multi_rohmu_storage.get_storage("x")
-    storage.upload_json("backup-1", backup_manifest)
-    storage.upload_hexdigest_bytes("FAKEDIGEST", b"fake-digest-data")
+    storage.get_json_store("x").upload_json("backup-1", backup_manifest)
+    storage.get_hexdigest_store("x").upload_hexdigest_bytes("FAKEDIGEST", b"fake-digest-data")
 
     list_request = ListRequest(storage="x")
-    list_response = list_backups(req=list_request, json_mstorage=multi_rohmu_storage)
+    list_response = list_backups(req=list_request, json_mstorage=storage.json_storage)
     expected_response = ListResponse(
         storages=[
             ListForStorage(

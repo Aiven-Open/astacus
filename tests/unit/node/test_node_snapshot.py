@@ -6,7 +6,7 @@ See LICENSE for details
 from astacus.common import ipc, magic, utils
 from astacus.common.progress import Progress
 from astacus.common.snapshot import SnapshotGroup
-from astacus.common.storage import JsonObject
+from astacus.common.storage.json import JsonObject
 from astacus.node.snapshot_op import SnapshotOp
 from astacus.node.sqlite_snapshot import SQLiteSnapshot
 from astacus.node.uploader import Uploader

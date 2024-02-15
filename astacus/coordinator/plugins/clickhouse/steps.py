@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+
 from __future__ import annotations
 
 from .client import ClickHouseClient, ClickHouseClientQueryError, escape_sql_identifier, escape_sql_string
@@ -23,9 +24,9 @@ from .manifest import (
 from .parts import list_parts_to_attach
 from .replication import DatabaseReplica, get_databases_replicas, get_shard_and_replica, sync_replicated_database
 from astacus.common import ipc
-from astacus.common.asyncstorage import AsyncJsonStorage
 from astacus.common.exceptions import TransientException
 from astacus.common.limiter import gather_limited
+from astacus.common.storage.asyncio import AsyncJsonStore
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.manifest import download_backup_manifest
 from astacus.coordinator.plugins.base import (
@@ -785,7 +786,7 @@ class DeleteDanglingObjectStorageFilesStep(Step[None]):
     """
 
     disks: Disks
-    json_storage: AsyncJsonStorage
+    json_storage: AsyncJsonStore
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         backup_manifests = context.get_result(ComputeKeptBackupsStep)

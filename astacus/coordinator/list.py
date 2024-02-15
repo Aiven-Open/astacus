@@ -3,6 +3,7 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 
 """
+
 from astacus.common import ipc, magic
 from astacus.common.json_view import (
     get_array,
@@ -13,7 +14,8 @@ from astacus.common.json_view import (
     iter_objects,
     JsonArrayView,
 )
-from astacus.common.storage import JsonStorage, MultiStorage
+from astacus.common.storage.base import MultiStorage
+from astacus.common.storage.json import JsonStore
 from astacus.common.utils import now
 from collections import defaultdict
 from collections.abc import Iterator
@@ -48,7 +50,7 @@ def compute_deduplicated_snapshot_file_stats(snapshot_results_json: JsonArrayVie
     return num_files, total_size
 
 
-def _iter_backups(storage: JsonStorage, backup_prefix: str) -> Iterator[ipc.ListSingleBackup]:
+def _iter_backups(storage: JsonStore, backup_prefix: str) -> Iterator[ipc.ListSingleBackup]:
     for name in sorted(storage.list_jsons()):
         if not name.startswith(backup_prefix):
             continue
@@ -89,7 +91,7 @@ def _iter_storages(
     # given storage. by default, we list all storages.
     for storage_name in sorted(json_mstorage.list_storages()):
         if not req.storage or req.storage == storage_name:
-            backups = list(_iter_backups(json_mstorage.get_storage(storage_name), backup_prefix=backup_prefix))
+            backups = list(_iter_backups(JsonStore(json_mstorage.get_storage(storage_name)), backup_prefix=backup_prefix))
             yield ipc.ListForStorage(storage_name=storage_name, backups=backups)
 
 

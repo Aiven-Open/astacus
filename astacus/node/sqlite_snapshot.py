@@ -4,6 +4,7 @@ Copyright (c) 2023 Aiven Ltd
 See LICENSE for details
 
 """
+
 from astacus.common import magic
 from astacus.common.ipc import SnapshotFile, SnapshotHash
 from astacus.common.progress import Progress

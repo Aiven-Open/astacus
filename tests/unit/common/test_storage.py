@@ -2,112 +2,141 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 
-Test that RohmuStorage works as advertised.
-
-TBD: Test with something else than local files?
-
 """
 
 from astacus.common import exceptions
-from astacus.common.cachingjsonstorage import CachingJsonStorage
-from astacus.common.rohmustorage import RohmuConfig, RohmuStorage
-from astacus.common.storage import FileStorage, Json, JsonStorage
-from contextlib import AbstractContextManager, nullcontext as does_not_raise
+from astacus.common.storage.base import Storage
+from astacus.common.storage.cache import CachedStorage
+from astacus.common.storage.file import FileStorage
+from astacus.common.storage.memory import MemoryStorage
+from astacus.common.storage.rohmu import RohmuConfig, RohmuStorage
+from io import BytesIO
 from pathlib import Path
 from pytest_mock import MockerFixture
 from rohmu.object_storage import google
 from tests.utils import create_rohmu_config
 from unittest.mock import Mock, patch
 
-import py
 import pytest
 
-TEST_HEXDIGEST = "deadbeef"
-TEXT_HEXDIGEST_DATA = b"data" * 15
 
-TEST_JSON = "jsonblob"
-TEST_JSON_DATA: Json = {"foo": 7, "array": [1, 2, 3], "true": True}
-
-
-def create_storage(*, tmpdir: py.path.local, engine: str, **kw):
-    if engine == "rohmu":
-        config = create_rohmu_config(tmpdir, **kw)
-        return RohmuStorage(config=config)
-    if engine == "file":
-        path = Path(tmpdir / "test-storage-file")
-        return FileStorage(path)
-    if engine == "cache":
+def create_storage(*, tmp_path: Path, engine: type[Storage], **kw) -> Storage:
+    if engine == RohmuStorage:
+        config = create_rohmu_config(tmp_path, **kw)
+        return RohmuStorage(config=config, prefix="json")
+    if engine == FileStorage:
+        return FileStorage(tmp_path)
+    if engine == CachedStorage:
         # FileStorage cache, and then rohmu filestorage underneath
-        cache_storage = FileStorage(Path(tmpdir / "test-storage-file"))
-        config = create_rohmu_config(tmpdir, **kw)
-        backend_storage = RohmuStorage(config=config)
-        return CachingJsonStorage(backend_storage=backend_storage, cache_storage=cache_storage)
+        cache_path = tmp_path / "cache"
+        storage_path = tmp_path / "storage"
+        cache_path.mkdir()
+        storage_path.mkdir()
+        cache = FileStorage(cache_path)
+        config = create_rohmu_config(storage_path, **kw)
+        storage = RohmuStorage(config=config)
+        return CachedStorage(storage=storage, cache=cache)
+    if engine == MemoryStorage:
+        return MemoryStorage()
     raise NotImplementedError(f"unknown storage {engine}")
 
 
-def _test_hexdigeststorage(storage: FileStorage) -> None:
-    storage.upload_hexdigest_bytes(TEST_HEXDIGEST, TEXT_HEXDIGEST_DATA)
-    assert storage.download_hexdigest_bytes(TEST_HEXDIGEST) == TEXT_HEXDIGEST_DATA
-    # Ensure that download attempts of nonexistent keys give NotFoundException
+TEST_CASES = [
+    (FileStorage, {}),
+    (RohmuStorage, {}),
+    (CachedStorage, {}),  # simple path - see test_caching_storage for rest
+    (RohmuStorage, {"compression": False}),
+    (RohmuStorage, {"encryption": False}),
+]
+
+
+@pytest.mark.parametrize("engine,kw", TEST_CASES)
+def test_storage_write_read(tmp_path: Path, engine: type[Storage], kw: dict[str, bool]) -> None:
+    storage = create_storage(tmp_path=tmp_path, engine=engine, **kw)
+    data = BytesIO(b"123")
+    data.seek(0)
+    storage.upload_key_from_file("abc", data, 3)
+    result = BytesIO()
+    storage.download_key_to_file("abc", result)
+    assert result.getvalue() == b"123"
+
+
+@pytest.mark.parametrize("engine,kw", TEST_CASES)
+def test_storage_read_raises_not_found(tmp_path: Path, engine: type[Storage], kw: dict[str, bool]) -> None:
+    storage = create_storage(tmp_path=tmp_path, engine=engine, **kw)
     with pytest.raises(exceptions.NotFoundException):
-        storage.download_hexdigest_bytes(TEST_HEXDIGEST + "x")
-    assert storage.list_hexdigests() == [TEST_HEXDIGEST]
-    storage.delete_hexdigest(TEST_HEXDIGEST)
+        storage.download_key_to_file("abc", BytesIO())
+
+
+@pytest.mark.parametrize("engine,kw", TEST_CASES)
+def test_storage_list(tmp_path: Path, engine: type[Storage], kw: dict[str, bool]) -> None:
+    storage = create_storage(tmp_path=tmp_path, engine=engine, **kw)
+    data = BytesIO(b"123")
+    data.seek(0)
+    storage.upload_key_from_file("abc", data, 3)
+    data = BytesIO(b"world")
+    data.seek(0)
+    storage.upload_key_from_file("hello", data, 3)
+    assert storage.list_key() == ["abc", "hello"]
+
+
+@pytest.mark.parametrize("engine,kw", TEST_CASES)
+def test_storage_delete(tmp_path: Path, engine: type[Storage], kw: dict[str, bool]) -> None:
+    storage = create_storage(tmp_path=tmp_path, engine=engine, **kw)
+    data = BytesIO(b"123")
+    data.seek(0)
+    storage.upload_key_from_file("abc", data, 3)
+    storage.delete_key("abc")
+    assert storage.list_key() == []
     with pytest.raises(exceptions.NotFoundException):
-        storage.delete_hexdigest(TEST_HEXDIGEST + "x")
-    assert storage.list_hexdigests() == []
+        storage.download_key_to_file("abc", BytesIO())
 
 
-def _test_jsonstorage(storage: JsonStorage) -> None:
-    assert storage.list_jsons() == []
-    storage.upload_json(TEST_JSON, TEST_JSON_DATA)
-    assert storage.download_json(TEST_JSON) == TEST_JSON_DATA
+@pytest.mark.parametrize("engine,kw", TEST_CASES)
+def test_storage_delete_raises_not_found(tmp_path: Path, engine: type[Storage], kw: dict[str, bool]) -> None:
+    storage = create_storage(tmp_path=tmp_path, engine=engine, **kw)
     with pytest.raises(exceptions.NotFoundException):
-        storage.download_json(TEST_JSON + "x")
-    assert storage.list_jsons() == [TEST_JSON]
-    storage.delete_json(TEST_JSON)
-    with pytest.raises(exceptions.NotFoundException):
-        storage.delete_json(TEST_JSON + "x")
-    assert storage.list_jsons() == []
+        storage.delete_key("abc")
 
 
-@pytest.mark.parametrize(
-    "engine,kw,ex",
-    [
-        ("file", {}, None),
-        ("rohmu", {}, None),
-        ("cache", {}, None),  # simple path - see test_caching_storage for rest
-        ("rohmu", {"compression": False}, None),
-        ("rohmu", {"encryption": False}, None),
-        ("rohmu", {"compression": False, "encryption": False}, pytest.raises(exceptions.CompressionOrEncryptionRequired)),
-    ],
-)
-def test_storage(tmpdir: py.path.local, engine: str, kw: dict[str, bool], ex: AbstractContextManager | None) -> None:
-    if ex is None:
-        ex = does_not_raise()
-    with ex:
-        storage = create_storage(tmpdir=tmpdir, engine=engine, **kw)
-        if isinstance(storage, FileStorage):
-            _test_hexdigeststorage(storage)
-        if isinstance(storage, JsonStorage):
-            _test_jsonstorage(storage)
+@pytest.mark.parametrize("engine,kw", TEST_CASES)
+def test_storage_upload_overwrites(tmp_path: Path, engine: type[Storage], kw: dict[str, bool]) -> None:
+    storage = create_storage(tmp_path=tmp_path, engine=engine, **kw)
+    data = BytesIO(b"123")
+    data.seek(0)
+    storage.upload_key_from_file("abc", data, 3)
+    data = BytesIO(b"world")
+    data.seek(0)
+    storage.upload_key_from_file("abc", data, 3)
+    result = BytesIO()
+    storage.download_key_to_file("abc", result)
+    assert result.getvalue() == b"world"
 
 
-def test_caching_storage(tmpdir: py.path.local, mocker: MockerFixture) -> None:
-    storage = create_storage(tmpdir=tmpdir, engine="cache")
-    storage.upload_json(TEST_JSON, TEST_JSON_DATA)
+def test_storage_must_have_compression_or_encryption(tmp_path: Path) -> None:
+    config = create_rohmu_config(tmp_path, compression=False, encryption=False)
+    with pytest.raises(exceptions.CompressionOrEncryptionRequired):
+        RohmuStorage(config)
 
-    storage = create_storage(tmpdir=tmpdir, engine="cache")
-    assert storage.list_jsons() == [TEST_JSON]
 
-    # We shouldn't wind up in download method of rohmu at all.
-    mockdown = mocker.patch.object(storage.backend_storage, "download_json")
-    # Nor list hexdigests
-    mocklist = mocker.patch.object(storage.backend_storage, "list_jsons")
+def test_caching_storage(tmp_path: Path, mocker: MockerFixture) -> None:
+    storage = create_storage(tmp_path=tmp_path, engine=CachedStorage)
+    assert isinstance(storage, CachedStorage)
+    data = BytesIO(b"123")
+    data.seek(0)
+    storage.upload_key_from_file("abc", data, 3)
 
-    assert storage.download_json(TEST_JSON) == TEST_JSON_DATA
-    assert storage.list_jsons() == [TEST_JSON]
+    # # We shouldn't wind up in download method of rohmu at all.
+    mockdown = mocker.patch.object(storage.storage, "download_key_to_file")
+
+    result = BytesIO()
+    storage.download_key_to_file("abc", result)
+    assert result.getvalue() == b"123"
     assert not mockdown.called
+
+    # Nor list hexdigests
+    mocklist = mocker.patch.object(storage.storage, "list_key")
+    assert storage.list_key() == ["abc"]
     assert not mocklist.called
 
 

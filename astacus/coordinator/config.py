@@ -3,8 +3,8 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 from astacus.common import ipc
-from astacus.common.rohmustorage import RohmuConfig
 from astacus.common.statsd import StatsdConfig
+from astacus.common.storage.rohmu import RohmuConfig
 from astacus.common.utils import AstacusModel
 from collections.abc import Sequence
 from fastapi import Request

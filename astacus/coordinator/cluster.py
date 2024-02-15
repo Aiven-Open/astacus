@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.common import ipc, op, utils
 from astacus.common.magic import LockCall
 from astacus.common.progress import Progress

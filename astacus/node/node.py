@@ -3,6 +3,7 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 
 """
+
 from .config import node_config, NodeConfig
 from .snapshotter import Snapshotter
 from .state import node_state, NodeState
@@ -10,6 +11,8 @@ from astacus.common import ipc, magic, op, statsd, utils
 from astacus.common.dependencies import get_request_app_state, get_request_url
 from astacus.common.snapshot import SnapshotGroup
 from astacus.common.statsd import StatsClient
+from astacus.common.storage.manager import StorageManager
+from astacus.common.storage.rohmu import RohmuMultiStorage
 from astacus.node.snapshot import Snapshot
 from astacus.node.sqlite_snapshot import SQLiteSnapshot, SQLiteSnapshotter
 from collections.abc import Sequence
@@ -28,12 +31,78 @@ Request = TypeVar("Request", bound=ipc.NodeRequest)
 Result = TypeVar("Result", bound=ipc.NodeResult)
 
 
+def node_stats(config: NodeConfig = Depends(node_config)) -> statsd.StatsClient:
+    return statsd.StatsClient(config=config.statsd)
+
+
+def node_storage(config: NodeConfig = Depends(node_config)) -> StorageManager:
+    assert config.object_storage
+    return StorageManager(
+        default_storage_name=config.object_storage.default_storage,
+        json_storage=RohmuMultiStorage(config=config.object_storage, prefix=magic.JSON_STORAGE_PREFIX),
+        hexdigest_storage=RohmuMultiStorage(config=config.object_storage, prefix=magic.HEXDIGEST_STORAGE_PREFIX),
+    )
+
+
+class Node(op.OpMixin):
+    state: NodeState
+    """ Convenience dependency which contains sub-dependencies most API endpoints need """
+
+    def __init__(
+        self,
+        *,
+        app_state: object = Depends(get_request_app_state),
+        request_url: URL = Depends(get_request_url),
+        background_tasks: BackgroundTasks,
+        config: NodeConfig = Depends(node_config),
+        state: NodeState = Depends(node_state),
+        stats: statsd.StatsClient = Depends(node_stats),
+        storage: StorageManager = Depends(node_storage),
+    ) -> None:
+        self.app_state = app_state
+        self.request_url = request_url
+        self.background_tasks = background_tasks
+        self.config = config
+        self.state = state
+        self.stats = stats
+        self.storage = storage
+
+    def get_or_create_snapshot(self) -> Snapshot:
+        return self._get_or_create_snapshot(SNAPSHOTTER_KEY, self.config.root_link)
+
+    def get_or_create_delta_snapshot(self) -> Snapshot:
+        return self._get_or_create_snapshot(DELTA_SNAPSHOTTER_KEY, self.config.delta_root_link)
+
+    def _get_or_create_snapshot(self, key: str, path: Path | None) -> Snapshot:
+        root_link = path if path is not None else self.config.root / magic.ASTACUS_TMPDIR
+
+        def _create_snapshot() -> Snapshot:
+            snapshotter_db_name = f"{key}.db"
+            return SQLiteSnapshot(root_link, self.config.db_path / snapshotter_db_name)
+
+        return utils.get_or_create_state(state=self.app_state, key=key, factory=_create_snapshot)
+
+    def get_snapshotter(self, groups: Sequence[SnapshotGroup]) -> Snapshotter:
+        return self._get_snapshotter_for_snapshot(self.get_or_create_snapshot(), groups)
+
+    def get_delta_snapshotter(self, groups: Sequence[SnapshotGroup]) -> Snapshotter:
+        return self._get_snapshotter_for_snapshot(self.get_or_create_delta_snapshot(), groups)
+
+    def _get_snapshotter_for_snapshot(self, snapshot: Snapshot, groups: Sequence[SnapshotGroup]) -> Snapshotter:
+        if isinstance(snapshot, SQLiteSnapshot):
+            return SQLiteSnapshotter(groups, self.config.root, snapshot.dst, snapshot, self.config.parallel.hashes)
+        raise NotImplementedError(f"Unknown snapshot type {type(snapshot)}")
+
+
 class NodeOp(op.Op, Generic[Request, Result]):
-    def __init__(self, *, n: "Node", op_id: int, req: Request, stats: StatsClient) -> None:
+    def __init__(self, *, n: Node, op_id: int, req: Request, stats: StatsClient) -> None:
         super().__init__(info=n.state.op_info, op_id=op_id, stats=stats)
         self.start_op = n.start_op
         self.config = n.config
         self._still_locked_callback = n.state.still_locked_callback
+        self.get_hexdigest_storage = n.storage.get_hexdigest_store
+        self.get_json_storage = n.storage.get_json_store
+
         self._sent_result_json: str | None = None
         self.req = req
         self.result = self.create_result()
@@ -77,55 +146,3 @@ class NodeOp(op.Op, Generic[Request, Result]):
         # fail or done; either way, we're done, send final result
         self.send_result()
         return True
-
-
-def node_stats(config: NodeConfig = Depends(node_config)) -> statsd.StatsClient:
-    return statsd.StatsClient(config=config.statsd)
-
-
-class Node(op.OpMixin):
-    state: NodeState
-    """ Convenience dependency which contains sub-dependencies most API endpoints need """
-
-    def __init__(
-        self,
-        *,
-        app_state: object = Depends(get_request_app_state),
-        request_url: URL = Depends(get_request_url),
-        background_tasks: BackgroundTasks,
-        config: NodeConfig = Depends(node_config),
-        state: NodeState = Depends(node_state),
-        stats: statsd.StatsClient = Depends(node_stats),
-    ) -> None:
-        self.app_state = app_state
-        self.request_url = request_url
-        self.background_tasks = background_tasks
-        self.config = config
-        self.state = state
-        self.stats = stats
-
-    def get_or_create_snapshot(self) -> Snapshot:
-        return self._get_or_create_snapshot(SNAPSHOTTER_KEY, self.config.root_link)
-
-    def get_or_create_delta_snapshot(self) -> Snapshot:
-        return self._get_or_create_snapshot(DELTA_SNAPSHOTTER_KEY, self.config.delta_root_link)
-
-    def _get_or_create_snapshot(self, key: str, path: Path | None) -> Snapshot:
-        root_link = path if path is not None else self.config.root / magic.ASTACUS_TMPDIR
-
-        def _create_snapshot() -> Snapshot:
-            snapshotter_db_name = f"{key}.db"
-            return SQLiteSnapshot(root_link, self.config.db_path / snapshotter_db_name)
-
-        return utils.get_or_create_state(state=self.app_state, key=key, factory=_create_snapshot)
-
-    def get_snapshotter(self, groups: Sequence[SnapshotGroup]) -> Snapshotter:
-        return self._get_snapshotter_for_snapshot(self.get_or_create_snapshot(), groups)
-
-    def get_delta_snapshotter(self, groups: Sequence[SnapshotGroup]) -> Snapshotter:
-        return self._get_snapshotter_for_snapshot(self.get_or_create_delta_snapshot(), groups)
-
-    def _get_snapshotter_for_snapshot(self, snapshot: Snapshot, groups: Sequence[SnapshotGroup]) -> Snapshotter:
-        if isinstance(snapshot, SQLiteSnapshot):
-            return SQLiteSnapshotter(groups, self.config.root, snapshot.dst, snapshot, self.config.parallel.hashes)
-        raise NotImplementedError(f"Unknown snapshot type {type(snapshot)}")

@@ -4,8 +4,8 @@ See LICENSE for details
 """
 from astacus.common.cassandra.config import CassandraClientConfiguration
 from astacus.common.magic import StrEnum
-from astacus.common.rohmustorage import RohmuConfig
 from astacus.common.statsd import StatsdConfig
+from astacus.common.storage.rohmu import RohmuConfig
 from astacus.common.utils import AstacusModel
 from collections.abc import Sequence
 from fastapi import Request

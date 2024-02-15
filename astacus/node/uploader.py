@@ -9,7 +9,8 @@ from .snapshotter import hash_hexdigest_readable
 from astacus.common import exceptions, utils
 from astacus.common.ipc import SnapshotFile, SnapshotHash
 from astacus.common.progress import Progress
-from astacus.common.storage import ThreadLocalStorage
+from astacus.common.storage.hexidigest import HexDigestStore
+from astacus.common.threadlocal import CopiedThreadLocal
 from astacus.node.snapshot import Snapshot
 from collections.abc import Sequence
 
@@ -18,7 +19,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class Uploader(ThreadLocalStorage):
+class Uploader:
+    def __init__(self, hexdigest_storage: HexDigestStore) -> None:
+        self.hexdigest_storage = CopiedThreadLocal(value=hexdigest_storage)
+
     def write_hashes_to_storage(
         self,
         *,
@@ -39,7 +43,7 @@ class Uploader(ThreadLocalStorage):
 
         def _upload_hexdigest_in_thread(work: tuple[str, list[SnapshotFile]]):
             hexdigest, files = work
-            storage = self.local_storage
+            storage = self.hexdigest_storage.value
 
             assert hexdigest
             files = list(snapshot.get_files_for_digest(hexdigest))

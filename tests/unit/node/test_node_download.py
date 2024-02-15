@@ -6,7 +6,7 @@ See LICENSE for details
 from astacus.common import ipc, magic, utils
 from astacus.common.progress import Progress
 from astacus.common.snapshot import SnapshotGroup
-from astacus.common.storage import FileStorage
+from astacus.common.storage.hexidigest import HexDigestStore
 from astacus.node.download import Downloader
 from astacus.node.sqlite_snapshot import SQLiteSnapshot
 from astacus.node.uploader import Uploader
@@ -20,7 +20,7 @@ import pytest
 
 @pytest.mark.parametrize("src_is_dst", [True, False])
 def test_download(
-    storage: FileStorage,
+    hexdigest_storage: HexDigestStore,
     uploader: Uploader,
     root: Path,
     src: Path,
@@ -57,7 +57,7 @@ def test_download(
     db2 = Path(root / "db2")
 
     snapshot, snapshotter = build_snapshot_and_snapshotter(dst2, dst3, db2, SQLiteSnapshot, [SnapshotGroup("**")])
-    downloader = Downloader(storage=storage, snapshotter=snapshotter, dst=dst2, parallel=1)
+    downloader = Downloader(hexdigest_storage=hexdigest_storage, snapshotter=snapshotter, dst=dst2, parallel=1)
     with snapshotter.lock:
         downloader.download_from_storage(progress=Progress(), snapshotstate=ss1)
 

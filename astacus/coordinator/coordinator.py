@@ -2,16 +2,21 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
+
 from .plugins.base import CoordinatorPlugin, OperationContext, Step, StepFailedError, StepsContext
-from astacus.common import asyncstorage, exceptions, ipc, op, statsd, utils
-from astacus.common.cachingjsonstorage import MultiCachingJsonStorage
+from astacus.common import exceptions, ipc, magic, op, statsd, utils
 from astacus.common.dependencies import get_request_url
 from astacus.common.magic import ErrorCode
 from astacus.common.op import Op
 from astacus.common.progress import Progress
-from astacus.common.rohmustorage import MultiRohmuStorage
 from astacus.common.statsd import StatsClient, Tags
-from astacus.common.storage import Json, JsonStorage, MultiFileStorage, MultiStorage
+from astacus.common.storage.asyncio import AsyncHexDigestStore, AsyncJsonStore
+from astacus.common.storage.base import MultiStorage
+from astacus.common.storage.cache import CachedMultiStorage
+from astacus.common.storage.file import FileMultiStorage
+from astacus.common.storage.json import Json, JsonStore
+from astacus.common.storage.manager import StorageManager
+from astacus.common.storage.rohmu import RohmuMultiStorage
 from astacus.common.utils import AsyncSleeper
 from astacus.coordinator.cluster import Cluster, LockResult, WaitResultError
 from astacus.coordinator.config import coordinator_config, CoordinatorConfig, CoordinatorNode
@@ -37,18 +42,18 @@ def coordinator_stats(config: CoordinatorConfig = Depends(coordinator_config)) -
     return StatsClient(config=config.statsd)
 
 
-def coordinator_hexdigest_mstorage(config: CoordinatorConfig = Depends(coordinator_config)) -> MultiStorage:
+def coordinator_storage(config: CoordinatorConfig = Depends(coordinator_config)) -> StorageManager:
     assert config.object_storage
-    return MultiRohmuStorage(config=config.object_storage)
-
-
-def coordinator_json_mstorage(config: CoordinatorConfig = Depends(coordinator_config)) -> MultiStorage:
-    assert config.object_storage
-    mstorage = MultiRohmuStorage(config=config.object_storage)
+    hexdigest_storage = RohmuMultiStorage(config=config.object_storage, prefix=magic.HEXDIGEST_STORAGE_PREFIX)
+    json_storage: MultiStorage = RohmuMultiStorage(config=config.object_storage, prefix=magic.JSON_STORAGE_PREFIX)
     if config.object_storage_cache:
-        file_mstorage = MultiFileStorage(config.object_storage_cache)
-        return MultiCachingJsonStorage(backend_mstorage=mstorage, cache_mstorage=file_mstorage)
-    return mstorage
+        cache = FileMultiStorage(config.object_storage_cache)
+        json_storage = CachedMultiStorage(storage=json_storage, cache=cache)
+    return StorageManager(
+        default_storage_name=config.object_storage.default_storage,
+        json_storage=json_storage,
+        hexdigest_storage=hexdigest_storage,
+    )
 
 
 class Coordinator(op.OpMixin):
@@ -63,20 +68,17 @@ class Coordinator(op.OpMixin):
         config: CoordinatorConfig = Depends(coordinator_config),
         state: CoordinatorState = Depends(coordinator_state),
         stats: statsd.StatsClient = Depends(coordinator_stats),
-        hexdigest_mstorage: MultiStorage = Depends(coordinator_hexdigest_mstorage),
-        json_mstorage: MultiStorage = Depends(coordinator_json_mstorage),
+        storage: StorageManager = Depends(coordinator_storage),
     ):
         self.request_url = request_url
         self.background_tasks = background_tasks
         self.config = config
         self.state = state
         self.stats = stats
-
-        self.hexdigest_mstorage = hexdigest_mstorage
-        self.json_mstorage = json_mstorage
+        self.storage = storage
 
     def get_operation_context(self, *, requested_storage: str = "") -> OperationContext:
-        storage_name = self.get_storage_name(requested_storage=requested_storage)
+        storage_name = self.storage.get_storage_name(name=requested_storage)
         return OperationContext(
             storage_name=storage_name,
             json_storage=self.get_json_storage(storage_name),
@@ -86,40 +88,41 @@ class Coordinator(op.OpMixin):
     def get_plugin(self) -> CoordinatorPlugin:
         return get_plugin(self.config.plugin).parse_obj(self.config.plugin_config)
 
-    def get_storage_name(self, *, requested_storage: str = ""):
-        return requested_storage if requested_storage else self.json_mstorage.get_default_storage_name()
+    def get_hexdigest_storage(self, storage_name: str | None) -> AsyncHexDigestStore:
+        return AsyncHexDigestStore(self.storage.get_hexdigest_store(storage_name))
 
-    def get_hexdigest_storage(self, storage_name: str) -> asyncstorage.AsyncHexDigestStorage:
-        return asyncstorage.AsyncHexDigestStorage(self.hexdigest_mstorage.get_storage(storage_name))
-
-    def get_json_storage(self, storage_name: str) -> asyncstorage.AsyncJsonStorage:
-        storage = CacheClearingJsonStorage(state=self.state, storage=self.json_mstorage.get_storage(storage_name))
-        return asyncstorage.AsyncJsonStorage(storage)
+    def get_json_storage(self, storage_name: str | None) -> AsyncJsonStore:
+        clearing_json_storage = CacheClearingJsonStore(
+            state=self.state,
+            wrapped=self.storage.get_json_store(storage_name),
+        )
+        return AsyncJsonStore(clearing_json_storage)
 
     def is_busy(self) -> bool:
         return bool(self.state.op and self.state.op_info.op_status in (Op.Status.running.value, Op.Status.starting.value))
 
 
-class CacheClearingJsonStorage(JsonStorage):
-    def __init__(self, state: CoordinatorState, storage: JsonStorage) -> None:
+class CacheClearingJsonStore(JsonStore):
+    def __init__(self, state: CoordinatorState, wrapped: JsonStore) -> None:
         self.state = state
-        self.storage = storage
+        self.wrapped = wrapped
+        super().__init__(wrapped.storage)
 
     def delete_json(self, name: str) -> None:
         try:
-            return self.storage.delete_json(name)
+            return self.wrapped.delete_json(name)
         finally:
             self.state.cached_list_response = None
 
     def download_json(self, name: str) -> Json:
-        return self.storage.download_json(name)
+        return self.wrapped.download_json(name)
 
     def list_jsons(self) -> list[str]:
-        return self.storage.list_jsons()
+        return self.wrapped.list_jsons()
 
     def upload_json_str(self, name: str, data: str) -> bool:
         try:
-            return self.storage.upload_json_str(name, data)
+            return self.wrapped.upload_json_str(name, data)
         finally:
             self.state.cached_list_response = None
 

@@ -2,8 +2,9 @@
 Copyright (c) 2023 Aiven Ltd
 See LICENSE for details
 """
+
 from abc import ABC, abstractmethod
-from astacus.common.rohmustorage import RohmuStorageConfig
+from astacus.common.storage.rohmu import RohmuStorageConfig
 from collections.abc import Iterator, Mapping, Sequence
 from rohmu import BaseTransfer
 from rohmu.errors import FileNotFoundFromStorageError

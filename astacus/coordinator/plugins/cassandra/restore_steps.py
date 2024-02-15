@@ -4,15 +4,16 @@ See LICENSE for details
 cassandra backup/restore plugin steps
 
 """
+
 from .model import CassandraConfigurationNode, CassandraManifest, CassandraManifestNode
 from .utils import delta_snapshot_groups, get_schema_hash, run_subop
 from astacus.common import ipc, utils
-from astacus.common.asyncstorage import AsyncJsonStorage
 from astacus.common.cassandra.client import CassandraClient
 from astacus.common.cassandra.config import BACKUP_GLOB
 from astacus.common.cassandra.schema import CassandraKeyspace
 from astacus.common.cassandra.utils import SYSTEM_KEYSPACES
 from astacus.common.magic import JSON_DELTA_PREFIX
+from astacus.common.storage.asyncio import AsyncJsonStore
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins.base import (
@@ -91,7 +92,7 @@ class StopReplacedNodesStep(Step[Sequence[CoordinatorNode]]):
 
 @dataclass
 class UploadFinalDeltaStep(Step[Sequence[ipc.BackupManifest]]):
-    json_storage: AsyncJsonStorage
+    json_storage: AsyncJsonStore
     storage_name: str
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> Sequence[ipc.BackupManifest]:

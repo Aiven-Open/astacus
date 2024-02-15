@@ -14,7 +14,6 @@ from pytest_mock import MockerFixture
 
 import asyncio
 import logging
-import py
 import pytest
 import tempfile
 import time
@@ -152,15 +151,15 @@ def test_sizelimitedfile() -> None:
         assert lf.read() == b"bar"
 
 
-def test_open_path_with_atomic_rename(tmpdir: py.path.local) -> None:
+def test_open_path_with_atomic_rename(tmp_path: Path) -> None:
     # default is bytes
-    f1_path = f"{tmpdir}/f1"
+    f1_path = tmp_path / "f1"
     with utils.open_path_with_atomic_rename(f1_path) as f1:
         f1.write(b"test1")
     assert Path(f1_path).read_text() == "test1"
 
     # text mode requires passing mode flag but should work
-    f2_path = f"{tmpdir}/f2"
+    f2_path = tmp_path / "f2"
     with utils.open_path_with_atomic_rename(f2_path, mode="w") as f2:
         f2.write("test2")
     assert Path(f2_path).read_text() == "test2"
@@ -171,7 +170,7 @@ def test_open_path_with_atomic_rename(tmpdir: py.path.local) -> None:
     assert Path(f2_path).read_text() == "test2-new"
 
     # erroneous cases should not produce file at all
-    f3_path = f"{tmpdir}/f3"
+    f3_path = tmp_path / "f3"
 
     class TestException(RuntimeError):
         pass

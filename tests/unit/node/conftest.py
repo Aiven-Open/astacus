@@ -5,7 +5,9 @@ See LICENSE for details
 
 from astacus.common import magic
 from astacus.common.snapshot import SnapshotGroup
-from astacus.common.storage import FileStorage
+from astacus.common.storage.file import FileStorage
+from astacus.common.storage.hexidigest import HexDigestStore
+from astacus.common.storage.json import JsonStore
 from astacus.node.api import router as node_router
 from astacus.node.config import NodeConfig
 from astacus.node.snapshot import Snapshot
@@ -16,19 +18,18 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pathlib import Path
 
-import py
 import pytest
 
 
 @pytest.fixture(name="app")
-def fixture_app(tmpdir: py.path.local) -> FastAPI:
+def fixture_app(tmp_path: Path) -> FastAPI:
     app = FastAPI()
     app.include_router(node_router, prefix="/node", tags=["node"])
-    root = Path(tmpdir) / "root"
-    db_path = Path(tmpdir) / "db_path"
-    backup_root = Path(tmpdir) / "backup-root"
+    root = tmp_path / "root"
+    db_path = tmp_path / "db_path"
+    backup_root = tmp_path / "backup-root"
     backup_root.mkdir()
-    tmp_path = Path(tmpdir) / "backup-tmp"
+    backup_path = tmp_path / "backup-tmp"
     root.mkdir()
     (root / "foo").write_text("foobar")
     (root / "foo2").write_text("foobar")
@@ -40,7 +41,7 @@ def fixture_app(tmpdir: py.path.local) -> FastAPI:
             "root": str(root),
             "db_path": str(db_path),
             "object_storage": {
-                "temporary_directory": str(tmp_path),
+                "temporary_directory": str(backup_path),
                 "default_storage": "x",
                 "compression": {"algorithm": "zstd"},
                 "storages": {
@@ -60,40 +61,47 @@ def fixture_client(app) -> TestClient:
     return TestClient(app)
 
 
+@pytest.fixture(name="json_storage")
+def fixture_json_storage(tmp_path: Path) -> JsonStore:
+    storage_path = tmp_path / "storage" / "json"
+    storage_path.mkdir(parents=True, exist_ok=True)
+    return JsonStore(FileStorage(storage_path))
+
+
+@pytest.fixture(name="hexdigest_storage")
+def fixture_hexdigest_storage(tmp_path: Path) -> HexDigestStore:
+    storage_path = tmp_path / "storage" / "hexdigest"
+    storage_path.mkdir(parents=True, exist_ok=True)
+    return HexDigestStore(FileStorage(storage_path))
+
+
 @pytest.fixture(name="uploader")
-def fixture_uploader(storage):
-    return Uploader(storage=storage)
-
-
-@pytest.fixture(name="storage")
-def fixture_storage(tmpdir: py.path.local) -> FileStorage:
-    storage_path = Path(tmpdir) / "storage"
-    storage_path.mkdir()
-    return FileStorage(storage_path)
+def fixture_uploader(hexdigest_storage: HexDigestStore):
+    return Uploader(hexdigest_storage=hexdigest_storage)
 
 
 @pytest.fixture(name="root")
-def fixture_root(tmpdir: py.path.local) -> Path:
-    return Path(tmpdir)
+def fixture_root(tmp_path: Path) -> Path:
+    return tmp_path
 
 
 @pytest.fixture(name="src")
-def fixture_src(tmpdir: py.path.local) -> Path:
-    src = Path(tmpdir) / "src"
+def fixture_src(tmp_path: Path) -> Path:
+    src = tmp_path / "src"
     src.mkdir()
     return src
 
 
 @pytest.fixture(name="dst")
-def fixture_dst(tmpdir: py.path.local) -> Path:
-    dst = Path(tmpdir) / "dst"
+def fixture_dst(tmp_path: Path) -> Path:
+    dst = tmp_path / "dst"
     dst.mkdir()
     return dst
 
 
 @pytest.fixture(name="db")
-def fixture_db(tmpdir: py.path.local) -> Path:
-    db = Path(tmpdir) / "db"
+def fixture_db(tmp_path: Path) -> Path:
+    db = tmp_path / "db"
     return db
 
 

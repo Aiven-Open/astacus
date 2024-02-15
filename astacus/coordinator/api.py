@@ -109,7 +109,7 @@ async def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordina
         raise HTTPException(status_code=429, detail="Already caching list result")
     c.state.cached_list_running = True
     try:
-        list_response = await to_thread(list_backups, req=req, json_mstorage=c.json_mstorage)
+        list_response = await to_thread(list_backups, req=req, json_mstorage=c.storage.json_storage)
         c.state.cached_list_response = CachedListResponse(
             coordinator_config=coordinator_config,
             list_request=req,
@@ -123,7 +123,7 @@ async def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordina
 @router.get("/delta/list")
 async def _list_delta_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordinator = Depends(), request: Request):
     # This is not supposed to be called very often, no caching necessary
-    return await to_thread(list_delta_backups, req=req, json_mstorage=c.json_mstorage)
+    return await to_thread(list_delta_backups, req=req, json_mstorage=c.storage.json_storage)
 
 
 @router.post("/cleanup")

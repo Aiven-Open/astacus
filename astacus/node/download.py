@@ -9,13 +9,14 @@ The basic file restoration steps should be implementable by using the
 API of this module with proper parameters.
 
 """
+
 from .node import NodeOp
 from .snapshotter import Snapshotter
 from astacus.common import ipc, utils
 from astacus.common.json_view import get_array, get_object, iter_objects
 from astacus.common.progress import Progress
-from astacus.common.rohmustorage import RohmuStorage
-from astacus.common.storage import Storage, ThreadLocalStorage
+from astacus.common.storage.hexidigest import HexDigestStore
+from astacus.common.threadlocal import CopiedThreadLocal
 from astacus.common.utils import get_umask
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -30,11 +31,17 @@ import subprocess
 logger = logging.getLogger(__name__)
 
 
-class Downloader(ThreadLocalStorage):
+class Downloader:
     def __init__(
-        self, *, dst: Path, snapshotter: Snapshotter, parallel: int, storage: Storage, copy_dst_owner: bool = False
+        self,
+        *,
+        dst: Path,
+        snapshotter: Snapshotter,
+        parallel: int,
+        hexdigest_storage: HexDigestStore,
+        copy_dst_owner: bool = False,
     ) -> None:
-        super().__init__(storage=storage)
+        self.hexdigest_storage = CopiedThreadLocal(value=hexdigest_storage)
         self.dst = dst
         self.snapshotter = snapshotter
         self.snapshot = snapshotter.snapshot
@@ -54,7 +61,7 @@ class Downloader(ThreadLocalStorage):
         download_path.parent.mkdir(parents=True, exist_ok=True)
         with utils.open_path_with_atomic_rename(download_path) as f:
             if snapshotfile.hexdigest:
-                self.local_storage.download_hexdigest_to_file(snapshotfile.hexdigest, f)
+                self.hexdigest_storage.value.download_hexdigest_to_file(snapshotfile.hexdigest, f)
             else:
                 assert snapshotfile.content_b64 is not None
                 f.write(base64.b64decode(snapshotfile.content_b64))
@@ -157,11 +164,6 @@ class Downloader(ThreadLocalStorage):
 class DownloadOp(NodeOp[ipc.SnapshotDownloadRequest, ipc.NodeResult]):
     snapshotter: Snapshotter | None = None
 
-    @property
-    def storage(self) -> RohmuStorage:
-        assert self.config.object_storage is not None
-        return RohmuStorage(self.config.object_storage, storage=self.req.storage)
-
     def create_result(self) -> ipc.NodeResult:
         return ipc.NodeResult()
 
@@ -173,7 +175,7 @@ class DownloadOp(NodeOp[ipc.SnapshotDownloadRequest, ipc.NodeResult]):
     def download(self) -> None:
         assert self.snapshotter is not None
         # Actual 'restore from backup'
-        manifest_json = self.storage.download_json(self.req.backup_name)
+        manifest_json = self.get_json_storage(self.req.storage).download_json(self.req.backup_name)
         assert isinstance(manifest_json, Mapping)
         snapshot_results_json = list(iter_objects(get_array(manifest_json, "snapshot_results")))
         snapshotstate_json = get_object(snapshot_results_json[self.req.snapshot_index], "state")
@@ -186,7 +188,7 @@ class DownloadOp(NodeOp[ipc.SnapshotDownloadRequest, ipc.NodeResult]):
             downloader = Downloader(
                 dst=self.config.root,
                 snapshotter=self.snapshotter,
-                storage=self.storage,
+                hexdigest_storage=self.get_hexdigest_storage(self.req.storage),
                 parallel=self.config.parallel.downloads,
                 copy_dst_owner=self.config.copy_root_owner,
             )

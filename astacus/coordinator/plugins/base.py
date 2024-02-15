@@ -5,12 +5,13 @@ See LICENSE for details
 Common base classes for the plugins
 
 """
+
 from __future__ import annotations
 
 from astacus.common import exceptions, ipc, magic, utils
-from astacus.common.asyncstorage import AsyncHexDigestStorage, AsyncJsonStorage
 from astacus.common.ipc import Retention
 from astacus.common.snapshot import SnapshotGroup
+from astacus.common.storage.asyncio import AsyncHexDigestStore, AsyncJsonStore
 from astacus.common.utils import AstacusModel
 from astacus.coordinator.cluster import Cluster, Result
 from astacus.coordinator.config import CoordinatorNode
@@ -60,8 +61,8 @@ class CoordinatorPlugin(AstacusModel):
 @dataclasses.dataclass
 class OperationContext:
     storage_name: str
-    json_storage: AsyncJsonStorage
-    hexdigest_storage: AsyncHexDigestStorage
+    json_storage: AsyncJsonStore
+    hexdigest_storage: AsyncHexDigestStore
 
 
 class Step(Generic[StepResult_co]):
@@ -118,7 +119,7 @@ class ListHexdigestsStep(Step[Set[str]]):
     Fetch the list of all files already present in object storage, identified by their hexdigest.
     """
 
-    hexdigest_storage: AsyncHexDigestStorage
+    hexdigest_storage: AsyncHexDigestStore
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> Set[str]:
         return set(await self.hexdigest_storage.list_hexdigests())
@@ -219,7 +220,7 @@ class UploadManifestStep(Step[None]):
     statistics collected by the `UploadBlocksStep` and the plugin manifest.
     """
 
-    json_storage: AsyncJsonStorage
+    json_storage: AsyncJsonStore
     plugin: ipc.Plugin
     plugin_manifest_step: type[Step[dict[str, Any]]] | None = None
     snapshot_step: type[Step[Sequence[ipc.SnapshotResult]]] | None = SnapshotStep
@@ -254,7 +255,7 @@ class BackupNameStep(Step[str]):
     most recent backup available in object storage, and fail if there are no backup.
     """
 
-    json_storage: AsyncJsonStorage
+    json_storage: AsyncJsonStore
     requested_name: str
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> str:
@@ -271,7 +272,7 @@ class BackupManifestStep(Step[ipc.BackupManifest]):
     Download the backup manifest from object storage.
     """
 
-    json_storage: AsyncJsonStorage
+    json_storage: AsyncJsonStore
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> ipc.BackupManifest:
         backup_name = context.get_result(BackupNameStep)
@@ -365,7 +366,7 @@ class ListBackupsStep(Step[set[str]]):
     List all available backups and return their name.
     """
 
-    json_storage: AsyncJsonStorage
+    json_storage: AsyncJsonStore
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> set[str]:
         return set(b for b in await self.json_storage.list_jsons() if b.startswith(magic.JSON_BACKUP_PREFIX))
@@ -377,7 +378,7 @@ class ListDeltaBackupsStep(Step[set[str]]):
     List all available delta backups and return their name.
     """
 
-    json_storage: AsyncJsonStorage
+    json_storage: AsyncJsonStore
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> set[str]:
         return set(b for b in await self.json_storage.list_jsons() if b.startswith(magic.JSON_DELTA_PREFIX))
@@ -392,7 +393,7 @@ class DeltaManifestsStep(Step[Sequence[ipc.BackupManifest]]):
     Returns manifests sorted by start time.
     """
 
-    json_storage: AsyncJsonStorage
+    json_storage: AsyncJsonStore
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> Sequence[ipc.BackupManifest]:
         backup_manifest = context.get_result(BackupManifestStep)
@@ -416,7 +417,7 @@ class RestoreDeltasStep(Step[None]):
     Restore the delta backups: download and apply to the node.
     """
 
-    json_storage: AsyncJsonStorage
+    json_storage: AsyncJsonStore
     storage_name: str
     # Delta restore is plugin-dependent, allow to customize it.
     restore_delta_url: str
@@ -585,7 +586,7 @@ class ComputeKeptBackupsStep(Step[Sequence[ManifestMin]]):
     backups and applying the retention rules.
     """
 
-    json_storage: AsyncJsonStorage
+    json_storage: AsyncJsonStore
     retention: Retention
     explicit_delete: Sequence[str]
     retain_deltas: bool = False
@@ -625,7 +626,7 @@ class DeleteBackupManifestsStep(Step[set[str]]):
     Delete all backup manifests that are not kept.
     """
 
-    json_storage: AsyncJsonStorage
+    json_storage: AsyncJsonStore
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> set[str]:
         all_backups = self.get_all_backups(context)
@@ -652,8 +653,8 @@ class DeleteDanglingHexdigestsStep(Step[None]):
     Delete all hexdigests that are not referenced by backup manifests.
     """
 
-    hexdigest_storage: AsyncHexDigestStorage
-    json_storage: AsyncJsonStorage
+    hexdigest_storage: AsyncHexDigestStore
+    json_storage: AsyncJsonStore
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         kept_manifests = context.get_result(ComputeKeptBackupsStep)

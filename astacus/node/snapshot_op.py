@@ -14,7 +14,6 @@ from .node import NodeOp
 from .snapshotter import Snapshotter
 from .uploader import Uploader
 from astacus.common import ipc, utils
-from astacus.common.rohmustorage import RohmuStorage
 from astacus.node.snapshot import Snapshot
 
 import logging
@@ -54,11 +53,6 @@ class SnapshotOp(NodeOp[ipc.SnapshotRequestV2, ipc.SnapshotResult]):
 class UploadOp(NodeOp[ipc.SnapshotUploadRequestV20221129, ipc.SnapshotUploadResult]):
     snapshot: Snapshot | None = None
 
-    @property
-    def storage(self) -> RohmuStorage:
-        assert self.config.object_storage is not None
-        return RohmuStorage(self.config.object_storage, storage=self.req.storage)
-
     def create_result(self) -> ipc.SnapshotUploadResult:
         return ipc.SnapshotUploadResult()
 
@@ -69,7 +63,7 @@ class UploadOp(NodeOp[ipc.SnapshotUploadRequestV20221129, ipc.SnapshotUploadResu
 
     def upload(self) -> None:
         assert self.snapshot is not None
-        uploader = Uploader(storage=self.storage)
+        uploader = Uploader(hexdigest_storage=self.get_hexdigest_storage(self.req.storage))
         # 'snapshotter' is global; ensure we have sole access to it
         with self.snapshot.lock:
             self.check_op_id()
