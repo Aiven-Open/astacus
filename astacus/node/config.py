@@ -2,16 +2,15 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
-
 from astacus.common.cassandra.config import CassandraClientConfiguration
 from astacus.common.magic import StrEnum
 from astacus.common.rohmustorage import RohmuConfig
 from astacus.common.statsd import StatsdConfig
 from astacus.common.utils import AstacusModel
+from collections.abc import Sequence
 from fastapi import Request
 from pathlib import Path
 from pydantic import DirectoryPath, Field, validator
-from typing import List, Optional
 
 APP_KEY = "node_config"
 
@@ -34,12 +33,12 @@ class CassandraNodeConfig(AstacusModel):
 
     # Nodetool is used to take snapshots in in cassandra subop=refresh-snapshot
     # (arguments passed as-is to subprocess.run)
-    nodetool_command: List[str]
+    nodetool_command: Sequence[str]
 
     # Cassandra start/stop are used in cassandra subop start-cassandra / stop-cassandra
     # (arguments passed as-is to subprocess.run)
-    start_command: List[str]
-    stop_command: List[str]
+    start_command: Sequence[str]
+    stop_command: Sequence[str]
 
     # We might want to block some damaging operations to avoid accidentally destroying live data.
     # Specify a safe default, let the users override it when restoring.
@@ -62,15 +61,15 @@ class NodeConfig(AstacusModel):
     # Where do we hardlink things from the file hierarchy we care about
     # By default, .astacus subdirectory is created in root if this is not set
     # Directory is created if it does not exist
-    root_link: Optional[Path]
+    root_link: Path | None = None
 
     # Same as root_link for the delta snapshotter.
-    delta_root_link: Optional[Path]
+    delta_root_link: Path | None = None
     db_path: Path
 
     # These can be either globally or locally set
-    object_storage: Optional[RohmuConfig] = None
-    statsd: Optional[StatsdConfig] = None
+    object_storage: RohmuConfig | None = None
+    statsd: StatsdConfig | None = None
 
     parallel: NodeParallel = Field(default_factory=NodeParallel)
 
@@ -81,7 +80,7 @@ class NodeConfig(AstacusModel):
 
     # Cassandra configuration is optional; for now, in node part of
     # the code, there are no plugins. (This may change later.)
-    cassandra: Optional[CassandraNodeConfig]
+    cassandra: CassandraNodeConfig | None = None
 
 
 def node_config(request: Request) -> NodeConfig:

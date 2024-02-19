@@ -13,7 +13,6 @@ from astacus.common.op import OpState
 from dataclasses import dataclass
 from fastapi import Request
 from threading import Lock
-from typing import Optional
 
 import time
 
@@ -29,7 +28,7 @@ class LockEntry(utils.AstacusModel):
 @dataclass
 class NodeState(OpState):
     mutate_lock = Lock()
-    _lock: Optional[LockEntry] = None
+    _lock: LockEntry | None = None
 
     @property
     def is_locked(self):

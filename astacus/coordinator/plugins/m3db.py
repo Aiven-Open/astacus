@@ -31,7 +31,8 @@ from astacus.common.snapshot import SnapshotGroup
 from astacus.common.utils import AstacusModel
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
-from typing import Any, Dict, List, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import dataclasses
 import logging
@@ -43,13 +44,13 @@ ETCD_PREFIX_FORMATS = ["_kv/{env}/m3db.node.namespaces", "_sd.placement/{env}/m3
 
 class M3DBManifest(AstacusModel):
     etcd: ETCDDump
-    placement_nodes: List[m3placement.M3PlacementNode]
+    placement_nodes: Sequence[m3placement.M3PlacementNode]
 
 
 class M3DBPlugin(CoordinatorPlugin):
     etcd_url: str
     environment: str
-    placement_nodes: List[m3placement.M3PlacementNode]
+    placement_nodes: Sequence[m3placement.M3PlacementNode]
 
     def get_backup_steps(self, *, context: OperationContext) -> Sequence[Step[Any]]:
         etcd_client = ETCDClient(self.etcd_url)
@@ -85,13 +86,13 @@ class M3DBPlugin(CoordinatorPlugin):
         ]
 
 
-def get_etcd_prefixes(environment: str) -> List[bytes]:
+def get_etcd_prefixes(environment: str) -> Sequence[bytes]:
     return [p.format(env=environment).encode() for p in ETCD_PREFIX_FORMATS]
 
 
 @dataclasses.dataclass
 class InitStep(Step[None]):
-    placement_nodes: List[m3placement.M3PlacementNode]
+    placement_nodes: Sequence[m3placement.M3PlacementNode]
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         validate_m3_config(self.placement_nodes, cluster.nodes)
@@ -100,7 +101,7 @@ class InitStep(Step[None]):
 @dataclasses.dataclass
 class RetrieveEtcdStep(Step[ETCDDump]):
     etcd_client: ETCDClient
-    etcd_prefixes: List[bytes]
+    etcd_prefixes: Sequence[bytes]
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> ETCDDump:
         etcd_dump = await get_etcd_dump(self.etcd_client, self.etcd_prefixes)
@@ -112,7 +113,7 @@ class RetrieveEtcdStep(Step[ETCDDump]):
 @dataclasses.dataclass
 class RetrieveEtcdAgainStep(Step[None]):
     etcd_client: ETCDClient
-    etcd_prefixes: List[bytes]
+    etcd_prefixes: Sequence[bytes]
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         etcd_before = context.get_result(RetrieveEtcdStep)
@@ -124,20 +125,20 @@ class RetrieveEtcdAgainStep(Step[None]):
 
 
 @dataclasses.dataclass
-class PrepareM3ManifestStep(Step[Dict[str, Any]]):
-    placement_nodes: List[m3placement.M3PlacementNode]
+class PrepareM3ManifestStep(Step[dict[str, Any]]):
+    placement_nodes: Sequence[m3placement.M3PlacementNode]
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> Dict[str, Any]:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> dict[str, Any]:
         etcd = context.get_result(RetrieveEtcdStep)
         return M3DBManifest(etcd=etcd, placement_nodes=self.placement_nodes).dict()
 
 
 @dataclasses.dataclass
-class RewriteEtcdStep(Step[Optional[ETCDDump]]):
-    placement_nodes: List[m3placement.M3PlacementNode]
-    partial_restore_nodes: Optional[List[ipc.PartialRestoreRequestNode]]
+class RewriteEtcdStep(Step[ETCDDump | None]):
+    placement_nodes: Sequence[m3placement.M3PlacementNode]
+    partial_restore_nodes: Sequence[ipc.PartialRestoreRequestNode] | None
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> Optional[ETCDDump]:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> ETCDDump | None:
         if self.partial_restore_nodes:
             logger.info("Skipping etcd rewrite due to partial backup restoration")
             return None
@@ -162,7 +163,7 @@ class RewriteEtcdStep(Step[Optional[ETCDDump]]):
 @dataclasses.dataclass
 class RestoreEtcdStep(Step[None]):
     etcd_client: ETCDClient
-    partial_restore_nodes: Optional[List[ipc.PartialRestoreRequestNode]]
+    partial_restore_nodes: Sequence[ipc.PartialRestoreRequestNode] | None
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         if self.partial_restore_nodes:
@@ -177,7 +178,7 @@ class M3IncorrectPlacementNodesLengthException(exceptions.PermanentException):
     pass
 
 
-def validate_m3_config(placement_nodes: List[m3placement.M3PlacementNode], nodes: List[CoordinatorNode]) -> None:
+def validate_m3_config(placement_nodes: Sequence[m3placement.M3PlacementNode], nodes: Sequence[CoordinatorNode]) -> None:
     pnode_count = len(placement_nodes)
     node_count = len(nodes)
     if pnode_count != node_count:
@@ -190,10 +191,10 @@ def validate_m3_config(placement_nodes: List[m3placement.M3PlacementNode], nodes
 def rewrite_m3db_placement(
     *,
     key: ETCDKey,
-    node_to_backup_index: List[Optional[int]],
-    src_placement_nodes: List[m3placement.M3PlacementNode],
-    dst_placement_nodes: List[m3placement.M3PlacementNode],
-    nodes: List[CoordinatorNode],
+    node_to_backup_index: Sequence[int | None],
+    src_placement_nodes: Sequence[m3placement.M3PlacementNode],
+    dst_placement_nodes: Sequence[m3placement.M3PlacementNode],
+    nodes: Sequence[CoordinatorNode],
 ) -> None:
     replacements = []
     for idx, node, pnode in zip(node_to_backup_index, nodes, dst_placement_nodes):

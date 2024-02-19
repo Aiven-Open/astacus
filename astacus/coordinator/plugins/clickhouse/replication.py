@@ -8,8 +8,8 @@ from .manifest import ReplicatedDatabase
 from .sql import chain_of, named_group, one_of, TokenType
 from astacus.coordinator.plugins.base import StepFailedError
 from astacus.coordinator.plugins.zookeeper import ZooKeeperConnection
+from collections.abc import Mapping, Sequence
 from kazoo.client import EventType, WatchedEvent
-from typing import Mapping, Optional, Sequence
 
 import asyncio
 import dataclasses
@@ -46,7 +46,7 @@ async def sync_replicated_database(
     database_max_ptr_path = f"{database_path}/max_log_ptr"
     database_max_ptr_bytes = await connection.get(database_max_ptr_path)
     database_max_ptr = int(database_max_ptr_bytes)
-    replica_ptrs: list[Optional[int]] = [None for _ in replicas]
+    replica_ptrs: list[int | None] = [None for _ in replicas]
     condition = asyncio.Condition()
 
     async def update_replica_ptr(replica_index: int, replica_ptr_path: str) -> None:

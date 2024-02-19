@@ -12,9 +12,9 @@ from astacus.common import ipc
 from astacus.common.cassandra.client import CassandraClient
 from astacus.common.cassandra.config import SNAPSHOT_GLOB, SNAPSHOT_NAME
 from astacus.common.exceptions import TransientException
+from collections.abc import Callable
 from pathlib import Path
 from pydantic import DirectoryPath
-from typing import Callable, Tuple
 
 import contextlib
 import logging
@@ -28,12 +28,12 @@ logger = logging.getLogger(__name__)
 TABLES_GLOB = "data/*/*"
 
 
-def ks_table_from_snapshot_path(p: Path) -> Tuple[str, str]:
+def ks_table_from_snapshot_path(p: Path) -> tuple[str, str]:
     # /.../keyspace/table/snapshots/astacus
     return p.parts[-4], p.parts[-3]
 
 
-def ks_table_from_backup_path(p: Path) -> Tuple[str, str]:
+def ks_table_from_backup_path(p: Path) -> tuple[str, str]:
     # /.../keyspace/table/backups
     return p.parts[-3], p.parts[-2]
 
@@ -122,7 +122,7 @@ class SimpleCassandraSubOp(NodeOp[ipc.NodeRequest, ipc.NodeResult]):
 
     def take_snapshot(self) -> None:
         assert self.config.cassandra
-        cmd = self.config.cassandra.nodetool_command[:]
+        cmd = list(self.config.cassandra.nodetool_command)
         cmd.extend(["snapshot", "-t", SNAPSHOT_NAME])
         subprocess.run(cmd, check=True)
         self.result.progress.done()
@@ -226,7 +226,7 @@ class CassandraStartOp(NodeOp[ipc.CassandraStartRequest, ipc.NodeResult]):
             config_fh.flush()
             progress.add_success()
 
-            subprocess.run(self.config.cassandra.start_command + [config_fh.name], check=True)
+            subprocess.run([*self.config.cassandra.start_command, config_fh.name], check=True)
             progress.add_success()
 
         progress.done()

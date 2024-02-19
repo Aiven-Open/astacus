@@ -6,7 +6,7 @@ When using remote storage disk in ClickHouse, the actual data is in object stora
 but there are still metadata files in local storage. This module contains functions
 required to parse these metadata files.
 """
-from typing import Sequence
+from collections.abc import Sequence
 
 import dataclasses
 import re

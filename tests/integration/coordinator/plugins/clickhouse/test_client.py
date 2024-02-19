@@ -4,8 +4,9 @@ See LICENSE for details
 """
 from .conftest import ClickHouseCommand, create_clickhouse_service, get_clickhouse_client
 from astacus.coordinator.plugins.clickhouse.client import ClickHouseClientQueryError
+from collections.abc import Sequence
 from tests.integration.conftest import Ports, Service
-from typing import cast, Sequence
+from typing import cast
 
 import pytest
 import time

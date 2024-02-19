@@ -4,11 +4,10 @@ See LICENSE for details
 cassandra backup/restore plugin models
 
 """
-
 from astacus.common.cassandra.schema import CassandraSchema
 from astacus.common.utils import AstacusModel
+from collections.abc import Sequence
 from pydantic import root_validator
-from typing import List, Optional
 from uuid import UUID
 
 
@@ -16,10 +15,10 @@ class CassandraConfigurationNode(AstacusModel):
     # The configured node order has to be identified _somehow_;
     # otherwise, we cannot map the same data to same set of
     # tokens. One of these is required.
-    address: Optional[str]
-    host_id: Optional[UUID]
-    listen_address: Optional[str]
-    tokens: Optional[List[str]]
+    address: str | None = None
+    host_id: UUID | None = None
+    listen_address: str | None = None
+    tokens: Sequence[str] | None = None
 
     @classmethod
     @root_validator
@@ -33,7 +32,7 @@ class CassandraManifestNode(AstacusModel):
     host_id: UUID
     listen_address: str
     rack: str
-    tokens: List[str]
+    tokens: list[str]
 
     def matches_configuration_node(self, node: CassandraConfigurationNode) -> bool:
         for attribute in ["address", "host_id", "listen_address", "tokens"]:
@@ -45,4 +44,4 @@ class CassandraManifestNode(AstacusModel):
 
 class CassandraManifest(AstacusModel):
     cassandra_schema: CassandraSchema
-    nodes: List[CassandraManifestNode]
+    nodes: Sequence[CassandraManifestNode]

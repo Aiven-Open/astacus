@@ -9,12 +9,13 @@ Rohmu-specific actual object storage implementation
 from .storage import Json, MultiStorage, Storage, StorageUploadResult
 from .utils import AstacusModel
 from astacus.common import exceptions
+from collections.abc import Mapping
 from enum import Enum
 from pydantic import Field
 from rohmu import errors, rohmufile
 from rohmu.compressor import CompressionStream
 from rohmu.encryptor import EncryptorStream
-from typing import BinaryIO, Dict, Optional, Union
+from typing import BinaryIO, TypeAlias
 
 import io
 import json
@@ -33,12 +34,12 @@ class RohmuModel(AstacusModel):
         use_enum_values = True
 
 
-RohmuStorageConfig = Union[
-    rohmu.LocalObjectStorageConfig,
-    rohmu.S3ObjectStorageConfig,
-    rohmu.AzureObjectStorageConfig,
-    rohmu.GoogleObjectStorageConfig,
-]
+RohmuStorageConfig: TypeAlias = (
+    rohmu.LocalObjectStorageConfig
+    | rohmu.S3ObjectStorageConfig
+    | rohmu.AzureObjectStorageConfig
+    | rohmu.GoogleObjectStorageConfig
+)
 
 
 class RohmuEncryptionKey(RohmuModel):
@@ -55,7 +56,7 @@ class RohmuCompressionType(Enum):
 
 
 class RohmuCompression(RohmuModel):
-    algorithm: Optional[RohmuCompressionType] = None
+    algorithm: RohmuCompressionType | None = None
     level: int = 0
     # threads: int = 0
 
@@ -65,19 +66,19 @@ class RohmuConfig(RohmuModel):
 
     # Targets we support for backing up
     default_storage: str
-    storages: Dict[str, RohmuStorageConfig]
+    storages: Mapping[str, RohmuStorageConfig]
 
     # Encryption (optional)
-    encryption_key_id: Optional[str] = None
-    encryption_keys: Dict[str, RohmuEncryptionKey] = {}
+    encryption_key_id: str | None = None
+    encryption_keys: Mapping[str, RohmuEncryptionKey] = {}
 
     # Compression (optional)
     compression: RohmuCompression = RohmuCompression()
 
 
 class RohmuMetadata(RohmuModel):
-    encryption_key_id: Optional[str] = Field(None, alias="encryption-key-id")
-    compression_algorithm: Optional[RohmuCompressionType] = Field(None, alias="compression-algorithm")
+    encryption_key_id: str | None = Field(None, alias="encryption-key-id")
+    compression_algorithm: RohmuCompressionType | None = Field(None, alias="compression-algorithm")
 
 
 def rohmu_error_wrapper(fun):

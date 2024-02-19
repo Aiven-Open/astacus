@@ -17,7 +17,6 @@ This is combination of:
 from .magic import StrEnum
 from .utils import AstacusModel
 from contextlib import asynccontextmanager, contextmanager
-from typing import Optional, Union
 
 import socket
 import time
@@ -28,7 +27,7 @@ class MessageFormat(StrEnum):
     telegraf = "telegraf"
 
 
-Tags = dict[str, Union[int, str, None]]
+Tags = dict[str, int | str | None]
 
 
 class StatsdConfig(AstacusModel):
@@ -41,7 +40,7 @@ class StatsdConfig(AstacusModel):
 class StatsClient:
     _enabled = True
 
-    def __init__(self, config: Optional[StatsdConfig]):
+    def __init__(self, config: StatsdConfig | None) -> None:
         if not config:
             self._enabled = False
             return
@@ -51,12 +50,12 @@ class StatsClient:
         self._message_format = config.message_format
 
     @asynccontextmanager
-    async def async_timing_manager(self, metric: str, tags: Optional[Tags] = None):
+    async def async_timing_manager(self, metric: str, tags: Tags | None = None):
         with self.timing_manager(metric, tags=tags):
             yield
 
     @contextmanager
-    def timing_manager(self, metric: str, tags: Optional[Tags] = None):
+    def timing_manager(self, metric: str, tags: Tags | None = None):
         start_time = time.monotonic()
         tags = (tags or {}).copy()
         try:
@@ -68,16 +67,16 @@ class StatsClient:
         tags["success"] = "1"
         self.timing(metric, time.monotonic() - start_time, tags=tags)
 
-    def gauge(self, metric: str, value: Union[int, float], *, tags: Optional[Tags] = None) -> None:
+    def gauge(self, metric: str, value: int | float, *, tags: Tags | None = None) -> None:
         self._send(metric, b"g", value, tags)
 
-    def increase(self, metric: str, *, inc_value: int = 1, tags: Optional[Tags] = None) -> None:
+    def increase(self, metric: str, *, inc_value: int = 1, tags: Tags | None = None) -> None:
         self._send(metric, b"c", inc_value, tags)
 
-    def timing(self, metric: str, value: Union[int, float], *, tags: Optional[Tags] = None) -> None:
+    def timing(self, metric: str, value: int | float, *, tags: Tags | None = None) -> None:
         self._send(metric, b"ms", value, tags)
 
-    def unexpected_exception(self, ex, where, *, tags: Optional[Tags] = None) -> None:
+    def unexpected_exception(self, ex, where, *, tags: Tags | None = None) -> None:
         all_tags = {
             "exception": ex.__class__.__name__,
             "where": where,
@@ -85,7 +84,7 @@ class StatsClient:
         all_tags.update(tags or {})
         self.increase("exception", tags=all_tags)
 
-    def _send(self, metric: str, metric_type: bytes, value: Union[int, float], tags: Optional[Tags]) -> None:
+    def _send(self, metric: str, metric_type: bytes, value: int | float, tags: Tags | None) -> None:
         if not self._enabled:
             # stats sending is disabled
             return

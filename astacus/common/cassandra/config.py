@@ -17,9 +17,9 @@ https://github.com/samuelcolvin/pydantic/issues/3376
 """
 
 from astacus.common.utils import AstacusModel
+from collections.abc import Sequence
 from pathlib import Path
 from pydantic import root_validator
-from typing import List, Optional
 
 import yaml
 
@@ -29,19 +29,19 @@ BACKUP_GLOB = "data/*/*/backups/"
 
 
 class CassandraClientConfiguration(AstacusModel):
-    config_path: Optional[Path]
+    config_path: Path | None = None
 
     # WhiteListRoundRobinPolicy contact points
-    hostnames: Optional[List[str]]
+    hostnames: Sequence[str] | None = None
 
-    port: Optional[int]
+    port: int | None = None
 
     # PlainTextAuthProvider
     username: str
     password: str
 
     # If set, configure ssl access configuration which requires the ca cert
-    ca_cert_path: Optional[str]
+    ca_cert_path: str | None = None
 
     @classmethod
     @root_validator
@@ -54,7 +54,7 @@ class CassandraClientConfiguration(AstacusModel):
             return self.port
         return int(self.get_config()["native_transport_port"])
 
-    def get_hostnames(self) -> List[str]:
+    def get_hostnames(self) -> Sequence[str]:
         if self.hostnames:
             return self.hostnames
         return ["127.0.0.1"]

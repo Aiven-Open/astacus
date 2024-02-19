@@ -7,6 +7,7 @@ from astacus.common.ipc import RestoreRequest
 from astacus.coordinator.plugins.base import OperationContext
 from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, HttpClickHouseClient
 from astacus.coordinator.plugins.clickhouse.plugin import ClickHousePlugin
+from collections.abc import AsyncIterable, AsyncIterator, Sequence
 from pathlib import Path
 from tests.integration.conftest import create_zookeeper, Ports
 from tests.integration.coordinator.plugins.clickhouse.conftest import (
@@ -18,7 +19,7 @@ from tests.integration.coordinator.plugins.clickhouse.conftest import (
     RestorableSource,
     run_astacus_command,
 )
-from typing import AsyncIterable, AsyncIterator, Final, List, Sequence
+from typing import Final
 from unittest import mock
 
 import base64
@@ -40,7 +41,7 @@ def _b64_str(b: bytes) -> str:
     return base64.b64encode(b).decode()
 
 
-def get_restore_steps_names() -> List[str]:
+def get_restore_steps_names() -> Sequence[str]:
     plugin = ClickHousePlugin()
     steps = plugin.get_restore_steps(
         context=OperationContext(storage_name="", json_storage=mock.Mock(), hexdigest_storage=mock.Mock()),
@@ -123,7 +124,7 @@ async def fixture_restored_cluster(
                     yield clients
 
 
-async def setup_cluster_content(clients: List[HttpClickHouseClient], use_named_collections: bool) -> None:
+async def setup_cluster_content(clients: Sequence[HttpClickHouseClient], use_named_collections: bool) -> None:
     for client in clients:
         await client.execute(b"DROP DATABASE default SYNC")
         await client.execute(
@@ -217,7 +218,7 @@ async def setup_cluster_content(clients: List[HttpClickHouseClient], use_named_c
     await clients[0].execute(b"INSERT INTO default.memory VALUES (123, 'foo')")
 
 
-async def setup_cluster_users(clients: List[HttpClickHouseClient]) -> None:
+async def setup_cluster_users(clients: Sequence[HttpClickHouseClient]) -> None:
     await clients[0].execute(b"CREATE USER alice")
     await clients[0].execute(b"GRANT SELECT on default.* TO alice")
     await clients[0].execute(b"CREATE ROLE bob")
@@ -231,7 +232,7 @@ async def setup_cluster_users(clients: List[HttpClickHouseClient]) -> None:
 
 
 @pytest.mark.asyncio
-async def test_restores_access_entities(restored_cluster: List[ClickHouseClient]) -> None:
+async def test_restores_access_entities(restored_cluster: Sequence[ClickHouseClient]) -> None:
     for client in restored_cluster:
         assert await client.execute(
             b"SELECT base64Encode(name) FROM system.users WHERE storage = 'replicated' ORDER BY name"
@@ -253,7 +254,7 @@ async def test_restores_access_entities(restored_cluster: List[ClickHouseClient]
 
 
 @pytest.mark.asyncio
-async def test_restores_replicated_merge_tree_tables_data(restored_cluster: List[ClickHouseClient]) -> None:
+async def test_restores_replicated_merge_tree_tables_data(restored_cluster: Sequence[ClickHouseClient]) -> None:
     s1_data = [[123, "foo"], [456, "bar"]]
     s2_data = [[789, "baz"]]
     cluster_data = [s1_data, s1_data, s2_data]
@@ -263,7 +264,7 @@ async def test_restores_replicated_merge_tree_tables_data(restored_cluster: List
 
 
 @pytest.mark.asyncio
-async def test_restores_table_with_experimental_types(restored_cluster: List[ClickHouseClient]) -> None:
+async def test_restores_table_with_experimental_types(restored_cluster: Sequence[ClickHouseClient]) -> None:
     # The JSON type merges the keys in the response,
     # hence the extra zero-valued entries we don't see in the insert queries.
     s1_data = [[123, {"a": 1, "b": 0}], [456, {"a": 0, "b": 2}]]
@@ -275,14 +276,14 @@ async def test_restores_table_with_experimental_types(restored_cluster: List[Cli
 
 
 @pytest.mark.asyncio
-async def test_restores_table_with_nullable_key(restored_cluster: List[ClickHouseClient]) -> None:
+async def test_restores_table_with_nullable_key(restored_cluster: Sequence[ClickHouseClient]) -> None:
     for client in restored_cluster:
         response = await client.execute(b"SELECT thekey, thedata FROM default.with_nullable_key ORDER BY thekey")
         assert response == []
 
 
 @pytest.mark.asyncio
-async def test_restores_table_with_nested_fields(restored_cluster: List[ClickHouseClient]) -> None:
+async def test_restores_table_with_nested_fields(restored_cluster: Sequence[ClickHouseClient]) -> None:
     client = restored_cluster[0]
     response = await client.execute(b"SELECT thekey, thedata FROM default.nested_not_flatten ORDER BY thekey")
     assert response == [[123, [{"a": 4, "b": 5}]]]
@@ -295,7 +296,7 @@ async def test_restores_table_with_nested_fields(restored_cluster: List[ClickHou
 
 
 @pytest.mark.asyncio
-async def test_restores_function_table(restored_cluster: List[ClickHouseClient]) -> None:
+async def test_restores_function_table(restored_cluster: Sequence[ClickHouseClient]) -> None:
     client = restored_cluster[0]
     response = await client.execute(b"SELECT * FROM default.from_function_table")
     assert response == [["0"], ["1"], ["2"]]
@@ -311,19 +312,19 @@ async def check_object_storage_data(cluster: Sequence[ClickHouseClient]) -> None
 
 
 @pytest.mark.asyncio
-async def test_restores_url_engine_table(restored_cluster: List[ClickHouseClient]) -> None:
+async def test_restores_url_engine_table(restored_cluster: Sequence[ClickHouseClient]) -> None:
     for client in restored_cluster:
         response = await client.execute(b"SELECT create_table_query FROM system.tables WHERE name = 'url_engine_table'")
         assert response[0][0] == SAMPLE_URL_ENGINE_DDL
 
 
 @pytest.mark.asyncio
-async def test_restores_object_storage_data(restored_cluster: List[ClickHouseClient]) -> None:
+async def test_restores_object_storage_data(restored_cluster: Sequence[ClickHouseClient]) -> None:
     await check_object_storage_data(restored_cluster)
 
 
 @pytest.mark.asyncio
-async def test_restores_simple_view(restored_cluster: List[ClickHouseClient]) -> None:
+async def test_restores_simple_view(restored_cluster: Sequence[ClickHouseClient]) -> None:
     s1_data = [[123 * 2], [456 * 2]]
     s2_data = [[789 * 2]]
     cluster_data = [s1_data, s1_data, s2_data]
@@ -333,7 +334,7 @@ async def test_restores_simple_view(restored_cluster: List[ClickHouseClient]) ->
 
 
 @pytest.mark.asyncio
-async def test_restores_materialized_view_data(restored_cluster: List[ClickHouseClient]) -> None:
+async def test_restores_materialized_view_data(restored_cluster: Sequence[ClickHouseClient]) -> None:
     s1_data = [[123 * 3], [456 * 3]]
     s2_data = [[789 * 3]]
     cluster_data = [s1_data, s1_data, s2_data]
@@ -343,14 +344,14 @@ async def test_restores_materialized_view_data(restored_cluster: List[ClickHouse
 
 
 @pytest.mark.asyncio
-async def test_restores_connectivity_between_distributed_servers(restored_cluster: List[ClickHouseClient]) -> None:
+async def test_restores_connectivity_between_distributed_servers(restored_cluster: Sequence[ClickHouseClient]) -> None:
     # This only works if each node can connect to all nodes of the cluster named after the Distributed database
     for client in restored_cluster:
         assert await client.execute(b"SELECT * FROM clusterAllReplicas('default', system.one) ") == [[0], [0], [0]]
 
 
 @pytest.mark.asyncio
-async def test_does_not_restore_log_tables_data(restored_cluster: List[ClickHouseClient]) -> None:
+async def test_does_not_restore_log_tables_data(restored_cluster: Sequence[ClickHouseClient]) -> None:
     # We restored the table structure but not the data
     for client in restored_cluster:
         assert await client.execute(b"SELECT thekey, thedata FROM default.memory") == []

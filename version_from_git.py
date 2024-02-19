@@ -40,7 +40,7 @@ def update_project_version(version_file):
             return git_ver
 
     if not file_ver:
-        raise Exception(f"version not available from git or from file {version_file!r}")
+        raise ValueError(f"version not available from git or from file {version_file!r}")
 
     return file_ver
 

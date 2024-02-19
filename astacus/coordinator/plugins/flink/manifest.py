@@ -2,10 +2,10 @@
 Copyright (c) 2022 Aiven Ltd
 See LICENSE for details
 """
-
 from astacus.common.utils import AstacusModel
-from typing import Dict, Optional
+from collections.abc import Mapping
+from typing import Any
 
 
 class FlinkManifest(AstacusModel):
-    data: Optional[Dict] = {}
+    data: Mapping[str, Any] | None = {}

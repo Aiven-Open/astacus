@@ -5,8 +5,8 @@ See LICENSE for details
 
 from astacus.common.cassandra import schema
 from cassandra import metadata as cm
+from collections.abc import Mapping
 from pytest_mock import MockerFixture
-from typing import Mapping
 
 import pytest
 

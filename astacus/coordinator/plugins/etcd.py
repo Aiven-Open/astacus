@@ -11,7 +11,7 @@ etcd in isolation, this isn't really the tool for it.
 from astacus.common.etcd import ETCDClient
 from astacus.common.utils import AstacusModel
 from base64 import b64decode, b64encode
-from typing import List, Optional
+from collections.abc import Sequence
 
 import asyncio
 import base64
@@ -43,19 +43,20 @@ class ETCDKey(AstacusModel):
 
 class ETCDPrefixDump(AstacusModel):
     prefix_b64: str
-    keys: List[ETCDKey]
+    keys: Sequence[ETCDKey]
 
 
 class ETCDDump(AstacusModel):
-    prefixes: List[ETCDPrefixDump]
+    prefixes: Sequence[ETCDPrefixDump]
 
 
-async def get_etcd_dump(client: ETCDClient, prefixes: List[bytes]) -> Optional[ETCDDump]:
+async def get_etcd_dump(client: ETCDClient, prefixes: Sequence[bytes]) -> ETCDDump | None:
     prefix_dump_coros = [_get_etcd_prefix_dump(client, prefix) for prefix in prefixes]
     prefix_ranges = await asyncio.gather(*prefix_dump_coros)
     if any(True for prefix_range in prefix_ranges if prefix_range is None):
         return None
-    return ETCDDump(prefixes=prefix_ranges)
+    non_none_prefix_ranges = [prefix_range for prefix_range in prefix_ranges if prefix_range is not None]
+    return ETCDDump(prefixes=non_none_prefix_ranges)
 
 
 async def restore_etcd_dump(client: ETCDClient, dump: ETCDDump) -> bool:
@@ -65,7 +66,7 @@ async def restore_etcd_dump(client: ETCDClient, dump: ETCDDump) -> bool:
     return True
 
 
-async def _get_etcd_prefix_dump(client: ETCDClient, prefix: bytes) -> Optional[ETCDPrefixDump]:
+async def _get_etcd_prefix_dump(client: ETCDClient, prefix: bytes) -> ETCDPrefixDump | None:
     assert isinstance(prefix, bytes)
     kvs = await client.prefix_get(prefix)
     if not kvs:

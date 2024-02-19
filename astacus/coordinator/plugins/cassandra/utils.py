@@ -4,15 +4,14 @@ See LICENSE for details
 cassandra backup/restore plugin utilities
 
 """
-
-
 from astacus.common import ipc
 from astacus.common.cassandra.config import SNAPSHOT_NAME
 from astacus.common.snapshot import SnapshotGroup
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins.base import StepFailedError
-from typing import List, Optional, Tuple, Type, TypeVar
+from collections.abc import Sequence
+from typing import TypeVar
 
 NR = TypeVar("NR", bound=ipc.NodeResult)
 
@@ -21,11 +20,11 @@ async def run_subop(
     cluster: Cluster,
     subop: ipc.CassandraSubOp,
     *,
-    nodes: Optional[List[CoordinatorNode]] = None,
-    req: Optional[ipc.NodeRequest] = None,
-    reqs: Optional[List[ipc.NodeRequest]] = None,
-    result_class: Type[NR],
-) -> List[NR]:
+    nodes: Sequence[CoordinatorNode] | None = None,
+    req: ipc.NodeRequest | None = None,
+    reqs: Sequence[ipc.NodeRequest] | None = None,
+    result_class: type[NR],
+) -> Sequence[NR]:
     if not req and not reqs:
         req = ipc.NodeRequest()
     start_results = await cluster.request_from_nodes(
@@ -41,7 +40,7 @@ async def run_subop(
     return await cluster.wait_successful_results(start_results=start_results, result_class=result_class)
 
 
-async def get_schema_hash(cluster: Cluster, nodes: Optional[list[CoordinatorNode]] = None) -> Tuple[str, str]:
+async def get_schema_hash(cluster: Cluster, nodes: Sequence[CoordinatorNode] | None = None) -> tuple[str, str]:
     hashes = [
         x.schema_hash
         for x in await run_subop(
@@ -55,7 +54,7 @@ async def get_schema_hash(cluster: Cluster, nodes: Optional[list[CoordinatorNode
     return hashes[0], ""
 
 
-def snapshot_groups() -> List[SnapshotGroup]:
+def snapshot_groups() -> Sequence[SnapshotGroup]:
     # first *: keyspace name; second *: table name
     return [
         SnapshotGroup(root_glob=f"data/*/*/snapshots/{SNAPSHOT_NAME}/*.db"),
@@ -64,7 +63,7 @@ def snapshot_groups() -> List[SnapshotGroup]:
     ]
 
 
-def delta_snapshot_groups() -> List[SnapshotGroup]:
+def delta_snapshot_groups() -> Sequence[SnapshotGroup]:
     # first *: keyspace name; second *: table name
     return [
         SnapshotGroup(root_glob="data/*/*/backups/*.db"),

@@ -4,7 +4,7 @@ See LICENSE for details
 """
 
 from astacus.common.cassandra.schema import CassandraKeyspace
-from typing import Mapping
+from collections.abc import Mapping
 
 
 class CassandraKeyspaceBuilder(CassandraKeyspace):

@@ -11,9 +11,10 @@ from astacus.coordinator.plugins.zookeeper_config import (
     ZooKeeperConfigurationUser,
     ZooKeeperNode,
 )
+from collections.abc import Sequence
 from kazoo.client import KazooClient
 from pydantic import SecretStr
-from typing import cast, List
+from typing import cast
 
 import pytest
 
@@ -54,7 +55,7 @@ def test_get_clickhouse_clients() -> None:
         password="password",
         nodes=[ClickHouseNode(host=f"n{i}.example.org", port=8123 + i) for i in range(3)],
     )
-    clients = cast(List[HttpClickHouseClient], get_clickhouse_clients(configuration))
+    clients = cast(Sequence[HttpClickHouseClient], get_clickhouse_clients(configuration))
     assert [client.host for client in clients] == [node.host for node in configuration.nodes]
     assert [client.port for client in clients] == [node.port for node in configuration.nodes]
     for client in clients:

@@ -17,9 +17,8 @@ from astacus.common.progress import Progress
 from astacus.common.rohmustorage import RohmuStorage
 from astacus.common.storage import Storage, ThreadLocalStorage
 from astacus.common.utils import get_umask
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Sequence
 
 import base64
 import getpass
@@ -87,7 +86,7 @@ class Downloader(ThreadLocalStorage):
         snapshotstate: ipc.SnapshotState,
         still_running_callback: Callable[[], bool] = lambda: True,
     ) -> None:
-        hexdigest_to_snapshotfiles: Dict[str, List[ipc.SnapshotFile]] = {}
+        hexdigest_to_snapshotfiles: dict[str, list[ipc.SnapshotFile]] = {}
         valid_relative_path_set = set()
         for snapshotfile in snapshotstate.files:
             valid_relative_path_set.add(snapshotfile.relative_path)
@@ -156,7 +155,7 @@ class Downloader(ThreadLocalStorage):
 
 
 class DownloadOp(NodeOp[ipc.SnapshotDownloadRequest, ipc.NodeResult]):
-    snapshotter: Optional[Snapshotter] = None
+    snapshotter: Snapshotter | None = None
 
     @property
     def storage(self) -> RohmuStorage:

@@ -16,7 +16,6 @@ from .uploader import Uploader
 from astacus.common import ipc, utils
 from astacus.common.rohmustorage import RohmuStorage
 from astacus.node.snapshot import Snapshot
-from typing import Optional
 
 import logging
 
@@ -86,7 +85,7 @@ class UploadOp(NodeOp[ipc.SnapshotUploadRequestV20221129, ipc.SnapshotUploadResu
 
 
 class ReleaseOp(NodeOp[ipc.SnapshotReleaseRequest, ipc.NodeResult]):
-    snapshotter: Optional[Snapshotter] = None
+    snapshotter: Snapshotter | None = None
 
     def create_result(self) -> ipc.NodeResult:
         return ipc.NodeResult()

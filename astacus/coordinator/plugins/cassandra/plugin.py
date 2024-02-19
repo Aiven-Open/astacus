@@ -22,8 +22,9 @@ from astacus.coordinator.plugins.base import (
     StepsContext,
 )
 from astacus.coordinator.plugins.cassandra import backup_steps, restore_steps
+from collections.abc import Sequence, Set
 from dataclasses import dataclass
-from typing import Any, List, Optional, Sequence, Set
+from typing import Any
 
 import dataclasses
 import logging
@@ -46,7 +47,7 @@ class CassandraSubOpStep(Step[None]):
 @dataclass
 class CassandraRestoreSubOpStep(Step[None]):
     op: ipc.CassandraSubOp
-    req: Optional[ipc.NodeRequest] = None
+    req: ipc.NodeRequest | None = None
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         node_to_backup_index = context.get_result(MapNodesStep)
@@ -61,7 +62,7 @@ class CassandraRestoreSubOpStep(Step[None]):
 
 @dataclass
 class ValidateConfigurationStep(Step[None]):
-    nodes: List[CassandraConfigurationNode]
+    nodes: Sequence[CassandraConfigurationNode]
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         cnode_count = len(self.nodes)
@@ -73,8 +74,8 @@ class ValidateConfigurationStep(Step[None]):
 
 class CassandraPlugin(CoordinatorPlugin):
     client: CassandraClientConfiguration
-    nodes: Optional[List[CassandraConfigurationNode]]
-    datacenter: Optional[str]
+    nodes: Sequence[CassandraConfigurationNode] | None = None
+    datacenter: str | None = None
     restore_start_timeout: int = 3600
 
     def get_backup_steps(self, *, context: OperationContext) -> Sequence[Step[Any]]:

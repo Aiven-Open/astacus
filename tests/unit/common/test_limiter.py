@@ -4,7 +4,7 @@ See LICENSE for details
 """
 
 from astacus.common.limiter import gather_limited, Limiter
-from typing import Sequence
+from collections.abc import Sequence
 
 import asyncio
 import pytest

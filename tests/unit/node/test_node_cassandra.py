@@ -8,13 +8,13 @@ from astacus.common.cassandra.config import SNAPSHOT_NAME
 from astacus.common.cassandra.utils import SYSTEM_KEYSPACES
 from astacus.node.api import READONLY_SUBOPS
 from astacus.node.config import CassandraAccessLevel, CassandraNodeConfig
+from collections.abc import Callable, Sequence
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pytest_mock import MockerFixture
 from requests import Response
 from tests.unit.conftest import CassandraTestConfig
 from types import ModuleType
-from typing import Callable, Sequence
 
 import py
 import pytest
@@ -111,7 +111,7 @@ def test_api_cassandra_subop(
         assert {p.name for p in (ctenv.root / "data" / "dummyks" / "dummytable-123").iterdir()} == {"backups", "snapshots"}
         assert not (ctenv.root / "data" / "dummyks" / "dummytable-234").exists()
     elif subop == ipc.CassandraSubOp.start_cassandra:
-        subprocess_run.assert_any_call(ctenv.cassandra_node_config.start_command + ["tempfilename"], check=True)
+        subprocess_run.assert_any_call([*ctenv.cassandra_node_config.start_command, "tempfilename"], check=True)
 
         assert (
             ctenv.fake_conffile.getvalue()
@@ -125,7 +125,7 @@ num_tokens: 2
         subprocess_run.assert_any_call(ctenv.cassandra_node_config.stop_command, check=True)
     elif subop == ipc.CassandraSubOp.take_snapshot:
         subprocess_run.assert_any_call(
-            ctenv.cassandra_node_config.nodetool_command + ["snapshot", "-t", SNAPSHOT_NAME], check=True
+            [*ctenv.cassandra_node_config.nodetool_command, "snapshot", "-t", SNAPSHOT_NAME], check=True
         )
     else:
         raise NotImplementedError(subop)

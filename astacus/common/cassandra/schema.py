@@ -5,12 +5,12 @@ See LICENSE for details
 Schema-related parts are based on basebackup_schema.py of Cashew
 
 """
-
 from .client import CassandraSession
 from .utils import is_system_keyspace
 from astacus.common.utils import AstacusModel
 from cassandra import metadata as cm
-from typing import Any, Dict, Iterator, List, Mapping, Set
+from collections.abc import Iterator, Mapping, Sequence, Set
+from typing import Any
 
 import hashlib
 import itertools
@@ -67,7 +67,7 @@ def _iterate_identifiers_in_cql_type_definition(definition: str) -> Iterator[str
 
 
 class CassandraUserType(CassandraNamed):
-    field_types: List[str]
+    field_types: Sequence[str]
 
     @classmethod
     def from_cassandra_metadata(cls, metadata: cm.UserType) -> "CassandraUserType":
@@ -91,7 +91,7 @@ def _get_field_repr(arg_name_type: tuple[str, str]) -> str:
 
 
 class CassandraFunction(CassandraNamed):
-    argument_types: List[str]
+    argument_types: list[str]
 
     def __lt__(self, o: CassandraNamed) -> bool:
         assert isinstance(o, CassandraFunction)
@@ -199,9 +199,9 @@ class CassandraTrigger(CassandraNamed):
 
 
 class CassandraTable(CassandraNamed):
-    indexes: List[CassandraIndex]
-    materialized_views: List[CassandraMaterializedView]
-    triggers: List[CassandraTrigger]
+    indexes: Sequence[CassandraIndex]
+    materialized_views: Sequence[CassandraMaterializedView]
+    triggers: Sequence[CassandraTrigger]
 
     @classmethod
     def from_cassandra_metadata(cls, metadata: cm.TableMetadata) -> "CassandraTable":
@@ -228,7 +228,7 @@ class CassandraTable(CassandraNamed):
                 resource.restore_if_needed(cas, resource_map)
 
 
-def _extract_dcs(metadata: cm.KeyspaceMetadata) -> Dict[str, str]:
+def _extract_dcs(metadata: cm.KeyspaceMetadata) -> Mapping[str, str]:
     strategy = metadata.replication_strategy
     if isinstance(strategy, cm.NetworkTopologyStrategy):
         return {dc: str(full_replicas) for dc, full_replicas in strategy.dc_replication_factors.items()}
@@ -239,10 +239,10 @@ class CassandraKeyspace(CassandraNamed):
     network_topology_strategy_dcs: Mapping[str, str]  # not [str, int] because of transient replication
     durable_writes: bool
 
-    aggregates: List[CassandraAggregate]
-    functions: List[CassandraFunction]
-    tables: List[CassandraTable]
-    user_types: List[CassandraUserType]
+    aggregates: Sequence[CassandraAggregate]
+    functions: Sequence[CassandraFunction]
+    tables: Sequence[CassandraTable]
+    user_types: Sequence[CassandraUserType]
 
     @classmethod
     def from_cassandra_metadata(cls, metadata: cm.KeyspaceMetadata) -> "CassandraKeyspace":
@@ -301,7 +301,7 @@ class CassandraKeyspace(CassandraNamed):
 
 
 class CassandraSchema(AstacusModel):
-    keyspaces: List[CassandraKeyspace]
+    keyspaces: Sequence[CassandraKeyspace]
 
     @classmethod
     def from_cassandra_session(cls, cas: CassandraSession) -> "CassandraSchema":

@@ -11,7 +11,7 @@ from astacus.common.ipc import SnapshotFile, SnapshotHash
 from astacus.common.progress import Progress
 from astacus.common.storage import ThreadLocalStorage
 from astacus.node.snapshot import Snapshot
-from typing import Sequence
+from collections.abc import Sequence
 
 import logging
 

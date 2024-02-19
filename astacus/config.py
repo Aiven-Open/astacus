@@ -16,7 +16,6 @@ from astacus.coordinator.config import APP_KEY as COORDINATOR_CONFIG_KEY, Coordi
 from astacus.node.config import APP_KEY as NODE_CONFIG_KEY, NodeConfig
 from fastapi import FastAPI, Request
 from pathlib import Path
-from typing import Optional, Tuple, Union
 
 import hashlib
 import io
@@ -35,7 +34,7 @@ class UvicornConfig(AstacusModel):
     host: str = magic.ASTACUS_DEFAULT_HOST
     http: HTTPMode = HTTPMode.h11
     port: int = magic.ASTACUS_DEFAULT_PORT
-    log_level: Optional[str] = None
+    log_level: str | None = None
     reload: bool = False
 
 
@@ -49,22 +48,22 @@ class GlobalConfig(AstacusModel):
     uvicorn: UvicornConfig = UvicornConfig()
 
     # These can be either globally or locally set
-    object_storage: Optional[RohmuConfig] = None
-    statsd: Optional[StatsdConfig] = None
+    object_storage: RohmuConfig | None = None
+    statsd: StatsdConfig | None = None
 
 
 def global_config(request: Request) -> GlobalConfig:
     return getattr(request.app.state, APP_KEY)
 
 
-def get_config_content_and_hash(config_path: Union[str, Path]) -> Tuple[str, str]:
+def get_config_content_and_hash(config_path: str | Path) -> tuple[str, str]:
     with open(config_path, "rb") as fh:
         config_content = fh.read()
     config_hash = hashlib.sha256(config_content).hexdigest()
     return config_content.decode(), config_hash
 
 
-def set_global_config_from_path(app: FastAPI, path: Union[str, Path]) -> GlobalConfig:
+def set_global_config_from_path(app: FastAPI, path: str | Path) -> GlobalConfig:
     config_content, config_hash = get_config_content_and_hash(path)
     with io.StringIO(config_content) as config_file:
         config = GlobalConfig.parse_obj(yaml.safe_load(config_file))

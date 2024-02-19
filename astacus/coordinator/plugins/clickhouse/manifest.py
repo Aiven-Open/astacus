@@ -5,7 +5,8 @@ See LICENSE for details
 from astacus.common.utils import AstacusModel
 from astacus.coordinator.plugins.clickhouse.client import escape_sql_identifier
 from base64 import b64decode, b64encode
-from typing import Any, Dict, List, Optional, Tuple
+from collections.abc import Mapping, Sequence
+from typing import Any
 from uuid import UUID
 
 import enum
@@ -24,7 +25,7 @@ class AccessEntity(AstacusModel):
     attach_query: bytes
 
     @classmethod
-    def from_plugin_data(cls, data: Dict[str, Any]) -> "AccessEntity":
+    def from_plugin_data(cls, data: Mapping[str, Any]) -> "AccessEntity":
         return AccessEntity(
             type=data["type"],
             uuid=UUID(hex=data["uuid"]),
@@ -36,13 +37,13 @@ class AccessEntity(AstacusModel):
 class ReplicatedDatabase(AstacusModel):
     name: bytes
     # This is optional because of older backups without uuids
-    uuid: Optional[UUID]
+    uuid: UUID | None = None
     # These contain macros, not per-server final values
     shard: bytes
     replica: bytes
 
     @classmethod
-    def from_plugin_data(cls, data: Dict[str, Any]) -> "ReplicatedDatabase":
+    def from_plugin_data(cls, data: Mapping[str, Any]) -> "ReplicatedDatabase":
         return ReplicatedDatabase(
             name=b64decode(data["name"]),
             uuid=uuid.UUID(data["uuid"]) if "uuid" in data else None,
@@ -59,7 +60,7 @@ class Table(AstacusModel):
     create_query: bytes
     # This is a list (database_name, table_name) that depends on this table,
     # *not* the list of tables that this table depends on.
-    dependencies: List[Tuple[bytes, bytes]] = []
+    dependencies: Sequence[tuple[bytes, bytes]] = []
 
     @property
     def is_replicated(self) -> bool:
@@ -74,7 +75,7 @@ class Table(AstacusModel):
         return f"{escape_sql_identifier(self.database)}.{escape_sql_identifier(self.name)}"
 
     @classmethod
-    def from_plugin_data(cls, data: Dict[str, Any]) -> "Table":
+    def from_plugin_data(cls, data: Mapping[str, Any]) -> "Table":
         dependencies = [
             (b64decode(database_name), b64decode(table_name)) for database_name, table_name in data["dependencies"]
         ]
@@ -119,16 +120,16 @@ class ClickHouseManifest(AstacusModel):
         use_enum_values = False
 
     version: ClickHouseBackupVersion
-    access_entities: List[AccessEntity] = []
-    replicated_databases: List[ReplicatedDatabase] = []
-    tables: List[Table] = []
+    access_entities: Sequence[AccessEntity] = []
+    replicated_databases: Sequence[ReplicatedDatabase] = []
+    tables: Sequence[Table] = []
     object_storage_files: list[ClickHouseObjectStorageFiles] = []
 
-    def to_plugin_data(self) -> Dict[str, Any]:
+    def to_plugin_data(self) -> dict[str, Any]:
         return encode_manifest_data(self.dict())
 
     @classmethod
-    def from_plugin_data(cls, data: Dict[str, Any]) -> "ClickHouseManifest":
+    def from_plugin_data(cls, data: Mapping[str, Any]) -> "ClickHouseManifest":
         return ClickHouseManifest(
             version=ClickHouseBackupVersion(data.get("version", ClickHouseBackupVersion.V1.value)),
             access_entities=[AccessEntity.from_plugin_data(item) for item in data["access_entities"]],

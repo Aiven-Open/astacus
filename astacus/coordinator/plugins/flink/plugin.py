@@ -21,7 +21,8 @@ from astacus.coordinator.plugins.flink.steps import (
     RetrieveDataStep,
 )
 from astacus.coordinator.plugins.zookeeper_config import get_zookeeper_client, ZooKeeperConfiguration
-from typing import Any, List, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import logging
 
@@ -30,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 class FlinkPlugin(CoordinatorPlugin):
     zookeeper: ZooKeeperConfiguration = ZooKeeperConfiguration()
-    zookeeper_paths: List[str] = ["/catalog"]
+    zookeeper_paths: Sequence[str] = ["/catalog"]
 
     def get_backup_steps(self, *, context: OperationContext) -> Sequence[Step[Any]]:
         zookeeper_client = get_zookeeper_client(self.zookeeper)

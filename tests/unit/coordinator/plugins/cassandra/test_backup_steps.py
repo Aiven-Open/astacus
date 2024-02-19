@@ -8,10 +8,10 @@ See LICENSE for details
 from astacus.common.cassandra.schema import CassandraSchema
 from astacus.coordinator.plugins.cassandra import backup_steps
 from astacus.coordinator.plugins.cassandra.model import CassandraConfigurationNode
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pytest_mock import MockerFixture
 from tests.unit.coordinator.plugins.cassandra.builders import build_keyspace
-from typing import Mapping, Optional
 from unittest.mock import Mock
 from uuid import UUID
 
@@ -23,7 +23,7 @@ class RetrieveTestCase:
     name: str
 
     # Input
-    field: Optional[str] = None
+    field: str | None = None
     populate_rf: int = 2
     populate_tokens: int = 7
     populate_nodes: int = 3
@@ -31,7 +31,7 @@ class RetrieveTestCase:
     duplicate_address: bool = False
 
     # Output
-    expected_error: Optional[type[Exception]] = None
+    expected_error: type[Exception] | None = None
 
     def __str__(self):
         return self.name

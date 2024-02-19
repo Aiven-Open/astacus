@@ -4,7 +4,6 @@ See LICENSE for details
 cassandra backup/restore plugin steps
 
 """
-
 from .model import CassandraConfigurationNode, CassandraManifest, CassandraManifestNode
 from .utils import get_schema_hash
 from astacus.common import exceptions
@@ -12,8 +11,9 @@ from astacus.common.cassandra.client import CassandraClient, CassandraSession
 from astacus.common.cassandra.schema import CassandraKeyspace, CassandraSchema
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import Step, StepFailedError, StepsContext
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Any
 
 import logging
 
@@ -33,9 +33,9 @@ def _remove_other_datacenters(keyspace: CassandraKeyspace, datacenter: str) -> N
 
 
 def _retrieve_manifest_from_cassandra(
-    cas: CassandraSession, config_nodes: List[CassandraConfigurationNode], *, datacenter: Optional[str]
+    cas: CassandraSession, config_nodes: Sequence[CassandraConfigurationNode], *, datacenter: str | None
 ) -> CassandraManifest:
-    host_id_to_node: Dict[str, CassandraManifestNode] = {}
+    host_id_to_node: dict[str, CassandraManifestNode] = {}
     for token, host in cas.cluster_metadata.token_map.token_to_host_owner.items():
         if datacenter and host.datacenter != datacenter:
             logger.debug(
@@ -112,12 +112,12 @@ class AssertSchemaUnchanged(Step[None]):
 
 
 @dataclass
-class PrepareCassandraManifestStep(Step[Dict]):
+class PrepareCassandraManifestStep(Step[dict[str, Any]]):
     client: CassandraClient
-    nodes: List[CassandraConfigurationNode]
-    datacenter: Optional[str]
+    nodes: Sequence[CassandraConfigurationNode]
+    datacenter: str | None
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> Dict:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> dict[str, Any]:
         result = await self.client.run_sync(_retrieve_manifest_from_cassandra, self.nodes, datacenter=self.datacenter)
         assert result
         return result.dict()

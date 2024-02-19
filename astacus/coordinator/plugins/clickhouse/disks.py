@@ -7,7 +7,7 @@ from .config import DiskConfiguration, DiskType
 from .escaping import escape_for_file_name, unescape_from_file_name
 from astacus.common.magic import DEFAULT_EMBEDDED_FILE_SIZE
 from astacus.common.snapshot import SnapshotGroup
-from typing import Optional, Sequence
+from collections.abc import Sequence
 from uuid import UUID
 
 import dataclasses
@@ -96,7 +96,7 @@ class Disks:
                 return disk.object_storage
         return None
 
-    def _get_disk(self, path_parts: Sequence[str]) -> Optional[Disk]:
+    def _get_disk(self, path_parts: Sequence[str]) -> Disk | None:
         for disk in self.disks:
             if path_parts[: len(disk.path_parts)] == disk.path_parts:
                 return disk

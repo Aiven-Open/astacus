@@ -8,8 +8,9 @@ from astacus.coordinator.plugins.base import StepsContext
 from astacus.coordinator.plugins.clickhouse.manifest import ReplicatedDatabase, Table
 from astacus.coordinator.plugins.clickhouse.steps import RetrieveDatabasesAndTablesStep
 from base64 import b64decode
+from collections.abc import Sequence
 from tests.integration.conftest import create_zookeeper, Ports
-from typing import cast, Sequence
+from typing import cast
 from uuid import UUID
 
 import pytest

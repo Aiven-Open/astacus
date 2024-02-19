@@ -15,7 +15,6 @@ from astacus.coordinator.config import CoordinatorConfig
 from dataclasses import dataclass
 from fastapi import FastAPI, Request
 from pydantic import Field
-from typing import Optional
 
 import time
 
@@ -39,7 +38,7 @@ class CoordinatorState(OpState):
     mutated.
     """
 
-    cached_list_response: Optional[CachedListResponse] = None
+    cached_list_response: CachedListResponse | None = None
     cached_list_running: bool = False
     shutting_down: bool = False
 

@@ -4,8 +4,8 @@ See LICENSE for details
 """
 from astacus.common.utils import AstacusModel, build_netloc
 from astacus.coordinator.plugins.zookeeper import KazooZooKeeperClient, ZooKeeperClient, ZooKeeperUser
+from collections.abc import Sequence
 from pydantic import SecretStr
-from typing import List
 
 
 class ZooKeeperNode(AstacusModel):
@@ -22,7 +22,7 @@ class ZooKeeperConfigurationUser(AstacusModel):
 
 
 class ZooKeeperConfiguration(AstacusModel):
-    nodes: List[ZooKeeperNode] = []
+    nodes: Sequence[ZooKeeperNode] = []
     user: ZooKeeperConfigurationUser | None = None
 
 

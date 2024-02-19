@@ -7,7 +7,6 @@ See LICENSE for details
 
 from .utils import AstacusModel
 from pyparsing import Iterable
-from typing import Optional
 from typing_extensions import Self, TypeVar
 
 import logging
@@ -18,7 +17,7 @@ logger = logging.getLogger(__name__)
 _log_1_1 = math.log(1.1)
 
 
-def increase_worth_reporting(value: int, new_value: Optional[int] = None, *, total: int | None = None):
+def increase_worth_reporting(value: int, new_value: int | None = None, *, total: int | None = None):
     """Make reporting sparser and sparser as values grow larger
     - report every 1.1**N or so
     - if we know total, report every percent

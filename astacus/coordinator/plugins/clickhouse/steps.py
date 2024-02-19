@@ -38,7 +38,8 @@ from astacus.coordinator.plugins.base import (
 )
 from astacus.coordinator.plugins.zookeeper import ChangeWatch, TransactionError, ZooKeeperClient
 from base64 import b64decode
-from typing import Any, Awaitable, Callable, cast, Dict, Iterable, Iterator, List, Mapping, Sequence, Tuple, TypeVar
+from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
+from typing import Any, cast, TypeVar
 
 import asyncio
 import base64
@@ -49,8 +50,8 @@ import uuid
 
 logger = logging.getLogger(__name__)
 
-DatabasesAndTables = Tuple[List[ReplicatedDatabase], List[Table]]
-ClickHouseVersion = Tuple[int, int]
+DatabasesAndTables = tuple[Sequence[ReplicatedDatabase], Sequence[Table]]
+ClickHouseVersion = tuple[int, int]
 
 DATABASES_LIST_QUERY = b"""SELECT
     base64Encode(system.databases.name),
@@ -97,7 +98,7 @@ class ValidateConfigStep(Step[None]):
 
 
 @dataclasses.dataclass
-class RetrieveAccessEntitiesStep(Step[List[AccessEntity]]):
+class RetrieveAccessEntitiesStep(Step[Sequence[AccessEntity]]):
     """
     Backups access entities (user, roles, quotas, row_policies, settings profiles) and their grants
     from ZooKeeper. This requires using the replicated storage engine for users.
@@ -118,7 +119,7 @@ class RetrieveAccessEntitiesStep(Step[List[AccessEntity]]):
     zookeeper_client: ZooKeeperClient
     access_entities_path: str
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> List[AccessEntity]:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> Sequence[AccessEntity]:
         access_entities = []
         async with self.zookeeper_client.connect() as connection:
             change_watch = ChangeWatch()
@@ -165,8 +166,8 @@ class RetrieveDatabasesAndTablesStep(Step[DatabasesAndTables]):
         clickhouse_client = self.clients[0]
         # We fetch databases and tables in a single query, we don't have to care about consistency within that step.
         # However, the schema could be modified between now and the freeze step.
-        databases: Dict[bytes, ReplicatedDatabase] = {}
-        tables: List[Table] = []
+        databases: dict[bytes, ReplicatedDatabase] = {}
+        tables: list[Table] = []
         database_rows = await clickhouse_client.execute(DATABASES_LIST_QUERY)
         for base64_db_name, db_uuid_str in database_rows:
             assert isinstance(base64_db_name, str)
@@ -261,12 +262,12 @@ class CollectObjectStorageFilesStep(Step[list[ClickHouseObjectStorageFiles]]):
 
 
 @dataclasses.dataclass
-class PrepareClickHouseManifestStep(Step[Dict[str, Any]]):
+class PrepareClickHouseManifestStep(Step[dict[str, Any]]):
     """
     Collects access entities, databases and tables from previous steps into an uploadable manifest.
     """
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> Dict[str, Any]:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> dict[str, Any]:
         databases, tables = context.get_result(RetrieveDatabasesAndTablesStep)
         manifest = ClickHouseManifest(
             version=ClickHouseBackupVersion.V2,
@@ -400,7 +401,7 @@ class MoveFrozenPartsStep(Step[None]):
         # backup name from all the snapshot entries
         # I do not like mutating an existing result, we should making this more visible
         # by returning a mutated copy and use that in other steps
-        snapshot_results: List[ipc.SnapshotResult] = context.get_result(SnapshotStep)
+        snapshot_results: Sequence[ipc.SnapshotResult] = context.get_result(SnapshotStep)
         for snapshot_result in snapshot_results:
             assert snapshot_result.state is not None
             snapshot_result.state.files = [
@@ -830,12 +831,12 @@ class DeleteDanglingObjectStorageFilesStep(Step[None]):
 
 
 @dataclasses.dataclass
-class GetVersionsStep(Step[List[ClickHouseVersion]]):
+class GetVersionsStep(Step[Sequence[ClickHouseVersion]]):
     """Get the version of ClickHouse running on every node."""
 
     clients: Sequence[ClickHouseClient]
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> List[ClickHouseVersion]:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> Sequence[ClickHouseVersion]:
         return await asyncio.gather(*(get_version(client) for client in self.clients))
 
 

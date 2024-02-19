@@ -7,7 +7,7 @@ from astacus.coordinator.plugins.clickhouse.disks import Disks
 from astacus.coordinator.plugins.clickhouse.manifest import Table
 from astacus.coordinator.plugins.clickhouse.parts import get_part_servers, list_parts_to_attach, Part, PartFile
 from astacus.coordinator.plugins.clickhouse.replication import DatabaseReplica
-from typing import List
+from collections.abc import Sequence
 from uuid import UUID
 
 import dataclasses
@@ -17,7 +17,7 @@ import pytest
 pytestmark = [pytest.mark.clickhouse]
 
 
-def create_part_files(*, table_uuid: UUID, part_name: str, digest_seed: str) -> List[SnapshotFile]:
+def create_part_files(*, table_uuid: UUID, part_name: str, digest_seed: str) -> Sequence[SnapshotFile]:
     uuid_head = str(table_uuid)[:3]
     return [
         SnapshotFile(
@@ -30,7 +30,7 @@ def create_part_files(*, table_uuid: UUID, part_name: str, digest_seed: str) -> 
     ]
 
 
-def create_part_from_part_files(snapshot_files: List[SnapshotFile]) -> Part:
+def create_part_from_part_files(snapshot_files: Sequence[SnapshotFile]) -> Part:
     return Part(
         table_uuid=T1_UUID,
         part_name=b"all_0_0_0",
@@ -70,7 +70,7 @@ def test_get_part_servers_fails_on_inconsistent_servers_set() -> None:
 
 def test_list_parts_to_attach() -> None:
     parts_to_attach = list_parts_to_attach(
-        SnapshotResult(state=SnapshotState(files=TABLE_1_PART_1 + TABLE_1_PART_2)),
+        SnapshotResult(state=SnapshotState(files=[*TABLE_1_PART_1, *TABLE_1_PART_2])),
         Disks(),
         {
             T1_UUID: Table(

@@ -4,9 +4,9 @@ See LICENSE for details
 """
 from astacus.common.utils import build_netloc
 from astacus.coordinator.plugins.zookeeper import KazooZooKeeperClient
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from pathlib import Path
 from types import MappingProxyType
-from typing import AsyncIterator, Iterator, List, Mapping, Optional, Union
 
 import asyncio
 import contextlib
@@ -31,7 +31,7 @@ def fixture_event_loop() -> Iterator[asyncio.AbstractEventLoop]:
     loop.close()
 
 
-async def get_command_path(name: str) -> Optional[Path]:
+async def get_command_path(name: str) -> Path | None:
     process = await asyncio.create_subprocess_exec(
         "which", name, stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE
     )
@@ -44,7 +44,7 @@ async def get_command_path(name: str) -> Optional[Path]:
     return None
 
 
-def get_zookeeper_command(*, java_path: Path, data_dir: Path, port: int) -> Optional[List[Union[str, Path]]]:
+def get_zookeeper_command(*, java_path: Path, data_dir: Path, port: int) -> Sequence[str | Path] | None:
     zookeeper_jars = list(Path("/usr/share/zookeeper").glob("*.jar"))
     if zookeeper_jars:
         class_paths = [data_dir, *zookeeper_jars]
@@ -59,13 +59,17 @@ class FailPatternFoundError(Exception):
     pass
 
 
+class PatternNotFoundError(Exception):
+    pass
+
+
 @contextlib.asynccontextmanager
 async def run_process_and_wait_for_pattern(
     *,
-    args: List[Union[str, Path]],
+    args: Sequence[str | Path],
     cwd: Path,
     pattern: str,
-    fail_pattern: Optional[str] = None,
+    fail_pattern: str | None = None,
     env: Mapping[str, str] = MappingProxyType({}),
     timeout: float = 10.0,
 ) -> AsyncIterator[subprocess.Popen[bytes]]:
@@ -93,7 +97,9 @@ async def run_process_and_wait_for_pattern(
             try:
                 await asyncio.wait_for(pattern_found.wait(), timeout=timeout)
             except asyncio.TimeoutError as e:
-                raise Exception(f"Pattern {pattern!r} not found after {timeout:.3f}s in output of {str_args}") from e
+                raise PatternNotFoundError(
+                    f"Pattern {pattern!r} not found after {timeout:.3f}s in output of {str_args}"
+                ) from e
             yield process
         finally:
             process.kill()
@@ -106,13 +112,13 @@ class Service:
     data_dir: Path
     port: int
     host: str = "localhost"
-    username: Optional[str] = None
-    password: Optional[str] = None
+    username: str | None = None
+    password: str | None = None
 
 
 @dataclasses.dataclass
 class ServiceCluster:
-    services: List[Service]
+    services: Sequence[Service]
 
 
 class Ports:

@@ -4,10 +4,11 @@ See LICENSE for details
 """
 from abc import ABC, abstractmethod
 from astacus.common.rohmustorage import RohmuStorageConfig
+from collections.abc import Iterator, Mapping, Sequence
 from rohmu import BaseTransfer
 from rohmu.errors import FileNotFoundFromStorageError
 from starlette.concurrency import run_in_threadpool
-from typing import Any, Iterator, Mapping, Self, Sequence, Union
+from typing import Any, Self
 
 import contextlib
 import dataclasses
@@ -27,7 +28,7 @@ class ObjectStorageItem:
 
 class AsyncObjectStorage(ABC):
     @abstractmethod
-    def get_config(self) -> Union[RohmuStorageConfig, dict]:
+    def get_config(self) -> RohmuStorageConfig | dict:
         ...
 
     @abstractmethod
