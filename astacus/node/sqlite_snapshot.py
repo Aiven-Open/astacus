@@ -8,7 +8,7 @@ See LICENSE for details
 from astacus.common import magic
 from astacus.common.ipc import SnapshotFile, SnapshotHash
 from astacus.common.progress import Progress
-from astacus.node.snapshot import Snapshot
+from astacus.node.snapshot import Snapshot, SnapshotFileTuple, tuple_to_snapshotfile
 from astacus.node.snapshotter import Snapshotter
 from contextlib import closing
 from functools import cached_property
@@ -22,6 +22,12 @@ import sqlite3
 
 logger = logging.getLogger(__name__)
 
+# sqlite connections can be safely shared between threads iff sqlite
+# has been compiled in serialized mode (which is the default).  If it
+# hasn't, we will get very confusing errors.
+if not sqlite3.threadsafety == 3:
+    raise ValueError("SQLite not compiled in serialized mode.")
+
 
 class SQLiteSnapshot(Snapshot):
     def __init__(self, dst: Path, db: Path) -> None:
@@ -34,11 +40,11 @@ class SQLiteSnapshot(Snapshot):
     def get_file(self, relative_path: str) -> SnapshotFile | None:
         cur = self._con.execute("select * from snapshot_files where relative_path = ?;", (relative_path,))
         row = cur.fetchone()
-        return row_to_snapshotfile(row) if row else None
+        return tuple_to_snapshotfile(row) if row else None
 
     def get_files_for_digest(self, hexdigest: str) -> Iterable[SnapshotFile]:
         return map(
-            row_to_snapshotfile,
+            tuple_to_snapshotfile,
             self._con.execute(
                 """
                 select *
@@ -50,8 +56,8 @@ class SQLiteSnapshot(Snapshot):
             ),
         )
 
-    def get_all_files(self) -> Iterable[SnapshotFile]:
-        return map(row_to_snapshotfile, self._con.execute("select * from snapshot_files order by relative_path;"))
+    def get_all_files_tuples(self) -> Iterable[SnapshotFileTuple]:
+        return self._con.execute("select * from snapshot_files order by relative_path;")
 
     @override
     def get_all_paths(self) -> Iterable[str]:
@@ -193,7 +199,7 @@ class SQLiteSnapshotter(Snapshotter[SQLiteSnapshot]):
                 if row[1] is None:
                     yield row[0], None
                 else:
-                    yield row[0], row_to_snapshotfile(row)
+                    yield row[0], tuple_to_snapshotfile(row)
 
     def _compare_with_src(self, files: Iterable[tuple[str, SnapshotFile | None]]) -> Iterable[SnapshotFile]:
         logger.info("Checking metadata for files in %s", self._dst)
@@ -250,13 +256,9 @@ class SQLiteSnapshotter(Snapshotter[SQLiteSnapshot]):
         return self.snapshot.get_connection()
 
 
-def row_to_path_and_snapshotfile(row: tuple) -> tuple[str, SnapshotFile | None]:
-    return row[0], row_to_snapshotfile(row)
+def row_to_path_and_snapshotfile(row: SnapshotFileTuple) -> tuple[str, SnapshotFile | None]:
+    return row[0], tuple_to_snapshotfile(row)
 
 
-def row_to_snapshotfile(row: tuple) -> SnapshotFile:
-    return SnapshotFile(relative_path=row[0], file_size=row[1], mtime_ns=row[2], hexdigest=row[3], content_b64=row[4])
-
-
-def snapshotfile_to_row(file: SnapshotFile) -> tuple[str, int, int, str, str | None]:
+def snapshotfile_to_row(file: SnapshotFile) -> SnapshotFileTuple:
     return (file.relative_path, file.file_size, file.mtime_ns, file.hexdigest, file.content_b64)

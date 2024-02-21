@@ -2,6 +2,7 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
+
 from .magic import DEFAULT_EMBEDDED_FILE_SIZE, StrEnum
 from .progress import Progress
 from .utils import AstacusModel, now, SizeLimitedFile
@@ -11,6 +12,7 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from pydantic import Field, root_validator
+from typing import Literal
 
 import functools
 import socket
@@ -36,6 +38,8 @@ class NodeFeatures(Enum):
     snapshot_groups = "snapshot_groups"
     # Added on 2023-10-16
     release_snapshot_files = "release_snapshot_files"
+    # Added on 2024-02-25
+    per_node_manifests = "per_node_manifests"
 
 
 class Retention(AstacusModel):
@@ -111,7 +115,15 @@ class SnapshotRequestGroup(AstacusModel):
     embedded_file_size_max: int | None = DEFAULT_EMBEDDED_FILE_SIZE
 
 
+class NodeManifestInfo(AstacusModel):
+    version: int
+    snapshot_index: int
+    backup_name: str
+    storage: str
+
+
 class SnapshotRequestV2(NodeRequest):
+    node_manifest_info: NodeManifestInfo | None = None
     # list of globs with extra options for each glob.
     groups: Sequence[SnapshotRequestGroup] = ()
     # Accept V1 request for backward compatibility if the controller is older
@@ -164,9 +176,6 @@ class SnapshotUploadRequest(NodeRequest):
     # which (sub)object storage entry should be used
     storage: str
 
-
-# Added on 2022-11-29, the previous version should be removable after 1 or 2 years.
-class SnapshotUploadRequestV20221129(SnapshotUploadRequest):
     # Whether we should check if the file hash has changed since the snapshot
     # Should be False only for plugins where the database is known to never
     # change the files that we are reading: for instance because the database
@@ -196,6 +205,13 @@ class SnapshotResult(NodeResult):
 
     # populated only if state is available
     hashes: Sequence[SnapshotHash] | None = None
+
+
+class SnapshotResultV20240225(SnapshotResult):
+    node_id: int
+    root_globs: Sequence[str]
+    state: None = None
+    hashes: None = None
 
 
 class SnapshotDownloadRequest(NodeRequest):
@@ -320,6 +336,11 @@ class BackupManifest(AstacusModel):
 
     # Semi-redundant but simplifies handling; automatically set on download
     filename: str = ""
+
+
+class BackupManifestV20240225(BackupManifest):
+    version: Literal[20240225] = 20240225
+    snapshot_results: Sequence[SnapshotResultV20240225]
 
 
 # coordinator.list

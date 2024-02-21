@@ -28,12 +28,15 @@ _original_asyncio_sleep = asyncio.sleep
 def fixture_storage(tmp_path: Path) -> StorageManager:
     config = create_rohmu_config(tmp_path)
     return StorageManager(
+        n_nodes=2,
         default_storage_name=config.default_storage,
         json_storage=CachedMultiStorage(
             storage=RohmuMultiStorage(config=config, prefix="json"),
             cache=FileMultiStorage(tmp_path / "cache"),
         ),
         hexdigest_storage=RohmuMultiStorage(config=config, prefix="hexdigest"),
+        node_storage=RohmuMultiStorage(config=config, prefix="node"),
+        tmp_path=tmp_path / "node_tmp_storage",
     )
 
 

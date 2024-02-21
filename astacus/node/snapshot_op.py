@@ -13,7 +13,8 @@ this module with proper parameters.
 from .node import NodeOp
 from .snapshotter import Snapshotter
 from .uploader import Uploader
-from astacus.common import ipc, utils
+from astacus.common import ipc, node_manifest, utils
+from astacus.common.pyarrow_utils import convert_rows_to_dataset
 from astacus.node.snapshot import Snapshot
 
 import logging
@@ -38,19 +39,32 @@ class SnapshotOp(NodeOp[ipc.SnapshotRequestV2, ipc.SnapshotResult]):
         with self.snapshotter.lock:
             self.check_op_id()
             self.snapshotter.perform_snapshot(progress=self.result.progress)
-            self.result.state = self.snapshotter.get_snapshot_state()
-            self.result.hashes = [
-                ipc.SnapshotHash(hexdigest=ssfile.hexdigest, size=ssfile.file_size)
-                for ssfile in self.result.state.files
-                if ssfile.hexdigest
-            ]
-            self.result.files = len(self.result.state.files)
-            self.result.total_size = sum(ssfile.file_size for ssfile in self.result.state.files)
-            self.result.end = utils.now()
-            self.result.progress.done()
+            if self.req.node_manifest_info is None:
+                self.result.state = self.snapshotter.get_snapshot_state()
+                self.result.hashes = [
+                    ipc.SnapshotHash(hexdigest=ssfile.hexdigest, size=ssfile.file_size)
+                    for ssfile in self.result.state.files
+                    if ssfile.hexdigest
+                ]
+                self.result.files = len(self.result.state.files)
+                self.result.total_size = sum(ssfile.file_size for ssfile in self.result.state.files)
+            else:
+                self.result.total_size = self.snapshotter.snapshot.get_total_size()
+                self.result.files = len(self.snapshotter.snapshot)
+                manifest_info = self.req.node_manifest_info
+                manifest = convert_rows_to_dataset(
+                    self.snapshotter.snapshot.get_all_files_tuples(),
+                    schema=node_manifest.ARROW_SCHEMA,
+                    batch_size=node_manifest.BATCH_SIZE,
+                )
+                self.get_node_store(manifest_info.snapshot_index, manifest_info.storage).upload_manifest(
+                    manifest_info.backup_name, manifest
+                )
+        self.result.end = utils.now()
+        self.result.progress.done()
 
 
-class UploadOp(NodeOp[ipc.SnapshotUploadRequestV20221129, ipc.SnapshotUploadResult]):
+class UploadOp(NodeOp[ipc.SnapshotUploadRequest, ipc.SnapshotUploadResult]):
     snapshot: Snapshot | None = None
 
     def create_result(self) -> ipc.SnapshotUploadResult:
@@ -63,7 +77,7 @@ class UploadOp(NodeOp[ipc.SnapshotUploadRequestV20221129, ipc.SnapshotUploadResu
 
     def upload(self) -> None:
         assert self.snapshot is not None
-        uploader = Uploader(hexdigest_storage=self.get_hexdigest_storage(self.req.storage))
+        uploader = Uploader(hexdigest_storage=self.get_hexdigest_store(self.req.storage))
         # 'snapshotter' is global; ensure we have sole access to it
         with self.snapshot.lock:
             self.check_op_id()

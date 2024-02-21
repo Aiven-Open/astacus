@@ -5,6 +5,7 @@ See LICENSE for details
 Test that the list endpoint behaves as advertised
 """
 
+from astacus.common.backup_conversion import convert_backup
 from astacus.common.ipc import (
     BackupManifest,
     ListForStorage,
@@ -20,11 +21,14 @@ from astacus.common.ipc import (
 )
 from astacus.common.storage.manager import StorageManager
 from astacus.coordinator import api
-from astacus.coordinator.list import compute_deduplicated_snapshot_file_stats, list_backups
+from astacus.coordinator.list import compute_deduplicated_snapshot_file_stats_v1, list_backups
+from astacus.node.snapshotter import hash_hexdigest_readable
 from fastapi.testclient import TestClient
+from io import BytesIO
 from pytest_mock import MockerFixture
 
 import datetime
+import hashlib
 import json
 import pytest
 
@@ -123,34 +127,34 @@ def fixture_backup_manifest() -> BackupManifest:
                             relative_path="store/000/00000000-0000-0000-0000-100000000001/detached/all_0_0_0/data.bin",
                             file_size=1000,
                             mtime_ns=0,
-                            hexdigest="1000",
+                            hexdigest=hash_str("1000"),
                         ),
                         SnapshotFile(
                             relative_path="store/000/00000000-0000-0000-0000-100000000001/detached/all_1_1_0/data.bin",
                             file_size=1000,
                             mtime_ns=0,
-                            hexdigest="1110",
+                            hexdigest=hash_str("1110"),
                         ),
                         SnapshotFile(
                             relative_path="store/000/00000000-0000-0000-0000-100000000001/detached/all_1_0_0/data.bin",
                             file_size=1000,
                             mtime_ns=0,
-                            hexdigest="1100",
+                            hexdigest=hash_str("1100"),
                         ),
                         # Second table
                         SnapshotFile(
                             relative_path="store/000/00000000-0000-0000-0000-100000000002/detached/all_0_0_0/data.bin",
                             file_size=1000,
                             mtime_ns=0,
-                            hexdigest="2000",
+                            hexdigest=hash_str("2000"),
                         ),
                     ],
                 ),
                 hashes=[
-                    SnapshotHash(hexdigest="1000", size=1000),
-                    SnapshotHash(hexdigest="1110", size=1000),
-                    SnapshotHash(hexdigest="1100", size=1000),
-                    SnapshotHash(hexdigest="2000", size=1000),
+                    SnapshotHash(hexdigest=hash_str("1000"), size=1000),
+                    SnapshotHash(hexdigest=hash_str("1110"), size=1000),
+                    SnapshotHash(hexdigest=hash_str("1100"), size=1000),
+                    SnapshotHash(hexdigest=hash_str("2000"), size=1000),
                 ],
                 files=4,
                 total_size=4000,
@@ -165,42 +169,42 @@ def fixture_backup_manifest() -> BackupManifest:
                             relative_path="store/000/00000000-0000-0000-0000-100000000001/detached/all_0_0_0/data.bin",
                             file_size=1000,
                             mtime_ns=0,
-                            hexdigest="1000",
+                            hexdigest=hash_str("1000"),
                         ),
                         SnapshotFile(
                             relative_path="store/000/00000000-0000-0000-0000-100000000001/detached/all_1_1_0/data.bin",
                             file_size=1000,
                             mtime_ns=0,
-                            hexdigest="1110",
+                            hexdigest=hash_str("1110"),
                         ),
                         # Second table
                         SnapshotFile(
                             relative_path="store/000/00000000-0000-0000-0000-100000000002/detached/all_0_0_0/data.bin",
                             file_size=1000,
                             mtime_ns=0,
-                            hexdigest="2000",
+                            hexdigest=hash_str("2000"),
                         ),
                         SnapshotFile(
                             relative_path="store/000/00000000-0000-0000-0000-100000000002/detached/all_1_1_0/data.bin",
                             file_size=1000,
                             mtime_ns=0,
-                            hexdigest="2110",
+                            hexdigest=hash_str("2110"),
                         ),
                         # Third table with same hexdigest as second one
                         SnapshotFile(
                             relative_path="store/000/00000000-0000-0000-0000-100000000003/detached/all_0_0_0/data.bin",
                             file_size=1000,
                             mtime_ns=0,
-                            hexdigest="2000",
+                            hexdigest=hash_str("2000"),
                         ),
                     ],
                 ),
                 hashes=[
-                    SnapshotHash(hexdigest="1000", size=1000),
-                    SnapshotHash(hexdigest="1110", size=1000),
-                    SnapshotHash(hexdigest="2000", size=1000),
-                    SnapshotHash(hexdigest="2110", size=1000),
-                    SnapshotHash(hexdigest="2000", size=1000),
+                    SnapshotHash(hexdigest=hash_str("1000"), size=1000),
+                    SnapshotHash(hexdigest=hash_str("1110"), size=1000),
+                    SnapshotHash(hexdigest=hash_str("2000"), size=1000),
+                    SnapshotHash(hexdigest=hash_str("2110"), size=1000),
+                    SnapshotHash(hexdigest=hash_str("2000"), size=1000),
                 ],
                 files=5,
                 total_size=5000,
@@ -218,17 +222,22 @@ def test_compute_deduplicated_snapshot_file_stats(backup_manifest: BackupManifes
     """Test backup stats are computed correctly in the presence of duplicate snapshot files."""
     manifest_json = json.loads(backup_manifest.json())
     snapshot_results_json = manifest_json["snapshot_results"]
-    num_files, total_size = compute_deduplicated_snapshot_file_stats(snapshot_results_json)
+    num_files, total_size = compute_deduplicated_snapshot_file_stats_v1(snapshot_results_json)
     assert (num_files, total_size) == (6, 6000)
 
 
-def test_api_list_deduplication(backup_manifest: BackupManifest, storage: StorageManager) -> None:
+@pytest.mark.parametrize("new_backup_schema", [True, False], ids=["v2", "v1"])
+def test_api_list_deduplication(backup_manifest: BackupManifest, storage: StorageManager, new_backup_schema: bool) -> None:
     """Test the list backup operation correctly deduplicates snapshot files when computing stats."""
-    storage.get_json_store("x").upload_json("backup-1", backup_manifest)
+    if new_backup_schema:
+        backup_manifest, datasets = convert_backup(backup_manifest)
+        for idx, dataset in enumerate(datasets):
+            storage.get_node_store(idx, "x").upload_manifest("backup-1", dataset)
     storage.get_hexdigest_store("x").upload_hexdigest_bytes("FAKEDIGEST", b"fake-digest-data")
+    storage.get_json_store("x").upload_json("backup-1", backup_manifest)
 
     list_request = ListRequest(storage="x")
-    list_response = list_backups(req=list_request, json_mstorage=storage.json_storage)
+    list_response = list_backups(req=list_request, storage=storage)
     expected_response = ListResponse(
         storages=[
             ListForStorage(
@@ -253,3 +262,7 @@ def test_api_list_deduplication(backup_manifest: BackupManifest, storage: Storag
         ]
     )
     assert list_response == expected_response
+
+
+def hash_str(s: str) -> str:
+    return hash_hexdigest_readable(BytesIO(s.encode()))

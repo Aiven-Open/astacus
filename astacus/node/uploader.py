@@ -33,21 +33,13 @@ class Uploader:
         still_running_callback=lambda: True,
         validate_file_hashes: bool = True
     ):
-        todo = [
-            (hexdigest, list(snapshot.get_files_for_digest(hexdigest)))
-            for hexdigest in set(hash.hexdigest for hash in hashes)
-        ]
-        todo.sort(key=lambda hexdigest_and_files: -hexdigest_and_files[1][0].file_size)
-        progress.start(len(todo))
+        progress.start(len(hashes))
         sizes = {"total": 0, "stored": 0}
 
-        def _upload_hexdigest_in_thread(work: tuple[str, list[SnapshotFile]]):
-            hexdigest, files = work
+        def _upload_hexdigest_in_thread(hexdigest: str):
             storage = self.hexdigest_storage.value
 
-            assert hexdigest
-            files = list(snapshot.get_files_for_digest(hexdigest))
-            for snapshotfile in files:
+            for snapshotfile in snapshot.get_files_for_digest(hexdigest):
                 path = snapshot.dst / snapshotfile.relative_path
                 if not path.is_file():
                     logger.warning("%s disappeared post-snapshot", path)
@@ -90,6 +82,11 @@ class Uploader:
             progress_callback(map_in)  # hexdigest
             return still_running_callback()
 
-        if not utils.parallel_map_to(fun=_upload_hexdigest_in_thread, iterable=todo, result_callback=_result_cb, n=parallel):
+        if not utils.parallel_map_to(
+            fun=_upload_hexdigest_in_thread,
+            iterable=hashes,
+            result_callback=_result_cb,
+            n=parallel,
+        ):
             progress.add_fail()
         return sizes["total"], sizes["stored"]

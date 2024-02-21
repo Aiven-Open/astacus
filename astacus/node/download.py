@@ -15,20 +15,27 @@ from .snapshotter import Snapshotter
 from astacus.common import ipc, utils
 from astacus.common.json_view import get_array, get_object, iter_objects
 from astacus.common.progress import Progress
+from astacus.common.pyarrow_utils import iterate_table, set_difference
 from astacus.common.storage.hexidigest import HexDigestStore
 from astacus.common.threadlocal import CopiedThreadLocal
 from astacus.common.utils import get_umask
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
+from typing import TypeAlias
 
 import base64
 import getpass
 import logging
 import os
+import pyarrow
+import pyarrow.compute as pc
+import pyarrow.dataset as ds
 import shutil
 import subprocess
 
 logger = logging.getLogger(__name__)
+
+StillRunningCallback: TypeAlias = Callable[[], bool]
 
 
 class Downloader:
@@ -91,7 +98,7 @@ class Downloader:
         *,
         progress: Progress,
         snapshotstate: ipc.SnapshotState,
-        still_running_callback: Callable[[], bool] = lambda: True,
+        still_running_callback: StillRunningCallback = lambda: True,
     ) -> None:
         hexdigest_to_snapshotfiles: dict[str, list[ipc.SnapshotFile]] = {}
         valid_relative_path_set = set()
@@ -132,33 +139,116 @@ class Downloader:
             absolute_path.unlink(missing_ok=True)
 
         if self.copy_dst_owner:
-            # Adjust owner of created files and folders to be like the owner of dst
-            dst_owner_uid = self.dst.stat().st_uid
-            chowned_paths: set[str] = set()
-            for snapshotfile in snapshotstate.files:
-                absolute_path = self.dst / snapshotfile.relative_path
-                chown_candidate = absolute_path
-                while chown_candidate != self.dst and chown_candidate.stat().st_uid != dst_owner_uid:
-                    chowned_paths.add(str(chown_candidate.relative_to(self.dst)))
-                    chown_candidate = chown_candidate.parent
-
-            chunk_size = 1000
-            sorted_paths = sorted(chowned_paths)
-            for chunk_start in range(0, len(sorted_paths), chunk_size):
-                astacus_user = getpass.getuser()
-                dst_owner_gid = self.dst.stat().st_gid
-                # We're very specific to allow a sufficiently restrictive sudoers configuration
-                cmd: Sequence[str | Path] = [
-                    "/usr/bin/sudo",
-                    "/usr/bin/chown",
-                    f"--from={astacus_user}:{dst_owner_gid}",
-                    f"{dst_owner_uid}",
-                    "--",
-                    *sorted_paths[chunk_start : chunk_start + chunk_size],
-                ]
-                subprocess.run(cmd, shell=False, check=True, cwd=self.dst)
+            self.ensure_correct_ownership(valid_relative_path_set)
         # This operation is done. It may or may not have been a success.
         progress.done()
+
+    def ensure_correct_ownership(self, files: Iterable[str]) -> None:
+        dst_owner_uid = self.dst.stat().st_uid
+        chowned_paths: set[str] = set()
+        for file in files:
+            absolute_path = self.dst / file
+            chown_candidate = absolute_path
+            while chown_candidate != self.dst and chown_candidate.stat().st_uid != dst_owner_uid:
+                chowned_paths.add(str(chown_candidate.relative_to(self.dst)))
+                chown_candidate = chown_candidate.parent
+
+        chunk_size = 1000
+        sorted_paths = sorted(chowned_paths)
+        for chunk_start in range(0, len(sorted_paths), chunk_size):
+            astacus_user = getpass.getuser()
+            dst_owner_gid = self.dst.stat().st_gid
+            # We're very specific to allow a sufficiently restrictive sudoers configuration
+            cmd: Sequence[str | Path] = [
+                "/usr/bin/sudo",
+                "/usr/bin/chown",
+                f"--from={astacus_user}:{dst_owner_gid}",
+                f"{dst_owner_uid}",
+                "--",
+                *sorted_paths[chunk_start : chunk_start + chunk_size],
+            ]
+            subprocess.run(cmd, shell=False, check=True, cwd=self.dst)
+
+    def download_from_storage_v2(
+        self,
+        *,
+        node_manifest: ds.Dataset,
+        progress: Progress,
+        still_running_callback: StillRunningCallback = lambda: True,
+    ) -> None:
+        progress.start(self.get_progress_total(node_manifest))
+        self.write_enbedded_contents(node_manifest)
+        if not self.download_hexidigests(progress, node_manifest, still_running_callback):
+            return
+
+        relative_paths = self.get_relative_paths(node_manifest)
+        self.remove_unwanted_files(relative_paths)
+
+        if self.copy_dst_owner:
+            self.ensure_correct_ownership(relative_paths)
+        progress.done()
+
+    def write_enbedded_contents(self, node_manifest: ds.Dataset) -> None:
+        table = node_manifest.to_table(columns=["relative_path", "content"]).filter(pc.is_valid(pc.field("content")))
+        for d in iterate_table(table):
+            Path(self.dst / d["relative_path"]).write_bytes(d["content"])
+
+    def get_progress_total(self, node_manifest: ds.Dataset) -> int:
+        file_sizes = node_manifest.to_table(columns=["file_size"])
+        total_size = pc.sum(file_sizes.column("file_size")).as_py()
+        total_files = len(file_sizes)
+        return total_size + total_files
+
+    def download_hexidigests(
+        self, progress: Progress, node_manifest: ds.Dataset, still_running_callback: StillRunningCallback
+    ) -> bool:
+        grouped_files = (
+            node_manifest.filter(pc.is_valid(pc.field("hexdigest")))
+            .to_table(columns=["hexdigest", "relative_path", "file_size", "mtime_ns"])
+            .group_by(["hexdigest"])
+            .aggregate([("relative_path", "list"), ("file_size", "list"), ("mtime_ns", "list"), ("file_size", "max")])
+            .sort([("file_size_max", "descending")])
+        )
+
+        work = map(self.convert_pyarrow_result_to_snapshots, iterate_table(grouped_files))
+
+        def _cb(*, map_in: Sequence[ipc.SnapshotFile], map_out: Sequence[ipc.SnapshotFile]) -> bool:
+            snapshotfiles = map_in
+            progress.download_success((snapshotfiles[0].file_size + 1) * len(snapshotfiles))
+            return still_running_callback()
+
+        if not utils.parallel_map_to(
+            fun=self._download_snapshotfiles_from_storage,
+            iterable=work,
+            result_callback=_cb,
+            n=self.parallel,
+        ):
+            progress.add_fail()
+            progress.done()
+            return False
+        return True
+
+    def convert_pyarrow_result_to_snapshots(self, d: dict) -> list[ipc.SnapshotFile]:
+        return [
+            ipc.SnapshotFile(
+                relative_path=d["relative_path_list"][i],
+                file_size=d["file_size_list"][i],
+                mtime_ns=d["mtime_ns_list"][i],
+                hexdigest=d["hexdigest"],
+                content_b64=None,
+            )
+            for i in range(len(d["relative_path"]))
+        ]
+
+    def get_relative_paths(self, dataset: ds.Dataset) -> pyarrow.StringArray:
+        # .unique() is hash table based and does not sort
+        return dataset.to_table(columns=["relative_path"]).column("relative_path").unique().sort()
+
+    def remove_unwanted_files(self, wanted_paths: pyarrow.StringArray) -> None:
+        existing_paths = pyarrow.array(self.snapshot.get_all_paths())
+        to_remove = set_difference(existing_paths, wanted_paths)
+        for path in to_remove:
+            (self.dst / path.as_py()).unlink(missing_ok=True)
 
 
 class DownloadOp(NodeOp[ipc.SnapshotDownloadRequest, ipc.NodeResult]):
@@ -175,25 +265,43 @@ class DownloadOp(NodeOp[ipc.SnapshotDownloadRequest, ipc.NodeResult]):
     def download(self) -> None:
         assert self.snapshotter is not None
         # Actual 'restore from backup'
-        manifest_json = self.get_json_storage(self.req.storage).download_json(self.req.backup_name)
+        manifest_json = self.get_json_store(self.req.storage).download_json(self.req.backup_name)
         assert isinstance(manifest_json, Mapping)
-        snapshot_results_json = list(iter_objects(get_array(manifest_json, "snapshot_results")))
-        snapshotstate_json = get_object(snapshot_results_json[self.req.snapshot_index], "state")
-        snapshotstate = ipc.SnapshotState.parse_obj(snapshotstate_json)
-        assert snapshotstate is not None
+        if "version" in manifest_json and manifest_json["version"] == 20240225:
+            node_manifest = self.get_node_store(self.req.snapshot_index, self.req.storage).download_manifest(
+                self.req.backup_name
+            )
+            with self.snapshotter.lock:
+                self.check_op_id()
+                downloader = Downloader(
+                    dst=self.config.root,
+                    snapshotter=self.snapshotter,
+                    hexdigest_storage=self.get_hexdigest_store(self.req.storage),
+                    parallel=self.config.parallel.downloads,
+                    copy_dst_owner=self.config.copy_root_owner,
+                )
+                downloader.download_from_storage_v2(
+                    node_manifest=node_manifest,
+                    progress=self.result.progress,
+                    still_running_callback=self.still_running_callback,
+                )
+        else:
+            snapshot_results_json = list(iter_objects(get_array(manifest_json, "snapshot_results")))
+            snapshotstate_json = get_object(snapshot_results_json[self.req.snapshot_index], "state")
+            snapshotstate = ipc.SnapshotState.parse_obj(snapshotstate_json)
+            assert snapshotstate is not None
 
-        # 'snapshotter' is global; ensure we have sole access to it
-        with self.snapshotter.lock:
-            self.check_op_id()
-            downloader = Downloader(
-                dst=self.config.root,
-                snapshotter=self.snapshotter,
-                hexdigest_storage=self.get_hexdigest_storage(self.req.storage),
-                parallel=self.config.parallel.downloads,
-                copy_dst_owner=self.config.copy_root_owner,
-            )
-            downloader.download_from_storage(
-                snapshotstate=snapshotstate,
-                progress=self.result.progress,
-                still_running_callback=self.still_running_callback,
-            )
+            with self.snapshotter.lock:
+                self.check_op_id()
+                downloader = Downloader(
+                    dst=self.config.root,
+                    snapshotter=self.snapshotter,
+                    hexdigest_storage=self.get_hexdigest_store(self.req.storage),
+                    parallel=self.config.parallel.downloads,
+                    copy_dst_owner=self.config.copy_root_owner,
+                )
+                downloader.download_from_storage(
+                    snapshotstate=snapshotstate,
+                    progress=self.result.progress,
+                    still_running_callback=self.still_running_callback,
+                )

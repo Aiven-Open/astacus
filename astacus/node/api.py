@@ -114,7 +114,7 @@ def delta_snapshot_result(*, op_id: int, n: Node = Depends()):
 
 
 @router.post("/upload")
-def upload(req: ipc.SnapshotUploadRequestV20221129, n: Node = Depends()):
+def upload(req: ipc.SnapshotUploadRequest, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
     snapshot_ = n.get_or_create_snapshot()
@@ -128,7 +128,7 @@ def upload_result(*, op_id: int, n: Node = Depends()):
 
 
 @router.post("/delta/upload")
-def delta_upload(req: ipc.SnapshotUploadRequestV20221129, n: Node = Depends()):
+def delta_upload(req: ipc.SnapshotUploadRequest, n: Node = Depends()):
     if not n.state.is_locked:
         raise HTTPException(status_code=409, detail="Not locked")
     snapshot_ = n.get_or_create_delta_snapshot()

@@ -100,8 +100,9 @@ class NodeOp(op.Op, Generic[Request, Result]):
         self.start_op = n.start_op
         self.config = n.config
         self._still_locked_callback = n.state.still_locked_callback
-        self.get_hexdigest_storage = n.storage.get_hexdigest_store
-        self.get_json_storage = n.storage.get_json_store
+        self.get_hexdigest_store = n.storage.get_hexdigest_store
+        self.get_json_store = n.storage.get_json_store
+        self.get_node_store = n.storage.get_node_store
 
         self._sent_result_json: str | None = None
         self.req = req

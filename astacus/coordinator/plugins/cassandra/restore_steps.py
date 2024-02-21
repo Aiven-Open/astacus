@@ -126,7 +126,7 @@ class UploadFinalDeltaStep(Step[Sequence[ipc.BackupManifest]]):
     async def upload_delta(
         self, node: CoordinatorNode, hashes: Sequence[ipc.SnapshotHash], *, cluster: Cluster
     ) -> Sequence[ipc.SnapshotUploadResult]:
-        upload_req: ipc.NodeRequest = ipc.SnapshotUploadRequestV20221129(
+        upload_req: ipc.NodeRequest = ipc.SnapshotUploadRequest(
             hashes=hashes, storage=self.storage_name, validate_file_hashes=False
         )
         upload_start_results = await cluster.request_from_nodes(

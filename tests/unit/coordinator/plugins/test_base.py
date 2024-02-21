@@ -146,9 +146,7 @@ def manifest_with_hashes(hashes: dict[str, bytes], index: int) -> ipc.BackupMani
         ),
         (
             [ipc.NodeFeatures.validate_file_hashes],
-            ipc.SnapshotUploadRequestV20221129(
-                result_url="", hashes=get_sample_hashes(), storage="fake", validate_file_hashes=True
-            ),
+            ipc.SnapshotUploadRequest(result_url="", hashes=get_sample_hashes(), storage="fake", validate_file_hashes=True),
         ),
     ],
     ids=["no_feature", "validate_file_hashes"],
