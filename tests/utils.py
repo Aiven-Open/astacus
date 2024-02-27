@@ -97,6 +97,9 @@ def is_cassandra_driver_importable() -> bool:
 
 def format_astacus_command(*arg: str) -> Sequence[str]:
     # If we're gathering coverage, run subprocesses under coverage run
+    if True:
+        memray_path = str(Path(sys.executable).parent / "memray")
+        return [memray_path, "run", "-m", "astacus.main"] + list(arg)
     if os.environ.get("COVERAGE_RUN", None):
         return [sys.executable, "-m", "coverage", "run", "-m", "astacus.main"] + list(arg)
     return [sys.executable, "-m", "astacus.main"] + list(arg)

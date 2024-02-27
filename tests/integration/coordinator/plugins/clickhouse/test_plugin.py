@@ -136,10 +136,22 @@ async def setup_cluster_content(clients: Sequence[HttpClickHouseClient], use_nam
             )
         )
     # table creation is auto-replicated so we only do it once :
-    await clients[0].execute(
-        b"CREATE TABLE default.replicated_merge_tree  (thekey UInt32, thedata String)  "
-        b"ENGINE = ReplicatedMergeTree ORDER BY (thekey)"
-    )
+    if True:
+        await clients[0].execute(
+            b"CREATE TABLE default.replicated_merge_tree  (thekey UInt32, thedata String)  "
+            b"ENGINE = ReplicatedMergeTree ORDER BY (thekey) PARTITION BY thekey"
+        )
+        await clients[0].execute(
+            b"INSERT INTO default.replicated_merge_tree (thekey)"
+            b" SELECT number FROM system.numbers LIMIT 10000"
+            b" SETTINGS max_partitions_per_insert_block=10000",
+            timeout=300.0,
+        )
+    else:
+        await clients[0].execute(
+            b"CREATE TABLE default.replicated_merge_tree  (thekey UInt32, thedata String)  "
+            b"ENGINE = ReplicatedMergeTree ORDER BY (thekey)"
+        )
     # test that we can re-create a table requiring custom global settings.
     await clients[0].execute(
         b"CREATE TABLE default.with_experimental_types (thekey UInt32, thedata JSON) "
