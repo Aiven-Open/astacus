@@ -6,7 +6,7 @@ from astacus.common import ipc, op, utils
 from astacus.common.magic import LockCall
 from astacus.common.progress import Progress
 from astacus.common.statsd import StatsClient
-from astacus.common.utils import AsyncSleeper
+from astacus.common.utils import AsyncSleeper, httpx_request_stream
 from astacus.coordinator.config import CoordinatorNode, PollConfig
 from collections.abc import Callable, Mapping, Sequence
 from enum import Enum
@@ -199,17 +199,20 @@ class Cluster:
                     continue
                 progress_text = f"{result.progress!r}" if result is not None else "not started"
                 logger.info("%s node #%d/%d: %s", node_op_from_url(url), i, len(urls), progress_text)
-                r = await utils.httpx_request(
-                    url, caller="Nodes.wait_successful_results", timeout=self.poll_config.result_timeout, json=False
-                )
-                if r is None:
-                    failures[i] += 1
-                    if failures[i] >= self.poll_config.maximum_failures:
-                        raise WaitResultError("too many failures")
-                    continue
-                # We got something -> decode the result
-                assert isinstance(r, httpx.Response)
-                result = msgspec.json.decode(r.content, type=result_class)
+                async with httpx_request_stream(
+                    url, caller="Nodes.wait_successful_results", timeout=self.poll_config.result_timeout
+                ) as r:
+                    if r is None:
+                        failures[i] += 1
+                        if failures[i] >= self.poll_config.maximum_failures:
+                            raise WaitResultError("too many failures")
+                        continue
+                    # We got something -> decode the result
+                    assert isinstance(r, httpx.Response)
+                    payload = bytearray()
+                    async for chunk in r.aiter_bytes():
+                        payload.extend(chunk)
+                result = msgspec.json.decode(payload, type=result_class)
                 results[i] = result
                 failures[i] = 0
                 if self.progress_handler is not None:
