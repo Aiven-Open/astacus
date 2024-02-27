@@ -12,17 +12,17 @@ API of this module with proper parameters.
 from .node import NodeOp
 from .snapshotter import Snapshotter
 from astacus.common import ipc, utils
-from astacus.common.json_view import get_array, get_object, iter_objects
 from astacus.common.progress import Progress
 from astacus.common.rohmustorage import RohmuStorage
 from astacus.common.storage import Storage, ThreadLocalStorage
 from astacus.common.utils import get_umask
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import base64
 import getpass
 import logging
+import msgspec
 import os
 import shutil
 import subprocess
@@ -173,11 +173,9 @@ class DownloadOp(NodeOp[ipc.SnapshotDownloadRequest, ipc.NodeResult]):
     def download(self) -> None:
         assert self.snapshotter is not None
         # Actual 'restore from backup'
-        manifest_json = self.storage.download_json(self.req.backup_name)
-        assert isinstance(manifest_json, Mapping)
-        snapshot_results_json = list(iter_objects(get_array(manifest_json, "snapshot_results")))
-        snapshotstate_json = get_object(snapshot_results_json[self.req.snapshot_index], "state")
-        snapshotstate = ipc.SnapshotState.parse_obj(snapshotstate_json)
+        with self.storage.open_json_bytes(self.req.backup_name) as manifest_content:
+            manifest = msgspec.json.decode(manifest_content, type=ipc.BackupManifest)
+        snapshotstate = manifest.snapshot_results[self.req.snapshot_index].state
         assert snapshotstate is not None
 
         # 'snapshotter' is global; ensure we have sole access to it

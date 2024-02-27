@@ -16,6 +16,7 @@ from requests import Response
 from tests.unit.conftest import CassandraTestConfig
 from types import ModuleType
 
+import msgspec
 import py
 import pytest
 import subprocess
@@ -164,7 +165,7 @@ class TestCassandraRestoreSSTables:
     ) -> Callable[..., ipc.CassandraRestoreSSTablesRequest]:
         class DefaultedRestoreSSTablesRequest(ipc.CassandraRestoreSSTablesRequest):
             table_glob: str = astacus_node_cassandra.SNAPSHOT_GLOB
-            keyspaces_to_skip: Sequence[str] = list(SYSTEM_KEYSPACES)
+            keyspaces_to_skip: Sequence[str] = msgspec.field(default_factory=lambda: list(SYSTEM_KEYSPACES))
             match_tables_by: ipc.CassandraTableMatching = ipc.CassandraTableMatching.cfname
             expect_empty_target: bool = True
 
@@ -211,7 +212,7 @@ class TestCassandraRestoreSSTables:
         self.assert_request_succeeded(ctenv, req)
 
     def assert_request_succeeded(self, ctenv: CassandraTestEnv, req: ipc.CassandraRestoreSSTablesRequest) -> None:
-        response = ctenv.post(subop=ipc.CassandraSubOp.restore_sstables, json=req.dict())
+        response = ctenv.post(subop=ipc.CassandraSubOp.restore_sstables, json=msgspec.to_builtins(req))
         status = ctenv.get_status(response)
         assert status.status_code == 200, response.json()
 
@@ -225,5 +226,14 @@ def test_dangerous_ops_not_allowed_on_read_access_level(ctenv: CassandraTestEnv,
     ctenv.lock()
     ctenv.setup_cassandra_node_config()
     ctenv.cassandra_node_config.access_level = CassandraAccessLevel.read
-    response = ctenv.post(subop=dangerous_op, json={})
+    if dangerous_op == ipc.CassandraSubOp.restore_sstables:
+        payload = {
+            "table_glob": "",
+            "keyspaces_to_skip": [],
+            "match_tables_by": ipc.CassandraTableMatching.cfid,
+            "expect_empty_target": False,
+        }
+    else:
+        payload = {}
+    response = ctenv.post(subop=dangerous_op, json=payload)
     assert response.status_code == 403, response.json()

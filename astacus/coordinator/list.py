@@ -4,23 +4,12 @@ See LICENSE for details
 
 """
 from astacus.common import ipc, magic
-from astacus.common.json_view import (
-    get_array,
-    get_int,
-    get_optional_object,
-    get_optional_str,
-    get_str,
-    iter_objects,
-    JsonArrayView,
-)
 from astacus.common.storage import JsonStorage, MultiStorage
-from astacus.common.utils import now
 from collections import defaultdict
 from collections.abc import Iterator
-from pydantic.datetime_parse import parse_datetime
 
 
-def compute_deduplicated_snapshot_file_stats(snapshot_results_json: JsonArrayView) -> tuple[int, int]:
+def compute_deduplicated_snapshot_file_stats(manifest: ipc.BackupManifest) -> tuple[int, int]:
     """Compute stats over snapshot files as identified by their hex digest.
 
     There may be duplicate hex digests within nodes for multiple copies of the same data chunks.
@@ -30,16 +19,13 @@ def compute_deduplicated_snapshot_file_stats(snapshot_results_json: JsonArrayVie
     """
     hexdigest_max_counts: dict[str, int] = {}
     hexdigest_sizes: dict[str, int] = {}
-    for snapshot_result in iter_objects(snapshot_results_json):
-        state = get_optional_object(snapshot_result, "state")
-        assert state is not None
+    for snapshot_result in manifest.snapshot_results:
+        assert snapshot_result.state is not None
         node_hexdigest_counter: defaultdict[str, int] = defaultdict(lambda: 0)
-        for snapshot_file in iter_objects(get_array(state, "files")):
-            hexdigest = get_str(snapshot_file, "hexdigest", "")
-            file_size = get_int(snapshot_file, "file_size")
-            node_hexdigest_counter[hexdigest] += 1
-            if hexdigest not in hexdigest_sizes:
-                hexdigest_sizes[hexdigest] = file_size
+        for snapshot_file in snapshot_result.state.files:
+            node_hexdigest_counter[snapshot_file.hexdigest] += 1
+            if snapshot_file.hexdigest not in hexdigest_sizes:
+                hexdigest_sizes[snapshot_file.hexdigest] = snapshot_file.file_size
         for hexdigest, count in node_hexdigest_counter.items():
             max_count = hexdigest_max_counts.get(hexdigest, 0)
             hexdigest_max_counts[hexdigest] = max(max_count, count)
@@ -53,26 +39,19 @@ def _iter_backups(storage: JsonStorage, backup_prefix: str) -> Iterator[ipc.List
         if not name.startswith(backup_prefix):
             continue
         pname = name[len(backup_prefix) :]
-        manifest_json = storage.download_json(name)
-        assert isinstance(manifest_json, dict)
-        snapshot_results_json = get_array(manifest_json, "snapshot_results")
-        upload_results_json = get_array(manifest_json, "upload_results")
-        files = sum(get_int(x, "files", 0) for x in iter_objects(snapshot_results_json))
-        total_size = sum(get_int(x, "total_size", 0) for x in iter_objects(snapshot_results_json))
-        upload_size = sum(get_int(x, "total_size", 0) for x in iter_objects(upload_results_json))
-        upload_stored_size = sum(get_int(x, "total_stored_size", 0) for x in iter_objects(upload_results_json))
-        cluster_files, cluster_data_size = compute_deduplicated_snapshot_file_stats(snapshot_results_json)
-        start = parse_datetime(get_str(manifest_json, "start"))
-        maybe_end = get_optional_str(manifest_json, "end", None)
-        # The default value is odd, but that's what is defined in `ipc.BackupManifest`.
-        end = parse_datetime(maybe_end) if maybe_end is not None else now()
+        manifest = storage.download_json(name, ipc.BackupManifest)
+        files = sum(x.files for x in manifest.snapshot_results)
+        total_size = sum(x.total_size for x in manifest.snapshot_results)
+        upload_size = sum(x.total_size for x in manifest.upload_results)
+        upload_stored_size = sum(x.total_stored_size for x in manifest.upload_results)
+        cluster_files, cluster_data_size = compute_deduplicated_snapshot_file_stats(manifest)
         yield ipc.ListSingleBackup(
             name=pname,
-            start=start,
-            end=end,
-            plugin=ipc.Plugin(get_str(manifest_json, "plugin")),
-            attempt=get_int(manifest_json, "attempt"),
-            nodes=len(snapshot_results_json),
+            start=manifest.start,
+            end=manifest.end,
+            plugin=manifest.plugin,
+            attempt=manifest.attempt,
+            nodes=len(manifest.snapshot_results),
             files=files,
             cluster_files=cluster_files,
             total_size=total_size,

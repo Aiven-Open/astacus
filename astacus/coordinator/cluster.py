@@ -17,6 +17,7 @@ import copy
 import httpx
 import json
 import logging
+import msgspec
 import urllib.parse
 
 logger = logging.getLogger(__name__)
@@ -110,7 +111,7 @@ class Cluster:
 
         # Now 'reqs' + 'urls' contains all we need to actually perform
         # requests we want to.
-        aws = [utils.httpx_request(url, caller=caller, data=req.json(), **kw) for req, url in zip(reqs, urls)]
+        aws = [utils.httpx_request(url, caller=caller, data=msgspec.json.encode(req), **kw) for req, url in zip(reqs, urls)]
         results = await asyncio.gather(*aws, return_exceptions=True)
 
         logger.info("request_from_nodes %r to %r => %r", reqs, urls, results)
@@ -199,7 +200,7 @@ class Cluster:
                 progress_text = f"{result.progress!r}" if result is not None else "not started"
                 logger.info("%s node #%d/%d: %s", node_op_from_url(url), i, len(urls), progress_text)
                 r = await utils.httpx_request(
-                    url, caller="Nodes.wait_successful_results", timeout=self.poll_config.result_timeout
+                    url, caller="Nodes.wait_successful_results", timeout=self.poll_config.result_timeout, json=False
                 )
                 if r is None:
                     failures[i] += 1
@@ -207,7 +208,8 @@ class Cluster:
                         raise WaitResultError("too many failures")
                     continue
                 # We got something -> decode the result
-                result = result_class.parse_obj(r)
+                assert isinstance(r, httpx.Response)
+                result = msgspec.json.decode(r.content, type=result_class)
                 results[i] = result
                 failures[i] = 0
                 if self.progress_handler is not None:

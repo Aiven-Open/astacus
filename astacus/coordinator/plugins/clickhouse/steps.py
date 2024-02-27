@@ -45,6 +45,7 @@ import asyncio
 import base64
 import dataclasses
 import logging
+import msgspec
 import secrets
 import uuid
 
@@ -405,14 +406,13 @@ class MoveFrozenPartsStep(Step[None]):
         for snapshot_result in snapshot_results:
             assert snapshot_result.state is not None
             snapshot_result.state.files = [
-                snapshot_file.copy(
-                    update={
-                        "relative_path": dataclasses.replace(
-                            self.disks.parse_part_file_path(snapshot_file.relative_path),
-                            freeze_name=None,
-                            detached=False,
-                        ).to_path()
-                    }
+                msgspec.structs.replace(
+                    snapshot_file,
+                    relative_path=dataclasses.replace(
+                        self.disks.parse_part_file_path(snapshot_file.relative_path),
+                        freeze_name=None,
+                        detached=False,
+                    ).to_path(),
                 )
                 for snapshot_file in snapshot_result.state.files
             ]

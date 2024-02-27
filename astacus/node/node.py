@@ -19,6 +19,7 @@ from starlette.datastructures import URL
 from typing import Generic, TypeVar
 
 import logging
+import msgspec
 
 logger = logging.getLogger(__name__)
 SNAPSHOTTER_KEY = "node_snapshotter"
@@ -34,7 +35,7 @@ class NodeOp(op.Op, Generic[Request, Result]):
         self.start_op = n.start_op
         self.config = n.config
         self._still_locked_callback = n.state.still_locked_callback
-        self._sent_result_json: str | None = None
+        self._sent_result_json: bytes | None = None
         self.req = req
         self.result = self.create_result()
         self.result.az = self.config.az
@@ -57,7 +58,7 @@ class NodeOp(op.Op, Generic[Request, Result]):
         if not self.still_running_callback():
             logger.debug("send_result omitted - not running")
             return
-        result_json = self.result.json(exclude_defaults=True)
+        result_json = msgspec.json.encode(self.result)
         if result_json == self._sent_result_json:
             return
         self._sent_result_json = result_json

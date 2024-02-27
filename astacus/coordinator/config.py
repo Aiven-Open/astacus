@@ -41,8 +41,20 @@ class CoordinatorNode(AstacusModel):
     az: str = ""
 
 
+class Retention(AstacusModel):
+    # If set, number of backups to retain always (even beyond days)
+    minimum_backups: int | None = None
+
+    # If set, maximum number of backups to retain
+    maximum_backups: int | None = None
+
+    # Backups older than this are deleted, unless it would reduce
+    # number of backups to less than minimum_backups
+    keep_days: int | None = None
+
+
 class CoordinatorConfig(AstacusModel):
-    retention: ipc.Retention = ipc.Retention(keep_days=7, minimum_backups=3)
+    retention: Retention = Retention(keep_days=7, minimum_backups=3)
 
     poll: PollConfig = PollConfig()
 

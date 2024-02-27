@@ -15,6 +15,7 @@ from pathlib import Path
 from pytest_mock import MockerFixture
 from tests.unit.node.conftest import build_snapshot_and_snapshotter, create_files_at_path
 
+import msgspec
 import pytest
 
 
@@ -98,5 +99,5 @@ def test_api_clear(client: TestClient, mocker: MockerFixture) -> None:
 
     # Decode the (result endpoint) response using the model
     response = m.call_args[1]["data"]
-    result = ipc.NodeResult.parse_raw(response)
+    result = msgspec.json.decode(response, type=ipc.NodeResult)
     assert result.progress.finished_successfully

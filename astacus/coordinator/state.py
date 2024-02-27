@@ -14,15 +14,15 @@ from astacus.common.op import OpState
 from astacus.coordinator.config import CoordinatorConfig
 from dataclasses import dataclass
 from fastapi import FastAPI, Request
-from pydantic import Field
 
+import msgspec
 import time
 
 APP_KEY = "coordinator_state"
 
 
-class CachedListResponse(utils.AstacusModel):
-    timestamp: float = Field(default_factory=time.monotonic)
+class CachedListResponse(msgspec.Struct, kw_only=True):
+    timestamp: float = msgspec.field(default_factory=time.monotonic)
     coordinator_config: CoordinatorConfig
     list_request: ipc.ListRequest
     list_response: ipc.ListResponse
