@@ -55,3 +55,4 @@ repos:
           - typing_extensions>=3.10.0
           - msgspec==0.18.6
           - pydantic==1.10.9
+          - starlette==0.27.0
