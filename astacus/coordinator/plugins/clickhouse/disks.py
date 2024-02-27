@@ -8,10 +8,14 @@ from .escaping import escape_for_file_name, unescape_from_file_name
 from astacus.common.magic import DEFAULT_EMBEDDED_FILE_SIZE
 from astacus.common.snapshot import SnapshotGroup
 from collections.abc import Sequence
+from typing import Final
 from uuid import UUID
 
 import dataclasses
+import msgspec
 import re
+
+UUID_RE: Final = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 
 class PartFilePathError(ValueError):
@@ -42,8 +46,7 @@ class Disk:
         )
 
 
-@dataclasses.dataclass(frozen=True, slots=True)
-class ParsedPath:
+class ParsedPath(msgspec.Struct, kw_only=True, frozen=True):
     disk: Disk
     freeze_name: bytes | None
     table_uuid: UUID
@@ -126,7 +129,7 @@ class Disks:
             uuid_index = store_or_shadow_index + 4
         else:
             raise PartFilePathError(file_path, "should start with 'store' or 'shadow' after the disk path")
-        if not re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", parts[uuid_index]):
+        if not UUID_RE.fullmatch(parts[uuid_index]):
             raise PartFilePathError(file_path, "invalid table UUID")
         if parts[uuid_index - 1] != parts[uuid_index][:3]:
             raise PartFilePathError(
