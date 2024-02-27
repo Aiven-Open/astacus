@@ -405,17 +405,12 @@ class MoveFrozenPartsStep(Step[None]):
         snapshot_results: Sequence[ipc.SnapshotResult] = context.get_result(SnapshotStep)
         for snapshot_result in snapshot_results:
             assert snapshot_result.state is not None
-            snapshot_result.state.files = [
-                msgspec.structs.replace(
-                    snapshot_file,
-                    relative_path=dataclasses.replace(
-                        self.disks.parse_part_file_path(snapshot_file.relative_path),
-                        freeze_name=None,
-                        detached=False,
-                    ).to_path(),
-                )
-                for snapshot_file in snapshot_result.state.files
-            ]
+            for snapshot_file in snapshot_result.state.files:
+                snapshot_file.relative_path = msgspec.structs.replace(
+                    self.disks.parse_part_file_path(snapshot_file.relative_path),
+                    freeze_name=None,
+                    detached=False,
+                ).to_path()
 
 
 @dataclasses.dataclass
