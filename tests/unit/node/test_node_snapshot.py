@@ -110,13 +110,15 @@ def test_api_snapshot_and_upload(client: TestClient, mocker: MockerFixture) -> N
     assert response.status_code == 200, response.json()
 
     # Decode the (result endpoint) response using the model
-    response = m.call_args[1]["data"]
-    result = msgspec.json.decode(response, type=ipc.SnapshotResult)
-    assert result.progress.finished_successfully
+    put_status_body = m.call_args[1]["data"]
+    status_result = msgspec.json.decode(put_status_body, type=ipc.NodeResult)
+    assert status_result.progress.finished_successfully
+    assert status_result.az
+
+    # Actually fetch the snapshot
+    response = client.get("/node/snapshot/2")
+    result = msgspec.json.decode(response.content, type=ipc.SnapshotResult)
     assert result.hashes
-    assert result.files
-    assert result.total_size
-    assert result.az
 
     # Ask it to be uploaded
     response = client.post("/node/upload")
@@ -125,9 +127,9 @@ def test_api_snapshot_and_upload(client: TestClient, mocker: MockerFixture) -> N
         "/node/upload", json={"storage": "x", "hashes": [msgspec.to_builtins(x) for x in result.hashes], "result_url": url}
     )
     assert response.status_code == 200, response.json()
-    response = m.call_args[1]["data"]
-    result2 = msgspec.json.decode(response, type=ipc.SnapshotUploadResult)
-    assert result2.progress.finished_successfully
+    put_status_body_2 = m.call_args[1]["data"]
+    status_result_2 = msgspec.json.decode(put_status_body_2, type=ipc.NodeResult)
+    assert status_result_2.progress.finished_successfully
 
 
 def test_api_snapshot_error(client: TestClient, mocker: MockerFixture) -> None:
