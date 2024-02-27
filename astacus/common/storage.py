@@ -5,20 +5,16 @@ See LICENSE for details
 
 """
 from .exceptions import NotFoundException
-from .utils import AstacusModel
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Iterator
 from pathlib import Path
-from typing import BinaryIO, Generic, ParamSpec, TypeAlias, TypeVar
+from typing import BinaryIO, Callable, ContextManager, Generic, ParamSpec, TypeAlias, TypeVar
 
+import contextlib
 import io
-
-try:
-    import ujson as json
-except ImportError:
-    import json  # type: ignore[no-redef]
-
 import logging
+import mmap
+import msgspec
 import os
 import threading
 
@@ -26,13 +22,14 @@ logger = logging.getLogger(__name__)
 
 P = ParamSpec("P")
 T = TypeVar("T")
+ST = TypeVar("ST", bound=msgspec.Struct)
 JsonArray: TypeAlias = list["Json"]
 JsonObject: TypeAlias = dict[str, "Json"]
 JsonScalar: TypeAlias = str | int | float | None
 Json: TypeAlias = JsonScalar | JsonObject | JsonArray
 
 
-class StorageUploadResult(AstacusModel):
+class StorageUploadResult(msgspec.Struct, kw_only=True, frozen=True):
     size: int
     stored_size: int
 
@@ -76,7 +73,7 @@ class JsonStorage(ABC):
         ...
 
     @abstractmethod
-    def download_json(self, name: str) -> Json:
+    def open_json_bytes(self, name: str) -> ContextManager[mmap.mmap]:
         ...
 
     @abstractmethod
@@ -84,15 +81,17 @@ class JsonStorage(ABC):
         ...
 
     @abstractmethod
-    def upload_json_str(self, name: str, data: str) -> bool:
+    def upload_json_bytes(self, name: str, data: bytes | mmap.mmap) -> bool:
         ...
 
-    def upload_json(self, name: str, data: AstacusModel | Json) -> bool:
-        if isinstance(data, AstacusModel):
-            text = data.json()
-        else:
-            text = json.dumps(data)
-        return self.upload_json_str(name, text)
+    def upload_json(self, name: str, data: msgspec.Struct) -> bool:
+        json_bytes = msgspec.json.encode(data)
+        return self.upload_json_bytes(name, json_bytes)
+
+    def download_json(self, name, struct_type: type[ST]) -> ST:
+        with self.open_json_bytes(name) as mapped_file:
+            # msgspec accepts mmap objects but the type stub does not document that
+            return msgspec.json.decode(mapped_file, type=struct_type)  # type: ignore[call-overload]
 
 
 class Storage(HexDigestStorage, JsonStorage, ABC):
@@ -166,20 +165,24 @@ class FileStorage(Storage):
         logger.info("delete_json %r", name)
         self._json_to_path(name).unlink()
 
-    @file_error_wrapper
-    def download_json(self, name: str) -> Json:
-        logger.info("download_json %r", name)
+    @contextlib.contextmanager
+    def open_json_bytes(self, name: str) -> Iterator[mmap.mmap]:
+        logger.info("open_json_bytes %r", name)
         path = self._json_to_path(name)
-        with open(path) as f:
-            return json.load(f)
+        try:
+            with open(path, "rb") as f:
+                with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mapped_file:
+                    yield mapped_file
+        except FileNotFoundError as ex:
+            raise NotFoundException from ex
 
     def list_jsons(self) -> list[str]:
         return self._list(self.json_suffix)
 
-    def upload_json_str(self, name: str, data: str) -> bool:
-        logger.info("upload_json_str %r", name)
+    def upload_json_bytes(self, name: str, data: bytes | mmap.mmap) -> bool:
+        logger.info("upload_json_bytes %r", name)
         path = self._json_to_path(name)
-        with path.open(mode="w") as f:
+        with path.open(mode="wb") as f:
             f.write(data)
         return True
 

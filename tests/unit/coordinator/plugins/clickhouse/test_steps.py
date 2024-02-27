@@ -4,13 +4,12 @@ See LICENSE for details
 """
 from astacus.common.asyncstorage import AsyncJsonStorage
 from astacus.common.exceptions import TransientException
-from astacus.common.ipc import BackupManifest, Plugin, SnapshotFile, SnapshotResult, SnapshotState
+from astacus.common.ipc import BackupManifest, ManifestMin, Plugin, SnapshotFile, SnapshotResult, SnapshotState
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins.base import (
     BackupManifestStep,
     ComputeKeptBackupsStep,
-    ManifestMin,
     SnapshotStep,
     StepFailedError,
     StepsContext,
@@ -79,6 +78,7 @@ from unittest.mock import _Call as MockCall  # pylint: disable=protected-access
 import asyncio
 import base64
 import datetime
+import msgspec
 import pytest
 import sys
 import uuid
@@ -1208,7 +1208,9 @@ async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
             filename="backup-3",
         ),
     ]
-    async_json_storage = AsyncJsonStorage(storage=MemoryJsonStorage(items={b.filename: b.json() for b in manifests}))
+    async_json_storage = AsyncJsonStorage(
+        storage=MemoryJsonStorage(items={b.filename: msgspec.json.encode(b) for b in manifests})
+    )
     disks = Disks(disks=[create_object_storage_disk("remote", object_storage)])
     step = DeleteDanglingObjectStorageFilesStep(disks=disks, json_storage=async_json_storage)
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])

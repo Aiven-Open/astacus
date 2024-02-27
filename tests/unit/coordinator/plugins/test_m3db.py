@@ -31,6 +31,7 @@ from fastapi import BackgroundTasks
 from starlette.datastructures import URL
 from tests.unit.common.test_m3placement import create_dummy_placement
 
+import datetime
 import pytest
 import respx
 
@@ -151,15 +152,13 @@ async def test_m3_restore(coordinator: Coordinator, plugin: M3DBPlugin, etcd_cli
     context = StepsContext()
     context.set_result(
         BackupManifestStep,
-        ipc.BackupManifest.parse_obj(
-            {
-                "plugin": "m3db",
-                "plugin_data": PLUGIN_DATA,
-                "attempt": 1,
-                "snapshot_results": [],
-                "start": "2020-01-01 12:00",
-                "upload_results": [],
-            }
+        ipc.BackupManifest(
+            plugin=ipc.Plugin.m3db,
+            plugin_data=PLUGIN_DATA,
+            attempt=1,
+            snapshot_results=[],
+            start=datetime.datetime(2020, 1, 1, 12, 00, tzinfo=datetime.UTC),
+            upload_results=[],
         ),
     )
     fail_at = rt.fail_at

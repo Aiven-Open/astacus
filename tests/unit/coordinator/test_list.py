@@ -26,7 +26,6 @@ from pytest_mock import MockerFixture
 from tests.utils import create_rohmu_config
 
 import datetime
-import json
 import pytest
 
 
@@ -43,12 +42,12 @@ def test_api_list(client: TestClient, populated_mstorage: MultiRohmuStorage, moc
                     "backups": [
                         {
                             "attempt": 1,
-                            "end": "2020-02-02T12:34:56+00:00",
+                            "end": "2020-02-02T12:34:56Z",
                             "nodes": 1,
                             "files": 1,
                             "name": "1",
                             "plugin": "files",
-                            "start": "2020-01-01T21:43:00+00:00",
+                            "start": "2020-01-01T21:43:00Z",
                             "cluster_files": 1,
                             "cluster_data_size": 6,
                             "total_size": 6,
@@ -57,12 +56,12 @@ def test_api_list(client: TestClient, populated_mstorage: MultiRohmuStorage, moc
                         },
                         {
                             "attempt": 1,
-                            "end": "2020-02-02T12:34:56+00:00",
+                            "end": "2020-02-02T12:34:56Z",
                             "nodes": 1,
                             "files": 1,
                             "name": "2",
                             "plugin": "files",
-                            "start": "2020-01-01T21:43:00+00:00",
+                            "start": "2020-01-01T21:43:00Z",
                             "cluster_files": 1,
                             "cluster_data_size": 6,
                             "total_size": 6,
@@ -76,12 +75,12 @@ def test_api_list(client: TestClient, populated_mstorage: MultiRohmuStorage, moc
                     "backups": [
                         {
                             "attempt": 1,
-                            "end": "2020-02-02T12:34:56+00:00",
+                            "end": "2020-02-02T12:34:56Z",
                             "nodes": 1,
                             "files": 1,
                             "name": "3",
                             "plugin": "files",
-                            "start": "2020-01-01T21:43:00+00:00",
+                            "start": "2020-01-01T21:43:00Z",
                             "cluster_files": 1,
                             "cluster_data_size": 6,
                             "total_size": 6,
@@ -217,9 +216,7 @@ def fixture_backup_manifest() -> BackupManifest:
 
 def test_compute_deduplicated_snapshot_file_stats(backup_manifest: BackupManifest) -> None:
     """Test backup stats are computed correctly in the presence of duplicate snapshot files."""
-    manifest_json = json.loads(backup_manifest.json())
-    snapshot_results_json = manifest_json["snapshot_results"]
-    num_files, total_size = compute_deduplicated_snapshot_file_stats(snapshot_results_json)
+    num_files, total_size = compute_deduplicated_snapshot_file_stats(backup_manifest)
     assert (num_files, total_size) == (6, 6000)
 
 

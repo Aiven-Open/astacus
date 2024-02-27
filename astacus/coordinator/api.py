@@ -11,16 +11,21 @@ from .state import CachedListResponse
 from astacus import config
 from astacus.common import ipc
 from astacus.common.magic import StrEnum
+from astacus.common.msgspec_glue import register_msgspec_glue, StructResponse
 from astacus.common.op import Op
 from astacus.config import APP_HASH_KEY, get_config_content_and_hash
 from asyncio import to_thread
-from fastapi import APIRouter, Depends, HTTPException, Request
+from collections.abc import Sequence
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from typing import Annotated
 from urllib.parse import urljoin
 
 import logging
+import msgspec
 import os
 import time
 
+register_msgspec_glue()
 router = APIRouter()
 
 logger = logging.getLogger(__name__)
@@ -88,13 +93,30 @@ async def delta_backup(*, c: Coordinator = Depends(), op: DeltaBackupOp = Depend
 
 
 @router.post("/restore")
-async def restore(*, c: Coordinator = Depends(), op: RestoreOp = Depends(RestoreOp.create)):
+async def restore(
+    *,
+    c: Coordinator = Depends(),
+    storage: Annotated[str, Body()] = "",
+    name: Annotated[str, Body()] = "",
+    partial_restore_nodes: Annotated[Sequence[ipc.PartialRestoreRequestNode] | None, Body()] = None,
+    stop_after_step: Annotated[str | None, Body()] = None,
+):
+    req = ipc.RestoreRequest(
+        storage=storage,
+        name=name,
+        partial_restore_nodes=partial_restore_nodes,
+        stop_after_step=stop_after_step,
+    )
+    op = RestoreOp(c=c, req=req)
     runner = await op.acquire_cluster_lock()
     return c.start_op(op_name=OpName.restore, op=op, fun=runner)
 
 
 @router.get("/list")
-async def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordinator = Depends(), request: Request):
+async def _list_backups(
+    *, storage: Annotated[str, Body()] = "", c: Coordinator = Depends(), request: Request
+) -> StructResponse:
+    req = ipc.ListRequest(storage=storage)
     coordinator_config = c.config
     cached_list_response = c.state.cached_list_response
     if cached_list_response is not None:
@@ -104,7 +126,7 @@ async def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordina
             and cached_list_response.coordinator_config == coordinator_config
             and cached_list_response.list_request
         ):
-            return cached_list_response.list_response
+            return StructResponse(cached_list_response.list_response)
     if c.state.cached_list_running:
         raise HTTPException(status_code=429, detail="Already caching list result")
     c.state.cached_list_running = True
@@ -117,17 +139,26 @@ async def _list_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordina
         )
     finally:
         c.state.cached_list_running = False
-    return list_response
+    return StructResponse(list_response)
 
 
 @router.get("/delta/list")
-async def _list_delta_backups(*, req: ipc.ListRequest = ipc.ListRequest(), c: Coordinator = Depends(), request: Request):
+async def _list_delta_backups(*, storage: Annotated[str, Body()] = "", c: Coordinator = Depends(), request: Request):
+    req = ipc.ListRequest(storage=storage)
     # This is not supposed to be called very often, no caching necessary
     return await to_thread(list_delta_backups, req=req, json_mstorage=c.json_mstorage)
 
 
 @router.post("/cleanup")
-async def cleanup(*, op: CleanupOp = Depends(CleanupOp.create), c: Coordinator = Depends()):
+async def cleanup(
+    *,
+    storage: Annotated[str, Body()] = "",
+    retention: Annotated[ipc.Retention | None, Body()] = None,
+    explicit_delete: Annotated[Sequence[str], Body()] = (),
+    c: Coordinator = Depends(),
+):
+    req = ipc.CleanupRequest(storage=storage, retention=retention, explicit_delete=list(explicit_delete))
+    op = CleanupOp(c=c, req=req)
     runner = await op.acquire_cluster_lock()
     return c.start_op(op_name=OpName.cleanup, op=op, fun=runner)
 
@@ -138,7 +169,7 @@ def op_status(*, op_name: OpName, op_id: int, c: Coordinator = Depends()):
     op, op_info = c.get_op_and_op_info(op_id=op_id, op_name=op_name)
     result = {"state": op_info.op_status}
     if isinstance(op, (BackupOp, DeltaBackupOp, RestoreOp)):
-        result["progress"] = op.progress
+        result["progress"] = msgspec.to_builtins(op.progress)
     return result
 
 
