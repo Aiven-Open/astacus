@@ -177,10 +177,8 @@ def op_status(*, op_name: OpName, op_id: int, c: Coordinator = Depends()):
 @router.put("/delta/{op_name}/{op_id}/sub-result")
 async def op_sub_result(*, op_name: OpName, op_id: int, c: Coordinator = Depends()):
     op, _ = c.get_op_and_op_info(op_id=op_id, op_name=op_name)
-    # Someday, we might want to actually store results. This is sort
-    # of spoofable endpoint though, so just triggering subsequent
-    # result fetching faster. In case of terminal results, this
-    # results only in one extra fetch per node, so not big deal.
+    # We used to have results available here, but not use those
+    # that was wasting a lot of memory by generating the same result twice.
     if not op.subresult_sleeper:
         return
     op.subresult_sleeper.wakeup()
