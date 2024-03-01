@@ -79,7 +79,7 @@ class ClickHousePlugin(CoordinatorPlugin):
     # Deprecated parameter, ignored
     max_concurrent_restart_replica: int = 10
     max_concurrent_restart_replica_per_node: int = 10
-    restore_replica_timeout: float = 300.0
+    restore_replica_timeout: float = 3600.0
     # Deprecated parameter, ignored
     max_concurrent_restore_replica: int = 10
     max_concurrent_restore_replica_per_node: int = 10
