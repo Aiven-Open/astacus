@@ -339,7 +339,7 @@ class ListRequest(msgspec.Struct, kw_only=True):
     storage: str = ""
 
 
-class ListSingleBackup(msgspec.Struct, kw_only=True):
+class ListSingleBackup(msgspec.Struct, frozen=True, kw_only=True):
     # Subset of BackupManifest; see it for information
     name: str
     start: datetime

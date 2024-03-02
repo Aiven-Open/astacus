@@ -6,7 +6,11 @@ See LICENSE for details
 from astacus.common import ipc, magic
 from astacus.common.storage import JsonStorage, MultiStorage
 from collections import defaultdict
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
+from typing import TypeAlias
+
+CachedStorageListEntries: TypeAlias = Mapping[str, ipc.ListSingleBackup]
+CachedListEntries: TypeAlias = Mapping[str, CachedStorageListEntries]
 
 
 def compute_deduplicated_snapshot_file_stats(manifest: ipc.BackupManifest) -> tuple[int, int]:
@@ -34,11 +38,17 @@ def compute_deduplicated_snapshot_file_stats(manifest: ipc.BackupManifest) -> tu
     return num_files, total_size
 
 
-def _iter_backups(storage: JsonStorage, backup_prefix: str) -> Iterator[ipc.ListSingleBackup]:
+def _iter_backups(
+    storage: JsonStorage, backup_prefix: str, storage_cache: CachedStorageListEntries
+) -> Iterator[ipc.ListSingleBackup]:
     for name in sorted(storage.list_jsons()):
         if not name.startswith(backup_prefix):
             continue
-        pname = name[len(backup_prefix) :]
+        backup_name = name[len(backup_prefix) :]
+        cached_entry = storage_cache.get(backup_name)
+        if cached_entry is not None:
+            yield cached_entry
+            continue
         manifest = storage.download_json(name, ipc.BackupManifest)
         files = sum(x.files for x in manifest.snapshot_results)
         total_size = sum(x.total_size for x in manifest.snapshot_results)
@@ -46,7 +56,7 @@ def _iter_backups(storage: JsonStorage, backup_prefix: str) -> Iterator[ipc.List
         upload_stored_size = sum(x.total_stored_size for x in manifest.upload_results)
         cluster_files, cluster_data_size = compute_deduplicated_snapshot_file_stats(manifest)
         yield ipc.ListSingleBackup(
-            name=pname,
+            name=backup_name,
             start=manifest.start,
             end=manifest.end,
             plugin=manifest.plugin,
@@ -62,19 +72,29 @@ def _iter_backups(storage: JsonStorage, backup_prefix: str) -> Iterator[ipc.List
 
 
 def _iter_storages(
-    req: ipc.ListRequest, json_mstorage: MultiStorage, backup_prefix: str = magic.JSON_BACKUP_PREFIX
+    req: ipc.ListRequest,
+    json_mstorage: MultiStorage,
+    cache: CachedListEntries,
+    backup_prefix: str = magic.JSON_BACKUP_PREFIX,
 ) -> Iterator[ipc.ListForStorage]:
     # req.storage is optional, used to constrain listing just to the
     # given storage. by default, we list all storages.
     for storage_name in sorted(json_mstorage.list_storages()):
         if not req.storage or req.storage == storage_name:
-            backups = list(_iter_backups(json_mstorage.get_storage(storage_name), backup_prefix=backup_prefix))
+            storage_cache = cache.get(storage_name, {})
+            backups = list(
+                _iter_backups(
+                    json_mstorage.get_storage(storage_name), backup_prefix=backup_prefix, storage_cache=storage_cache
+                )
+            )
             yield ipc.ListForStorage(storage_name=storage_name, backups=backups)
 
 
-def list_backups(*, req: ipc.ListRequest, json_mstorage: MultiStorage) -> ipc.ListResponse:
-    return ipc.ListResponse(storages=list(_iter_storages(req, json_mstorage)))
+def list_backups(*, req: ipc.ListRequest, json_mstorage: MultiStorage, cache: CachedListEntries) -> ipc.ListResponse:
+    return ipc.ListResponse(storages=list(_iter_storages(req, json_mstorage, cache=cache)))
 
 
 def list_delta_backups(*, req: ipc.ListRequest, json_mstorage: MultiStorage) -> ipc.ListResponse:
-    return ipc.ListResponse(storages=list(_iter_storages(req, json_mstorage, backup_prefix=magic.JSON_DELTA_PREFIX)))
+    return ipc.ListResponse(
+        storages=list(_iter_storages(req, json_mstorage, cache={}, backup_prefix=magic.JSON_DELTA_PREFIX))
+    )
