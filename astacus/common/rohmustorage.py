@@ -7,14 +7,18 @@ Rohmu-specific actual object storage implementation
 
 """
 from .storage import MultiStorage, Storage, StorageUploadResult
-from .utils import AstacusModel
+from .utils import AstacusModel, fifo_cache
 from astacus.common import exceptions
 from collections.abc import Iterator, Mapping
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 from enum import Enum
 from pydantic import Field
 from rohmu import errors, rohmufile
 from rohmu.compressor import CompressionStream
 from rohmu.encryptor import EncryptorStream
+from rohmu.typing import Metadata
 from typing import BinaryIO, TypeAlias
 
 import contextlib
@@ -111,15 +115,14 @@ class RohmuStorage(Storage):
 
     @rohmu_error_wrapper
     def _download_key_to_file(self, key, f: BinaryIO) -> bool:
-        raw_metadata: dict = self.storage.get_metadata_for_key(key)
         with tempfile.TemporaryFile(dir=self.config.temporary_directory) as temp_file:
-            self.storage.get_contents_to_fileobj(key, temp_file)
+            raw_metadata: Metadata = self.storage.get_contents_to_fileobj(key, temp_file)
             temp_file.seek(0)
             rohmufile.read_file(
                 input_obj=temp_file,
                 output_obj=f,
                 metadata=raw_metadata,
-                key_lookup=self._private_key_lookup,
+                key_lookup=self._loaded_private_key_lookup,
                 log_func=logger.debug,
             )
         return True
@@ -127,11 +130,22 @@ class RohmuStorage(Storage):
     def _list_key(self, key: str) -> list[str]:
         return [os.path.basename(o["name"]) for o in self.storage.list_iter(key, with_metadata=False)]
 
-    def _private_key_lookup(self, key_id: str) -> str:
-        return self.config.encryption_keys[key_id].private
+    @fifo_cache(size=1)
+    def _loaded_private_key_lookup(self, key_id: str) -> RSAPrivateKey:
+        private_key_pem = self.config.encryption_keys[key_id].private.encode("ascii")
+        # RSA key validation is compute-intense and require caching
+        private_key = serialization.load_pem_private_key(data=private_key_pem, password=None, backend=default_backend())
+        if not isinstance(private_key, RSAPrivateKey):
+            raise ValueError("Key must be RSA")
+        return private_key
 
-    def _public_key_lookup(self, key_id: str) -> str:
-        return self.config.encryption_keys[key_id].public
+    @fifo_cache(size=1)
+    def _loaded_public_key_lookup(self, key_id: str) -> RSAPublicKey:
+        public_key_pem = self.config.encryption_keys[key_id].public.encode("ascii")
+        public_key = serialization.load_pem_public_key(public_key_pem, backend=default_backend())
+        if not isinstance(public_key, RSAPublicKey):
+            raise ValueError("Key must be RSA")
+        return public_key
 
     @rohmu_error_wrapper
     def _upload_key_from_file(self, key: str, f: BinaryIO, file_size: int) -> StorageUploadResult:
@@ -144,7 +158,7 @@ class RohmuStorage(Storage):
             wrapped_file = CompressionStream(wrapped_file, compression.algorithm, compression.level)
         if encryption_key_id:
             metadata.encryption_key_id = encryption_key_id
-            rsa_public_key = self._public_key_lookup(encryption_key_id)
+            rsa_public_key = self._loaded_public_key_lookup(encryption_key_id)
             wrapped_file = EncryptorStream(wrapped_file, rsa_public_key)
         rohmu_metadata = metadata.dict(exclude_defaults=True, by_alias=True)
         self.storage.store_file_object(key, wrapped_file, metadata=rohmu_metadata)

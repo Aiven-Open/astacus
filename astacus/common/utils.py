@@ -11,12 +11,13 @@ Shared utilities (between coordinator and node)
 from __future__ import annotations
 
 from abc import ABC
+from collections import deque
 from collections.abc import AsyncIterable, AsyncIterator, Callable, Iterable, Mapping
 from contextlib import contextmanager
 from multiprocessing.dummy import Pool  # fastapi + fork = bad idea
 from pathlib import Path
 from pydantic import BaseModel
-from typing import Any, Final, TypeVar
+from typing import Any, Final, Generic, Hashable, TypeAlias, TypeVar
 
 import asyncio
 import contextlib
@@ -374,3 +375,68 @@ def parse_umask(proc_status: str) -> int:
     if umask_line := re.search(r"^Umask:\s+(0\d\d\d)$", proc_status, flags=re.MULTILINE):
         return int(umask_line.group(1), 8)
     return FALLBACK_UMASK
+
+
+FifoValue = TypeVar("FifoValue")
+
+
+class FifoCache(Generic[FifoValue]):
+    def __init__(self, size: int = 1) -> None:
+        if size < 1:
+            raise ValueError("FifoCache size must be at least 1")
+        self.size: int = size
+        self.cache: dict[Hashable, FifoValue] = {}
+        self.key_queue: deque[Hashable] = deque()
+
+    def __contains__(self, key: Hashable) -> bool:
+        return key in self.cache
+
+    def __getitem__(self, key: Hashable) -> FifoValue | None:
+        return self.cache.get(key)
+
+    def __setitem__(self, key: Hashable, value: FifoValue) -> None:
+        if key in self.cache:
+            self.cache[key] = value
+        if len(self.cache) >= self.size:
+            self.cache.pop(self.key_queue.popleft())
+        self.key_queue.append(key)
+        self.cache[key] = value
+
+    def __len__(self) -> int:
+        return len(self.cache)
+
+
+CacheMethodClassT = TypeVar("CacheMethodClassT", bound=object)
+CacheFuncArg = TypeVar("CacheFuncArg", bound=Hashable)
+CacheValue = TypeVar("CacheValue")
+CachedMethod: TypeAlias = Callable[[CacheMethodClassT, CacheFuncArg], CacheValue]
+
+
+def fifo_cache(size: int) -> Callable[[CachedMethod], CachedMethod]:
+    """Decorator for caching method results in a FIFO cache of given size.
+
+    The decorated method must take only one hashable argument.
+    The cache is per-instance.
+    Not thread-safe.
+    """
+
+    def decorator(method: CachedMethod) -> Callable:
+        cache_attribute_name = "__fifo_cache_" + method.__name__
+
+        # Type alias cannot be used here, as mypy cannot deduct from inner types
+        def wrapper(self: Callable[[CacheMethodClassT, CacheFuncArg], CacheValue], key: CacheFuncArg) -> CacheValue:
+            cache: FifoCache[CacheValue] | None = getattr(self, cache_attribute_name, None)
+            if cache is None:
+                cache = FifoCache[CacheValue](size)
+                setattr(self, cache_attribute_name, cache)
+            if key in cache:
+                val = cache[key]
+                assert val is not None
+                return val
+            value = method(self, key)
+            cache[key] = value
+            return value
+
+        return wrapper
+
+    return decorator

@@ -197,3 +197,35 @@ Umask:  POTATO
 State:  R (running)
 """
     assert parse_umask(proc_status) == 0o022
+
+
+class CacheTester:
+    def __init__(self, val: int) -> None:
+        self.val = val
+        self.call_cnt = 0
+
+    @utils.fifo_cache(2)
+    def get(self, key: int) -> int:
+        self.call_cnt += 1
+        return key + self.val
+
+
+def test_fifo_cache_is_per_object() -> None:
+    instance_1 = CacheTester(1)
+    instance_2 = CacheTester(2)
+    assert instance_1.get(1) == 2
+    # per object cache
+    assert instance_2.get(1) == 3
+
+
+def test_fifo_cache_eviction() -> None:
+    instance = CacheTester(0)
+    assert instance.get(1) == 1
+    assert instance.call_cnt == 1
+    assert instance.get(2) == 2
+    assert instance.call_cnt == 2
+    assert instance.get(3) == 3
+    assert instance.call_cnt == 3
+    # key=1 was evicted
+    assert instance.get(1) == 1
+    assert instance.call_cnt == 4
