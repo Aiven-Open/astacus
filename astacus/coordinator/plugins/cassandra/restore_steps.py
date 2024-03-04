@@ -29,6 +29,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
 import logging
+import msgspec
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +155,7 @@ class UploadFinalDeltaStep(Step[Sequence[ipc.BackupManifest]]):
             filename=backup_name,
         )
         logger.info("Storing backup manifest %s", backup_name)
-        await self.json_storage.upload_json(backup_name, manifest)
+        await self.json_storage.upload_json_bytes(backup_name, msgspec.json.encode(manifest))
         return [manifest]
 
 

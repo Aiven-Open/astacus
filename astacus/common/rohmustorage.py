@@ -6,10 +6,10 @@ See LICENSE for details
 Rohmu-specific actual object storage implementation
 
 """
-from .storage import Json, MultiStorage, Storage, StorageUploadResult
+from .storage import MultiStorage, Storage, StorageUploadResult
 from .utils import AstacusModel, fifo_cache
 from astacus.common import exceptions
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
@@ -21,9 +21,10 @@ from rohmu.encryptor import EncryptorStream
 from rohmu.typing import Metadata
 from typing import BinaryIO, TypeAlias
 
+import contextlib
 import io
-import json
 import logging
+import mmap
 import os
 import rohmu
 import tempfile
@@ -199,23 +200,26 @@ class RohmuStorage(Storage):
         key = os.path.join(self.json_key, name)
         self.storage.delete_key(key)
 
-    def download_json(self, name: str) -> Json:
+    @contextlib.contextmanager
+    def open_json_bytes(self, name: str) -> Iterator[mmap.mmap]:
         key = os.path.join(self.json_key, name)
-        f = io.BytesIO()
-        self._download_key_to_file(key, f)
-        f.seek(0)
-        return json.load(f)
+        with tempfile.TemporaryFile(dir=self.config.temporary_directory) as temp_file:
+            self._download_key_to_file(key, temp_file)
+            temp_file.seek(0)
+            with mmap.mmap(temp_file.fileno(), 0, access=mmap.ACCESS_READ) as mapped_file:
+                yield mapped_file
 
     def list_jsons(self) -> list[str]:
         return self._list_key(self.json_key)
 
-    def upload_json_str(self, name: str, data: str) -> bool:
+    def upload_json_bytes(self, name: str, data: bytes | mmap.mmap) -> bool:
         key = os.path.join(self.json_key, name)
-        f = io.BytesIO()
-        encoded_data = data.encode()
-        f.write(encoded_data)
-        f.seek(0)
-        self._upload_key_from_file(key, f, len(encoded_data))
+        if isinstance(data, bytes):
+            f = io.BytesIO(data)
+            self._upload_key_from_file(key, f, len(data))
+        else:
+            data.seek(0)
+            self._upload_key_from_file(key, data, len(data))
         return True
 
 

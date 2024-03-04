@@ -15,6 +15,7 @@ from pathlib import Path
 from pytest_mock import MockerFixture
 from tests.unit.node.conftest import build_snapshot_and_snapshotter, create_files_at_path
 
+import msgspec
 import os
 import pytest
 
@@ -95,7 +96,7 @@ def test_api_snapshot_and_upload(client: TestClient, mocker: MockerFixture) -> N
     response = client.post("/node/snapshot")
     assert response.status_code == 422, response.json()
 
-    req_json: JsonObject = {"root_globs": ["*"]}
+    req_json: JsonObject = {"groups": [{"root_glob": "*"}]}
     response = client.post("/node/snapshot", json=req_json)
     assert response.status_code == 409, response.json()
 
@@ -109,28 +110,30 @@ def test_api_snapshot_and_upload(client: TestClient, mocker: MockerFixture) -> N
     assert response.status_code == 200, response.json()
 
     # Decode the (result endpoint) response using the model
-    response = m.call_args[1]["data"]
-    result = ipc.SnapshotResult.parse_raw(response)
-    assert result.progress.finished_successfully
+    put_status_body = m.call_args[1]["data"]
+    status_result = msgspec.json.decode(put_status_body, type=ipc.NodeResult)
+    assert status_result.progress.finished_successfully
+    assert status_result.az
+
+    # Actually fetch the snapshot
+    response = client.get("/node/snapshot/2")
+    result = msgspec.json.decode(response.content, type=ipc.SnapshotResult)
     assert result.hashes
-    assert result.files
-    assert result.total_size
-    assert result.az
 
     # Ask it to be uploaded
     response = client.post("/node/upload")
     assert response.status_code == 422, response.json()
     response = client.post(
-        "/node/upload", json={"storage": "x", "hashes": [x.dict() for x in result.hashes], "result_url": url}
+        "/node/upload", json={"storage": "x", "hashes": [msgspec.to_builtins(x) for x in result.hashes], "result_url": url}
     )
     assert response.status_code == 200, response.json()
-    response = m.call_args[1]["data"]
-    result2 = ipc.SnapshotUploadResult.parse_raw(response)
-    assert result2.progress.finished_successfully
+    put_status_body_2 = m.call_args[1]["data"]
+    status_result_2 = msgspec.json.decode(put_status_body_2, type=ipc.NodeResult)
+    assert status_result_2.progress.finished_successfully
 
 
 def test_api_snapshot_error(client: TestClient, mocker: MockerFixture) -> None:
-    req_json = {"root_globs": ["*"]}
+    req_json: JsonObject = {"groups": []}
     response = client.post("/node/lock?locker=x&ttl=10")
     assert response.status_code == 200, response.json()
     response = client.post("/node/snapshot", json=req_json)

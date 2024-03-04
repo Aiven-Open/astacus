@@ -11,7 +11,7 @@ from astacus.common.op import Op
 from astacus.common.progress import Progress
 from astacus.common.rohmustorage import MultiRohmuStorage
 from astacus.common.statsd import StatsClient, Tags
-from astacus.common.storage import Json, JsonStorage, MultiFileStorage, MultiStorage
+from astacus.common.storage import JsonStorage, MultiFileStorage, MultiStorage
 from astacus.common.utils import AsyncSleeper
 from astacus.coordinator.cluster import Cluster, LockResult, WaitResultError
 from astacus.coordinator.config import coordinator_config, CoordinatorConfig, CoordinatorNode
@@ -27,6 +27,7 @@ from urllib.parse import urlunsplit
 import asyncio
 import contextlib
 import logging
+import mmap
 import socket
 import time
 
@@ -111,15 +112,17 @@ class CacheClearingJsonStorage(JsonStorage):
         finally:
             self.state.cached_list_response = None
 
-    def download_json(self, name: str) -> Json:
-        return self.storage.download_json(name)
+    @contextlib.contextmanager
+    def open_json_bytes(self, name: str) -> Iterator[mmap.mmap]:
+        with self.storage.open_json_bytes(name) as json_bytes:
+            yield json_bytes
 
     def list_jsons(self) -> list[str]:
         return self.storage.list_jsons()
 
-    def upload_json_str(self, name: str, data: str) -> bool:
+    def upload_json_bytes(self, name: str, data: bytes | mmap.mmap) -> bool:
         try:
-            return self.storage.upload_json_str(name, data)
+            return self.storage.upload_json_bytes(name, data)
         finally:
             self.state.cached_list_response = None
 

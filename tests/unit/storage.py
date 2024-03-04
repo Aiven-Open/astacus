@@ -3,18 +3,20 @@ Copyright (c) 2023 Aiven Ltd
 See LICENSE for details
 """
 from astacus.common import exceptions
-from astacus.common.storage import HexDigestStorage, Json, JsonStorage, StorageUploadResult
+from astacus.common.storage import HexDigestStorage, JsonStorage, StorageUploadResult
+from collections.abc import Iterator
 from pathlib import Path
 from typing import BinaryIO
 
+import contextlib
 import dataclasses
-import json
+import mmap
 import os
 
 
 @dataclasses.dataclass(frozen=True)
 class MemoryJsonStorage(JsonStorage):
-    items: dict[str, str]
+    items: dict[str, bytes]
 
     def delete_json(self, name: str) -> None:
         try:
@@ -22,17 +24,23 @@ class MemoryJsonStorage(JsonStorage):
         except KeyError as e:
             raise exceptions.NotFoundException from e
 
-    def download_json(self, name: str) -> Json:
+    @contextlib.contextmanager
+    def open_json_bytes(self, name: str) -> Iterator[mmap.mmap]:
         try:
             data = self.items[name]
         except KeyError as e:
             raise exceptions.NotFoundException from e
-        return json.loads(data)
+        with mmap.mmap(-1, len(data)) as mapped_data:
+            mapped_data.write(data)
+            mapped_data.seek(0)
+            yield mapped_data
 
     def list_jsons(self) -> list[str]:
         return sorted(self.items)
 
-    def upload_json_str(self, name: str, data: str) -> bool:
+    def upload_json_bytes(self, name: str, data: bytes | mmap.mmap) -> bool:
+        if not isinstance(data, bytes):
+            data = bytes(data)
         self.items[name] = data
         return True
 

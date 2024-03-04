@@ -19,6 +19,7 @@ from starlette.datastructures import URL
 from typing import Generic, TypeVar
 
 import logging
+import msgspec
 
 logger = logging.getLogger(__name__)
 SNAPSHOTTER_KEY = "node_snapshotter"
@@ -34,7 +35,6 @@ class NodeOp(op.Op, Generic[Request, Result]):
         self.start_op = n.start_op
         self.config = n.config
         self._still_locked_callback = n.state.still_locked_callback
-        self._sent_result_json: str | None = None
         self.req = req
         self.result = self.create_result()
         self.result.az = self.config.az
@@ -57,11 +57,15 @@ class NodeOp(op.Op, Generic[Request, Result]):
         if not self.still_running_callback():
             logger.debug("send_result omitted - not running")
             return
-        result_json = self.result.json(exclude_defaults=True)
-        if result_json == self._sent_result_json:
-            return
-        self._sent_result_json = result_json
-        utils.http_request(self.req.result_url, method="put", caller="NodeOp.send_result", data=result_json)
+        # We used to send the entire  json-encoded result but not use it, wasting a lot of memory for nothing
+        status = msgspec.json.encode(
+            ipc.NodeResult(
+                hostname=self.result.hostname,
+                az=self.result.az,
+                progress=self.result.progress,
+            )
+        )
+        utils.http_request(self.req.result_url, method="put", caller="NodeOp.send_result", data=status)
 
     def set_status(self, status: op.Op.Status, *, from_status: op.Op.Status | None = None) -> bool:
         if not super().set_status(status, from_status=from_status):

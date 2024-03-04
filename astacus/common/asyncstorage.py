@@ -5,8 +5,7 @@ See LICENSE for details
 
 """
 
-from astacus.common.storage import HexDigestStorage, Json, JsonStorage
-from astacus.common.utils import AstacusModel
+from astacus.common.storage import HexDigestStorage, JsonStorage
 from starlette.concurrency import run_in_threadpool
 
 
@@ -44,11 +43,8 @@ class AsyncJsonStorage:
     async def delete_json(self, name: str) -> None:
         return await run_in_threadpool(self.storage.delete_json, name)
 
-    async def download_json(self, name: str) -> Json:
-        return await run_in_threadpool(self.storage.download_json, name)
-
     async def list_jsons(self) -> list[str]:
         return await run_in_threadpool(self.storage.list_jsons)
 
-    async def upload_json(self, name: str, data: AstacusModel | Json) -> bool:
-        return await run_in_threadpool(self.storage.upload_json, name, data)
+    async def upload_json_bytes(self, name: str, data: bytes) -> bool:
+        return await run_in_threadpool(self.storage.upload_json_bytes, name, data)

@@ -4,15 +4,16 @@ See LICENSE for details
 """
 from .magic import DEFAULT_EMBEDDED_FILE_SIZE, StrEnum
 from .progress import Progress
-from .utils import AstacusModel, now, SizeLimitedFile
+from .utils import now, SizeLimitedFile
 from astacus.common.snapshot import SnapshotGroup
 from collections.abc import Sequence, Set
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from pydantic import Field, root_validator
+from typing import Self
 
 import functools
+import msgspec
 import socket
 
 # pydantic validators are class methods in disguise
@@ -38,7 +39,7 @@ class NodeFeatures(Enum):
     release_snapshot_files = "release_snapshot_files"
 
 
-class Retention(AstacusModel):
+class Retention(msgspec.Struct, kw_only=True):
     # If set, number of backups to retain always (even beyond days)
     minimum_backups: int | None = None
 
@@ -53,26 +54,26 @@ class Retention(AstacusModel):
 # node generic base
 
 
-class NodeRequest(AstacusModel):
+class NodeRequest(msgspec.Struct, kw_only=True):
     result_url: str = ""  # where results are sent
 
 
-class NodeResult(AstacusModel):
-    hostname: str = Field(default_factory=socket.gethostname)
+class NodeResult(msgspec.Struct, kw_only=True):
+    hostname: str = msgspec.field(default_factory=socket.gethostname)
     az: str = ""
-    progress: Progress = Field(default_factory=Progress)
+    progress: Progress = msgspec.field(default_factory=Progress)
 
 
-class MetadataResult(AstacusModel):
+class MetadataResult(msgspec.Struct, kw_only=True):
     version: str
-    features: Sequence[str] = Field(default_factory=list)
+    features: Sequence[str] = msgspec.field(default_factory=list)
 
 
 # node.snapshot
 
 
 @functools.total_ordering
-class SnapshotFile(AstacusModel):
+class SnapshotFile(msgspec.Struct, kw_only=True, omit_defaults=True):
     relative_path: str
     file_size: int
     mtime_ns: int
@@ -87,15 +88,20 @@ class SnapshotFile(AstacusModel):
         return self.mtime_ns == o.mtime_ns and self.relative_path == o.relative_path and self.file_size == o.file_size
 
     def equals_excluding_mtime(self, o: "SnapshotFile") -> bool:
-        return self.copy(update={"mtime_ns": 0}) == o.copy(update={"mtime_ns": 0})
+        return (self.relative_path, self.file_size, self.hexdigest, self.content_b64) == (
+            o.relative_path,
+            o.file_size,
+            o.hexdigest,
+            o.content_b64,
+        )
 
     def open_for_reading(self, root_path: Path) -> SizeLimitedFile:
         return SizeLimitedFile(path=root_path / self.relative_path, file_size=self.file_size)
 
 
-class SnapshotState(AstacusModel):
-    root_globs: Sequence[str] = []
-    files: Sequence[SnapshotFile] = []
+class SnapshotState(msgspec.Struct, kw_only=True, omit_defaults=True):
+    root_globs: Sequence[str] = msgspec.field(default_factory=list)
+    files: Sequence[SnapshotFile] = msgspec.field(default_factory=list)
 
 
 class SnapshotRequest(NodeRequest):
@@ -103,7 +109,7 @@ class SnapshotRequest(NodeRequest):
     root_globs: Sequence[str] = ()
 
 
-class SnapshotRequestGroup(AstacusModel):
+class SnapshotRequestGroup(msgspec.Struct, kw_only=True):
     root_glob: str
     # Exclude some file names that matched the glob
     excluded_names: Sequence[str] = ()
@@ -138,7 +144,7 @@ def create_snapshot_request(
     )
 
 
-class SnapshotHash(AstacusModel):
+class SnapshotHash(msgspec.Struct, kw_only=True, frozen=True):
     """
     This class represents something that is to be stored in the object storage.
 
@@ -174,21 +180,21 @@ class SnapshotUploadRequestV20221129(SnapshotUploadRequest):
     validate_file_hashes: bool = True
 
 
-class SnapshotUploadResult(NodeResult):
+class SnapshotUploadResult(NodeResult, kw_only=True):
     total_size: int = 0
     total_stored_size: int = 0
 
 
 class SnapshotResult(NodeResult):
     # when was the operation started ( / done )
-    start: datetime = Field(default_factory=now)
+    start: datetime = msgspec.field(default_factory=now)
     end: datetime | None = None
 
     # The state is optional because it's written by the Snapshotter post-initialization.
     # If the backup failed, the related manifest doesn't exist: the state and the
     # summary attributes below will be set to none and their default values respectively.
     # Should be passed opaquely to restore.
-    state: SnapshotState | None = Field(default_factory=SnapshotState)
+    state: SnapshotState | None = msgspec.field(default_factory=SnapshotState)
 
     # Summary data for manifest use
     files: int = 0
@@ -260,19 +266,19 @@ class CassandraRestoreSSTablesRequest(NodeRequest):
 
 
 # coordinator.api
-class PartialRestoreRequestNode(AstacusModel):
+class PartialRestoreRequestNode(msgspec.Struct, kw_only=True):
+    def __post_init__(self) -> None:
+        if (self.backup_index is None) == (self.backup_hostname is None):
+            raise ValueError("Exactly one of backup_index or backup_hostname supported")
+        if (self.node_index is None) == (self.node_url is None):
+            raise ValueError("Exactly one of node_index or node_url supported")
+
     # One of these has to be specified
     #
     # index = index in configuration
     # hostname = hostname of the host that did the backup
     backup_index: int | None = None
     backup_hostname: str | None = None
-
-    @root_validator
-    def _check_only_one_backup_criteria(cls, values):
-        if (values["backup_index"] is None) == (values["backup_hostname"] is None):
-            raise ValueError("Exactly one of backup_index or backup_hostname supported")
-        return values
 
     # One of these has to be specified
     #
@@ -281,14 +287,8 @@ class PartialRestoreRequestNode(AstacusModel):
     node_index: int | None = None
     node_url: str | None = None
 
-    @root_validator
-    def _check_only_one_node_criteria(cls, values):
-        if (values["node_index"] is None) == (values["node_url"] is None):
-            raise ValueError("Exactly one of node_index or node_url supported")
-        return values
 
-
-class RestoreRequest(AstacusModel):
+class RestoreRequest(msgspec.Struct, kw_only=True):
     storage: str = ""
     name: str = ""
     partial_restore_nodes: Sequence[PartialRestoreRequestNode] | None = None
@@ -296,12 +296,12 @@ class RestoreRequest(AstacusModel):
 
 
 # coordinator.plugins backup/restore
-class BackupManifest(AstacusModel):
+class BackupManifest(msgspec.Struct, kw_only=True):
     # When was (this) backup attempt started
     start: datetime
 
     # .. and when did it finish
-    end: datetime = Field(default_factory=now)
+    end: datetime = msgspec.field(default_factory=now)
 
     # How many attempts did it take (starts from 1)
     attempt: int
@@ -316,20 +316,30 @@ class BackupManifest(AstacusModel):
     plugin: Plugin
 
     # Plugin-specific data about the backup
-    plugin_data: dict = {}
+    plugin_data: dict = msgspec.field(default_factory=dict)
 
     # Semi-redundant but simplifies handling; automatically set on download
     filename: str = ""
 
 
+class ManifestMin(msgspec.Struct, kw_only=True):
+    start: datetime
+    end: datetime
+    filename: str
+
+    @classmethod
+    def from_manifest(cls, manifest: BackupManifest) -> Self:
+        return cls(start=manifest.start, end=manifest.end, filename=manifest.filename)
+
+
 # coordinator.list
 
 
-class ListRequest(AstacusModel):
+class ListRequest(msgspec.Struct, kw_only=True):
     storage: str = ""
 
 
-class ListSingleBackup(AstacusModel):
+class ListSingleBackup(msgspec.Struct, kw_only=True):
     # Subset of BackupManifest; see it for information
     name: str
     start: datetime
@@ -348,19 +358,19 @@ class ListSingleBackup(AstacusModel):
     cluster_data_size: int
 
 
-class ListForStorage(AstacusModel):
+class ListForStorage(msgspec.Struct, kw_only=True):
     storage_name: str
     backups: Sequence[ListSingleBackup]
 
 
-class ListResponse(AstacusModel):
+class ListResponse(msgspec.Struct, kw_only=True):
     storages: Sequence[ListForStorage]
 
 
 # coordinator.cleanup
 
 
-class CleanupRequest(AstacusModel):
+class CleanupRequest(msgspec.Struct, kw_only=True):
     storage: str = ""
     retention: Retention | None = None
-    explicit_delete: Sequence[str] = []
+    explicit_delete: Sequence[str] = msgspec.field(default_factory=list)

@@ -5,7 +5,7 @@ See LICENSE for details
 """
 from astacus.common import ipc, utils
 from astacus.common.asyncstorage import AsyncHexDigestStorage, AsyncJsonStorage
-from astacus.common.ipc import Plugin, SnapshotHash
+from astacus.common.ipc import ManifestMin, Plugin, SnapshotHash
 from astacus.common.op import Op
 from astacus.common.progress import Progress
 from astacus.common.utils import now
@@ -21,7 +21,6 @@ from astacus.coordinator.plugins.base import (
     ListBackupsStep,
     ListDeltaBackupsStep,
     ListHexdigestsStep,
-    ManifestMin,
     SnapshotReleaseStep,
     SnapshotStep,
     Step,
@@ -33,7 +32,6 @@ from astacus.node.snapshotter import hash_hexdigest_readable
 from collections.abc import Callable, Sequence, Set
 from http import HTTPStatus
 from io import BytesIO
-from pydantic import Field
 from tests.unit.storage import MemoryHexDigestStorage, MemoryJsonStorage
 from unittest import mock
 
@@ -41,6 +39,7 @@ import dataclasses
 import datetime
 import httpx
 import json
+import msgspec
 import pytest
 import respx
 
@@ -76,7 +75,7 @@ def get_sample_hashes() -> list[ipc.SnapshotHash]:
 
 
 class DefaultedSnapshotResult(ipc.SnapshotResult):
-    end: datetime.datetime | None = Field(default_factory=now)
+    end: datetime.datetime | None = msgspec.field(default_factory=now)
     hashes: Sequence[ipc.SnapshotHash] | None = None
 
 
@@ -164,19 +163,23 @@ async def test_upload_step_uses_new_request_if_supported(
     upload_step = UploadBlocksStep(storage_name="fake")
     with respx.mock:
         metadata_request = respx.get("http://node_1/metadata").respond(
-            json=ipc.MetadataResult(version="0.1", features=[feature.value for feature in node_features]).jsondict()
+            json=msgspec.to_builtins(
+                ipc.MetadataResult(version="0.1", features=[feature.value for feature in node_features])
+            ),
         )
         upload_request = respx.post("http://node_1/upload").mock(
-            side_effect=make_request_check(expected_request.jsondict(), "upload")
+            side_effect=make_request_check(msgspec.to_builtins(expected_request), "upload")
         )
         status_request = respx.get("http://node_1/upload/1").respond(
-            json=ipc.SnapshotUploadResult(
-                hostname="localhost",
-                az="az1",
-                progress=Progress(handled=1, total=1, final=True),
-                total_size=10,
-                total_stored_size=8,
-            ).jsondict()
+            json=msgspec.to_builtins(
+                ipc.SnapshotUploadResult(
+                    hostname="localhost",
+                    az="az1",
+                    progress=Progress(handled=1, total=1, final=True),
+                    total_size=10,
+                    total_stored_size=8,
+                )
+            ),
         )
         await upload_step.run_step(cluster=single_node_cluster, context=context)
         assert metadata_request.call_count == 1
@@ -185,11 +188,11 @@ async def test_upload_step_uses_new_request_if_supported(
 
 
 BACKUPS_FOR_RETENTION_TEST = {
-    "b1": make_manifest("2020-01-01T11:00Z", "2020-01-01T13:00Z").json(),
-    "b2": make_manifest("2020-01-02T11:00Z", "2020-01-02T13:00Z").json(),
-    "b3": make_manifest("2020-01-03T11:00Z", "2020-01-03T13:00Z").json(),
-    "b4": make_manifest("2020-01-04T11:00Z", "2020-01-04T13:00Z").json(),
-    "b5": make_manifest("2020-01-05T11:00Z", "2020-01-05T13:00Z").json(),
+    "b1": msgspec.json.encode(make_manifest("2020-01-01T11:00Z", "2020-01-01T13:00Z")),
+    "b2": msgspec.json.encode(make_manifest("2020-01-02T11:00Z", "2020-01-02T13:00Z")),
+    "b3": msgspec.json.encode(make_manifest("2020-01-03T11:00Z", "2020-01-03T13:00Z")),
+    "b4": msgspec.json.encode(make_manifest("2020-01-04T11:00Z", "2020-01-04T13:00Z")),
+    "b5": msgspec.json.encode(make_manifest("2020-01-05T11:00Z", "2020-01-05T13:00Z")),
 }
 
 
@@ -257,7 +260,7 @@ async def test_compute_kept_deltas(
     context: StepsContext,
 ):
     async_json_storage = AsyncJsonStorage(
-        storage=MemoryJsonStorage(items={k: v.json() for k, v in BACKUPS_FOR_DELTA_RETENTION_TEST.items()})
+        storage=MemoryJsonStorage(items={k: msgspec.json.encode(v) for k, v in BACKUPS_FOR_DELTA_RETENTION_TEST.items()})
     )
     keep_all_retention = ipc.Retention(minimum_backups=len(BACKUPS_FOR_DELTA_RETENTION_TEST))
     context.set_result(ListBackupsStep, {"b1", "b2", "b3", "b4", "b5"})
@@ -274,10 +277,10 @@ async def test_compute_kept_deltas(
 
 @pytest.mark.asyncio
 async def test_delete_backup_manifests(single_node_cluster: Cluster, context: StepsContext) -> None:
-    json_items: dict[str, str] = {
-        "b1": "",
-        "d1": "",
-        "b2": "",
+    json_items: dict[str, bytes] = {
+        "b1": b"",
+        "d1": b"",
+        "b2": b"",
     }
     async_json_storage = AsyncJsonStorage(storage=MemoryJsonStorage(items=json_items))
     context.set_result(ListBackupsStep, {"b1", "b2"})
@@ -324,7 +327,7 @@ class DeleteBackupManifestsParam:
 async def test_delete_backup_and_delta_manifests(
     single_node_cluster: Cluster, context: StepsContext, p: DeleteBackupManifestsParam
 ) -> None:
-    json_items = {b: named_manifest(b).json() for b in (p.all_backups | p.all_deltas)}
+    json_items = {b: msgspec.json.encode(named_manifest(b)) for b in (p.all_backups | p.all_deltas)}
     async_json_storage = AsyncJsonStorage(storage=MemoryJsonStorage(items=json_items))
     context.set_result(ListBackupsStep, p.all_backups)
     context.set_result(ListDeltaBackupsStep, p.all_deltas)
@@ -357,7 +360,9 @@ async def test_delete_dangling_hexdigests_step(
     expected_hashes: dict[str, bytes],
 ) -> None:
     async_digest_storage = AsyncHexDigestStorage(storage=MemoryHexDigestStorage(items=stored_hashes))
-    async_json_storage = AsyncJsonStorage(storage=MemoryJsonStorage(items={b.filename: b.json() for b in kept_backups}))
+    async_json_storage = AsyncJsonStorage(
+        storage=MemoryJsonStorage(items={b.filename: msgspec.json.encode(b) for b in kept_backups})
+    )
     context.set_result(ComputeKeptBackupsStep, [ManifestMin.from_manifest(b) for b in kept_backups])
     step = DeleteDanglingHexdigestsStep(json_storage=async_json_storage, hexdigest_storage=async_digest_storage)
     await step.run_step(single_node_cluster, context)
@@ -385,7 +390,7 @@ async def test_upload_manifest_step_generates_correct_backup_name(
     context.set_result(SnapshotStep, [DefaultedSnapshotResult()])
     context.set_result(UploadBlocksStep, [ipc.SnapshotUploadResult()])
     async_json_storage = AsyncJsonStorage(storage=MemoryJsonStorage(items={}))
-    step = UploadManifestStep(json_storage=async_json_storage, plugin=ipc.Plugin.files)
+    step = UploadManifestStep(json_storage=async_json_storage, plugin=Plugin.files)
     await step.run_step(cluster=single_node_cluster, context=context)
     assert isinstance(async_json_storage.storage, MemoryJsonStorage)
     assert "backup-2020-01-07T05:00:00+00:00" in async_json_storage.storage.items
@@ -414,19 +419,23 @@ async def test_snapshot_release_step(
 
     with respx.mock:
         metadata_request = respx.get("http://node_1/metadata").respond(
-            json=ipc.MetadataResult(version="0.1", features=[feature.value for feature in node_features]).jsondict()
+            json=msgspec.to_builtins(
+                ipc.MetadataResult(version="0.1", features=[feature.value for feature in node_features])
+            )
         )
         if ipc.NodeFeatures.release_snapshot_files in node_features:
             assert expected_request is not None
             release_request = respx.post("http://node_1/release").mock(
-                side_effect=make_request_check(expected_request.jsondict(), "release")
+                side_effect=make_request_check(msgspec.to_builtins(expected_request), "release")
             )
             status_request = respx.get("http://node_1/release/1").respond(
-                json=ipc.NodeResult(
-                    hostname="localhost",
-                    az="az1",
-                    progress=Progress(handled=2, total=2, final=True),
-                ).jsondict()
+                json=msgspec.to_builtins(
+                    ipc.NodeResult(
+                        hostname="localhost",
+                        az="az1",
+                        progress=Progress(handled=2, total=2, final=True),
+                    )
+                ),
             )
         await release_step.run_step(cluster=single_node_cluster, context=context)
         assert metadata_request.call_count == 1
@@ -439,7 +448,7 @@ async def test_snapshot_release_step(
 class TestListDeltasParam:
     test_id: str
     basebackup_manifest: ipc.BackupManifest
-    stored_jsons: dict[str, str]
+    stored_jsons: dict[str, bytes]
     expected_deltas: list[str]
 
 
@@ -457,8 +466,8 @@ class TestListDeltasParam:
             test_id="single_delta",
             basebackup_manifest=make_manifest(start="1970-01-01T00:00", end="1970-01-01T00:30"),
             stored_jsons={
-                "backup-base": make_manifest(start="1970-01-01T00:00", end="1970-01-01T00:30").json(),
-                "delta-one": make_manifest(start="1970-01-01T01:00", end="1970-01-01T01:05").json(),
+                "backup-base": msgspec.json.encode(make_manifest(start="1970-01-01T00:00", end="1970-01-01T00:30")),
+                "delta-one": msgspec.json.encode(make_manifest(start="1970-01-01T01:00", end="1970-01-01T01:05")),
             },
             expected_deltas=["delta-one"],
         ),
@@ -466,13 +475,13 @@ class TestListDeltasParam:
             test_id="deltas_older_than_backup_are_not_listed",
             basebackup_manifest=make_manifest(start="2000-01-01T00:00", end="2000-01-01T00:30"),
             stored_jsons={
-                "backup-old": make_manifest(start="1970-01-01T00:00", end="1970-01-01T00:30").json(),
-                "delta-old": make_manifest(start="1970-01-01T01:00", end="1970-01-01T01:05").json(),
-                "backup-one": make_manifest(start="2000-01-01T00:00", end="2000-01-01T00:30").json(),
-                "delta-one": make_manifest(start="2000-01-01T01:00", end="2000-01-01T01:05").json(),
-                "delta-two": make_manifest(start="2000-01-01T12:00", end="1970-01-01T12:05").json(),
-                "backup-two": make_manifest(start="2000-01-02T00:00", end="2000-01-02T00:30").json(),
-                "delta-three": make_manifest(start="2000-01-02T12:00", end="2000-01-02T12:05").json(),
+                "backup-old": msgspec.json.encode(make_manifest(start="1970-01-01T00:00", end="1970-01-01T00:30")),
+                "delta-old": msgspec.json.encode(make_manifest(start="1970-01-01T01:00", end="1970-01-01T01:05")),
+                "backup-one": msgspec.json.encode(make_manifest(start="2000-01-01T00:00", end="2000-01-01T00:30")),
+                "delta-one": msgspec.json.encode(make_manifest(start="2000-01-01T01:00", end="2000-01-01T01:05")),
+                "delta-two": msgspec.json.encode(make_manifest(start="2000-01-01T12:00", end="1970-01-01T12:05")),
+                "backup-two": msgspec.json.encode(make_manifest(start="2000-01-02T00:00", end="2000-01-02T00:30")),
+                "delta-three": msgspec.json.encode(make_manifest(start="2000-01-02T12:00", end="2000-01-02T12:05")),
             },
             expected_deltas=["delta-one", "delta-two", "delta-three"],
         ),
@@ -480,9 +489,9 @@ class TestListDeltasParam:
             test_id="relies_on_start_time_in_case_of_intersections",
             basebackup_manifest=make_manifest(start="2000-01-01T00:00", end="2000-01-01T00:30"),
             stored_jsons={
-                "delta-old": make_manifest(start="1999-12-31T23:59", end="2000-01-01T00:04").json(),
-                "backup-one": make_manifest(start="2000-01-01T00:00", end="2000-01-01T00:30").json(),
-                "delta-one": make_manifest(start="2000-01-01T00:05", end="2000-01-01T00:10").json(),
+                "delta-old": msgspec.json.encode(make_manifest(start="1999-12-31T23:59", end="2000-01-01T00:04")),
+                "backup-one": msgspec.json.encode(make_manifest(start="2000-01-01T00:00", end="2000-01-01T00:30")),
+                "delta-one": msgspec.json.encode(make_manifest(start="2000-01-01T00:05", end="2000-01-01T00:10")),
             },
             expected_deltas=["delta-one"],
         ),

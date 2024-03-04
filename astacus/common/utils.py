@@ -12,13 +12,15 @@ from __future__ import annotations
 
 from abc import ABC
 from collections import deque
+from collections.abc import AsyncIterable, AsyncIterator, Callable, Hashable, Iterable, Mapping
 from contextlib import contextmanager
 from multiprocessing.dummy import Pool  # fastapi + fork = bad idea
 from pathlib import Path
 from pydantic import BaseModel
-from typing import Any, AsyncIterable, Callable, Final, Generic, Hashable, Iterable, Mapping, TypeAlias, TypeVar
+from typing import Any, Final, Generic, TypeAlias, TypeVar
 
 import asyncio
+import contextlib
 import datetime
 import httpcore
 import httpx
@@ -133,6 +135,41 @@ async def httpx_request(
         except httpx.HTTPError as ex:
             logger.warning("Unexpected response from %s to %s: %r", url, caller, ex)
         return None
+
+
+@contextlib.asynccontextmanager
+async def httpx_request_stream(
+    url: str | httpx.URL,
+    *,
+    caller: str,
+    method: str = "get",
+    timeout: float = 10.0,
+    ignore_status_code: bool = False,
+    **kw,
+) -> AsyncIterator[httpx.Response | None]:
+    """Wrapper for httpx.request which handles timeouts as non-exceptions,
+    and returns only valid results that we actually care about.
+    """
+    # TBD: may need to redact url in future, if we actually wind up
+    # using passwords in urls here.
+    logger.info("async-request %s %s by %s", method, url, caller)
+    async with httpx.AsyncClient() as client:
+        try:
+            async with client.stream(method, url, timeout=timeout, **kw) as r:
+                if not r.is_error or ignore_status_code:
+                    yield r
+                    return
+                await r.aread()
+                logger.warning("Unexpected response status code from %s to %s: %s %r", url, caller, r.status_code, r.text)
+        except (httpcore.NetworkError, httpcore.TimeoutException) as ex:
+            # Unfortunately at least current httpx leaks these
+            # exceptions without wrapping them. Future versions may
+            # address this hopefully. I believe httpx.TransportError
+            # replaces it in future versions once we upgrade.
+            logger.warning("Network error from %s to %s: %r", url, caller, ex)
+        except httpx.HTTPError as ex:
+            logger.warning("Unexpected response from %s to %s: %r", url, caller, ex)
+        yield None
 
 
 def build_netloc(host: str, port: int | None = None) -> str:
