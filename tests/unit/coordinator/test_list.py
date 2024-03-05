@@ -19,11 +19,13 @@ from astacus.common.ipc import (
 )
 from astacus.common.rohmustorage import MultiRohmuStorage
 from astacus.coordinator import api
+from astacus.coordinator.api import get_cache_entries_from_list_response
 from astacus.coordinator.list import compute_deduplicated_snapshot_file_stats, list_backups
 from fastapi.testclient import TestClient
 from os import PathLike
 from pytest_mock import MockerFixture
 from tests.utils import create_rohmu_config
+from unittest import mock
 
 import datetime
 import pytest
@@ -228,7 +230,7 @@ def test_api_list_deduplication(backup_manifest: BackupManifest, tmpdir: PathLik
     storage.upload_hexdigest_bytes("FAKEDIGEST", b"fake-digest-data")
 
     list_request = ListRequest(storage="x")
-    list_response = list_backups(req=list_request, json_mstorage=multi_rohmu_storage)
+    list_response = list_backups(req=list_request, json_mstorage=multi_rohmu_storage, cache={})
     expected_response = ListResponse(
         storages=[
             ListForStorage(
@@ -253,3 +255,73 @@ def test_api_list_deduplication(backup_manifest: BackupManifest, tmpdir: PathLik
         ]
     )
     assert list_response == expected_response
+
+
+def test_list_can_use_cache_from_previous_response(backup_manifest: BackupManifest, tmpdir: PathLike) -> None:
+    multi_rohmu_storage = MultiRohmuStorage(config=create_rohmu_config(tmpdir))
+    storage = multi_rohmu_storage.get_storage("x")
+    storage.upload_json("backup-1", backup_manifest)
+    storage.upload_hexdigest_bytes("FAKEDIGEST", b"fake-digest-data")
+
+    list_request = ListRequest(storage="x")
+    first_list_response = list_backups(req=list_request, json_mstorage=multi_rohmu_storage, cache={})
+    cached_entries = get_cache_entries_from_list_response(first_list_response)
+
+    with mock.patch.object(storage, "download_json") as dowload_json:
+        second_list_response = list_backups(req=list_request, json_mstorage=multi_rohmu_storage, cache=cached_entries)
+        tested_entries = 0
+        for storage_entry in second_list_response.storages:
+            for backup_entry in storage_entry.backups:
+                cached_entry = cached_entries[storage_entry.storage_name][backup_entry.name]
+                assert backup_entry is cached_entry
+                tested_entries += 1
+        assert tested_entries > 0
+        dowload_json.assert_not_called()
+
+
+def test_list_does_not_return_stale_cache_entries(backup_manifest: BackupManifest, tmpdir: PathLike) -> None:
+    multi_rohmu_storage = MultiRohmuStorage(config=create_rohmu_config(tmpdir))
+    storage = multi_rohmu_storage.get_storage("x")
+    storage.upload_json("backup-1", backup_manifest)
+    storage.upload_hexdigest_bytes("FAKEDIGEST", b"fake-digest-data")
+
+    list_request = ListRequest(storage="x")
+    first_list_response = list_backups(req=list_request, json_mstorage=multi_rohmu_storage, cache={})
+    cached_entries = get_cache_entries_from_list_response(first_list_response)
+    storage.delete_json("backup-1")
+    second_list_response = list_backups(req=list_request, json_mstorage=multi_rohmu_storage, cache=cached_entries)
+    assert second_list_response.storages == [ListForStorage(storage_name="x", backups=[])]
+
+
+def test_get_cache_entries_from_list_response() -> None:
+    backup_x_1 = create_backup("backup_x_1")
+    backup_x_2 = create_backup("backup_x_2")
+    backup_y_3 = create_backup("backup_y_3")
+    assert get_cache_entries_from_list_response(
+        ListResponse(
+            storages=[
+                ListForStorage(storage_name="x", backups=[backup_x_1, backup_x_2]),
+                ListForStorage(storage_name="y", backups=[backup_y_3]),
+            ]
+        )
+    ) == {
+        "x": {"backup_x_1": backup_x_1, "backup_x_2": backup_x_2},
+        "y": {"backup_y_3": backup_y_3},
+    }
+
+
+def create_backup(name: str) -> ListSingleBackup:
+    return ListSingleBackup(
+        name=name,
+        start=datetime.datetime(2020, 1, 2, 3, 4, 5, 678, tzinfo=datetime.timezone.utc),
+        end=datetime.datetime(2020, 1, 2, 5, 6, 7, 891, tzinfo=datetime.timezone.utc),
+        plugin=Plugin("clickhouse"),
+        attempt=1,
+        nodes=2,
+        cluster_files=6,
+        cluster_data_size=6000,
+        files=9,
+        total_size=9000,
+        upload_size=9000,
+        upload_stored_size=7000,
+    )

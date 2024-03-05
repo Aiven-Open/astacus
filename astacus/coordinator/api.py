@@ -5,7 +5,7 @@ See LICENSE for details
 
 from .cleanup import CleanupOp
 from .coordinator import BackupOp, Coordinator, DeltaBackupOp, RestoreOp
-from .list import list_backups, list_delta_backups
+from .list import CachedListEntries, list_backups, list_delta_backups
 from .lockops import LockOps
 from .state import CachedListResponse
 from astacus import config
@@ -131,7 +131,12 @@ async def _list_backups(
         raise HTTPException(status_code=429, detail="Already caching list result")
     c.state.cached_list_running = True
     try:
-        list_response = await to_thread(list_backups, req=req, json_mstorage=c.json_mstorage)
+        cache = (
+            get_cache_entries_from_list_response(cached_list_response.list_response)
+            if cached_list_response is not None
+            else {}
+        )
+        list_response = await to_thread(list_backups, req=req, json_mstorage=c.json_mstorage, cache=cache)
         c.state.cached_list_response = CachedListResponse(
             coordinator_config=coordinator_config,
             list_request=req,
@@ -140,6 +145,13 @@ async def _list_backups(
     finally:
         c.state.cached_list_running = False
     return StructResponse(list_response)
+
+
+def get_cache_entries_from_list_response(list_response: ipc.ListResponse) -> CachedListEntries:
+    return {
+        listed_storage.storage_name: {listed_backup.name: listed_backup for listed_backup in listed_storage.backups}
+        for listed_storage in list_response.storages
+    }
 
 
 @router.get("/delta/list")
