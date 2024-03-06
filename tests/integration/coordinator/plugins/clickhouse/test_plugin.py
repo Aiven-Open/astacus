@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+
 from _pytest.fixtures import SubRequest
 from astacus.common.ipc import RestoreRequest
 from astacus.coordinator.plugins.base import OperationContext
@@ -179,6 +180,15 @@ async def setup_cluster_content(clients: Sequence[HttpClickHouseClient], use_nam
         b"SETTINGS index_granularity=8192 "
         b"SETTINGS flatten_nested=1"
     )
+    # integrations - note most of these never actually attempt to connect to the remote server.
+    await clients[0].execute(
+        b"CREATE TABLE default.postgresql (a Int) "
+        b"ENGINE = PostgreSQL('https://host:1234', 'database', 'table', 'user', 'password')"
+    )
+    await clients[0].execute(
+        b"CREATE TABLE default.mysql (a Int) ENGINE = MySQL('https://host:1234', 'database', 'table', 'user', 'password')"
+    )
+    await clients[0].execute(b"CREATE TABLE default.s3 (a Int) ENGINE = S3('http://bucket.s3.amazonaws.com/key.json')")
     # add a function table
     await clients[0].execute(b"CREATE TABLE default.from_function_table AS numbers(3)")
     # add a table with data in object storage
@@ -392,3 +402,15 @@ async def test_cleanup_does_not_break_object_storage_disk_files(
                     run_astacus_command(astacus_cluster, "restore")
                 # Then check again after a full restore
                 await check_object_storage_data(clients)
+
+
+@pytest.mark.asyncio
+async def test_restores_integration_tables(restored_cluster: Sequence[ClickHouseClient]) -> None:
+    for client in restored_cluster:
+        assert await table_exists(client, "default.postgresql")
+        assert await table_exists(client, "default.mysql")
+        assert await table_exists(client, "default.s3")
+
+
+async def table_exists(client: ClickHouseClient, table_name: str) -> bool:
+    return bool(await client.execute(f"EXISTS TABLE {table_name}".encode()))

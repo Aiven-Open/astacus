@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.common.utils import build_netloc, httpx_request
 from collections.abc import Mapping, Sequence
 from re import Match
