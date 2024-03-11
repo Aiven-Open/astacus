@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+
 from _pytest.fixtures import FixtureRequest
 from astacus.client import create_client_parsers
 from astacus.common.ipc import Plugin
@@ -543,13 +544,15 @@ def create_astacus_configs(
                             for service in clickhouse_cluster.services
                         ],
                     ),
-                    replicated_databases_settings=ReplicatedDatabaseSettings(
-                        collection_name="default_cluster",
-                    )
-                    if clickhouse_cluster.use_named_collections
-                    else ReplicatedDatabaseSettings(
-                        cluster_username=clickhouse_cluster.services[0].username,
-                        cluster_password=clickhouse_cluster.services[0].password,
+                    replicated_databases_settings=(
+                        ReplicatedDatabaseSettings(
+                            collection_name="default_cluster",
+                        )
+                        if clickhouse_cluster.use_named_collections
+                        else ReplicatedDatabaseSettings(
+                            cluster_username=clickhouse_cluster.services[0].username,
+                            cluster_password=clickhouse_cluster.services[0].password,
+                        )
                     ),
                     disks=[
                         DiskConfiguration(

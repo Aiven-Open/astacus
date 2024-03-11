@@ -33,7 +33,14 @@ build-dep-fedora:
 
 .PHONY: build-dep-ubuntu
 build-dep-ubuntu:
-	sudo sh -c 'apt-get update && apt-get install -y git libsnappy-dev python3-pip python3-psycopg2 protobuf-compiler'
+	sudo apt-get install -y apt-transport-https ca-certificates dirmngr
+	sudo gpg --no-default-keyring --keyring /usr/share/keyrings/clickhouse-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 8919F6BD2B48D754
+	echo "deb [signed-by=/usr/share/keyrings/clickhouse-keyring.gpg] https://packages.clickhouse.com/deb stable main" | sudo tee /etc/apt/sources.list.d/clickhouse.list
+	sudo apt-get update
+	sudo sh -c 'apt-get update && apt-get install -y git libsnappy-dev python3-pip python3-psycopg2 protobuf-compiler clickhouse-server clickhouse-client'
+	wget https://dl.min.io/server/minio/release/linux-amd64/minio
+	chmod +x minio
+	sudo mv minio /usr/bin/minio
 
 .PHONY: test-dep-ubuntu
 test-dep-ubuntu:
