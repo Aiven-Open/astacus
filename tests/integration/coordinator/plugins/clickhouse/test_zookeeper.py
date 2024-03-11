@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.coordinator.plugins.zookeeper import (
     KazooZooKeeperClient,
     NodeExistsError,
@@ -42,40 +43,34 @@ def fixture_znode(zookeeper: Service) -> ZNode:
     return znode
 
 
-@pytest.mark.asyncio
 async def test_kazoo_zookeeper_client_get(zookeeper_client: KazooZooKeeperClient, znode: ZNode):
     async with zookeeper_client.connect() as connection:
         assert await connection.get(znode.path) == znode.content
 
 
-@pytest.mark.asyncio
 async def test_kazoo_zookeeper_client_get_missing_node_fails(zookeeper_client: KazooZooKeeperClient) -> None:
     async with zookeeper_client.connect() as connection:
         with pytest.raises(NoNodeError):
             assert await connection.get("/does/not/exist")
 
 
-@pytest.mark.asyncio
 async def test_kazoo_zookeeper_client_get_children(zookeeper_client: KazooZooKeeperClient) -> None:
     async with zookeeper_client.connect() as connection:
         assert await connection.get_children("/zookeeper") == ["config", "quota"]
 
 
-@pytest.mark.asyncio
 async def test_kazoo_zookeeper_client_get_children_of_missing_node_fails(zookeeper_client: KazooZooKeeperClient) -> None:
     async with zookeeper_client.connect() as connection:
         with pytest.raises(NoNodeError):
             assert await connection.get_children("/does/not/exists")
 
 
-@pytest.mark.asyncio
 async def test_kazoo_zookeeper_client_try_create(zookeeper_client: KazooZooKeeperClient) -> None:
     async with zookeeper_client.connect() as connection:
         assert await connection.try_create("/new/try_create", b"new_content") is True
         assert await connection.get("/new/try_create") == b"new_content"
 
 
-@pytest.mark.asyncio
 async def test_kazoo_zookeeper_client_try_create_failure(zookeeper_client: KazooZooKeeperClient) -> None:
     async with zookeeper_client.connect() as connection:
         await connection.create("/new/try_create_failure", b"content")
@@ -83,21 +78,18 @@ async def test_kazoo_zookeeper_client_try_create_failure(zookeeper_client: Kazoo
         assert await connection.get("/new/try_create_failure") == b"content"
 
 
-@pytest.mark.asyncio
 async def test_kazoo_zookeeper_client_create(zookeeper_client: KazooZooKeeperClient) -> None:
     async with zookeeper_client.connect() as connection:
         await connection.create("/new/create", b"content")
         assert await connection.get("/new/create") == b"content"
 
 
-@pytest.mark.asyncio
 async def test_kazoo_zookeeper_client_create_existing_node_fails(zookeeper_client: KazooZooKeeperClient) -> None:
     async with zookeeper_client.connect() as connection:
         with pytest.raises(NodeExistsError):
             await connection.create("/zookeeper", b"content")
 
 
-@pytest.mark.asyncio
 async def test_kazoo_zookeeper_transaction(zookeeper_client: KazooZooKeeperClient) -> None:
     async with zookeeper_client.connect() as connection:
         transaction = connection.transaction()
@@ -108,7 +100,6 @@ async def test_kazoo_zookeeper_transaction(zookeeper_client: KazooZooKeeperClien
         assert await connection.get("/transaction_2") == b"content"
 
 
-@pytest.mark.asyncio
 async def test_kazoo_zookeeper_failing_transaction(zookeeper_client: KazooZooKeeperClient) -> None:
     async with zookeeper_client.connect() as connection:
         await connection.create("/failing_transaction_2", b"old_content")
@@ -123,7 +114,6 @@ async def test_kazoo_zookeeper_failing_transaction(zookeeper_client: KazooZooKee
         assert isinstance(raised.value.results[2], RuntimeInconsistency)
 
 
-@pytest.mark.asyncio
 async def test_kazoo_zookeeper_client_bounded_failure_time(ports: Ports) -> None:
     async with create_zookeeper(ports) as zookeeper:
         zookeeper_client = KazooZooKeeperClient(hosts=[get_kazoo_host(zookeeper)], user=None, timeout=1)

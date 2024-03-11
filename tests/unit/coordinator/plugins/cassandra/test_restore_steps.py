@@ -53,7 +53,6 @@ _pr_node = ipc.PartialRestoreRequestNode
 
 @pytest.mark.parametrize("override_tokens", [False, True])
 @pytest.mark.parametrize("replace_backup_nodes", [False, True])
-@pytest.mark.asyncio
 async def test_step_start_cassandra(mocker: MockerFixture, override_tokens: bool, replace_backup_nodes: bool) -> None:
     plugin_manifest = CassandraManifest(
         cassandra_schema=CassandraSchema(keyspaces=[]),
@@ -109,7 +108,6 @@ async def test_step_start_cassandra(mocker: MockerFixture, override_tokens: bool
     )
 
 
-@pytest.mark.asyncio
 async def test_step_stop_replaced_nodes(mocker: MockerFixture) -> None:
     # Node 3 is replacing node 1.
     manifest_nodes = [_manifest_node(1), _manifest_node(2)]
@@ -160,7 +158,6 @@ class AsyncIterableWrapper:
 
 
 @pytest.mark.parametrize("steps,success", [([True], True), ([False, True], True), ([False], False)])
-@pytest.mark.asyncio
 async def test_step_wait_cassandra_up(mocker: MockerFixture, steps: list[bool], success: bool) -> None:
     get_schema_steps = steps[:]
 
@@ -188,7 +185,6 @@ async def test_step_wait_cassandra_up(mocker: MockerFixture, steps: list[bool], 
             await step.run_step(cluster, context)
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "replaced_node_step, expected_nodes", [(restore_steps.StopReplacedNodesStep, [_coordinator_node(2)]), (None, None)]
 )

@@ -13,7 +13,6 @@ import pytest
 
 
 @pytest.mark.parametrize("start_ok", [False, True])
-@pytest.mark.asyncio
 async def test_run_subop(mocker: MockerFixture, start_ok: bool) -> None:
     async def request_from_nodes(*args, **kwargs):
         if start_ok:
@@ -42,7 +41,6 @@ async def test_run_subop(mocker: MockerFixture, start_ok: bool) -> None:
         ([1], (1, "")),
     ],
 )
-@pytest.mark.asyncio
 async def test_get_schema_hash(mocker: MockerFixture, hashes: list[int], result: tuple[str, str]) -> None:
     mocker.patch.object(utils, "run_subop", return_value=[Mock(schema_hash=hash) for hash in hashes])
     actual_result = await utils.get_schema_hash(mocker.Mock(nodes=[]))

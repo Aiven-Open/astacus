@@ -6,6 +6,7 @@ See LICENSE for details
 Test stats sending.
 
 """
+
 from astacus.common import op
 from astacus.common.ipc import Plugin
 from astacus.common.statsd import StatsClient
@@ -18,8 +19,6 @@ from astacus.coordinator.state import CoordinatorState
 from fastapi import BackgroundTasks
 from starlette.datastructures import URL
 from unittest.mock import patch
-
-import pytest
 
 
 class DummyStep(Step[bool]):
@@ -39,7 +38,6 @@ class DummyStep3(DummyStep):
     pass
 
 
-@pytest.mark.asyncio
 async def test_op_stats() -> None:
     stats = StatsClient(config=None)
     coordinator = Coordinator(

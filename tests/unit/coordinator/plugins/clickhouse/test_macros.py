@@ -2,6 +2,7 @@
 Copyright (c) 2022 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.coordinator.plugins.clickhouse.client import StubClickHouseClient
 from astacus.coordinator.plugins.clickhouse.macros import fetch_server_macros, MacroExpansionError, Macros, MACROS_LIST_QUERY
 from base64 import b64encode
@@ -95,7 +96,6 @@ def test_as_mapping() -> None:
     assert macros.as_mapping() == {b"foo": b"123", b"bar": b"456"}
 
 
-@pytest.mark.asyncio
 async def test_fetch_server_macros() -> None:
     client = StubClickHouseClient()
     client.set_response(

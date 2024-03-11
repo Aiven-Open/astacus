@@ -23,7 +23,6 @@ def fixture_cplugin(cassandra_test_config: CassandraTestConfig) -> plugin.Cassan
     )
 
 
-@pytest.mark.asyncio
 async def test_step_cassandrasubop(mocker: MockerFixture) -> None:
     mocker.patch.object(plugin, "run_subop")
 
@@ -34,7 +33,6 @@ async def test_step_cassandrasubop(mocker: MockerFixture) -> None:
 
 
 @pytest.mark.parametrize("success", [False, True])
-@pytest.mark.asyncio
 async def test_step_cassandra_validate_configuration(mocker: MockerFixture, success: bool) -> None:
     step = plugin.ValidateConfigurationStep(nodes=[])
     context = Mock()

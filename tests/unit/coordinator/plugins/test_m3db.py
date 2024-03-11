@@ -6,6 +6,7 @@ See LICENSE for details
 Test that the plugin m3 specific flow (backup + restore) works
 
 """
+
 from astacus.common import ipc
 from astacus.common.etcd import b64encode_to_str, ETCDClient
 from astacus.common.statsd import StatsClient
@@ -96,7 +97,6 @@ def fixture_etcd_client(plugin: M3DBPlugin) -> ETCDClient:
     return ETCDClient(plugin.etcd_url)
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize("fail_at", BACKUP_FAILS)
 async def test_m3_backup(coordinator: Coordinator, plugin: M3DBPlugin, etcd_client: ETCDClient, fail_at: int | None):
     etcd_prefixes = get_etcd_prefixes(plugin.environment)
@@ -134,7 +134,6 @@ class RestoreTest:
     partial: bool = False
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize("rt", [RestoreTest(fail_at=i) for i in range(3)] + [RestoreTest()])
 async def test_m3_restore(coordinator: Coordinator, plugin: M3DBPlugin, etcd_client: ETCDClient, rt: RestoreTest) -> None:
     partial_restore_nodes: Sequence[ipc.PartialRestoreRequestNode] | None = None

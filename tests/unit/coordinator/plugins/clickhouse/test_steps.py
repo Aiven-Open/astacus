@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.common.asyncstorage import AsyncJsonStorage
 from astacus.common.exceptions import TransientException
 from astacus.common.ipc import BackupManifest, ManifestMin, Plugin, SnapshotFile, SnapshotResult, SnapshotState
@@ -160,7 +161,6 @@ def mock_clickhouse_client() -> mock.Mock:
     return mock_client
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "clickhouse_count,coordinator_count,success",
     [
@@ -205,7 +205,6 @@ async def create_zookeper_access_entities(zookeeper_client: ZooKeeperClient) -> 
         )
 
 
-@pytest.mark.asyncio
 async def test_retrieve_access_entities() -> None:
     zookeeper_client = FakeZooKeeperClient()
     await create_zookeper_access_entities(zookeeper_client)
@@ -235,7 +234,6 @@ class TrappedZooKeeperClient(FakeZooKeeperClient):
             self.calls_until_failure -= 1
 
 
-@pytest.mark.asyncio
 async def test_retrieve_access_entities_fails_from_concurrent_updates() -> None:
     zookeeper_client = TrappedZooKeeperClient()
     await create_zookeper_access_entities(zookeeper_client)
@@ -251,7 +249,6 @@ async def test_retrieve_access_entities_fails_from_concurrent_updates() -> None:
         await step.run_step(Cluster(nodes=[]), StepsContext())
 
 
-@pytest.mark.asyncio
 async def test_retrieve_tables() -> None:
     clients: Sequence[StubClickHouseClient] = [StubClickHouseClient(), StubClickHouseClient()]
     clients[0].set_response(
@@ -340,7 +337,6 @@ async def test_retrieve_tables() -> None:
     assert tables == SAMPLE_TABLES
 
 
-@pytest.mark.asyncio
 async def test_retrieve_tables_without_any_database_or_table() -> None:
     clients = [StubClickHouseClient(), StubClickHouseClient()]
     clients[0].set_response(DATABASES_LIST_QUERY, [])
@@ -350,7 +346,6 @@ async def test_retrieve_tables_without_any_database_or_table() -> None:
     assert await step.run_step(Cluster(nodes=[]), context) == ([], [])
 
 
-@pytest.mark.asyncio
 async def test_retrieve_tables_without_any_table() -> None:
     clients = [StubClickHouseClient(), StubClickHouseClient()]
     clients[0].set_response(
@@ -383,7 +378,6 @@ async def test_retrieve_tables_without_any_table() -> None:
     assert tables == []
 
 
-@pytest.mark.asyncio
 async def test_retrieve_macros() -> None:
     clients = [StubClickHouseClient(), StubClickHouseClient()]
     for (
@@ -417,7 +411,6 @@ def create_remote_file(path: str, remote_path: str) -> SnapshotFile:
     )
 
 
-@pytest.mark.asyncio
 async def test_collect_object_storage_file_steps() -> None:
     disks = Disks.from_disk_configs(
         [
@@ -464,7 +457,6 @@ async def test_collect_object_storage_file_steps() -> None:
     assert await step.run_step(Cluster(nodes=[]), context) == SAMPLE_OBJET_STORAGE_FILES
 
 
-@pytest.mark.asyncio
 async def test_move_frozen_parts_steps() -> None:
     disks = Disks.from_disk_configs(
         [
@@ -514,7 +506,6 @@ async def test_move_frozen_parts_steps() -> None:
     )
 
 
-@pytest.mark.asyncio
 async def test_create_clickhouse_manifest() -> None:
     step = PrepareClickHouseManifestStep()
     context = StepsContext()
@@ -524,7 +515,6 @@ async def test_create_clickhouse_manifest() -> None:
     assert await step.run_step(Cluster(nodes=[]), context) == SAMPLE_MANIFEST_ENCODED
 
 
-@pytest.mark.asyncio
 async def test_remove_frozen_tables_step_using_system_unfreeze() -> None:
     first_client, second_client = mock_clickhouse_client(), mock_clickhouse_client()
     step = RemoveFrozenTablesStep(
@@ -539,7 +529,6 @@ async def test_remove_frozen_tables_step_using_system_unfreeze() -> None:
     assert [call.args[0] for call in second_client.execute.mock_calls] == client_queries
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize("all_clients", [True, False])
 @pytest.mark.parametrize("operation", ["FREEZE", "UNFREEZE"])
 async def test_freezes_all_mergetree_tables_listed_in_manifest(all_clients: bool, operation: str) -> None:
@@ -582,7 +571,6 @@ def b64_str(b: bytes) -> str:
     return b64encode(b).decode()
 
 
-@pytest.mark.asyncio
 async def test_parse_clickhouse_manifest() -> None:
     step = ClickHouseManifestStep()
     context = StepsContext()
@@ -641,7 +629,6 @@ async def test_parse_clickhouse_manifest() -> None:
     )
 
 
-@pytest.mark.asyncio
 async def test_list_database_replicas_step() -> None:
     step = ListDatabaseReplicasStep()
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
@@ -677,7 +664,6 @@ async def test_list_database_replicas_step() -> None:
 
 
 @pytest.mark.parametrize("missing_macro", [b"shard", b"replica"])
-@pytest.mark.asyncio
 async def test_list_database_replicas_step_fails_on_missing_macro(missing_macro: bytes) -> None:
     server_1_macros = Macros()
     server_2_macros = Macros()
@@ -704,7 +690,6 @@ async def test_list_database_replicas_step_fails_on_missing_macro(missing_macro:
         await step.run_step(cluster, context)
 
 
-@pytest.mark.asyncio
 async def test_list_sync_database_replicas_step() -> None:
     zookeeper_client = FakeZooKeeperClient()
     async with zookeeper_client.connect() as connection:
@@ -757,7 +742,6 @@ async def test_list_sync_database_replicas_step() -> None:
         assert await connection.get("/clickhouse/databases/db%2Done/replicas/all|node2/log_ptr") == b"100"
 
 
-@pytest.mark.asyncio
 async def test_creates_all_replicated_databases_and_tables_in_manifest() -> None:
     clients = [mock_clickhouse_client(), mock_clickhouse_client()]
     step = RestoreReplicatedDatabasesStep(
@@ -811,7 +795,6 @@ async def test_creates_all_replicated_databases_and_tables_in_manifest() -> None
     assert [call.args[0] for call in clients[1].execute.mock_calls] == second_client_queries
 
 
-@pytest.mark.asyncio
 async def test_creates_all_replicated_databases_and_tables_in_manifest_with_custom_settings() -> None:
     client = mock_clickhouse_client()
     step = RestoreReplicatedDatabasesStep(
@@ -855,7 +838,6 @@ async def test_creates_all_replicated_databases_and_tables_in_manifest_with_cust
     assert [call.args[0] for call in client.execute.mock_calls] == first_client_queries
 
 
-@pytest.mark.asyncio
 async def test_drops_each_database_on_all_servers_before_recreating_it() -> None:
     # We use the same client twice to record the global sequence of queries across all servers
     client1 = mock_clickhouse_client()
@@ -902,7 +884,6 @@ async def test_drops_each_database_on_all_servers_before_recreating_it() -> None
     assert all(query in client1_queries or client2_queries for query in queries_expected_on_a_single_node)
 
 
-@pytest.mark.asyncio
 async def test_creates_all_access_entities_in_manifest() -> None:
     client = FakeZooKeeperClient()
     step = RestoreAccessEntitiesStep(zookeeper_client=client, access_entities_path="/clickhouse/access")
@@ -912,7 +893,6 @@ async def test_creates_all_access_entities_in_manifest() -> None:
     await check_restored_entities(client)
 
 
-@pytest.mark.asyncio
 async def test_creating_all_access_entities_can_be_retried() -> None:
     client = FakeZooKeeperClient()
     step = RestoreAccessEntitiesStep(zookeeper_client=client, access_entities_path="/clickhouse/access")
@@ -951,7 +931,6 @@ async def check_restored_entities(client: ZooKeeperClient) -> None:
         assert await connection.get(f"/clickhouse/access/uuid/{str(uuid.UUID(int=6))}") == b"ATTACH USER \x80 ..."
 
 
-@pytest.mark.asyncio
 async def test_restore_replica() -> None:
     zookeeper_client = FakeZooKeeperClient()
     client_1 = mock_clickhouse_client()
@@ -992,7 +971,6 @@ async def test_restore_replica() -> None:
         check_each_pair_of_calls_has_the_same_session_id(client.mock_calls)
 
 
-@pytest.mark.asyncio
 async def test_restore_object_storage_files() -> None:
     object_storage_items = [
         ObjectStorageItem(key=file.path, last_modified=datetime.datetime(2020, 1, 2, tzinfo=datetime.timezone.utc))
@@ -1010,7 +988,6 @@ async def test_restore_object_storage_files() -> None:
     assert await target_object_storage.list_items() == object_storage_items
 
 
-@pytest.mark.asyncio
 async def test_restore_object_storage_files_does_nothing_is_storages_have_same_config() -> None:
     same_object_storage = mock.Mock(spec_set=AsyncObjectStorage)
     source_disks = Disks(disks=[create_object_storage_disk("remote", same_object_storage)])
@@ -1023,7 +1000,6 @@ async def test_restore_object_storage_files_does_nothing_is_storages_have_same_c
     same_object_storage.copy_items_from.assert_not_called()
 
 
-@pytest.mark.asyncio
 async def test_restore_object_storage_files_fails_if_source_disk_has_no_object_storage_config() -> None:
     source_disks = Disks(disks=[create_object_storage_disk("remote", None)])
     target_disks = Disks(disks=[create_object_storage_disk("remote", MemoryAsyncObjectStorage())])
@@ -1035,7 +1011,6 @@ async def test_restore_object_storage_files_fails_if_source_disk_has_no_object_s
         await step.run_step(cluster, context)
 
 
-@pytest.mark.asyncio
 async def test_restore_object_storage_files_fails_if_target_disk_has_no_object_storage_config() -> None:
     source_disks = Disks(disks=[create_object_storage_disk("remote", MemoryAsyncObjectStorage())])
     target_disks = Disks(disks=[create_object_storage_disk("remote", None)])
@@ -1047,7 +1022,6 @@ async def test_restore_object_storage_files_fails_if_target_disk_has_no_object_s
         await step.run_step(cluster, context)
 
 
-@pytest.mark.asyncio
 async def test_attaches_all_mergetree_parts_in_manifest() -> None:
     client_1 = mock_clickhouse_client()
     client_2 = mock_clickhouse_client()
@@ -1123,7 +1097,6 @@ async def test_attaches_all_mergetree_parts_in_manifest() -> None:
     check_each_pair_of_calls_has_the_same_session_id(client_2.mock_calls)
 
 
-@pytest.mark.asyncio
 async def test_sync_replicas_for_replicated_mergetree_tables() -> None:
     clients = [mock_clickhouse_client(), mock_clickhouse_client()]
     step = SyncTableReplicasStep(clients, sync_timeout=180, max_concurrent_sync_per_node=10)
@@ -1149,7 +1122,6 @@ def check_each_pair_of_calls_has_the_same_session_id(mock_calls: Sequence[MockCa
         assert session_ids[start_index] == session_ids[start_index + 1]
 
 
-@pytest.mark.asyncio
 async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
     object_storage = MemoryAsyncObjectStorage.from_items(
         [
@@ -1226,7 +1198,6 @@ async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
     ]
 
 
-@pytest.mark.asyncio
 async def test_get_versions_step() -> None:
     client_1 = mock_clickhouse_client()
     client_1.execute.return_value = [["23.8.6.1"]]
@@ -1238,7 +1209,6 @@ async def test_get_versions_step() -> None:
     assert result == [(23, 8), (23, 3)]
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "versions,called_node_indicies",
     [
