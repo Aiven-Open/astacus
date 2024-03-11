@@ -509,6 +509,7 @@ class RestoreReplicatedDatabasesStep(Step[None]):
             # we need to re-enable these custom global settings when creating the table again.
             # We can enable these settings unconditionally because they are harmless
             # for tables not needing them.
+            b"SET allow_experimental_annoy_index=true",
             b"SET allow_experimental_geo_types=true",
             b"SET allow_experimental_object_type=true",
             b"SET allow_suspicious_codecs=true",
