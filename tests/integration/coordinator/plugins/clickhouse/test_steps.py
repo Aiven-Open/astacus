@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+
 from .conftest import ClickHouseCommand, create_clickhouse_cluster, get_clickhouse_client, MinioBucket
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import StepsContext
@@ -21,7 +22,6 @@ pytestmark = [
 ]
 
 
-@pytest.mark.asyncio
 async def test_retrieve_tables(ports: Ports, clickhouse_command: ClickHouseCommand, minio_bucket: MinioBucket) -> None:
     async with create_zookeeper(ports) as zookeeper:
         # We need a "real" cluster to be able to use Replicated databases

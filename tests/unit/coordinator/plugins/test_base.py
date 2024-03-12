@@ -3,6 +3,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.common import ipc, utils
 from astacus.common.asyncstorage import AsyncHexDigestStorage, AsyncJsonStorage
 from astacus.common.ipc import ManifestMin, Plugin, SnapshotHash
@@ -132,7 +133,6 @@ def manifest_with_hashes(hashes: dict[str, bytes], index: int) -> ipc.BackupMani
     )
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "node_features,expected_request",
     [
@@ -196,7 +196,6 @@ BACKUPS_FOR_RETENTION_TEST = {
 }
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "retention,kept_backups",
     [
@@ -241,7 +240,6 @@ BACKUPS_FOR_DELTA_RETENTION_TEST = {
 }
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "explicit_delete,expected_kept_backups",
     [
@@ -275,7 +273,6 @@ async def test_compute_kept_deltas(
     assert {b.filename for b in kept_backups} == expected_kept_backups
 
 
-@pytest.mark.asyncio
 async def test_delete_backup_manifests(single_node_cluster: Cluster, context: StepsContext) -> None:
     json_items: dict[str, bytes] = {
         "b1": b"",
@@ -301,7 +298,6 @@ class DeleteBackupManifestsParam:
     test_id: str
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "p",
     [
@@ -338,7 +334,6 @@ async def test_delete_backup_and_delta_manifests(
     assert set(json_items.keys()) == p.expected_remaining
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "kept_backups,stored_hashes,expected_hashes",
     [
@@ -369,7 +364,6 @@ async def test_delete_dangling_hexdigests_step(
     assert stored_hashes == expected_hashes
 
 
-@pytest.mark.asyncio
 async def test_delete_backup_and_delta_manifests_raises_when_delta_steps_are_missing(
     single_node_cluster: Cluster, context: StepsContext
 ) -> None:
@@ -381,7 +375,6 @@ async def test_delete_backup_and_delta_manifests_raises_when_delta_steps_are_mis
         await step.run_step(single_node_cluster, context)
 
 
-@pytest.mark.asyncio
 async def test_upload_manifest_step_generates_correct_backup_name(
     single_node_cluster: Cluster,
     context: StepsContext,
@@ -396,7 +389,6 @@ async def test_upload_manifest_step_generates_correct_backup_name(
     assert "backup-2020-01-07T05:00:00+00:00" in async_json_storage.storage.items
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "node_features,expected_request",
     [
@@ -452,7 +444,6 @@ class TestListDeltasParam:
     expected_deltas: list[str]
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "p",
     [

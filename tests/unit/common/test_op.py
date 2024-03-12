@@ -6,6 +6,7 @@ See LICENSE for details
 astacus.common.op tests that do not fit elsewhere
 
 """
+
 from astacus.common import op
 from astacus.common.exceptions import ExpiredOperationException
 from astacus.common.statsd import StatsClient
@@ -15,7 +16,6 @@ from starlette.datastructures import URL
 import pytest
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "fun_ex,expect_status,expect_ex",
     [

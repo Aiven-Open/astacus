@@ -7,13 +7,13 @@ Test that StatsClient works as advertised.
 This could be broader, but at least minimal functionality is tested here.
 
 """
+
 from __future__ import annotations
 
 from astacus.common import statsd
 from typing import Any
 
 import asyncio
-import pytest
 import socket
 
 
@@ -25,7 +25,6 @@ class _Protocol(asyncio.DatagramProtocol):
         self.received_queue.put_nowait(data)
 
 
-@pytest.mark.asyncio
 async def test_statsd() -> None:
     loop = asyncio.get_running_loop()
     received: asyncio.Queue[bytes] = asyncio.Queue()

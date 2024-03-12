@@ -241,7 +241,6 @@ async def setup_cluster_users(clients: Sequence[HttpClickHouseClient]) -> None:
     await clients[0].execute(b"CREATE USER `z_\\x80_enjoyer`")
 
 
-@pytest.mark.asyncio
 async def test_restores_access_entities(restored_cluster: Sequence[ClickHouseClient]) -> None:
     for client in restored_cluster:
         assert await client.execute(
@@ -263,7 +262,6 @@ async def test_restores_access_entities(restored_cluster: Sequence[ClickHouseCli
         assert await client.execute(b"SELECT name FROM system.settings_profiles WHERE storage = 'replicated'") == [["érin"]]
 
 
-@pytest.mark.asyncio
 async def test_restores_replicated_merge_tree_tables_data(restored_cluster: Sequence[ClickHouseClient]) -> None:
     s1_data = [[123, "foo"], [456, "bar"]]
     s2_data = [[789, "baz"]]
@@ -273,7 +271,6 @@ async def test_restores_replicated_merge_tree_tables_data(restored_cluster: Sequ
         assert response == expected_data
 
 
-@pytest.mark.asyncio
 async def test_restores_table_with_experimental_types(restored_cluster: Sequence[ClickHouseClient]) -> None:
     # The JSON type merges the keys in the response,
     # hence the extra zero-valued entries we don't see in the insert queries.
@@ -285,14 +282,12 @@ async def test_restores_table_with_experimental_types(restored_cluster: Sequence
         assert response == expected_data
 
 
-@pytest.mark.asyncio
 async def test_restores_table_with_nullable_key(restored_cluster: Sequence[ClickHouseClient]) -> None:
     for client in restored_cluster:
         response = await client.execute(b"SELECT thekey, thedata FROM default.with_nullable_key ORDER BY thekey")
         assert response == []
 
 
-@pytest.mark.asyncio
 async def test_restores_table_with_nested_fields(restored_cluster: Sequence[ClickHouseClient]) -> None:
     client = restored_cluster[0]
     response = await client.execute(b"SELECT thekey, thedata FROM default.nested_not_flatten ORDER BY thekey")
@@ -305,7 +300,6 @@ async def test_restores_table_with_nested_fields(restored_cluster: Sequence[Clic
     assert response == [[123, [4], [5]]]
 
 
-@pytest.mark.asyncio
 async def test_restores_function_table(restored_cluster: Sequence[ClickHouseClient]) -> None:
     client = restored_cluster[0]
     response = await client.execute(b"SELECT * FROM default.from_function_table")
@@ -321,19 +315,16 @@ async def check_object_storage_data(cluster: Sequence[ClickHouseClient]) -> None
         assert response == expected_data
 
 
-@pytest.mark.asyncio
 async def test_restores_url_engine_table(restored_cluster: Sequence[ClickHouseClient]) -> None:
     for client in restored_cluster:
         response = await client.execute(b"SELECT create_table_query FROM system.tables WHERE name = 'url_engine_table'")
         assert response[0][0] == SAMPLE_URL_ENGINE_DDL
 
 
-@pytest.mark.asyncio
 async def test_restores_object_storage_data(restored_cluster: Sequence[ClickHouseClient]) -> None:
     await check_object_storage_data(restored_cluster)
 
 
-@pytest.mark.asyncio
 async def test_restores_simple_view(restored_cluster: Sequence[ClickHouseClient]) -> None:
     s1_data = [[123 * 2], [456 * 2]]
     s2_data = [[789 * 2]]
@@ -343,7 +334,6 @@ async def test_restores_simple_view(restored_cluster: Sequence[ClickHouseClient]
         assert response == expected_data
 
 
-@pytest.mark.asyncio
 async def test_restores_materialized_view_data(restored_cluster: Sequence[ClickHouseClient]) -> None:
     s1_data = [[123 * 3], [456 * 3]]
     s2_data = [[789 * 3]]
@@ -353,21 +343,18 @@ async def test_restores_materialized_view_data(restored_cluster: Sequence[ClickH
         assert response == expected_data
 
 
-@pytest.mark.asyncio
 async def test_restores_connectivity_between_distributed_servers(restored_cluster: Sequence[ClickHouseClient]) -> None:
     # This only works if each node can connect to all nodes of the cluster named after the Distributed database
     for client in restored_cluster:
         assert await client.execute(b"SELECT * FROM clusterAllReplicas('default', system.one) ") == [[0], [0], [0]]
 
 
-@pytest.mark.asyncio
 async def test_does_not_restore_log_tables_data(restored_cluster: Sequence[ClickHouseClient]) -> None:
     # We restored the table structure but not the data
     for client in restored_cluster:
         assert await client.execute(b"SELECT thekey, thedata FROM default.memory") == []
 
 
-@pytest.mark.asyncio
 async def test_cleanup_does_not_break_object_storage_disk_files(
     ports: Ports,
     clickhouse_command: ClickHouseCommand,
@@ -404,7 +391,6 @@ async def test_cleanup_does_not_break_object_storage_disk_files(
                 await check_object_storage_data(clients)
 
 
-@pytest.mark.asyncio
 async def test_restores_integration_tables(restored_cluster: Sequence[ClickHouseClient]) -> None:
     for client in restored_cluster:
         assert await table_exists(client, "default.postgresql")

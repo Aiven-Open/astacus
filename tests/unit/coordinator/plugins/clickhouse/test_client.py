@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.coordinator.plugins.clickhouse.client import (
     ClickHouseClientQueryError,
     escape_sql_identifier,
@@ -15,7 +16,6 @@ import respx
 pytestmark = [pytest.mark.clickhouse]
 
 
-@pytest.mark.asyncio
 async def test_successful_execute_returns_rows() -> None:
     client = HttpClickHouseClient(host="example.org", port=9000)
     with respx.mock:
@@ -31,7 +31,6 @@ async def test_successful_execute_returns_rows() -> None:
     assert response == [["system"], ["defaultdb"]]
 
 
-@pytest.mark.asyncio
 async def test_failing_execute_raises_an_exception() -> None:
     client = HttpClickHouseClient(host="example.org", port=9000)
     with respx.mock:
@@ -40,7 +39,6 @@ async def test_failing_execute_raises_an_exception() -> None:
             await client.execute(b"SHOW DATABASES")
 
 
-@pytest.mark.asyncio
 async def test_sends_authentication_headers() -> None:
     client = HttpClickHouseClient(host="example.org", port=9000, username="user", password="password")
     with respx.mock:
@@ -51,7 +49,6 @@ async def test_sends_authentication_headers() -> None:
         assert request.headers["x-clickhouse-key"] == "password"
 
 
-@pytest.mark.asyncio
 async def test_sends_session_id_as_parameter() -> None:
     client = HttpClickHouseClient(host="example.org", port=9000)
     with respx.mock:

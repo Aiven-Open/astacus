@@ -2,6 +2,7 @@
 Copyright (c) 2022 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.coordinator.plugins.clickhouse.replication import get_shard_and_replica
 from tests.integration.conftest import create_zookeeper, Ports
 from tests.integration.coordinator.plugins.clickhouse.conftest import (
@@ -19,7 +20,6 @@ pytestmark = [
 ]
 
 
-@pytest.mark.asyncio
 async def test_get_shard_and_replica(ports: Ports, clickhouse_command: ClickHouseCommand, minio_bucket: MinioBucket) -> None:
     async with create_zookeeper(ports) as zookeeper:
         async with create_clickhouse_cluster(

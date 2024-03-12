@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+
 from .conftest import ClickHouseCommand, create_clickhouse_service, get_clickhouse_client
 from astacus.coordinator.plugins.clickhouse.client import ClickHouseClientQueryError
 from collections.abc import Sequence
@@ -17,21 +18,18 @@ pytestmark = [
 ]
 
 
-@pytest.mark.asyncio
 async def test_client_execute(clickhouse: Service) -> None:
     client = get_clickhouse_client(clickhouse)
     response = cast(Sequence[list[str]], await client.execute(b"SHOW DATABASES"))
     assert sorted(list(response)) == [["INFORMATION_SCHEMA"], ["default"], ["information_schema"], ["system"]]
 
 
-@pytest.mark.asyncio
 async def test_client_execute_on_system_database(clickhouse: Service) -> None:
     client = get_clickhouse_client(clickhouse)
     response = await client.execute(b"SELECT currentDatabase()")
     assert response == [["system"]]
 
 
-@pytest.mark.asyncio
 async def test_client_execute_with_empty_response(clickhouse: Service) -> None:
     # In that case, ClickHouse http protocol doesn't bother with replying with
     # an empty json dict and instead replies with an empty string.
@@ -41,7 +39,6 @@ async def test_client_execute_with_empty_response(clickhouse: Service) -> None:
     assert response == []
 
 
-@pytest.mark.asyncio
 async def test_client_execute_bounded_connection_failure_time(ports: Ports, clickhouse_command: ClickHouseCommand) -> None:
     async with create_clickhouse_service(ports, clickhouse_command) as clickhouse:
         client = get_clickhouse_client(clickhouse, timeout=1.0)
@@ -53,7 +50,6 @@ async def test_client_execute_bounded_connection_failure_time(ports: Ports, clic
         assert elapsed_time < 10.0
 
 
-@pytest.mark.asyncio
 async def test_client_execute_bounded_query_time(clickhouse: Service) -> None:
     client = get_clickhouse_client(clickhouse, timeout=1.0)
     start_time = time.monotonic()
@@ -63,7 +59,6 @@ async def test_client_execute_bounded_query_time(clickhouse: Service) -> None:
     assert 1.0 <= elapsed_time < 3.0
 
 
-@pytest.mark.asyncio
 async def test_client_execute_timeout_can_be_customized_per_query(clickhouse: Service) -> None:
     client = get_clickhouse_client(clickhouse, timeout=10.0)
     start_time = time.monotonic()
@@ -74,7 +69,6 @@ async def test_client_execute_timeout_can_be_customized_per_query(clickhouse: Se
     assert 1.0 <= elapsed_time < 3.0
 
 
-@pytest.mark.asyncio
 async def test_client_execute_error_returns_status_and_exception_code(clickhouse: Service) -> None:
     unknown_table_exception_code = 60
     client = get_clickhouse_client(clickhouse)

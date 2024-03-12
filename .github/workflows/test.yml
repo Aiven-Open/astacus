@@ -1,8 +1,10 @@
-name: Test Suite (Minimal)
+name: Test
 
-on: pull_request
-
-# Note: This test runs only on one Python version the minimal pip install
+on:
+  pull_request:
+  push:
+    branches:
+      - main
 
 jobs:
   unit-test:
@@ -10,7 +12,7 @@ jobs:
     strategy:
       max-parallel: 4
       matrix:
-        python-version: ['3.11']
+        python-version: ["3.11"]
     steps:
     - uses: actions/checkout@v3
 
@@ -24,7 +26,16 @@ jobs:
         cache: 'pip'
 
     - name: Install requirements
-      run: pip install -r requirements.txt
+      run: pip install -e '.[cassandra]'
+
+    - name: Install testing requirements (not included by default in normal install)
+      run: pip install -r requirements.testing.txt
 
     - name: Execute unit-tests
       run: make unittest
+
+    - id: upload-codecov
+      # Third-party action pinned to v2.1.0
+      uses: codecov/codecov-action@f32b3a3741e1053eb607407145bc9619351dc93b
+      with:
+        verbose: true

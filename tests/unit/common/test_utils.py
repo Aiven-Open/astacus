@@ -46,14 +46,12 @@ def test_build_netloc_adds_port_to_ipv6() -> None:
     assert build_netloc("::1", 1234) == "[::1]:1234"
 
 
-@pytest.mark.asyncio
 async def test_httpx_request_connect_failure():
     # Known (most likely) unreachable local IP address
     r = await utils.httpx_request("http://127.0.0.42:12345/foo", caller="test")
     assert r is None
 
 
-@pytest.mark.asyncio
 async def test_async_sleeper() -> None:
     sleeper = AsyncSleeper()
 
@@ -70,7 +68,6 @@ async def test_async_sleeper() -> None:
         task.done()
 
 
-@pytest.mark.asyncio
 async def test_exponential_backoff(mocker: MockerFixture) -> None:
     _waits: list[float] = []
     base = 42

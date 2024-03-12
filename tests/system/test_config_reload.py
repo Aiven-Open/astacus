@@ -11,7 +11,6 @@ import pytest
 
 
 @pytest.mark.order("last")
-@pytest.mark.asyncio
 def test_reload_config(tmpdir, rootdir: str, astacus1: TestNode, astacus2: TestNode, astacus3: TestNode) -> None:
     # Update the root_globs config of the first node
     create_astacus_config(tmpdir=tmpdir, node=astacus1, plugin_config={"root_globs": ["*.foo"]})

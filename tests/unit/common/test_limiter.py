@@ -18,7 +18,6 @@ import pytest
         (3, ["s1", "s2", "s3", "e2", "e3", "e1"]),
     ],
 )
-@pytest.mark.asyncio
 async def test_limiter(limit: int, expected_trace: Sequence[str]) -> None:
     trace = []
 
@@ -44,7 +43,6 @@ async def test_limiter(limit: int, expected_trace: Sequence[str]) -> None:
         (3, ["s1", "s2", "s3", "e2", "e3", "e1"]),
     ],
 )
-@pytest.mark.asyncio
 async def test_gather_limited(limit: int, expected_trace: Sequence[str]) -> None:
     trace = []
 

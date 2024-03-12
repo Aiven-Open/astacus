@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.coordinator.plugins.zookeeper import (
     ChangeWatch,
     FakeZooKeeperClient,
@@ -18,7 +19,6 @@ import pytest
 pytestmark = [pytest.mark.clickhouse]
 
 
-@pytest.mark.asyncio
 async def test_fake_zookeeper_client_create_includes_parents() -> None:
     client = FakeZooKeeperClient()
     async with client.connect() as connection:
@@ -28,7 +28,6 @@ async def test_fake_zookeeper_client_create_includes_parents() -> None:
         assert await connection.get("/path/to/some") == b""
 
 
-@pytest.mark.asyncio
 async def test_fake_zookeeper_client_create_then_get() -> None:
     client = FakeZooKeeperClient()
     async with client.connect() as connection:
@@ -37,7 +36,6 @@ async def test_fake_zookeeper_client_create_then_get() -> None:
         assert await connection.get("/path/to_key/") == b"content"
 
 
-@pytest.mark.asyncio
 async def test_fake_zookeeper_client_create_then_set() -> None:
     client = FakeZooKeeperClient()
     async with client.connect() as connection:
@@ -46,7 +44,6 @@ async def test_fake_zookeeper_client_create_then_set() -> None:
         assert await connection.get("/path/to_key/") == b"new content"
 
 
-@pytest.mark.asyncio
 async def test_fake_zookeeper_client_create_existing_node_fails() -> None:
     client = FakeZooKeeperClient()
     async with client.connect() as connection:
@@ -55,7 +52,6 @@ async def test_fake_zookeeper_client_create_existing_node_fails() -> None:
             await connection.create("/path/to_key", b"content")
 
 
-@pytest.mark.asyncio
 async def test_fake_zookeeper_client_get_missing_node_fails() -> None:
     client = FakeZooKeeperClient()
     async with client.connect() as connection:
@@ -63,7 +59,6 @@ async def test_fake_zookeeper_client_get_missing_node_fails() -> None:
             await connection.get("/path/to_key")
 
 
-@pytest.mark.asyncio
 async def test_fake_zookeeper_client_set_missing_node_fails() -> None:
     client = FakeZooKeeperClient()
     async with client.connect() as connection:
@@ -71,7 +66,6 @@ async def test_fake_zookeeper_client_set_missing_node_fails() -> None:
             await connection.set("/path/to_key", b"content")
 
 
-@pytest.mark.asyncio
 async def test_fake_zookeeper_client_delete() -> None:
     client = FakeZooKeeperClient()
     async with client.connect() as connection:
@@ -80,7 +74,6 @@ async def test_fake_zookeeper_client_delete() -> None:
         assert not await connection.exists("/path/to_key")
 
 
-@pytest.mark.asyncio
 async def test_fake_zookeeper_client_delete_fails_if_not_exist() -> None:
     client = FakeZooKeeperClient()
     async with client.connect() as connection:
@@ -88,7 +81,6 @@ async def test_fake_zookeeper_client_delete_fails_if_not_exist() -> None:
             await connection.delete("/path/to_key")
 
 
-@pytest.mark.asyncio
 async def test_fake_zookeeper_client_delete_fails_if_has_children() -> None:
     client = FakeZooKeeperClient()
     async with client.connect() as connection:
@@ -98,7 +90,6 @@ async def test_fake_zookeeper_client_delete_fails_if_has_children() -> None:
             await connection.delete("/path/to_key")
 
 
-@pytest.mark.asyncio
 async def test_fake_zookeeper_client_delete_recursive() -> None:
     client = FakeZooKeeperClient()
     async with client.connect() as connection:
@@ -111,14 +102,12 @@ async def test_fake_zookeeper_client_delete_recursive() -> None:
         assert not await connection.exists("/path/to_key/sub2")
 
 
-@pytest.mark.asyncio
 async def test_fake_zookeeper_client_root_exists() -> None:
     client = FakeZooKeeperClient()
     async with client.connect() as connection:
         assert await connection.get("") == b""
 
 
-@pytest.mark.asyncio
 async def test_fake_zookeeper_client_get_children() -> None:
     client = FakeZooKeeperClient()
     async with client.connect() as connection:
@@ -128,7 +117,6 @@ async def test_fake_zookeeper_client_get_children() -> None:
         assert await connection.get_children("/group/of") == ["key_1", "key_2", "key_3"]
 
 
-@pytest.mark.asyncio
 async def test_fake_zookeeper_client_get_children_of_missing_node_fails() -> None:
     client = FakeZooKeeperClient()
     async with client.connect() as connection:
@@ -136,7 +124,6 @@ async def test_fake_zookeeper_client_get_children_of_missing_node_fails() -> Non
             await connection.get_children("/group/of")
 
 
-@pytest.mark.asyncio
 async def test_fake_zookeeper_client_get_watch_on_child() -> None:
     client = FakeZooKeeperClient()
     change_watch = ChangeWatch()
@@ -148,7 +135,6 @@ async def test_fake_zookeeper_client_get_watch_on_child() -> None:
     assert change_watch.has_changed
 
 
-@pytest.mark.asyncio
 async def test_fake_zookeeper_client_get_watch_on_set() -> None:
     client = FakeZooKeeperClient()
     change_watch = ChangeWatch()
@@ -160,7 +146,6 @@ async def test_fake_zookeeper_client_get_watch_on_set() -> None:
     assert change_watch.has_changed
 
 
-@pytest.mark.asyncio
 async def test_fake_zookeeper_client_get_children_watch() -> None:
     client = FakeZooKeeperClient()
     change_watch = ChangeWatch()
@@ -172,7 +157,6 @@ async def test_fake_zookeeper_client_get_children_watch() -> None:
     assert change_watch.has_changed
 
 
-@pytest.mark.asyncio
 async def test_fake_zookeeper_transaction() -> None:
     client = FakeZooKeeperClient()
     async with client.connect() as connection:
@@ -184,7 +168,6 @@ async def test_fake_zookeeper_transaction() -> None:
         assert await connection.get("/key_2") == b"content"
 
 
-@pytest.mark.asyncio
 async def test_fake_zookeeper_transaction_is_atomic() -> None:
     client = FakeZooKeeperClient()
     async with client.connect() as connection:
@@ -202,7 +185,6 @@ async def test_fake_zookeeper_transaction_is_atomic() -> None:
         assert repr(raised.value.results) == repr(expected_errors)
 
 
-@pytest.mark.asyncio
 async def test_fake_zookeeper_transaction_does_not_implicitly_create_parents() -> None:
     client = FakeZooKeeperClient()
     async with client.connect() as connection:
@@ -212,7 +194,6 @@ async def test_fake_zookeeper_transaction_does_not_implicitly_create_parents() -
             await transaction.commit()
 
 
-@pytest.mark.asyncio
 async def test_fake_zookeeper_transaction_generates_trigger() -> None:
     client = FakeZooKeeperClient()
     change_watch = ChangeWatch()

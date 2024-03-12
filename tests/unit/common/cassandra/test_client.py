@@ -54,7 +54,6 @@ def test_cassandra_client(mocker: MockFixture, ssl: bool) -> None:
         assert isinstance(session, client_module.CassandraSession)
 
 
-@pytest.mark.asyncio
 async def test_cassandra_client_run(mocker: MockFixture):
     client = create_client(mocker)
 

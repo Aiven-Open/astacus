@@ -2,6 +2,7 @@
 Copyright (c) 2022 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.coordinator.plugins.base import StepsContext
 from astacus.coordinator.plugins.flink.manifest import FlinkManifest
 from astacus.coordinator.plugins.flink.steps import FlinkManifestStep, RestoreDataStep, RetrieveDataStep
@@ -9,10 +10,7 @@ from astacus.coordinator.plugins.zookeeper import KazooZooKeeperClient
 from unittest.mock import Mock
 from uuid import uuid4
 
-import pytest
 
-
-@pytest.mark.asyncio
 async def test_restore_data(zookeeper_client: KazooZooKeeperClient) -> None:
     table_id1 = str(uuid4()).partition("-")[0]
     table_id2 = str(uuid4()).partition("-")[0]
