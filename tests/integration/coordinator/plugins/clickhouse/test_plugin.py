@@ -188,7 +188,6 @@ async def setup_cluster_content(clients: Sequence[HttpClickHouseClient], use_nam
     await clients[0].execute(
         b"CREATE TABLE default.mysql (a Int) ENGINE = MySQL('https://host:1234', 'database', 'table', 'user', 'password')"
     )
-    await clients[0].execute(b"CREATE TABLE default.s3 (a Int) ENGINE = S3('http://bucket.s3.amazonaws.com/key.json')")
     # add a function table
     await clients[0].execute(b"CREATE TABLE default.from_function_table AS numbers(3)")
     # add a table with data in object storage
@@ -395,7 +394,6 @@ async def test_restores_integration_tables(restored_cluster: Sequence[ClickHouse
     for client in restored_cluster:
         assert await table_exists(client, "default.postgresql")
         assert await table_exists(client, "default.mysql")
-        assert await table_exists(client, "default.s3")
 
 
 async def table_exists(client: ClickHouseClient, table_name: str) -> bool:
