@@ -410,6 +410,28 @@ def create_clickhouse_configs(
                         </node>
                     </zookeeper>
                     <mark_cache_size>5368709120</mark_cache_size>
+
+                    <merge_tree>
+                        <number_of_free_entries_in_pool_to_execute_mutation>2</number_of_free_entries_in_pool_to_execute_mutation>
+                        <number_of_free_entries_in_pool_to_execute_optimize_entire_partition>2</number_of_free_entries_in_pool_to_execute_optimize_entire_partition>
+                    </merge_tree>
+                    <background_pool_size>4</background_pool_size>
+                    <background_move_pool_size>2</background_move_pool_size>
+                    <background_fetches_pool_size>2</background_fetches_pool_size>
+                    <background_common_pool_size>4</background_common_pool_size>
+                    <background_buffer_flush_schedule_pool_size>2</background_buffer_flush_schedule_pool_size>
+                    <background_schedule_pool_size>2</background_schedule_pool_size>
+                    <background_message_broker_schedule_pool_size>2</background_message_broker_schedule_pool_size>
+                    <background_distributed_schedule_pool_size>2</background_distributed_schedule_pool_size>
+                    <tables_loader_foreground_pool_size>2</tables_loader_foreground_pool_size>
+                    <tables_loader_background_pool_size>2</tables_loader_background_pool_size>
+                    <restore_threads>2</restore_threads>
+                    <backup_threads>2</backup_threads>
+                    <backups_io_thread_pool_queue_size>2</backups_io_thread_pool_queue_size>
+                    <max_parts_cleaning_thread_pool_size>2</max_parts_cleaning_thread_pool_size>
+                    <max_active_parts_loading_thread_pool_size>2</max_active_parts_loading_thread_pool_size>
+                    <max_outdated_parts_loading_thread_pool_size>2</max_outdated_parts_loading_thread_pool_size>
+
                     <max_server_memory_usage_to_ram_ratio>0.5</max_server_memory_usage_to_ram_ratio>
                     <enable_system_unfreeze>true</enable_system_unfreeze>
                     <user_directories>
