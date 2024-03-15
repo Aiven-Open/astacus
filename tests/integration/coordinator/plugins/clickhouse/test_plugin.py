@@ -6,9 +6,10 @@ See LICENSE for details
 from _pytest.fixtures import SubRequest
 from astacus.common.ipc import RestoreRequest
 from astacus.coordinator.plugins.base import OperationContext
-from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, HttpClickHouseClient
+from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, ClickHouseClientQueryError, HttpClickHouseClient
 from astacus.coordinator.plugins.clickhouse.plugin import ClickHousePlugin
 from collections.abc import AsyncIterable, AsyncIterator, Sequence
+from contextlib import asynccontextmanager
 from pathlib import Path
 from tests.integration.conftest import create_zookeeper, Ports
 from tests.integration.coordinator.plugins.clickhouse.conftest import (
@@ -51,8 +52,8 @@ def get_restore_steps_names() -> Sequence[str]:
     return [step.__class__.__name__ for step in steps]
 
 
-@pytest.fixture(scope="module", name="restorable_cluster")
-async def fixture_restorable_cluster(
+@asynccontextmanager
+async def restorable_cluster_manager(
     ports: Ports,
     clickhouse_command: ClickHouseCommand,
     minio_bucket: MinioBucket,
@@ -79,15 +80,24 @@ async def fixture_restorable_cluster(
         yield storage_path
 
 
-@pytest.fixture(scope="module", name="restored_cluster", params=[*get_restore_steps_names(), None])
-async def fixture_restored_cluster(
+@pytest.fixture(scope="module", name="restorable_cluster")
+async def fixture_restorable_cluster(
+    ports: Ports,
+    clickhouse_command: ClickHouseCommand,
+    minio_bucket: MinioBucket,
+) -> AsyncIterator[Path]:
+    async with restorable_cluster_manager(ports, clickhouse_command, minio_bucket) as restorable_cluster:
+        yield restorable_cluster
+
+
+@asynccontextmanager
+async def restored_cluster_manager(
     restorable_cluster: Path,
     ports: Ports,
-    request: SubRequest,
+    stop_after_step: str | None,
     clickhouse_restore_command: ClickHouseCommand,
     minio_bucket: MinioBucket,
-) -> AsyncIterable[Sequence[ClickHouseClient]]:
-    stop_after_step: str = request.param
+) -> AsyncIterator[Sequence[ClickHouseClient]]:
     restorable_source = RestorableSource(
         astacus_storage_path=restorable_cluster / "astacus_backup", clickhouse_object_storage_prefix="restorable/"
     )
@@ -123,6 +133,35 @@ async def fixture_restored_cluster(
                         )
                     run_astacus_command(astacus_cluster, "restore", "--storage", "restorable")
                     yield clients
+
+
+@pytest.fixture(scope="module", name="restored_cluster", params=[*get_restore_steps_names(), None])
+async def fixture_restored_cluster(
+    ports: Ports,
+    request: SubRequest,
+    restorable_cluster: Path,
+    clickhouse_restore_command: ClickHouseCommand,
+    minio_bucket: MinioBucket,
+) -> AsyncIterable[Sequence[ClickHouseClient]]:
+    stop_after_step: str | None = request.param
+    async with restored_cluster_manager(
+        restorable_cluster, ports, stop_after_step, clickhouse_restore_command, minio_bucket
+    ) as clients:
+        yield clients
+
+
+@pytest.fixture(scope="function", name="function_restored_cluster")
+async def fixture_function_restored_cluster(
+    ports: Ports,
+    clickhouse_command: ClickHouseCommand,
+    clickhouse_restore_command: ClickHouseCommand,
+    function_minio_bucket: MinioBucket,
+) -> AsyncIterable[Sequence[ClickHouseClient]]:
+    async with restorable_cluster_manager(ports, clickhouse_command, function_minio_bucket) as restorable_cluster:
+        async with restored_cluster_manager(
+            restorable_cluster, ports, None, clickhouse_restore_command, function_minio_bucket
+        ) as clients:
+            yield clients
 
 
 async def setup_cluster_content(clients: Sequence[HttpClickHouseClient], use_named_collections: bool) -> None:
@@ -202,10 +241,29 @@ async def setup_cluster_content(clients: Sequence[HttpClickHouseClient], use_nam
         b"CREATE VIEW default.simple_view AS SELECT toInt32(thekey * 2) as thekey2 FROM default.replicated_merge_tree"
     )
     await clients[0].execute(
+        b"CREATE TABLE default.source_table_for_view_deleted (thekey UInt32, thedata String) "
+        b"ENGINE = ReplicatedMergeTree ORDER BY (thekey)"
+    )
+    await clients[0].execute(
+        b"CREATE VIEW default.view_deleted_source AS SELECT toInt32(thekey * 2) as thekey2 "
+        b"FROM default.source_table_for_view_deleted"
+    )
+    await clients[0].execute(
         b"CREATE MATERIALIZED VIEW default.materialized_view "
         b"ENGINE = MergeTree ORDER BY (thekey3) "
         b"AS SELECT toInt32(thekey * 3) as thekey3 FROM default.replicated_merge_tree"
     )
+    await clients[0].execute(
+        b"CREATE TABLE default.data_table_for_mv (thekey3 UInt32) ENGINE = ReplicatedMergeTree ORDER BY (thekey3)"
+    )
+    await clients[0].execute(
+        b"CREATE MATERIALIZED VIEW default.materialized_view_deleted_source to default.data_table_for_mv "
+        b"AS SELECT toInt32(thekey * 3) as thekey3 FROM default.source_table_for_view_deleted"
+    )
+    await clients[0].execute(b"INSERT INTO default.source_table_for_view_deleted VALUES (7, '7')")
+    await clients[2].execute(b"INSERT INTO default.source_table_for_view_deleted VALUES (9, '9')")
+    await clients[0].execute(b"DROP TABLE default.source_table_for_view_deleted")
+
     await clients[0].execute(b"CREATE TABLE default.memory  (thekey UInt32, thedata String)  ENGINE = Memory")
     # This will be replicated between nodes of the same shard (servers 0 and 1, but not 2)
     await clients[0].execute(b"INSERT INTO default.replicated_merge_tree VALUES (123, 'foo')")
@@ -340,6 +398,57 @@ async def test_restores_materialized_view_data(restored_cluster: Sequence[ClickH
     cluster_data = [s1_data, s1_data, s2_data]
     for client, expected_data in zip(restored_cluster, cluster_data):
         response = await client.execute(b"SELECT thekey3 FROM default.materialized_view ORDER BY thekey3")
+        assert response == expected_data
+
+
+async def test_restores_materialized_view_deleted_source_table(restored_cluster: Sequence[ClickHouseClient]) -> None:
+    s1_data = [[7 * 3]]
+    s2_data = [[9 * 3]]
+    cluster_data = [s1_data, s1_data, s2_data]
+    for client, expected_data in zip(restored_cluster, cluster_data):
+        response = await client.execute(b"SELECT thekey3 FROM default.materialized_view_deleted_source ORDER BY thekey3")
+        assert response == expected_data
+
+
+async def test_restores_materialized_view_with_undeleted_source_table(
+    function_restored_cluster: Sequence[ClickHouseClient],
+) -> None:
+    await function_restored_cluster[0].execute(
+        b"CREATE TABLE default.source_table_for_view_deleted (thekey UInt32, thedata String) "
+        b"ENGINE = ReplicatedMergeTree ORDER BY (thekey)"
+    )
+    await function_restored_cluster[0].execute(b"INSERT INTO default.source_table_for_view_deleted VALUES (8, '8')")
+    s1_data = [[7 * 3], [8 * 3]]
+    s2_data = [[9 * 3]]
+    cluster_data = [s1_data, s1_data, s2_data]
+    # Recreated deleted table works again
+    for client, expected_data in zip(function_restored_cluster, cluster_data):
+        response = await client.execute(b"SELECT thekey3 FROM default.materialized_view_deleted_source ORDER BY thekey3")
+        assert response == expected_data
+
+
+async def test_restores_view_with_deleted_source_table(restored_cluster: Sequence[ClickHouseClient]) -> None:
+    unknown_table_exception_code = 60
+    for client in restored_cluster:
+        with pytest.raises(ClickHouseClientQueryError) as raised:
+            await client.execute(b"SELECT thekey2 FROM default.view_deleted_source ORDER BY thekey2")
+        assert raised.value.status_code == 404
+        assert raised.value.exception_code == unknown_table_exception_code
+
+
+async def test_restores_view_undeleted_source_table(function_restored_cluster: Sequence[ClickHouseClient]) -> None:
+    await function_restored_cluster[0].execute(
+        b"CREATE TABLE default.source_table_for_view_deleted (thekey UInt32, thedata String) "
+        b"ENGINE = ReplicatedMergeTree ORDER BY (thekey)"
+    )
+    await function_restored_cluster[0].execute(b"INSERT INTO default.source_table_for_view_deleted VALUES (11, '11')")
+    await function_restored_cluster[2].execute(b"INSERT INTO default.source_table_for_view_deleted VALUES (17, '17')")
+    s1_data = [[11 * 2]]
+    s2_data = [[17 * 2]]
+    cluster_data = [s1_data, s1_data, s2_data]
+    # Recreated deleted table works again
+    for client, expected_data in zip(function_restored_cluster, cluster_data):
+        response = await client.execute(b"SELECT thekey2 FROM default.view_deleted_source ORDER BY thekey2")
         assert response == expected_data
 
 

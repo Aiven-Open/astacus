@@ -49,6 +49,7 @@ from astacus.coordinator.plugins.clickhouse.steps import (
     DeleteDanglingObjectStorageFilesStep,
     FreezeTablesStep,
     FreezeUnfreezeTablesStepBase,
+    get_restore_table_query,
     GetVersionsStep,
     ListDatabaseReplicasStep,
     MoveFrozenPartsStep,
@@ -1242,3 +1243,36 @@ async def test_run_partition_cmd_on_every_node(
 
 def create_object_storage_disk(name: str, object_storage: AsyncObjectStorage | None) -> Disk:
     return Disk(type=DiskType.object_storage, name=name, path_parts=("disks", name), object_storage=object_storage)
+
+
+@pytest.mark.parametrize(
+    "original_query,rewritten_query",
+    [
+        [
+            b"CREATE VIEW FOO AS SELECT 1",
+            b"CREATE VIEW FOO AS SELECT 1",
+        ],
+        [
+            b"CREATE VIEW `CREATE MATERIALIZED VIEW` AS SELECT 1",
+            b"CREATE VIEW `CREATE MATERIALIZED VIEW` AS SELECT 1",
+        ],
+        [
+            b"CREATE MATERIALIZED VIEW FOO AS SELECT 1",
+            b"ATTACH MATERIALIZED VIEW FOO AS SELECT 1",
+        ],
+        [
+            b"CREATE MATERIALIZED VIEW `CREATE MATERIALIZED VIEW` AS SELECT 1",
+            b"ATTACH MATERIALIZED VIEW `CREATE MATERIALIZED VIEW` AS SELECT 1",
+        ],
+    ],
+)
+def test_get_restore_table_query(original_query: bytes, rewritten_query: bytes):
+    table = Table(
+        database=b"db",
+        name=b"table",
+        uuid=uuid.UUID("00000000-0000-0000-0000-100000000001"),
+        engine="Engine",
+        create_query=original_query,
+        dependencies=[],
+    )
+    assert get_restore_table_query(table) == rewritten_query
