@@ -200,11 +200,27 @@ async def setup_cluster_content(clients: Sequence[HttpClickHouseClient], use_nam
     await clients[0].execute(
         b"CREATE VIEW default.simple_view AS SELECT toInt32(thekey * 2) as thekey2 FROM default.replicated_merge_tree"
     )
+    # Materialized views
     await clients[0].execute(
         b"CREATE MATERIALIZED VIEW default.materialized_view "
         b"ENGINE = MergeTree ORDER BY (thekey3) "
         b"AS SELECT toInt32(thekey * 3) as thekey3 FROM default.replicated_merge_tree"
     )
+    await clients[0].execute(
+        b"CREATE TABLE default.data_table_for_mv (thekey UInt32, thedata String) "
+        b"ENGINE = ReplicatedMergeTree ORDER BY (thekey)"
+    )
+    await clients[0].execute(
+        b"CREATE TABLE default.source_table_for_mv_deleted (thekey UInt32, thedata String) "
+        b"ENGINE = ReplicatedMergeTree ORDER BY (thekey)"
+    )
+    await clients[0].execute(
+        b"CREATE MATERIALIZED VIEW default.materialized_view_deleted_source to default.data_table_for_mv "
+        b"AS SELECT toInt32(thekey * 3) as thekey3 FROM default.source_table_for_mv_deleted"
+    )
+    await clients[0].execute(b"INSERT INTO default.source_table_for_mv_deleted VALUES (7, '7')")
+    await clients[0].execute(b"DROP TABLE default.source_table_for_mv_deleted")
+
     await clients[0].execute(b"CREATE TABLE default.memory  (thekey UInt32, thedata String)  ENGINE = Memory")
     # This will be replicated between nodes of the same shard (servers 0 and 1, but not 2)
     await clients[0].execute(b"INSERT INTO default.replicated_merge_tree VALUES (123, 'foo')")
@@ -341,6 +357,14 @@ async def test_restores_materialized_view_data(restored_cluster: Sequence[ClickH
         response = await client.execute(b"SELECT thekey3 FROM default.materialized_view ORDER BY thekey3")
         assert response == expected_data
 
+
+async def test_restores_materialized_view_delete_source_table(restored_cluster: Sequence[ClickHouseClient]) -> None:
+    s1_data = [[7 * 3]]
+    s2_data = []
+    cluster_data = [s1_data, s1_data, s2_data]
+    for client, expected_data in zip(restored_cluster, cluster_data):
+        response = await client.execute(b"SELECT thekey3 FROM default.materialized_view_deleted_source ORDER BY thekey3")
+        assert response == expected_data
 
 async def test_restores_connectivity_between_distributed_servers(restored_cluster: Sequence[ClickHouseClient]) -> None:
     # This only works if each node can connect to all nodes of the cluster named after the Distributed database

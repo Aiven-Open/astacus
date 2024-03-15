@@ -10,6 +10,45 @@ import graphlib
 import re
 import uuid
 
+def sort_topologically(elements: Sequence, get_key: callable,
+                       get_dependencies: callable=lambda x: [],
+                       get_dependants: callable=lambda x: []) -> list:
+    """
+    Sort elements topologically based on their dependencies.
+    """
+    sorter = graphlib.TopologicalSorter()
+    for element in elements:
+        element_key = get_key(element)
+        sorter.add(element_key)
+        for dependency in get_dependencies(element):
+            sorter.add(element_key, dependency)
+        for dependency in get_dependants(element):
+            sorter.add(dependency, element_key)
+    sort_order = list(sorter.static_order())
+    return sorted(elements, key=lambda element: sort_order.index(get_key(element)))
+
+def undelimit(name: str | None) -> str | None:
+    if name is None:
+        return None
+    if name[0] == "`" or name[0] == '"':
+        return name[1:-1]
+    return name
+
+def parse_create_materialized_view(query):
+    # TODO: check if extra escape is needed like escape_sql_identifier
+    delimiter_regexp = r"""(`[^`]*`|[a-zA-Z0-9_]+|"[^"]*")"""
+    uuid_regexp = r"'([a-fA-F0-9\-]+)'"
+    match = re.match(r"CREATE MATERIALIZED VIEW\s+"
+                     rf"{delimiter_regexp}\.{delimiter_regexp}\s+"
+                     rf"(?:UUID\s+{uuid_regexp}\s+)?"
+                     rf"(?:TO\s+{delimiter_regexp}\.{delimiter_regexp}|TO\s+INNER\s+UUID\s+{uuid_regexp})\s+"
+                     , query)
+    if match is None:
+        return None, None, None
+    db_name = undelimit(match.group(4))
+    table_name = undelimit(match.group(5))
+    inner_uuid = match.group(6)
+    return db_name, table_name, inner_uuid
 
 def tables_sorted_by_dependencies(tables: Sequence[Table]) -> Sequence[Table]:
     """
@@ -22,13 +61,23 @@ def tables_sorted_by_dependencies(tables: Sequence[Table]) -> Sequence[Table]:
     The `dependencies` attribute of each table must contain the list of
     `(database_name: str, table_name: str)` that depend on this table.
     """
-    sorter = graphlib.TopologicalSorter()  # type: ignore
-    for table in tables:
-        sorter.add((table.database, table.name))
-        for dependency in table.dependencies:
-            sorter.add(dependency, (table.database, table.name))
-    sort_order = list(sorter.static_order())
-    return sorted(tables, key=lambda t: sort_order.index((t.database, t.name)))
+    uuid_to_dable = {table.uuid: table for table in tables}
+    def get_mv_to_table_dependency(table):
+        materialized_view_engine = "MaterializedView"
+        if table.engine != materialized_view_engine:
+            return []
+        # TO table or implicit TO INNER should be used
+        db_name, table_name, inner_uuid = parse_create_materialized_view(table.create_query.decode("utf-8"))
+        if db_name is not None and table_name is not None:
+            return [(db_name, table_name)]
+        assert inner_uuid is not None
+        inner_table = uuid_to_dable.get(uuid.UUID(inner_uuid))
+        return [(inner_table.database, inner_table.name)] if inner_table is not None else []
+
+    return sort_topologically(tables,
+                              get_key=lambda table: (table.database, table.name),
+                              get_dependants=lambda table: table.dependencies,
+                              get_dependencies=get_mv_to_table_dependency)
 
 
 def access_entities_sorted_by_dependencies(access_entities: Sequence[AccessEntity]) -> Sequence[AccessEntity]:
@@ -48,9 +97,8 @@ def access_entities_sorted_by_dependencies(access_entities: Sequence[AccessEntit
     # other entities. This is unpleasant, but the quoting format of entity names and entity
     # uuids is different enough to not risk false matches.
     clickhouse_id = re.compile(rb"ID\('([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'\)")
-    for entity in access_entities:
-        sorter.add(entity.uuid)
-        for uuid_bytes in clickhouse_id.findall(entity.attach_query):
-            sorter.add(entity.uuid, uuid.UUID(uuid_bytes.decode()))
-    sort_order = list(sorter.static_order())
-    return sorted(access_entities, key=lambda e: sort_order.index(e.uuid))
+    return sort_topologically(
+        access_entities,
+        get_dependencies=lambda entity: map(lambda uuid_bytes: uuid.UUID(uuid_bytes.decode()),
+                                       clickhouse_id.findall(entity.attach_query)),
+        get_key=lambda entity: entity.uuid)

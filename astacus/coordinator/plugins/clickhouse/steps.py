@@ -537,9 +537,18 @@ class RestoreReplicatedDatabasesStep(Step[None]):
             # Materialized views creates both a table for the view itself and a table
             # with the .inner_id. prefix to store the data, we don't need to recreate
             # them manually. We will need to restore their data parts however.
-            if not table.name.startswith(b".inner_id."):
-                # Create on the first client and let replication do its thing
-                await self.clients[0].execute(table.create_query, session_id=session_id)
+            # if not table.name.startswith(b".inner_id."):
+            #     # Create on the first client and let replication do its thing
+            #     await self.clients[0].execute(table.create_query, session_id=session_id)
+            #     # first attach inner_id
+            #     # then attach materialized view
+
+            modified_query = table.create_query.replace(
+                b"CREATE MATERIALIZED VIEW",
+                b"ATTACH MATERIALIZED VIEW",
+            )
+            # Create on the first client and let replication do its thing
+            await self.clients[0].execute(modified_query, session_id=session_id)
 
 
 DatabasesReplicas = Mapping[bytes, Sequence[DatabaseReplica]]
