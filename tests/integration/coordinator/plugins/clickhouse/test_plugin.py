@@ -9,6 +9,7 @@ from astacus.coordinator.plugins.base import OperationContext
 from astacus.coordinator.plugins.clickhouse.client import (
     ClickHouseClient,
     ClickHouseClientQueryError,
+    escape_sql_identifier,
     escape_sql_string,
     HttpClickHouseClient,
 )
@@ -143,6 +144,7 @@ async def restored_cluster_manager(
                             "restorable",
                         )
                     run_astacus_command(astacus_cluster, "restore", "--storage", "restorable")
+                    await sync_replicated_tables(clients)
                     yield clients
 
 
@@ -173,6 +175,18 @@ async def fixture_function_restored_cluster(
             restorable_cluster, ports, None, clickhouse_restore_command, function_minio_bucket
         ) as clients:
             yield clients
+
+
+async def sync_replicated_tables(clients: Sequence[ClickHouseClient]) -> None:
+    # Get replicated tables to sync
+    rows = await clients[0].execute(
+        b"SELECT name FROM system.tables WHERE database = 'default' AND engine like 'Replicated%'"
+    )
+    for client in clients:
+        for row in rows:
+            table_name = row[0]
+            assert isinstance(table_name, str)
+            await client.execute(f"SYSTEM SYNC REPLICA default.{escape_sql_identifier(table_name.encode())} STRICT".encode())
 
 
 async def setup_cluster_content(clients: Sequence[HttpClickHouseClient], use_named_collections: bool) -> None:
