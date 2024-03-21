@@ -204,6 +204,12 @@ async def fixture_minio_bucket(minio: MinioService) -> AsyncIterator[MinioBucket
         yield bucket
 
 
+@pytest.fixture(scope="function", name="function_minio_bucket")
+async def fixture_function_minio_bucket(minio: MinioService) -> AsyncIterator[MinioBucket]:
+    with minio.bucket(bucket_name="function-clickhouse-bucket") as bucket:
+        yield bucket
+
+
 @contextlib.asynccontextmanager
 async def create_minio_service(ports: Ports) -> AsyncIterator[MinioService]:
     server_port = ports.allocate()
@@ -337,6 +343,10 @@ def create_clickhouse_configs(
     minio_bucket: MinioBucket | None = None,
     object_storage_prefix: str = "/",
 ):
+    # Helper for emitting XML configuration: avoid very long lines and deduplicate
+    def setting(name: str, value: int | float | str):
+        return f"<{name}>{value}</{name}>"
+
     replicas = "\n".join(
         f"""
         <replica>
@@ -409,9 +419,29 @@ def create_clickhouse_configs(
                             <port>{zookeeper.port}</port>
                         </node>
                     </zookeeper>
-                    <mark_cache_size>5368709120</mark_cache_size>
-                    <max_server_memory_usage_to_ram_ratio>0.5</max_server_memory_usage_to_ram_ratio>
-                    <enable_system_unfreeze>true</enable_system_unfreeze>
+                    <merge_tree>
+                        {setting("number_of_free_entries_in_pool_to_execute_mutation", 2)}
+                        {setting("number_of_free_entries_in_pool_to_execute_optimize_entire_partition", 2)}
+                    </merge_tree>
+                    {setting("background_pool_size", 4)}
+                    {setting("background_move_pool_size", 2)}
+                    {setting("background_fetches_pool_size", 2)}
+                    {setting("background_common_pool_size", 4)}
+                    {setting("background_buffer_flush_schedule_pool_size", 2)}
+                    {setting("background_schedule_pool_size", 2)}
+                    {setting("background_message_broker_schedule_pool_size", 2)}
+                    {setting("background_distributed_schedule_pool_size", 2)}
+                    {setting("tables_loader_foreground_pool_size", 2)}
+                    {setting("tables_loader_background_pool_size", 2)}
+                    {setting("restore_threads", 2)}
+                    {setting("backup_threads", 2)}
+                    {setting("backups_io_thread_pool_queue_size", 2)}
+                    {setting("max_parts_cleaning_thread_pool_size", 2)}
+                    {setting("max_active_parts_loading_thread_pool_size", 2)}
+                    {setting("max_outdated_parts_loading_thread_pool_size", 2)}
+                    {setting("mark_cache_size", 5368709120)}
+                    {setting("max_server_memory_usage_to_ram_ratio", 0.5)}
+                    {setting("enable_system_unfreeze", "true")}
                     <user_directories>
                         <users_xml>
                             <path>{str(data_dir / "users.xml")}</path>

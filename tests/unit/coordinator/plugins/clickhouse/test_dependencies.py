@@ -48,6 +48,7 @@ def test_tables_sorted_by_dependencies() -> None:
         dependencies=[(b"db_one", b"t2"), (b"db_one", b"t3")],
     )
     assert tables_sorted_by_dependencies([t1, t2, t3, t4]) == [t1, t4, t3, t2]
+    assert tables_sorted_by_dependencies([t2, t3, t4, t1]) == [t1, t4, t3, t2]
 
 
 def test_dangling_table_dependency_doesnt_crash() -> None:
@@ -94,6 +95,7 @@ def test_access_entities_sorted_by_dependencies() -> None:
         type="R", uuid=uuid.UUID("00000000-0000-abcd-0000-000000000004"), name=b"a4", attach_query=b"ATTACH ROLE a4"
     )
     assert access_entities_sorted_by_dependencies([a1, a2, a3, a4]) == [a4, a2, a3, a1]
+    assert access_entities_sorted_by_dependencies([a2, a4, a3, a1]) == [a4, a2, a3, a1]
 
 
 def test_dangling_access_entities_doesnt_crash() -> None:

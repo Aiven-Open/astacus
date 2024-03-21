@@ -46,6 +46,7 @@ import base64
 import dataclasses
 import logging
 import msgspec
+import re
 import secrets
 import uuid
 
@@ -432,6 +433,12 @@ async def run_on_every_node(
     await asyncio.gather(*[gather_limited(per_node_concurrency_limit, fn(client)) for client in clients])
 
 
+def get_restore_table_query(table: Table) -> bytes:
+    # Use `ATTACH` instead of `CREATE` for materialized views for
+    # proper restore in case of `SELECT` table absence
+    return re.sub(b"^CREATE MATERIALIZED VIEW", b"ATTACH MATERIALIZED VIEW", table.create_query)
+
+
 @dataclasses.dataclass
 class RestoreReplicatedDatabasesStep(Step[None]):
     """
@@ -534,12 +541,9 @@ class RestoreReplicatedDatabasesStep(Step[None]):
         # If any known table depends on an unknown table that was inside a non-replicated
         # database engine, then this will crash. See comment in `RetrieveReplicatedDatabasesStep`.
         for table in tables_sorted_by_dependencies(manifest.tables):
-            # Materialized views creates both a table for the view itself and a table
-            # with the .inner_id. prefix to store the data, we don't need to recreate
-            # them manually. We will need to restore their data parts however.
-            if not table.name.startswith(b".inner_id."):
-                # Create on the first client and let replication do its thing
-                await self.clients[0].execute(table.create_query, session_id=session_id)
+            restore_table_query = get_restore_table_query(table)
+            # Create on the first client and let replication do its thing
+            await self.clients[0].execute(restore_table_query, session_id=session_id)
 
 
 DatabasesReplicas = Mapping[bytes, Sequence[DatabaseReplica]]
