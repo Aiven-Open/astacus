@@ -9,7 +9,7 @@ PROTODIR=astacus/proto
 PROTOBUFS = $(wildcard $(PROTODIR)/*.proto)
 GENERATED_PROTOBUFS = $(patsubst %.proto,%_pb2.py,$(PROTOBUFS))
 
-GENERATED = astacus/version.py $(GENERATED_PROTOBUFS)
+GENERATED = $(GENERATED_PROTOBUFS)
 
 PYTHON = python3
 DNF_INSTALL = sudo dnf install -y
@@ -147,8 +147,13 @@ rpm: $(GENERATED) /usr/bin/rpmbuild /usr/lib/rpm/check-buildroot
 	$(RM) astacus-rpm-src.tar
 
 .PHONY: generate_version_from_git
-generate_version_from_git: version_from_git.py
-	$(PYTHON) $^ astacus/version.py
+generate_version_from_git: version_setter.py
+	@$(PYTHON) version_setter.py from-git
+
+.PHONY: set_version
+set_version:
+	@test "$(SET_VERSION)" || { echo "SET_VERSION must be passed as an env variable"; exit 1; }
+	$(PYTHON) version_setter.py set-version $(SET_VERSION)
 
 %_pb2.py: %.proto
 	protoc -I $(PROTODIR) $< --python_out=$(PROTODIR)

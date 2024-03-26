@@ -32,7 +32,7 @@ jobs:
       run: pip install -r requirements.testing.txt
 
     - name: Execute unit-tests
-      run: make unittest
+      run: make generate_version_from_git unittest
 
     - id: upload-codecov
       # Third-party action pinned to v2.1.0
