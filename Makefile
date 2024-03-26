@@ -146,8 +146,9 @@ rpm: $(GENERATED) /usr/bin/rpmbuild /usr/lib/rpm/check-buildroot
 		--define 'minor_version $(subst -,.,$(subst $(SHORT_VER)-,,$(LONG_VER)))'
 	$(RM) astacus-rpm-src.tar
 
-astacus/version.py: version_from_git.py
-	$(PYTHON) $^ $@
+.PHONY: generate_version_from_git
+generate_version_from_git: version_from_git.py
+	$(PYTHON) $^ astacus/version.py
 
 %_pb2.py: %.proto
 	protoc -I $(PROTODIR) $< --python_out=$(PROTODIR)
