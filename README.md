@@ -53,6 +53,7 @@ sudo pip3 install -e '.[cassandra]'
 
 ```
 sudo dnf install -y make
+make generate_version_from_git
 make build-dep-fedora
 sudo python3 ./setup.py install
 ```
@@ -64,6 +65,7 @@ sudo python3 ./setup.py install
 ```
 sudo apt-get update
 sudo apt-get install -y make sudo
+make generate_version_from_git
 make build-dep-ubuntu
 sudo python3 ./setup.py install
 ```

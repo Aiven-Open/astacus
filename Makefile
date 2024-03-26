@@ -9,7 +9,7 @@ PROTODIR=astacus/proto
 PROTOBUFS = $(wildcard $(PROTODIR)/*.proto)
 GENERATED_PROTOBUFS = $(patsubst %.proto,%_pb2.py,$(PROTOBUFS))
 
-GENERATED = astacus/version.py $(GENERATED_PROTOBUFS)
+GENERATED = $(GENERATED_PROTOBUFS)
 
 PYTHON = python3
 DNF_INSTALL = sudo dnf install -y
@@ -134,20 +134,14 @@ run-server:
 	echo bar > $(BACKUPROOT)/bar
 	astacus server -c examples/astacus-files-local.yaml
 
-.PHONY: rpm
-rpm: $(GENERATED) /usr/bin/rpmbuild /usr/lib/rpm/check-buildroot
-	git archive --output=astacus-rpm-src.tar --prefix=astacus/ HEAD
-	# add generated files to the tar, they're not in git repository
-	tar -r -f astacus-rpm-src.tar --transform=s,astacus/,astacus/astacus/, $(GENERATED)
-	rpmbuild -bb astacus.spec \
-		--define '_topdir $(PWD)/rpm' \
-		--define '_sourcedir $(CURDIR)' \
-		--define 'major_version $(SHORT_VER)' \
-		--define 'minor_version $(subst -,.,$(subst $(SHORT_VER)-,,$(LONG_VER)))'
-	$(RM) astacus-rpm-src.tar
+.PHONY: generate_version_from_git
+generate_version_from_git: version_setter.py
+	@$(PYTHON) version_setter.py from-git
 
-astacus/version.py: version_from_git.py
-	$(PYTHON) $^ $@
+.PHONY: set_version
+set_version:
+	@test "$(SET_VERSION)" || { echo "SET_VERSION must be passed as an env variable"; exit 1; }
+	$(PYTHON) version_setter.py set-version $(SET_VERSION)
 
 %_pb2.py: %.proto
 	protoc -I $(PROTODIR) $< --python_out=$(PROTODIR)

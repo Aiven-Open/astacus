@@ -7,7 +7,7 @@ RUN apt-get update
 RUN apt-get install -y sudo make
 
 ADD Makefile /build/
-RUN cd /build && make build-dep-ubuntu
+RUN cd /build && make generate_version_from_git && make build-dep-ubuntu
 
 ADD README.md setup.cfg setup.py requirements*.txt /build/
 RUN cd /build && pip3 install -e '.[cassandra]'
