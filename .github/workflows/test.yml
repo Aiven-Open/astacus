@@ -25,14 +25,17 @@ jobs:
         python-version: ${{ matrix.python-version }}
         cache: 'pip'
 
+    - name: Install testing requirements
+      run: pip install -r requirements.testing.txt
+
+    - name: generate version
+      run: make generate_version_from_git
+
     - name: Install requirements
       run: pip install -e '.[cassandra]'
 
-    - name: Install testing requirements (not included by default in normal install)
-      run: pip install -r requirements.testing.txt
-
     - name: Execute unit-tests
-      run: make generate_version_from_git unittest
+      run: make unittest
 
     - id: upload-codecov
       # Third-party action pinned to v2.1.0
