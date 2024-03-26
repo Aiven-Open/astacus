@@ -8,13 +8,7 @@ import setuptools
 
 
 def _run():
-    try:
-        from . import version  # pylint: disable=import-outside-toplevel
-
-        version_for_setup_py = version.update_project_version_from_git("astacus/version.py")
-        version_for_setup_py = ".dev".join(version_for_setup_py.split("-", 2)[:2])
-    except ImportError:
-        version_for_setup_py = "0.0.1"  # tox
+    from astacus.version import __version__ as version_for_setup_py  # pylint: disable=import-outside-toplevel
 
     setuptools.setup(
         version=version_for_setup_py,
