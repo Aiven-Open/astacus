@@ -22,14 +22,18 @@ def save_version(*, new_ver, old_ver, version_file):
 
 def update_project_version(version_file):
     "Update the version_file, and return the version number stored in the file"
-    version_file_full_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), version_file)
+    project_root_directory = os.path.dirname(os.path.realpath(__file__))
+    version_file_full_path = os.path.join(project_root_directory, version_file)
     module_spec = importlib.util.spec_from_file_location("verfile", version_file_full_path)
     module = importlib.util.module_from_spec(module_spec)
     file_ver = getattr(module, "__version__", None)
 
     os.chdir(os.path.dirname(__file__) or ".")
     try:
-        git_out = subprocess.check_output(["git", "describe", "--always"], stderr=getattr(subprocess, "DEVNULL", None))
+        git_out = subprocess.check_output(
+            ["git", "--git-dir", os.path.join(project_root_directory, ".git"), "describe", "--always"],
+            stderr=getattr(subprocess, "DEVNULL", None),
+        )
     except (OSError, subprocess.CalledProcessError):
         pass
     else:
