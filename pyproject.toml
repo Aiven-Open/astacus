@@ -27,7 +27,7 @@ dependencies = [
     "httpx",
     "msgspec",
     "kazoo",
-    "protobuf",
+    "protobuf < 3.21",
     "pydantic",
     "pyyaml",
     "rohmu >= 2.2.0",
