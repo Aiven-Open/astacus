@@ -18,7 +18,9 @@ jobs:
           cache: 'pip'
 
       - name: Install requirements
-        run: pip install -r requirements.txt
+        run: |
+          pip install "."
+          pip install ".[dev]"
 
       - name: Run all pre-commit hooks
         run: make lint
