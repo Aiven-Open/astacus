@@ -27,7 +27,7 @@ class Uploader(ThreadLocalStorage):
         parallel: int,
         progress: Progress,
         still_running_callback=lambda: True,
-        validate_file_hashes: bool = True
+        validate_file_hashes: bool = True,
     ):
         todo = [
             (hexdigest, list(snapshot.get_files_for_digest(hexdigest)))

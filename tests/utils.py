@@ -92,7 +92,7 @@ def get_clickhouse_version(command: Sequence[str | Path]) -> tuple[int, ...]:
 
 
 def is_cassandra_driver_importable() -> bool:
-    return importlib.util.find_spec("cassandra") is not None
+    return importlib.util.find_spec("cassandra") is not None  # type: ignore[attr-defined]
 
 
 def format_astacus_command(*arg: str) -> Sequence[str]:
