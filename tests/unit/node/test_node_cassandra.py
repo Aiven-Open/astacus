@@ -2,7 +2,6 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
-
 from astacus.common import ipc
 from astacus.common.cassandra.config import SNAPSHOT_NAME
 from astacus.common.cassandra.utils import SYSTEM_KEYSPACES
