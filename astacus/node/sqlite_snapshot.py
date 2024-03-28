@@ -17,7 +17,6 @@ from typing import Iterable
 import logging
 import os
 import sqlite3
-
 import sys
 
 if sys.version_info >= (3, 12):

@@ -12,12 +12,12 @@ from __future__ import annotations
 
 from abc import ABC
 from collections import deque
-from collections.abc import AsyncIterable, AsyncIterator, Callable, Hashable, Iterable, Mapping
+from collections.abc import AsyncIterable, AsyncIterator, Callable, Hashable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from multiprocessing.dummy import Pool  # fastapi + fork = bad idea
 from pathlib import Path
 from pydantic import BaseModel
-from typing import Any, Final, Generic, TypeAlias, TypeVar
+from typing import Any, ContextManager, Final, Generic, IO, Literal, overload, TextIO, TypeAlias, TypeVar
 
 import asyncio
 import contextlib
@@ -102,7 +102,7 @@ def http_request(url, *, caller, method="get", timeout=10, ignore_status_code: b
 
 
 async def httpx_request(
-    url: str | httpx.URL,
+    url: str,
     *,
     caller: str,
     method: str = "get",
@@ -345,18 +345,44 @@ def monotonic_time():
     return time.monotonic()
 
 
+Write: TypeAlias = Literal["w"]
+UpdateBinary: TypeAlias = Literal["w+b"]
+
+
+@overload
+def open_path_with_atomic_rename(path: os.PathLike, *, mode: UpdateBinary) -> ContextManager[IO[bytes]]:
+    ...
+
+
+@overload
+def open_path_with_atomic_rename(path: os.PathLike, *, mode: Write) -> ContextManager[TextIO]:
+    ...
+
+
+@overload
+def open_path_with_atomic_rename(path: os.PathLike) -> ContextManager[IO[bytes]]:
+    ...
+
+
+def open_path_with_atomic_rename(path: os.PathLike, *, mode: str = "w+b") -> ContextManager[TextIO | IO[bytes]]:
+    return _open_path_with_atomic_rename(path, mode=mode)
+
+
 @contextmanager
-def open_path_with_atomic_rename(path, **kwargs):
+def _open_path_with_atomic_rename(path: os.PathLike, *, mode: str) -> Iterator[TextIO | IO[bytes]]:
     """Pathlib-style ~atomic file replacement.
 
     This utility function creates new temporary file 'near' the path
     (=in the same directory, with .astacus.tmp suffix). If the file
     creation succeeds (=no exception is thrown), the temporary file is
     renamed to the target file.
+
+    Note: IO[bytes] used instead of BinaryIO because the object returned by NamedTemporaryFile
+    (_TemporaryFileWrapper[bytes]) isn't a BinaryIO. See https://github.com/python/typeshed/issues/7843
     """
     if not isinstance(path, Path):
         path = Path(path)
-    with tempfile.NamedTemporaryFile(prefix=path.name, dir=path.parent, suffix=".astacus.tmp", delete=False, **kwargs) as f:
+    with tempfile.NamedTemporaryFile(prefix=path.name, dir=path.parent, suffix=".astacus.tmp", delete=False, mode=mode) as f:
         try:
             yield f
             os.rename(f.name, path)
