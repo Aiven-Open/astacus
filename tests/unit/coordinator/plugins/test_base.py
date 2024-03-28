@@ -437,7 +437,7 @@ async def test_snapshot_release_step(
 
 
 @dataclasses.dataclass
-class TestListDeltasParam:
+class ListDeltasParam:
     test_id: str
     basebackup_manifest: ipc.BackupManifest
     stored_jsons: dict[str, bytes]
@@ -447,13 +447,13 @@ class TestListDeltasParam:
 @pytest.mark.parametrize(
     "p",
     [
-        TestListDeltasParam(
+        ListDeltasParam(
             test_id="empty_storage",
             basebackup_manifest=make_manifest(start="1970-01-01T00:00", end="1970-01-01T00:30"),
             stored_jsons={},
             expected_deltas=[],
         ),
-        TestListDeltasParam(
+        ListDeltasParam(
             test_id="single_delta",
             basebackup_manifest=make_manifest(start="1970-01-01T00:00", end="1970-01-01T00:30"),
             stored_jsons={
@@ -462,7 +462,7 @@ class TestListDeltasParam:
             },
             expected_deltas=["delta-one"],
         ),
-        TestListDeltasParam(
+        ListDeltasParam(
             test_id="deltas_older_than_backup_are_not_listed",
             basebackup_manifest=make_manifest(start="2000-01-01T00:00", end="2000-01-01T00:30"),
             stored_jsons={
@@ -476,7 +476,7 @@ class TestListDeltasParam:
             },
             expected_deltas=["delta-one", "delta-two", "delta-three"],
         ),
-        TestListDeltasParam(
+        ListDeltasParam(
             test_id="relies_on_start_time_in_case_of_intersections",
             basebackup_manifest=make_manifest(start="2000-01-01T00:00", end="2000-01-01T00:30"),
             stored_jsons={
@@ -489,7 +489,7 @@ class TestListDeltasParam:
     ],
     ids=lambda p: p.test_id,
 )
-async def test_list_delta_backups(p: TestListDeltasParam) -> None:
+async def test_list_delta_backups(p: ListDeltasParam) -> None:
     async_json_storage = AsyncJsonStorage(MemoryJsonStorage(p.stored_jsons))
     step = DeltaManifestsStep(async_json_storage)
     cluster = Cluster(nodes=[CoordinatorNode(url="http://node_1")])
