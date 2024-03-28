@@ -4,16 +4,16 @@ See LICENSE for details
 
 Hot-reloading of astacus configuration
 """
-
+from pathlib import Path
 from tests.system.conftest import astacus_ls, astacus_run, create_astacus_config, TestNode
 
 import pytest
 
 
 @pytest.mark.order("last")
-def test_reload_config(tmpdir, rootdir: str, astacus1: TestNode, astacus2: TestNode, astacus3: TestNode) -> None:
+def test_reload_config(tmp_path: Path, rootdir: str, astacus1: TestNode, astacus2: TestNode, astacus3: TestNode) -> None:
     # Update the root_globs config of the first node
-    create_astacus_config(tmpdir=tmpdir, node=astacus1, plugin_config={"root_globs": ["*.foo"]})
+    create_astacus_config(tmp_path=tmp_path, node=astacus1, plugin_config={"root_globs": ["*.foo"]})
     # Check that astacus can detect that reloading config is needed
     assert astacus_run(rootdir, astacus1, "check-reload", "--status", check=False).returncode == 1
     check_without_status = astacus_run(rootdir, astacus1, "check-reload", check=True, capture_output=True)
