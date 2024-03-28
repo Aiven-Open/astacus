@@ -25,14 +25,6 @@ venv: default
 clean:
 	rm -rf rpm/ $(GENERATED)
 
-.PHONY: astacus/version.py
-python-build:
-	$(PYTHON) -m build
-
-.PHONY: dev-deps
-dev-deps:
-	pip install .
-	pip install ".[dev]"
 
 .PHONY: build-dep-fedora
 build-dep-fedora:
@@ -82,9 +74,6 @@ test: lint copyright unittest
 .PHONY: isort
 isort:
 	pre-commit run isort --all-files
-
-.PHONY: yapf
-yapf: black
 
 .PHONY: black
 black:
