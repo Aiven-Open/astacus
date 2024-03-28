@@ -18,6 +18,7 @@ from astacus.common.storage import JsonStorage, Storage, ThreadLocalStorage
 from astacus.common.utils import get_umask
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import BinaryIO
 
 import base64
 import getpass
@@ -52,8 +53,9 @@ class Downloader(ThreadLocalStorage):
         relative_path = snapshotfile.relative_path
         download_path = self.dst / relative_path
         download_path.parent.mkdir(parents=True, exist_ok=True)
-        with utils.open_path_with_atomic_rename(download_path) as f:
+        with utils.open_path_with_atomic_rename(download_path, mode="w+b") as f:
             if snapshotfile.hexdigest:
+                assert isinstance(f, BinaryIO)
                 self.local_storage.download_hexdigest_to_file(snapshotfile.hexdigest, f)
             else:
                 assert snapshotfile.content_b64 is not None

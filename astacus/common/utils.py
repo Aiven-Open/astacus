@@ -12,12 +12,12 @@ from __future__ import annotations
 
 from abc import ABC
 from collections import deque
-from collections.abc import AsyncIterable, AsyncIterator, Callable, Hashable, Iterable, Mapping
+from collections.abc import AsyncIterable, AsyncIterator, Callable, Hashable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from multiprocessing.dummy import Pool  # fastapi + fork = bad idea
 from pathlib import Path
 from pydantic import BaseModel
-from typing import Any, Final, Generic, TypeAlias, TypeVar
+from typing import Any, Final, Generic, IO, TypeAlias, TypeVar
 
 import asyncio
 import contextlib
@@ -341,7 +341,7 @@ def monotonic_time():
 
 
 @contextmanager
-def open_path_with_atomic_rename(path, **kwargs):
+def open_path_with_atomic_rename(path: os.PathLike, *, mode: str = "w+b") -> Iterator[IO]:
     """Pathlib-style ~atomic file replacement.
 
     This utility function creates new temporary file 'near' the path
@@ -351,7 +351,7 @@ def open_path_with_atomic_rename(path, **kwargs):
     """
     if not isinstance(path, Path):
         path = Path(path)
-    with tempfile.NamedTemporaryFile(prefix=path.name, dir=path.parent, suffix=".astacus.tmp", delete=False, **kwargs) as f:
+    with tempfile.NamedTemporaryFile(prefix=path.name, dir=path.parent, suffix=".astacus.tmp", delete=False, mode=mode) as f:
         try:
             yield f
             os.rename(f.name, path)
