@@ -41,18 +41,10 @@ repos:
         args:
           - --rcfile=.pylintrc
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.8.0
+  - repo: local
     hooks:
       - id: mypy
-        exclude: ^setup.py|^vendor/|^astacus/proto/
-        additional_dependencies:
-          - types-PyYAML>=6.0.12.2
-          - types-requests>=2.28.11.5
-          - types-tabulate>=0.9.0.0
-          - types-ujson>=5.9.0.0
-          - types-urllib3>=1.26.25.4
-          - typing_extensions>=3.10.0
-          - msgspec==0.18.6
-          - pydantic==1.10.9
-          - starlette==0.27.0
+        name: mypy
+        entry: mypy
+        language: system
+        types: [python]
