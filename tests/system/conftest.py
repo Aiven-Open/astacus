@@ -17,7 +17,6 @@ import httpx
 import json
 import logging
 import os.path
-import py
 import pytest
 import subprocess
 
@@ -98,11 +97,11 @@ def create_astacus_config_dict(
 
 def create_astacus_config(
     *,
-    tmpdir,
+    tmp_path: Path,
     node: TestNode,
     plugin_config: Mapping[str, Any] = MappingProxyType(DEFAULT_PLUGIN_CONFIG),
 ) -> Path:
-    a = Path(tmpdir / "node" / node.name)
+    a = tmp_path / "node" / node.name
     node.path = a
     root_path = a / "root"
     root_path.mkdir(parents=True, exist_ok=True)
@@ -113,7 +112,7 @@ def create_astacus_config(
     db_path.mkdir(exist_ok=True)
     node.db_path = db_path
     a_conf = create_astacus_config_dict(
-        tmpdir=Path(tmpdir), root_path=root_path, link_path=link_path, node=node, plugin_config=plugin_config
+        tmpdir=tmp_path, root_path=root_path, link_path=link_path, node=node, plugin_config=plugin_config
     )
     a_conf_path = a / "astacus.conf"
     a_conf_path.write_text(json.dumps(a_conf))
@@ -140,9 +139,9 @@ def fixture_rootdir(pytestconfig: Config) -> str:
 
 
 @asynccontextmanager
-async def _astacus(*, tmpdir: py.path.local, index: int) -> AsyncIterator[TestNode]:
+async def _astacus(*, tmp_path: Path, index: int) -> AsyncIterator[TestNode]:
     node = ASTACUS_NODES[index]
-    a_conf_path = create_astacus_config(tmpdir=tmpdir, node=node)
+    a_conf_path = create_astacus_config(tmp_path=tmp_path, node=node)
     astacus_source_root = os.path.join(os.path.dirname(__file__), "..", "..")
     cmd = format_astacus_command("server", "-c", str(a_conf_path))
     async with background_process(*cmd, env={"PYTHONPATH": astacus_source_root}) as process:
@@ -152,20 +151,20 @@ async def _astacus(*, tmpdir: py.path.local, index: int) -> AsyncIterator[TestNo
 
 
 @pytest.fixture(name="astacus1")
-async def fixture_astacus1(tmpdir: py.path.local) -> AsyncIterator[TestNode]:
-    async with _astacus(tmpdir=tmpdir, index=0) as a:
+async def fixture_astacus1(tmp_path: Path) -> AsyncIterator[TestNode]:
+    async with _astacus(tmp_path=tmp_path, index=0) as a:
         yield a
 
 
 @pytest.fixture(name="astacus2")
-async def fixture_astacus2(tmpdir: py.path.local) -> AsyncIterator[TestNode]:
-    async with _astacus(tmpdir=tmpdir, index=1) as a:
+async def fixture_astacus2(tmp_path: Path) -> AsyncIterator[TestNode]:
+    async with _astacus(tmp_path=tmp_path, index=1) as a:
         yield a
 
 
 @pytest.fixture(name="astacus3")
-async def fixture_astacus3(tmpdir: py.path.local) -> AsyncIterator[TestNode]:
-    async with _astacus(tmpdir=tmpdir, index=2) as a:
+async def fixture_astacus3(tmp_path: Path) -> AsyncIterator[TestNode]:
+    async with _astacus(tmp_path=tmp_path, index=2) as a:
         yield a
 
 

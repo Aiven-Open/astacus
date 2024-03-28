@@ -20,7 +20,6 @@ from tests.utils import create_rohmu_config
 from unittest.mock import Mock, patch
 
 import json
-import py
 import pytest
 
 TEST_HEXDIGEST = "deadbeef"
@@ -30,16 +29,16 @@ TEST_JSON = "jsonblob"
 TEST_JSON_DATA: Json = {"foo": 7, "array": [1, 2, 3], "true": True}
 
 
-def create_storage(*, tmpdir: py.path.local, engine: str, **kw):
+def create_storage(*, tmpdir: Path, engine: str, **kw):
     if engine == "rohmu":
         config = create_rohmu_config(tmpdir, **kw)
         return RohmuStorage(config=config)
     if engine == "file":
-        path = Path(tmpdir / "test-storage-file")
+        path = tmpdir / "test-storage-file"
         return FileStorage(path)
     if engine == "cache":
         # FileStorage cache, and then rohmu filestorage underneath
-        cache_storage = FileStorage(Path(tmpdir / "test-storage-file"))
+        cache_storage = FileStorage(tmpdir / "test-storage-file")
         config = create_rohmu_config(tmpdir, **kw)
         backend_storage = RohmuStorage(config=config)
         return CachingJsonStorage(backend_storage=backend_storage, cache_storage=cache_storage)
@@ -85,22 +84,22 @@ def _test_jsonstorage(storage: JsonStorage) -> None:
         ("rohmu", {"compression": False, "encryption": False}, pytest.raises(exceptions.CompressionOrEncryptionRequired)),
     ],
 )
-def test_storage(tmpdir: py.path.local, engine: str, kw: dict[str, bool], ex: AbstractContextManager | None) -> None:
+def test_storage(tmp_path: Path, engine: str, kw: dict[str, bool], ex: AbstractContextManager | None) -> None:
     if ex is None:
         ex = does_not_raise()
     with ex:
-        storage = create_storage(tmpdir=tmpdir, engine=engine, **kw)
+        storage = create_storage(tmpdir=tmp_path, engine=engine, **kw)
         if isinstance(storage, FileStorage):
             _test_hexdigeststorage(storage)
         if isinstance(storage, JsonStorage):
             _test_jsonstorage(storage)
 
 
-def test_caching_storage(tmpdir: py.path.local, mocker: MockerFixture) -> None:
-    storage = create_storage(tmpdir=tmpdir, engine="cache")
+def test_caching_storage(tmp_path: Path, mocker: MockerFixture) -> None:
+    storage = create_storage(tmpdir=tmp_path, engine="cache")
     storage.upload_json(TEST_JSON, TEST_JSON_DATA)
 
-    storage = create_storage(tmpdir=tmpdir, engine="cache")
+    storage = create_storage(tmpdir=tmp_path, engine="cache")
     assert storage.list_jsons() == [TEST_JSON]
 
     # We shouldn't wind up in download method of rohmu at all.

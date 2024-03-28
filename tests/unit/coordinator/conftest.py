@@ -15,20 +15,19 @@ from pytest_mock import MockerFixture
 from tests.utils import create_rohmu_config
 
 import asyncio
-import py
 import pytest
 
 _original_asyncio_sleep = asyncio.sleep
 
 
 @pytest.fixture(name="storage")
-def fixture_storage(tmpdir: py.path.local) -> RohmuStorage:
-    return RohmuStorage(config=create_rohmu_config(tmpdir))
+def fixture_storage(tmp_path: Path) -> RohmuStorage:
+    return RohmuStorage(config=create_rohmu_config(tmp_path))
 
 
 @pytest.fixture(name="mstorage")
-def fixture_mstorage(tmpdir: py.path.local) -> MultiRohmuStorage:
-    return MultiRohmuStorage(config=create_rohmu_config(tmpdir))
+def fixture_mstorage(tmp_path: Path) -> MultiRohmuStorage:
+    return MultiRohmuStorage(config=create_rohmu_config(tmp_path))
 
 
 @pytest.fixture(name="populated_mstorage")
@@ -70,14 +69,14 @@ COORDINATOR_NODES = [
 
 
 @pytest.fixture(name="app")
-def fixture_app(mocker: MockerFixture, sleepless: None, storage: RohmuStorage, tmpdir: py.path.local) -> FastAPI:
+def fixture_app(mocker: MockerFixture, sleepless: None, storage: RohmuStorage, tmp_path: Path) -> FastAPI:
     app = FastAPI()
     app.include_router(router, tags=["coordinator"])
     app.state.coordinator_config = CoordinatorConfig(
-        object_storage=create_rohmu_config(tmpdir),
+        object_storage=create_rohmu_config(tmp_path),
         plugin=Plugin.files,
         plugin_config={"root_globs": ["*"]},
-        object_storage_cache=Path(f"{tmpdir}/cache/is/somewhere"),
+        object_storage_cache=tmp_path / "cache/is/somewhere",
     )
     app.state.coordinator_config.nodes = COORDINATOR_NODES[:]
     mocker.patch.object(LockedCoordinatorOp, "get_locker", return_value="x")

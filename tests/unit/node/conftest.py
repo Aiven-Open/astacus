@@ -16,19 +16,18 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pathlib import Path
 
-import py
 import pytest
 
 
 @pytest.fixture(name="app")
-def fixture_app(tmpdir: py.path.local) -> FastAPI:
+def fixture_app(tmp_path: Path) -> FastAPI:
     app = FastAPI()
     app.include_router(node_router, prefix="/node", tags=["node"])
-    root = Path(tmpdir) / "root"
-    db_path = Path(tmpdir) / "db_path"
-    backup_root = Path(tmpdir) / "backup-root"
+    root = tmp_path / "root"
+    db_path = tmp_path / "db_path"
+    backup_root = tmp_path / "backup-root"
     backup_root.mkdir()
-    tmp_path = Path(tmpdir) / "backup-tmp"
+    tmp_path = tmp_path / "backup-tmp"
     root.mkdir()
     (root / "foo").write_text("foobar")
     (root / "foo2").write_text("foobar")
@@ -66,34 +65,34 @@ def fixture_uploader(storage):
 
 
 @pytest.fixture(name="storage")
-def fixture_storage(tmpdir: py.path.local) -> FileStorage:
-    storage_path = Path(tmpdir) / "storage"
+def fixture_storage(tmp_path: Path) -> FileStorage:
+    storage_path = tmp_path / "storage"
     storage_path.mkdir()
     return FileStorage(storage_path)
 
 
 @pytest.fixture(name="root")
-def fixture_root(tmpdir: py.path.local) -> Path:
-    return Path(tmpdir)
+def fixture_root(tmp_path: Path) -> Path:
+    return tmp_path
 
 
 @pytest.fixture(name="src")
-def fixture_src(tmpdir: py.path.local) -> Path:
-    src = Path(tmpdir) / "src"
+def fixture_src(tmp_path: Path) -> Path:
+    src = tmp_path / "src"
     src.mkdir()
     return src
 
 
 @pytest.fixture(name="dst")
-def fixture_dst(tmpdir: py.path.local) -> Path:
-    dst = Path(tmpdir) / "dst"
+def fixture_dst(tmp_path: Path) -> Path:
+    dst = tmp_path / "dst"
     dst.mkdir()
     return dst
 
 
 @pytest.fixture(name="db")
-def fixture_db(tmpdir: py.path.local) -> Path:
-    db = Path(tmpdir) / "db"
+def fixture_db(tmp_path: Path) -> Path:
+    db = tmp_path / "db"
     return db
 
 
