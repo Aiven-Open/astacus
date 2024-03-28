@@ -9,7 +9,7 @@ PROTODIR=astacus/proto
 PROTOBUFS = $(wildcard $(PROTODIR)/*.proto)
 GENERATED_PROTOBUFS = $(patsubst %.proto,%_pb2.py,$(PROTOBUFS))
 
-GENERATED = astacus/version.py $(GENERATED_PROTOBUFS)
+GENERATED = $(GENERATED_PROTOBUFS)
 
 PYTHON = python3
 DNF_INSTALL = sudo dnf install -y
@@ -20,10 +20,19 @@ ZOOKEEPER_HASH = 284cb4675adb64794c63d95bf202d265cebddc0cda86ac86fb0ede8049de918
 default: $(GENERATED)
 
 venv: default
-	$(PYTHON) -m venv venv && source venv/bin/activate && pip install -U pip && pip install -r requirements.txt
+	$(PYTHON) -m venv venv && source venv/bin/activate && pip install -U pip && pip install . ".[dev]"
 
 clean:
 	rm -rf rpm/ $(GENERATED)
+
+.PHONY: astacus/version.py
+python-build:
+	$(PYTHON) -m build
+
+.PHONY: dev-deps
+dev-deps:
+	pip install .
+	pip install ".[dev]"
 
 .PHONY: build-dep-fedora
 build-dep-fedora:
@@ -145,9 +154,6 @@ rpm: $(GENERATED) /usr/bin/rpmbuild /usr/lib/rpm/check-buildroot
 		--define 'major_version $(SHORT_VER)' \
 		--define 'minor_version $(subst -,.,$(subst $(SHORT_VER)-,,$(LONG_VER)))'
 	$(RM) astacus-rpm-src.tar
-
-astacus/version.py: version_from_git.py
-	$(PYTHON) $^ $@
 
 %_pb2.py: %.proto
 	protoc -I $(PROTODIR) $< --python_out=$(PROTODIR)

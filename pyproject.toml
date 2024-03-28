@@ -1,3 +1,83 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "astacus"
+authors = [
+  { name="Aiven", email="opensource@aiven.io" },
+]
+description = "Astacus, cluster (database) backup tool"
+readme = "README.md"
+requires-python = ">=3.11"
+classifiers=[
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Database :: Database Engines/Servers",
+    "Topic :: Software Development :: Libraries",
+]
+license = { text = "Apache License 2.0" }
+dynamic = ["version"]
+dependencies = [
+    "fastapi",
+    "httpx",
+    "msgspec",
+    "kazoo",
+    "protobuf < 3.21",
+    "pydantic",
+    "pyyaml",
+    "rohmu >= 2.2.0",
+    "sentry-sdk",
+    "tabulate",
+    "typing-extensions >= 4.7.1",
+    "uvicorn==0.15.0",
+    "wcmatch",
+]
+
+[project.optional-dependencies]
+dev = [
+    # makefile convenience"
+    "pre-commit>=2.20.0",
+    # pre-commit tasks in Makefile need these"
+    "anyio==3.5.0",
+    "pylint==2.15.5",
+    "pytest-asyncio==0.21.1",
+    "pytest-cov==3.0.0",
+    "pytest-mock==3.3.1",
+    "pytest-order==1.0.0",
+    "pytest-timeout==1.4.2",
+    "pytest-watch==4.2.0",
+    "pytest==7.2.2",
+    # pinning mypy to the same version as pre-commit"
+    "mypy==1.0.0",
+    # types for things that don't seem to have them"
+    "types-PyYAML>=6.0.12.2",
+    "types-tabulate>=0.9.0.0",
+    "types-urllib3>=1.26.25.4",
+    "typing_extensions>=4.4.0",
+    "freezegun>=1.2",
+    "respx==0.20.1",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/Aiven-Open/astacus"
+"Bug Tracker" = "https://github.com/Aiven-Open/astacus/issues"
+
+[project.scripts]
+astacus = "astacus.main:main"
+
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "astacus/version.py"
+
+
 [tool.black]
 line-length = 125
 
