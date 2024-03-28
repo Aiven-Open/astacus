@@ -146,6 +146,8 @@ def test_proxy_storage(mock_google_client: Mock, mock_get_credentials: Mock) -> 
         ),
         storage="x-proxy",
     )
+    assert isinstance(rs.storage, google.GoogleTransfer)
+    assert hasattr(rs.storage, "proxy_info")
     assert rs.storage.proxy_info["user"] == "REDACTED"
     assert rs.storage.proxy_info["pass"] == "REDACTED"
     assert rs.storage.proxy_info["type"] == "socks5"

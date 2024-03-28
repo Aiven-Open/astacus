@@ -4,7 +4,7 @@ See LICENSE for details
 """
 from astacus.common.exceptions import TransientException
 from asyncio import to_thread
-from collections.abc import AsyncIterator, Callable, Collection, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from kazoo.client import EventType, KazooClient, KeeperState, TransactionRequest, WatchedEvent
 from kazoo.retry import KazooRetry
 
@@ -164,7 +164,7 @@ class NotEmptyError(TransientException):
 
 
 class TransactionError(TransientException):
-    def __init__(self, results: Collection[bool | TransientException]) -> None:
+    def __init__(self, results: Sequence[bool | TransientException]) -> None:
         super().__init__(results)
         self.message = f"Transaction failed: {results!r}"
         self.results = results
@@ -213,7 +213,7 @@ class KazooZooKeeperTransaction(ZooKeeperTransaction):
                 kazoo.exceptions.NoNodeError: NoNodeError,
                 kazoo.exceptions.NodeExistsError: NodeExistsError,
             }
-            mapped_results: Collection[bool | TransientException] = [
+            mapped_results: Sequence[bool | TransientException] = [
                 exceptions_map[result.__class__](operation.path) if isinstance(result, Exception) else True
                 for result, operation in zip(results, self.request.operations)
             ]

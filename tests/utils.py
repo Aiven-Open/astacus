@@ -9,7 +9,6 @@ from typing import Final
 
 import importlib
 import os
-import py
 import re
 import subprocess
 import sys
@@ -43,7 +42,7 @@ nkMAHqg9PS372Cs=
 -----END PRIVATE KEY-----"""
 
 
-def create_rohmu_config(tmpdir: py.path.local, *, compression: bool = True, encryption: bool = True) -> RohmuConfig:
+def create_rohmu_config(tmpdir: os.PathLike, *, compression: bool = True, encryption: bool = True) -> RohmuConfig:
     x_path = Path(tmpdir) / "rohmu-x"
     x_path.mkdir(exist_ok=True)
     y_path = Path(tmpdir) / "rohmu-y"
