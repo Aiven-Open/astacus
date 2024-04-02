@@ -19,7 +19,7 @@ def test_cassandra_session(mocker: MockFixture) -> None:
     assert session.cluster_metadata == 42
 
     session.cluster_refresh_schema_metadata(max_schema_agreement_wait=7.0)
-    assert ccluster.refresh_schema_metadata.called_with(max_schema_agreement_wait=7.0)
+    ccluster.refresh_schema_metadata.assert_called_with(max_schema_agreement_wait=7.0)
 
     test_multi_statement = """
 first
