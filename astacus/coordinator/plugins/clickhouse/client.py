@@ -28,11 +28,16 @@ class ClickHouseClientQueryError(Exception):
     SETTING_CONSTRAINT_VIOLATION = 452
 
     def __init__(
-        self, query: bytes, host: str, port: int, *, status_code: int | None = None, exception_code: int | None = None
+        self,
+        query: bytes,
+        host: str,
+        port: int,
+        *,
+        status_code: int | None = None,
+        exception_code: int | None = None,
+        response: bytes | None = None,
     ) -> None:
-        super().__init__(
-            f"Query failed: {query!r} on {host}:{port}: status_code={status_code}, exception_code={exception_code}"
-        )
+        super().__init__(f"Query failed: {query!r} on {host}:{port}: {status_code=}, {exception_code=}, {response=}")
         self.query = query
         self.host = host
         self.port = port
@@ -99,7 +104,12 @@ class HttpClickHouseClient(ClickHouseClient):
             if isinstance(raw_exception_code, str) and re.match(r"\d+", raw_exception_code):
                 exception_code = int(raw_exception_code)
             raise ClickHouseClientQueryError(
-                query, self.host, self.port, status_code=response.status_code, exception_code=exception_code
+                query,
+                self.host,
+                self.port,
+                status_code=response.status_code,
+                exception_code=exception_code,
+                response=response.content,
             )
         if response.content:
             # Beware: large ints (Int64, UInt64, and larger) will be returned as strings
