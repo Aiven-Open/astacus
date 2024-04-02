@@ -118,7 +118,12 @@ async def httpx_request(
     # TBD: may need to redact url in future, if we actually wind up
     # using passwords in urls here.
     logger.info("async-request %s %s by %s", method, url, caller)
-    async with httpx.AsyncClient() as client:
+    # httpx has a silly bug where it (very slowly) loads the ssl context even when it's not used at all.
+    # we can work around that by disabling certificates verification when the protocol is HTTP.
+    # A better fix would be to have a proper long-living scope for the client, but this requires large
+    # changes in astacus API implementation.
+    verify = not url.startswith("http://")
+    async with httpx.AsyncClient(verify=verify) as client:
         try:
             r = await client.request(method, url, timeout=timeout, **kw)
             if not r.is_error:
