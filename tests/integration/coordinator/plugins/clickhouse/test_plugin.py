@@ -144,7 +144,6 @@ async def restored_cluster_manager(
                             "restorable",
                         )
                     run_astacus_command(astacus_cluster, "restore", "--storage", "restorable")
-                    await sync_replicated_tables(clients)
                     yield clients
 
 
@@ -177,16 +176,9 @@ async def fixture_function_restored_cluster(
             yield clients
 
 
-async def sync_replicated_tables(clients: Sequence[ClickHouseClient]) -> None:
-    # Get replicated tables to sync
-    rows = await clients[0].execute(
-        b"SELECT name FROM system.tables WHERE database = 'default' AND engine like 'Replicated%'"
-    )
+async def sync_replicated_table(clients: Sequence[ClickHouseClient], table_name: str) -> None:
     for client in clients:
-        for row in rows:
-            table_name = row[0]
-            assert isinstance(table_name, str)
-            await client.execute(f"SYSTEM SYNC REPLICA default.{escape_sql_identifier(table_name.encode())} STRICT".encode())
+        await client.execute(f"SYSTEM SYNC REPLICA default.{escape_sql_identifier(table_name.encode())} STRICT".encode())
 
 
 async def setup_cluster_content(clients: Sequence[HttpClickHouseClient], use_named_collections: bool) -> None:
@@ -447,6 +439,8 @@ async def test_restores_materialized_view_with_undeleted_source_table(
         b"ENGINE = ReplicatedMergeTree ORDER BY (thekey)"
     )
     await function_restored_cluster[0].execute(b"INSERT INTO default.source_table_for_view_deleted VALUES (8, '8')")
+    await sync_replicated_table(function_restored_cluster, "source_table_for_view_deleted")
+    await sync_replicated_table(function_restored_cluster, "data_table_for_mv")
     s1_data = [[7 * 3], [8 * 3]]
     s2_data = [[9 * 3]]
     cluster_data = [s1_data, s1_data, s2_data]
@@ -472,6 +466,7 @@ async def test_restores_view_undeleted_source_table(function_restored_cluster: S
     )
     await function_restored_cluster[0].execute(b"INSERT INTO default.source_table_for_view_deleted VALUES (11, '11')")
     await function_restored_cluster[2].execute(b"INSERT INTO default.source_table_for_view_deleted VALUES (17, '17')")
+    await sync_replicated_table(function_restored_cluster, "source_table_for_view_deleted")
     s1_data = [[11 * 2]]
     s2_data = [[17 * 2]]
     cluster_data = [s1_data, s1_data, s2_data]
