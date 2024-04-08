@@ -305,6 +305,17 @@ async def setup_cluster_content(clients: Sequence[HttpClickHouseClient], use_nam
     await clients[2].execute(b"INSERT INTO default.in_object_storage VALUES (789, 'baz')")
     # This won't be backed up
     await clients[0].execute(b"INSERT INTO default.memory VALUES (123, 'foo')")
+    # Make sure everything is synced before starting the backup
+    for table_name in [
+        "replicated_merge_tree",
+        "with_experimental_types",
+        "nested_not_flatten",
+        "nested_flatten",
+        "array_tuple_not_flatten",
+        "array_tuple_flatten",
+        "in_object_storage",
+    ]:
+        await sync_replicated_table(clients, table_name)
 
 
 async def setup_cluster_users(clients: Sequence[HttpClickHouseClient]) -> None:
