@@ -35,10 +35,19 @@ import base64
 import pytest
 import tempfile
 
+pytest.skip(
+    "These are flakey see tickets"
+    "https://aiven.atlassian.net/jira/software/c/projects/DDB/boards/210?selectedIssue=DDB-922"
+    "and https://aiven.atlassian.net/jira/software/c/projects/DDB/boards/210?selectedIssue=DDB-932",
+    allow_module_level=True,
+)
+
+
 pytestmark = [
     pytest.mark.clickhouse,
     pytest.mark.order("last"),
 ]
+
 
 SAMPLE_URL_ENGINE_DDL: Final[str] = (
     "CREATE TABLE default.url_engine_table (`thekey` UInt32, `thedata` String) "
