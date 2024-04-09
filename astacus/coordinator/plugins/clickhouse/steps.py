@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+
 from __future__ import annotations
 
 from .client import ClickHouseClient, ClickHouseClientQueryError, escape_sql_identifier, escape_sql_string
@@ -758,8 +759,6 @@ class SyncTableReplicasStep(Step[None]):
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         manifest = context.get_result(ClickHouseManifestStep)
-        if manifest.version != ClickHouseBackupVersion.V1:
-            return
 
         def _sync_replicas(client: ClickHouseClient) -> Iterator[Awaitable[None]]:
             yield from (

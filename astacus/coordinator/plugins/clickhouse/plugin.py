@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+
 from .config import (
     ClickHouseConfiguration,
     DiskConfiguration,
@@ -187,11 +188,6 @@ class ClickHousePlugin(CoordinatorPlugin):
                 attach_timeout=self.attach_timeout,
                 max_concurrent_attach_per_node=self.max_concurrent_attach_per_node,
             ),
-            SyncTableReplicasStep(
-                clients=clients,
-                sync_timeout=self.sync_tables_timeout,
-                max_concurrent_sync_per_node=self.max_concurrent_sync_per_node,
-            ),
             RestoreReplicaStep(
                 zookeeper_client=zookeeper_client,
                 clients=clients,
@@ -200,6 +196,11 @@ class ClickHousePlugin(CoordinatorPlugin):
                 max_concurrent_restart_per_node=self.max_concurrent_restart_replica_per_node,
                 restore_timeout=self.restore_replica_timeout,
                 max_concurrent_restore_per_node=self.max_concurrent_restore_replica_per_node,
+            ),
+            SyncTableReplicasStep(
+                clients=clients,
+                sync_timeout=self.sync_tables_timeout,
+                max_concurrent_sync_per_node=self.max_concurrent_sync_per_node,
             ),
             # Keeping this step last avoids access from non-admin users while we are still restoring
             RestoreAccessEntitiesStep(
