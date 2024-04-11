@@ -175,8 +175,7 @@ def test_open_path_with_atomic_rename(tmp_path: Path) -> None:
     with pytest.raises(TestException):
         with utils.open_path_with_atomic_rename(f3_path):
             raise TestException()
-    # This version of MyPy works poorly with pytest.raises
-    assert not f3_path.exists()  # type: ignore[unreachable]
+    assert not f3_path.exists()
 
 
 def test_parse_umask() -> None:

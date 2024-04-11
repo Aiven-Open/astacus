@@ -7,7 +7,6 @@ Test that RohmuStorage works as advertised.
 TBD: Test with something else than local files?
 
 """
-
 from astacus.common import exceptions
 from astacus.common.cachingjsonstorage import CachingJsonStorage
 from astacus.common.rohmustorage import RohmuConfig, RohmuStorage
@@ -17,7 +16,6 @@ from pathlib import Path
 from pytest_mock import MockerFixture
 from rohmu.object_storage import google
 from tests.utils import create_rohmu_config
-from unittest.mock import Mock, patch
 
 import json
 import pytest
@@ -114,9 +112,9 @@ def test_caching_storage(tmp_path: Path, mocker: MockerFixture) -> None:
     assert not mocklist.called
 
 
-@patch("rohmu.object_storage.google.get_credentials")
-@patch.object(google.GoogleTransfer, "_init_google_client")
-def test_proxy_storage(mock_google_client: Mock, mock_get_credentials: Mock) -> None:
+def test_proxy_storage(mocker: MockerFixture) -> None:
+    mocker.patch.object(google, "get_credentials")
+    mocker.patch.object(google.GoogleTransfer, "_init_google_client")
     rs = RohmuStorage(
         config=RohmuConfig.parse_obj(
             {
@@ -147,9 +145,9 @@ def test_proxy_storage(mock_google_client: Mock, mock_get_credentials: Mock) -> 
         storage="x-proxy",
     )
     assert isinstance(rs.storage, google.GoogleTransfer)
-    assert hasattr(rs.storage, "proxy_info")
-    assert rs.storage.proxy_info["user"] == "REDACTED"
-    assert rs.storage.proxy_info["pass"] == "REDACTED"
-    assert rs.storage.proxy_info["type"] == "socks5"
-    assert rs.storage.proxy_info["host"] == "localhost"
-    assert rs.storage.proxy_info["port"] == 1080
+    assert isinstance(rs.storage.proxy_info, dict)  # type: ignore[attr-defined]
+    assert rs.storage.proxy_info["user"] == "REDACTED"  # type: ignore[attr-defined]
+    assert rs.storage.proxy_info["pass"] == "REDACTED"  # type: ignore[attr-defined]
+    assert rs.storage.proxy_info["type"] == "socks5"  # type: ignore[attr-defined]
+    assert rs.storage.proxy_info["host"] == "localhost"  # type: ignore[attr-defined]
+    assert rs.storage.proxy_info["port"] == 1080  # type: ignore[attr-defined]

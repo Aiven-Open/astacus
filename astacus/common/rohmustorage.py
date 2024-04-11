@@ -66,6 +66,20 @@ class RohmuCompression(RohmuModel):
     level: int = 0
     # threads: int = 0
 
+    @property
+    def algorithm_value(self) -> str | None:
+        # The parent model is configured with `use_enum_values=True`,
+        # therefore the algorithm attribute can be string typed.
+        match self.algorithm:
+            case RohmuCompressionType():
+                return self.algorithm.value
+            case str():
+                return self.algorithm  # type: ignore[unreachable]
+            case None:
+                return None
+            case _:
+                raise TypeError(f"Expected compression algorithm, got {self.algorithm!r}")
+
 
 class RohmuConfig(RohmuModel):
     temporary_directory: str
@@ -154,9 +168,9 @@ class RohmuStorage(Storage):
         compression = self.config.compression
         metadata = RohmuMetadata()
         wrapped_file: IO[bytes] | Stream = f
-        if compression.algorithm:
-            metadata.compression_algorithm = compression.algorithm
-            wrapped_file = CompressionStream(wrapped_file, compression.algorithm.value, compression.level)
+        if compression.algorithm_value:
+            metadata.compression_algorithm = RohmuCompressionType(compression.algorithm)
+            wrapped_file = CompressionStream(wrapped_file, compression.algorithm_value, compression.level)
         if encryption_key_id:
             metadata.encryption_key_id = encryption_key_id
             rsa_public_key = self._loaded_public_key_lookup(encryption_key_id)

@@ -7,7 +7,7 @@ from astacus.common.rohmustorage import RohmuStorageConfig
 from astacus.common.utils import AstacusModel, build_netloc
 from astacus.coordinator.plugins.zookeeper import KazooZooKeeperClient, ZooKeeperClient
 from astacus.coordinator.plugins.zookeeper_config import ZooKeeperConfiguration
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import enum
@@ -41,7 +41,7 @@ class DiskType(enum.Enum):
 
 class DiskObjectStorageConfiguration(AstacusModel):
     default_storage: str
-    storages: dict[str, RohmuStorageConfig]
+    storages: Mapping[str, RohmuStorageConfig]
 
 
 class DiskConfiguration(AstacusModel):

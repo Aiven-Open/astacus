@@ -10,9 +10,9 @@ from astacus.node.config import CassandraAccessLevel, CassandraNodeConfig
 from collections.abc import Callable, Sequence
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from httpx import Response
 from pathlib import Path
 from pytest_mock import MockerFixture
-from requests import Response
 from tests.unit.conftest import CassandraTestConfig
 from types import ModuleType
 

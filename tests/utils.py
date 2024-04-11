@@ -2,7 +2,7 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
-from astacus.common.rohmustorage import RohmuConfig
+from astacus.common.rohmustorage import RohmuCompressionType, RohmuConfig
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Final
@@ -64,7 +64,7 @@ def create_rohmu_config(tmpdir: os.PathLike, *, compression: bool = True, encryp
         },
     }
     if compression:
-        config.update({"compression": {"algorithm": "zstd"}})
+        config.update({"compression": {"algorithm": RohmuCompressionType.zstd}})
     if encryption:
         config.update(
             {
@@ -91,7 +91,7 @@ def get_clickhouse_version(command: Sequence[str | Path]) -> tuple[int, ...]:
 
 
 def is_cassandra_driver_importable() -> bool:
-    return importlib.util.find_spec("cassandra") is not None  # type: ignore[attr-defined]
+    return importlib.util.find_spec("cassandra") is not None
 
 
 def format_astacus_command(*arg: str) -> Sequence[str]:

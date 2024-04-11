@@ -174,7 +174,7 @@ class MinioService:
     @contextlib.contextmanager
     def bucket(self, *, bucket_name: str) -> Iterator[MinioBucket]:
         with self.get_client(access_key=self.root_user, secret_key=self.root_password) as s3_client:
-            s3_client.create_bucket(Bucket=bucket_name, ACL="private")
+            s3_client.create_bucket(Bucket=bucket_name, ACL="private")  # type: ignore[attr-defined]
             yield MinioBucket(
                 host=self.host,
                 port=self.server_port,
@@ -183,13 +183,13 @@ class MinioService:
                 access_key_id=self.root_user,
                 secret_access_key=self.root_password,
             )
-            response = s3_client.list_objects_v2(Bucket=bucket_name)
+            response = s3_client.list_objects_v2(Bucket=bucket_name)  # type: ignore[attr-defined]
             if response["KeyCount"] > 0:
-                s3_client.delete_objects(
+                s3_client.delete_objects(  # type: ignore[attr-defined]
                     Bucket=bucket_name,
                     Delete={"Objects": [{"Key": content["Key"]} for content in response["Contents"]]},
                 )
-            s3_client.delete_bucket(Bucket=bucket_name)
+            s3_client.delete_bucket(Bucket=bucket_name)  # type: ignore[attr-defined]
 
 
 @pytest.fixture(scope="module", name="minio")
@@ -525,7 +525,7 @@ def create_astacus_configs(
             storage_type=rohmu.StorageDriver.s3,
             region="fake",
             host=minio_bucket.host,
-            port=minio_bucket.port,
+            port=str(minio_bucket.port),
             aws_access_key_id=minio_bucket.access_key_id,
             aws_secret_access_key=minio_bucket.secret_access_key,
             bucket_name=minio_bucket.name,
@@ -547,7 +547,7 @@ def create_astacus_configs(
             storage_type=rohmu.StorageDriver.s3,
             region="fake",
             host=minio_bucket.host,
-            port=minio_bucket.port,
+            port=str(minio_bucket.port),
             aws_access_key_id=minio_bucket.access_key_id,
             aws_secret_access_key=minio_bucket.secret_access_key,
             bucket_name=minio_bucket.name,
