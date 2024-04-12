@@ -11,19 +11,16 @@ GENERATED_PROTOBUFS = $(patsubst %.proto,%_pb2.py,$(PROTOBUFS))
 
 GENERATED = $(GENERATED_PROTOBUFS)
 
-PYTHON = python3
-DNF_INSTALL = sudo dnf install -y
-
 ZOOKEEPER_VERSION = 3.8.4
 ZOOKEEPER_HASH = 284cb4675adb64794c63d95bf202d265cebddc0cda86ac86fb0ede8049de9187
 
 default: $(GENERATED)
 
 venv: default
-	$(PYTHON) -m venv venv && source venv/bin/activate && pip install -U pip && pip install . ".[dev]"
+	python3 -m venv venv && source venv/bin/activate && pip install -U pip && pip install . ".[dev]"
 
 clean:
-	rm -rf rpm/ $(GENERATED)
+	rm -rf rpm/ $(GENERATED) venv/ .mypy_cache/ astacus.egg-info/
 
 
 .PHONY: build-dep-fedora
