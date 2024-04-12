@@ -46,7 +46,10 @@ f38 = [
     "cramjam == 2.8.3",
     "cryptography == 37.0.2",
     "fastapi == 0.99.0",
-    "h11 == 0.13.0",
+    # h11 on Fedora 38 is actually 0.13.0, but 0.13.0 is rejeceted by httpcore 0.15.0
+    # See: https://github.com/encode/httpcore/blob/0.15.0/setup.py#L56-L57
+    # See also: https://github.com/python-hyper/h11/compare/v0.12.0...v0.13.0 if you're looking for meaningful differences.
+    "h11 == 0.12.0",
     "httpcore == 0.15.0",
     "httplib2 == 0.20.4",
     "httpx == 0.24.1",
