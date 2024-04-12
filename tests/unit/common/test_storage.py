@@ -27,17 +27,17 @@ TEST_JSON = "jsonblob"
 TEST_JSON_DATA: Json = {"foo": 7, "array": [1, 2, 3], "true": True}
 
 
-def create_storage(*, tmpdir: Path, engine: str, **kw):
+def create_storage(*, tmp_path: Path, engine: str, **kw):
     if engine == "rohmu":
-        config = create_rohmu_config(tmpdir, **kw)
+        config = create_rohmu_config(tmp_path, **kw)
         return RohmuStorage(config=config)
     if engine == "file":
-        path = tmpdir / "test-storage-file"
+        path = tmp_path / "test-storage-file"
         return FileStorage(path)
     if engine == "cache":
         # FileStorage cache, and then rohmu filestorage underneath
-        cache_storage = FileStorage(tmpdir / "test-storage-file")
-        config = create_rohmu_config(tmpdir, **kw)
+        cache_storage = FileStorage(tmp_path / "test-storage-file")
+        config = create_rohmu_config(tmp_path, **kw)
         backend_storage = RohmuStorage(config=config)
         return CachingJsonStorage(backend_storage=backend_storage, cache_storage=cache_storage)
     raise NotImplementedError(f"unknown storage {engine}")
@@ -86,7 +86,7 @@ def test_storage(tmp_path: Path, engine: str, kw: dict[str, bool], ex: AbstractC
     if ex is None:
         ex = does_not_raise()
     with ex:
-        storage = create_storage(tmpdir=tmp_path, engine=engine, **kw)
+        storage = create_storage(tmp_path=tmp_path, engine=engine, **kw)
         if isinstance(storage, FileStorage):
             _test_hexdigeststorage(storage)
         if isinstance(storage, JsonStorage):
@@ -94,10 +94,10 @@ def test_storage(tmp_path: Path, engine: str, kw: dict[str, bool], ex: AbstractC
 
 
 def test_caching_storage(tmp_path: Path, mocker: MockerFixture) -> None:
-    storage = create_storage(tmpdir=tmp_path, engine="cache")
+    storage = create_storage(tmp_path=tmp_path, engine="cache")
     storage.upload_json(TEST_JSON, TEST_JSON_DATA)
 
-    storage = create_storage(tmpdir=tmp_path, engine="cache")
+    storage = create_storage(tmp_path=tmp_path, engine="cache")
     assert storage.list_jsons() == [TEST_JSON]
 
     # We shouldn't wind up in download method of rohmu at all.

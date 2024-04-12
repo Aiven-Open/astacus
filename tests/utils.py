@@ -42,15 +42,15 @@ nkMAHqg9PS372Cs=
 -----END PRIVATE KEY-----"""
 
 
-def create_rohmu_config(tmpdir: os.PathLike, *, compression: bool = True, encryption: bool = True) -> RohmuConfig:
-    x_path = Path(tmpdir) / "rohmu-x"
+def create_rohmu_config(tmp_path: Path, *, compression: bool = True, encryption: bool = True) -> RohmuConfig:
+    x_path = tmp_path / "rohmu-x"
     x_path.mkdir(exist_ok=True)
-    y_path = Path(tmpdir) / "rohmu-y"
+    y_path = tmp_path / "rohmu-y"
     y_path.mkdir(exist_ok=True)
-    tmp_path = Path(tmpdir) / "rohmu-tmp"
-    tmp_path.mkdir(exist_ok=True)
+    rohmu_tmp_path = tmp_path / "rohmu-tmp"
+    rohmu_tmp_path.mkdir(exist_ok=True)
     config = {
-        "temporary_directory": str(tmp_path),
+        "temporary_directory": str(rohmu_tmp_path),
         "default_storage": "x",
         "storages": {
             "x": {
