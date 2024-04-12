@@ -39,6 +39,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+cassandra = [
+    "cassandra-driver == 3.20.2",
+]
 f38 = [
     "cramjam == 2.8.3",
     "cryptography == 37.0.2",
