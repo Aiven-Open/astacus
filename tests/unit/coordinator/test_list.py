@@ -22,7 +22,7 @@ from astacus.coordinator import api
 from astacus.coordinator.api import get_cache_entries_from_list_response
 from astacus.coordinator.list import compute_deduplicated_snapshot_file_stats, list_backups
 from fastapi.testclient import TestClient
-from os import PathLike
+from pathlib import Path
 from pytest_mock import MockerFixture
 from tests.utils import create_rohmu_config
 from unittest import mock
@@ -222,9 +222,9 @@ def test_compute_deduplicated_snapshot_file_stats(backup_manifest: BackupManifes
     assert (num_files, total_size) == (6, 6000)
 
 
-def test_api_list_deduplication(backup_manifest: BackupManifest, tmpdir: PathLike) -> None:
+def test_api_list_deduplication(backup_manifest: BackupManifest, tmp_path: Path) -> None:
     """Test the list backup operation correctly deduplicates snapshot files when computing stats."""
-    multi_rohmu_storage = MultiRohmuStorage(config=create_rohmu_config(tmpdir))
+    multi_rohmu_storage = MultiRohmuStorage(config=create_rohmu_config(tmp_path))
     storage = multi_rohmu_storage.get_storage("x")
     storage.upload_json("backup-1", backup_manifest)
     storage.upload_hexdigest_bytes("FAKEDIGEST", b"fake-digest-data")
@@ -257,8 +257,8 @@ def test_api_list_deduplication(backup_manifest: BackupManifest, tmpdir: PathLik
     assert list_response == expected_response
 
 
-def test_list_can_use_cache_from_previous_response(backup_manifest: BackupManifest, tmpdir: PathLike) -> None:
-    multi_rohmu_storage = MultiRohmuStorage(config=create_rohmu_config(tmpdir))
+def test_list_can_use_cache_from_previous_response(backup_manifest: BackupManifest, tmp_path: Path) -> None:
+    multi_rohmu_storage = MultiRohmuStorage(config=create_rohmu_config(tmp_path))
     storage = multi_rohmu_storage.get_storage("x")
     storage.upload_json("backup-1", backup_manifest)
     storage.upload_hexdigest_bytes("FAKEDIGEST", b"fake-digest-data")
@@ -279,8 +279,8 @@ def test_list_can_use_cache_from_previous_response(backup_manifest: BackupManife
         dowload_json.assert_not_called()
 
 
-def test_list_does_not_return_stale_cache_entries(backup_manifest: BackupManifest, tmpdir: PathLike) -> None:
-    multi_rohmu_storage = MultiRohmuStorage(config=create_rohmu_config(tmpdir))
+def test_list_does_not_return_stale_cache_entries(backup_manifest: BackupManifest, tmp_path: Path) -> None:
+    multi_rohmu_storage = MultiRohmuStorage(config=create_rohmu_config(tmp_path))
     storage = multi_rohmu_storage.get_storage("x")
     storage.upload_json("backup-1", backup_manifest)
     storage.upload_hexdigest_bytes("FAKEDIGEST", b"fake-digest-data")

@@ -99,5 +99,6 @@ def test_api_clear(client: TestClient, mocker: MockerFixture) -> None:
 
     # Decode the (result endpoint) response using the model
     response = m.call_args[1]["data"]
+    assert isinstance(response, bytes)
     result = msgspec.json.decode(response, type=ipc.NodeResult)
     assert result.progress.finished_successfully

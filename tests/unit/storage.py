@@ -6,6 +6,7 @@ from astacus.common import exceptions
 from astacus.common.storage import HexDigestStorage, JsonStorage, StorageUploadResult
 from collections.abc import Iterator
 from pathlib import Path
+from rohmu.typing import FileLike
 from typing import BinaryIO
 
 import contextlib
@@ -52,7 +53,7 @@ class MemoryHexDigestStorage(HexDigestStorage):
     def delete_hexdigest(self, hexdigest: str) -> None:
         del self.items[hexdigest]
 
-    def download_hexdigest_to_file(self, hexdigest: str, f: BinaryIO) -> bool:
+    def download_hexdigest_to_file(self, hexdigest: str, f: FileLike) -> bool:
         f.write(self.items[hexdigest])
         return True
 

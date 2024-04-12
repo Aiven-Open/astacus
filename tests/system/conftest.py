@@ -77,7 +77,7 @@ async def background_process(program: str | Path, *args: str | Path, **kwargs) -
 
 
 def create_astacus_config_dict(
-    *, tmpdir: Path, root_path: Path, link_path: Path, node: TestNode, plugin_config: Mapping[str, Any]
+    *, tmp_path: Path, root_path: Path, link_path: Path, node: TestNode, plugin_config: Mapping[str, Any]
 ) -> Mapping[str, Any]:
     nodes = [{"url": f"{node.url}/node"} for node in ASTACUS_NODES]
     return {
@@ -87,7 +87,7 @@ def create_astacus_config_dict(
             "root_link": str(link_path),
             "db_path": str(node.db_path),
         },
-        "object_storage": create_rohmu_config(tmpdir).jsondict(),
+        "object_storage": create_rohmu_config(tmp_path).jsondict(),
         "uvicorn": {
             "port": node.port,
             "log_level": "debug",
@@ -112,7 +112,7 @@ def create_astacus_config(
     db_path.mkdir(exist_ok=True)
     node.db_path = db_path
     a_conf = create_astacus_config_dict(
-        tmpdir=tmp_path, root_path=root_path, link_path=link_path, node=node, plugin_config=plugin_config
+        tmp_path=tmp_path, root_path=root_path, link_path=link_path, node=node, plugin_config=plugin_config
     )
     a_conf_path = a / "astacus.conf"
     a_conf_path.write_text(json.dumps(a_conf))

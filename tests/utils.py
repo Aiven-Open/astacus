@@ -2,14 +2,13 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
-from astacus.common.rohmustorage import RohmuConfig
+from astacus.common.rohmustorage import RohmuCompressionType, RohmuConfig
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Final
 
 import importlib
 import os
-import py
 import re
 import subprocess
 import sys
@@ -43,15 +42,15 @@ nkMAHqg9PS372Cs=
 -----END PRIVATE KEY-----"""
 
 
-def create_rohmu_config(tmpdir: py.path.local, *, compression: bool = True, encryption: bool = True) -> RohmuConfig:
-    x_path = Path(tmpdir) / "rohmu-x"
+def create_rohmu_config(tmp_path: Path, *, compression: bool = True, encryption: bool = True) -> RohmuConfig:
+    x_path = tmp_path / "rohmu-x"
     x_path.mkdir(exist_ok=True)
-    y_path = Path(tmpdir) / "rohmu-y"
+    y_path = tmp_path / "rohmu-y"
     y_path.mkdir(exist_ok=True)
-    tmp_path = Path(tmpdir) / "rohmu-tmp"
-    tmp_path.mkdir(exist_ok=True)
+    rohmu_tmp_path = tmp_path / "rohmu-tmp"
+    rohmu_tmp_path.mkdir(exist_ok=True)
     config = {
-        "temporary_directory": str(tmp_path),
+        "temporary_directory": str(rohmu_tmp_path),
         "default_storage": "x",
         "storages": {
             "x": {
@@ -65,7 +64,7 @@ def create_rohmu_config(tmpdir: py.path.local, *, compression: bool = True, encr
         },
     }
     if compression:
-        config.update({"compression": {"algorithm": "zstd"}})
+        config.update({"compression": {"algorithm": RohmuCompressionType.zstd}})
     if encryption:
         config.update(
             {
@@ -92,7 +91,7 @@ def get_clickhouse_version(command: Sequence[str | Path]) -> tuple[int, ...]:
 
 
 def is_cassandra_driver_importable() -> bool:
-    return importlib.util.find_spec("cassandra") is not None  # type: ignore[attr-defined]
+    return importlib.util.find_spec("cassandra") is not None
 
 
 def format_astacus_command(*arg: str) -> Sequence[str]:

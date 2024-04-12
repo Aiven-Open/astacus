@@ -18,8 +18,9 @@ from pydantic import Field
 from rohmu import errors, rohmufile
 from rohmu.compressor import CompressionStream
 from rohmu.encryptor import EncryptorStream
-from rohmu.typing import Metadata
-from typing import BinaryIO, TypeAlias
+from rohmu.filewrap import Stream
+from rohmu.typing import FileLike, Metadata
+from typing import BinaryIO, IO, TypeAlias
 
 import contextlib
 import io
@@ -64,6 +65,20 @@ class RohmuCompression(RohmuModel):
     algorithm: RohmuCompressionType | None = None
     level: int = 0
     # threads: int = 0
+
+    @property
+    def algorithm_value(self) -> str | None:
+        # The parent model is configured with `use_enum_values=True`,
+        # therefore the algorithm attribute can be string typed.
+        match self.algorithm:
+            case RohmuCompressionType():
+                return self.algorithm.value
+            case str():
+                return self.algorithm  # type: ignore[unreachable]
+            case None:
+                return None
+            case _:
+                raise TypeError(f"Expected compression algorithm, got {self.algorithm!r}")
 
 
 class RohmuConfig(RohmuModel):
@@ -114,7 +129,7 @@ class RohmuStorage(Storage):
             raise exceptions.CompressionOrEncryptionRequired()
 
     @rohmu_error_wrapper
-    def _download_key_to_file(self, key, f: BinaryIO) -> bool:
+    def _download_key_to_file(self, key, f: FileLike) -> bool:
         with tempfile.TemporaryFile(dir=self.config.temporary_directory) as temp_file:
             raw_metadata: Metadata = self.storage.get_contents_to_fileobj(key, temp_file)
             temp_file.seek(0)
@@ -148,20 +163,22 @@ class RohmuStorage(Storage):
         return public_key
 
     @rohmu_error_wrapper
-    def _upload_key_from_file(self, key: str, f: BinaryIO, file_size: int) -> StorageUploadResult:
+    def _upload_key_from_file(self, key: str, f: IO[bytes], file_size: int) -> StorageUploadResult:
         encryption_key_id = self.config.encryption_key_id
         compression = self.config.compression
         metadata = RohmuMetadata()
-        wrapped_file = f
-        if compression.algorithm:
-            metadata.compression_algorithm = compression.algorithm
-            wrapped_file = CompressionStream(wrapped_file, compression.algorithm, compression.level)
+        wrapped_file: IO[bytes] | Stream = f
+        if compression.algorithm_value:
+            metadata.compression_algorithm = RohmuCompressionType(compression.algorithm)
+            wrapped_file = CompressionStream(wrapped_file, compression.algorithm_value, compression.level)
         if encryption_key_id:
             metadata.encryption_key_id = encryption_key_id
             rsa_public_key = self._loaded_public_key_lookup(encryption_key_id)
             wrapped_file = EncryptorStream(wrapped_file, rsa_public_key)
         rohmu_metadata = metadata.dict(exclude_defaults=True, by_alias=True)
-        self.storage.store_file_object(key, wrapped_file, metadata=rohmu_metadata)
+        # BaseTransfer.store_file_object is compatible with file descriptors of type IO[bytes] and Stream
+        # However, the BinaryIO parameter type is too strict for the union type we want to pass here.
+        self.storage.store_file_object(key, wrapped_file, metadata=rohmu_metadata)  # type: ignore[arg-type]
         return StorageUploadResult(size=file_size, stored_size=wrapped_file.tell())
 
     storage_name: str = ""
@@ -186,7 +203,7 @@ class RohmuStorage(Storage):
     def list_hexdigests(self) -> list[str]:
         return self._list_key(self.hexdigest_key)
 
-    def download_hexdigest_to_file(self, hexdigest: str, f: BinaryIO) -> bool:
+    def download_hexdigest_to_file(self, hexdigest: str, f: FileLike) -> bool:
         key = os.path.join(self.hexdigest_key, hexdigest)
         return self._download_key_to_file(key, f)
 

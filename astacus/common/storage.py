@@ -8,6 +8,7 @@ from .exceptions import NotFoundException
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from pathlib import Path
+from rohmu.typing import FileLike
 from typing import BinaryIO, Callable, ContextManager, Generic, ParamSpec, TypeAlias, TypeVar
 
 import contextlib
@@ -46,7 +47,7 @@ class HexDigestStorage(ABC):
         return b.read()
 
     @abstractmethod
-    def download_hexdigest_to_file(self, hexdigest: str, f: BinaryIO) -> bool:
+    def download_hexdigest_to_file(self, hexdigest: str, f: FileLike) -> bool:
         ...
 
     def download_hexdigest_to_path(self, hexdigest: str, filename: str | Path) -> None:
@@ -147,7 +148,7 @@ class FileStorage(Storage):
         return self._list(self.hexdigest_suffix)
 
     @file_error_wrapper
-    def download_hexdigest_to_file(self, hexdigest: str, f: BinaryIO) -> bool:
+    def download_hexdigest_to_file(self, hexdigest: str, f: FileLike) -> bool:
         logger.info("download_hexdigest_to_file %r", hexdigest)
         path = self._hexdigest_to_path(hexdigest)
         f.write(path.read_bytes())

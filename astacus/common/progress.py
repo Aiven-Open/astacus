@@ -4,8 +4,8 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 
 """
-from pyparsing import Iterable
-from typing_extensions import Self, TypeVar
+from collections.abc import Iterable, Iterator, Sequence
+from typing import Self, TypeVar
 
 import logging
 import math
@@ -52,7 +52,7 @@ class Progress(msgspec.Struct, kw_only=True):
         finished = ", finished" if self.final else ""
         return f"{self.handled}/{self.total} handled, {self.failed} failures{finished}"
 
-    def wrap(self, i: Iterable[T]) -> Iterable[T]:
+    def wrap(self, i: Sequence[T]) -> Iterator[T]:
         """Iterate over i, updating progress as we go."""
         try:
             self.add_total(len(i))

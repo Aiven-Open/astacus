@@ -839,12 +839,12 @@ async def upload_node_index_datas(
 async def get_nodes_metadata(
     cluster: Cluster, *, nodes: Sequence[CoordinatorNode] | None = None
 ) -> list[ipc.MetadataResult]:
-    metadata_responses: Sequence[httpx.Response | None] = await cluster.request_from_nodes(
+    metadata_responses = await cluster.request_from_nodes(
         "metadata", caller="get_nodes_metadata", method="get", nodes=nodes, json=False
     )
     return [
         ipc.MetadataResult(version="", features=[])
-        if response is None
+        if not isinstance(response, httpx.Response)
         else msgspec.json.decode(response.content, type=ipc.MetadataResult)
         for response in metadata_responses
     ]
