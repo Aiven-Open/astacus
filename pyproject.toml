@@ -34,7 +34,7 @@ dependencies = [
     "sentry-sdk",
     "tabulate",
     "typing-extensions >= 4.7.1",
-    "uvicorn==0.15.0",
+    "uvicorn",
     "wcmatch",
 ]
 
