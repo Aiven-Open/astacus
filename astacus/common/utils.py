@@ -90,6 +90,13 @@ def http_request(url, *, caller, method="get", timeout=10, ignore_status_code: b
     # using passwords in urls here.
     logger.info("request %s %s by %s", method, url, caller)
     try:
+        # There is a combination of bugs between urllib3<2 and uvicorn<0.24.0
+        # where the abrupt socket shutdown of urllib3 causes the uvicorn server
+        # to wait for a long time when shutting down, only on Python>=3.12.
+        # Since we don't use multi-requests sessions, disable Keep-Alive to
+        # allow the server to shut down the connection on its side as soon as
+        # it is done replying.
+        kw["headers"] = {"Connection": "close", **kw.get("headers", {})}
         r = requests.request(method, url, timeout=timeout, **kw)
         if r.ok:
             return r.json()
