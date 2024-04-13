@@ -26,10 +26,7 @@ jobs:
         cache: 'pip'
 
     - name: Install requirements
-      run: pip install -e '.[cassandra]'
-
-    - name: Install testing requirements (not included by default in normal install)
-      run: pip install ".[dev]"
+      run: pip install -e '.[cassandra,dev,f38]'
 
     - name: Execute unit-tests
       run: make unittest
