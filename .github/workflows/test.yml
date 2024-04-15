@@ -12,27 +12,33 @@ jobs:
     strategy:
       max-parallel: 4
       matrix:
-        python-version: ["3.11"]
+        fedora-version: ["38", "39"]
+
+        include:
+          - fedora-version: "38"
+            python-version: "3.11"
+          - fedora-version: "39"
+            python-version: "3.12"
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - name: Install dependencies
-      run: make build-dep-ubuntu test-dep-ubuntu
+      - name: Install dependencies
+        run: make build-dep-ubuntu test-dep-ubuntu
 
-    - name: Set up Python ${{ matrix.python-version }} with caching
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ matrix.python-version }}
-        cache: 'pip'
+      - name: Set up Python ${{ matrix.python-version }} with caching
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
 
-    - name: Install requirements
-      run: pip install -e '.[cassandra,dev,f38]'
+      - name: Install requirements
+        run: pip install -e '.[cassandra,dev,f${{ matrix.fedora-version }}]'
 
-    - name: Execute unit-tests
-      run: make unittest
+      - name: Execute unit-tests
+        run: make unittest
 
-    - id: upload-codecov
-      # Third-party action pinned to v2.1.0
-      uses: codecov/codecov-action@f32b3a3741e1053eb607407145bc9619351dc93b
-      with:
-        verbose: true
+      - id: upload-codecov
+        # Third-party action pinned to v2.1.0
+        uses: codecov/codecov-action@f32b3a3741e1053eb607407145bc9619351dc93b
+        with:
+          verbose: true
