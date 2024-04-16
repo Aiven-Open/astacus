@@ -3,7 +3,7 @@ Copyright (c) 2022 Aiven Ltd
 See LICENSE for details
 """
 
-from astacus.common import ipc
+from astacus.common import ipc, utils
 from astacus.common.cassandra.schema import CassandraSchema
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
@@ -166,12 +166,7 @@ async def test_step_wait_cassandra_up(mocker: MockerFixture, steps: list[bool], 
         return get_schema_steps.pop(0), "unused-error"
 
     mocker.patch.object(restore_steps, "get_schema_hash", new=get_schema_hash)
-
-    mocker.patch.object(
-        restore_steps.utils,  # type: ignore[attr-defined]
-        "exponential_backoff",
-        return_value=AsyncIterableWrapper(steps),
-    )
+    mocker.patch.object(utils, "exponential_backoff", return_value=AsyncIterableWrapper(steps))
 
     step = restore_steps.WaitCassandraUpStep(duration=123, replaced_node_step=None)
     context = base.StepsContext()
