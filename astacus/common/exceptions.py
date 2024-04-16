@@ -24,6 +24,10 @@ class InsufficientAZsException(PermanentException):
     pass
 
 
+class ImbalancedAZsException(PermanentException):
+    pass
+
+
 class NotFoundException(PermanentException):
     pass
 

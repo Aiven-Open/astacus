@@ -292,6 +292,7 @@ class MapNodesStep(Step[NodeBackupIndices]):
     """
 
     partial_restore_nodes: Sequence[ipc.PartialRestoreRequestNode] | None = None
+    ignore_imbalanced_azs: bool = False
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> NodeBackupIndices:
         # AZ distribution should in theory be forced to match, but in
@@ -307,6 +308,7 @@ class MapNodesStep(Step[NodeBackupIndices]):
             partial_restore_nodes=self.partial_restore_nodes,
             snapshot_results=snapshot_results,
             nodes=cluster.nodes,
+            ignore_imbalanced_azs=self.ignore_imbalanced_azs,
         )
 
 
@@ -676,7 +678,8 @@ def get_node_to_backup_index(
     partial_restore_nodes: Sequence[ipc.PartialRestoreRequestNode] | None,
     snapshot_results: Sequence[ipc.SnapshotResult],
     nodes: Sequence[CoordinatorNode],
-) -> Sequence[int | None]:
+    ignore_imbalanced_azs: bool = False,
+) -> NodeBackupIndices:
     if partial_restore_nodes:
         return get_node_to_backup_index_from_partial_restore_nodes(
             partial_restore_nodes=partial_restore_nodes,
@@ -694,13 +697,25 @@ def get_node_to_backup_index(
     if len(azs_in_backup) > len(azs_in_nodes):
         azs_missing = len(azs_in_backup) - len(azs_in_nodes)
         raise exceptions.InsufficientAZsException(f"{azs_missing} az(s) missing - unable to restore backup")
-
-    return get_node_to_backup_index_from_azs(
-        snapshot_results=snapshot_results,
-        nodes=nodes,
-        azs_in_backup=azs_in_backup,
-        azs_in_nodes=azs_in_nodes,
-    )
+    try:
+        return get_node_to_backup_index_from_azs(
+            snapshot_results=snapshot_results,
+            nodes=nodes,
+            azs_in_backup=azs_in_backup,
+            azs_in_nodes=azs_in_nodes,
+        )
+    except exceptions.ImbalancedAZsException:
+        if not ignore_imbalanced_azs:
+            raise
+        modified_snapshot_results = [
+            msgspec.structs.replace(result, az=node.az) for result, node in zip(snapshot_results, nodes, strict=True)
+        ]
+        return get_node_to_backup_index_from_azs(
+            snapshot_results=modified_snapshot_results,
+            nodes=nodes,
+            azs_in_backup=azs_in_nodes,
+            azs_in_nodes=azs_in_nodes,
+        )
 
 
 def get_node_to_backup_index_from_partial_restore_nodes(
@@ -759,7 +774,7 @@ def get_node_to_backup_index_from_azs(
     for (backup_az, backup_n), (node_az, node_n) in zip(azs_in_backup.most_common(), azs_in_nodes.most_common()):
         if backup_n > node_n:
             missing_n = backup_n - node_n
-            raise exceptions.InsufficientNodesException(
+            raise exceptions.ImbalancedAZsException(
                 f"AZ {node_az}, to be restored from {backup_az}, is missing {missing_n} nodes"
             )
 

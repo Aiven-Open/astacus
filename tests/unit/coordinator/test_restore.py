@@ -162,28 +162,113 @@ def test_restore(rt: RestoreTest, app: FastAPI, client: TestClient, mstorage: Mu
         assert app.state.coordinator_state.op_info.op_id == 1
 
 
+@dataclass(frozen=True)
+class NodeToBackupCase:
+    node_azlist: list[str]
+    backup_azlist: list[str]
+    ignore_imbalanced_azs: bool
+    expected_index: NodeBackupIndices | None
+    exception: AbstractContextManager
+    name: str
+
+
 @pytest.mark.parametrize(
-    "node_azlist,backup_azlist,expected_index,exception",
+    "case",
     [
         # successful cases
-        ([], [], [], does_not_raise()),
-        (["foo", "foo", "bar"], ["1", "2", "2"], [1, 2, 0], does_not_raise()),
-        (["a", "bb", "bb", "ccc", "ccc", "ccc"], ["1", "2", "2"], [None, 0, None, 1, 2, None], does_not_raise()),
-        (["a", "bb", "bb", "ccc", "ccc", "ccc"], ["3", "3", "3", "1", "2", "2"], [3, 4, 5, 0, 1, 2], does_not_raise()),
+        NodeToBackupCase(
+            node_azlist=[],
+            backup_azlist=[],
+            ignore_imbalanced_azs=False,
+            expected_index=[],
+            exception=does_not_raise(),
+            name="no-nodes",
+        ),
+        NodeToBackupCase(
+            node_azlist=["foo", "foo", "bar"],
+            backup_azlist=["1", "2", "2"],
+            ignore_imbalanced_azs=False,
+            expected_index=[1, 2, 0],
+            exception=does_not_raise(),
+            name="matching-distribution",
+        ),
+        NodeToBackupCase(
+            node_azlist=["a", "bb", "bb", "ccc", "ccc", "ccc"],
+            backup_azlist=["1", "2", "2"],
+            ignore_imbalanced_azs=False,
+            expected_index=[None, 0, None, 1, 2, None],
+            exception=does_not_raise(),
+            name="overcomplete-node-set",
+        ),
+        NodeToBackupCase(
+            node_azlist=["a", "bb", "bb", "ccc", "ccc", "ccc"],
+            backup_azlist=["3", "3", "3", "1", "2", "2"],
+            ignore_imbalanced_azs=False,
+            expected_index=[
+                3,
+                4,
+                5,
+                0,
+                1,
+                2,
+            ],
+            exception=does_not_raise(),
+            name="matching-distribution-3azs",
+        ),
         # errors
-        (["foo", "foo"], ["1", "2", "2"], None, pytest.raises(exceptions.InsufficientNodesException)),
-        (["foo", "foo", "foo"], ["1", "2", "2"], None, pytest.raises(exceptions.InsufficientAZsException)),
-        (["foo", "foo", "bar", "bar"], ["1", "3", "3", "3"], None, pytest.raises(exceptions.InsufficientNodesException)),
+        NodeToBackupCase(
+            node_azlist=["foo", "foo"],
+            backup_azlist=["1", "2", "2"],
+            ignore_imbalanced_azs=False,
+            expected_index=None,
+            exception=pytest.raises(exceptions.InsufficientNodesException),
+            name="insufficient-nodes",
+        ),
+        NodeToBackupCase(
+            node_azlist=["foo", "foo", "foo"],
+            backup_azlist=["1", "2", "2"],
+            ignore_imbalanced_azs=False,
+            expected_index=None,
+            exception=pytest.raises(exceptions.InsufficientAZsException),
+            name="insufficient-azs",
+        ),
+        NodeToBackupCase(
+            node_azlist=["foo", "foo", "bar", "bar"],
+            backup_azlist=["1", "3", "3", "3"],
+            ignore_imbalanced_azs=False,
+            expected_index=None,
+            exception=pytest.raises(exceptions.ImbalancedAZsException),
+            name="imbalanced-azs",
+        ),
+        # ignored errors (insufficient nodes raise, imbalanced AZs doesn't)
+        NodeToBackupCase(
+            node_azlist=["foo", "foo"],
+            backup_azlist=["1", "2", "2"],
+            ignore_imbalanced_azs=True,
+            expected_index=None,
+            exception=pytest.raises(exceptions.InsufficientNodesException),
+            name="insufficient-nodes-not-ignored",
+        ),
+        NodeToBackupCase(
+            node_azlist=["foo", "foo", "bar", "bar"],
+            backup_azlist=["1", "3", "3", "3"],
+            ignore_imbalanced_azs=True,
+            expected_index=[0, 1, 2, 3],
+            exception=does_not_raise(),
+            name="imbalanced-azs-ignored",
+        ),
     ],
+    ids=lambda case: case.name,
 )
-def test_node_to_backup_index(
-    node_azlist: list[str], backup_azlist: list[str], expected_index: list[int], exception: AbstractContextManager
-) -> None:
-    snapshot_results = [ipc.SnapshotResult(az=az) for az in backup_azlist]
-    nodes = [CoordinatorNode(url="unused", az=az) for az in node_azlist]
-    with exception:
-        assert expected_index == get_node_to_backup_index(
-            partial_restore_nodes=None, snapshot_results=snapshot_results, nodes=nodes
+def test_node_to_backup_index(case: NodeToBackupCase) -> None:
+    snapshot_results = [ipc.SnapshotResult(az=az) for az in case.backup_azlist]
+    nodes = [CoordinatorNode(url="unused", az=az) for az in case.node_azlist]
+    with case.exception:
+        assert case.expected_index == get_node_to_backup_index(
+            partial_restore_nodes=None,
+            snapshot_results=snapshot_results,
+            nodes=nodes,
+            ignore_imbalanced_azs=case.ignore_imbalanced_azs,
         )
 
 
