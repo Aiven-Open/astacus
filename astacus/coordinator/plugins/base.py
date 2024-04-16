@@ -17,7 +17,7 @@ from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.manifest import download_backup_manifest, download_backup_min_manifest
 from collections import Counter
 from collections.abc import Sequence, Set
-from typing import Any, Counter as TCounter, Generic, TypeVar
+from typing import Any, Counter as TCounter, Generic, TypeAlias, TypeVar
 
 import dataclasses
 import datetime
@@ -29,6 +29,8 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 StepResult_co = TypeVar("StepResult_co", covariant=True)
+
+NodeBackupIndices: TypeAlias = Sequence[int | None]
 
 
 class CoordinatorPlugin(AstacusModel):
@@ -284,14 +286,14 @@ class BackupManifestStep(Step[ipc.BackupManifest]):
 
 
 @dataclasses.dataclass
-class MapNodesStep(Step[Sequence[int | None]]):
+class MapNodesStep(Step[NodeBackupIndices]):
     """
     Create an index mapping nodes from cluster configuration to nodes in the backup manifest.
     """
 
     partial_restore_nodes: Sequence[ipc.PartialRestoreRequestNode] | None = None
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> Sequence[int | None]:
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> NodeBackupIndices:
         # AZ distribution should in theory be forced to match, but in
         # practise it doesn't really matter. So we restore nodes 'as
         # well as we can' and hope that is well enough (or whoever
@@ -475,7 +477,7 @@ class RestoreDeltasStep(Step[None]):
         *,
         nodes: Sequence[CoordinatorNode],
         cluster: Cluster,
-        node_to_backup_index: Sequence[int | None],
+        node_to_backup_index: NodeBackupIndices,
         delta_manifest: ipc.BackupManifest,
     ) -> None:
         reqs: list[ipc.NodeRequest] = []
@@ -520,7 +522,7 @@ class RestoreDeltasStep(Step[None]):
         *,
         nodes: Sequence[CoordinatorNode],
         cluster: Cluster,
-        node_to_backup_index: Sequence[int | None],
+        node_to_backup_index: NodeBackupIndices,
         delta_manifest: ipc.BackupManifest,
     ) -> None:
         reqs: list[ipc.NodeRequest] = []
@@ -706,7 +708,7 @@ def get_node_to_backup_index_from_partial_restore_nodes(
     partial_restore_nodes: Sequence[ipc.PartialRestoreRequestNode],
     snapshot_results: Sequence[ipc.SnapshotResult],
     nodes: Sequence[CoordinatorNode],
-) -> Sequence[int | None]:
+) -> NodeBackupIndices:
     node_to_backup_index: list[int | None] = [None] * len(nodes)
     hostname_to_backup_index: dict[str | None, int] = {}
     url_to_node_index: dict[str | None, int] = {}
@@ -751,7 +753,7 @@ def get_node_to_backup_index_from_azs(
     nodes: Sequence[CoordinatorNode],
     azs_in_backup: TCounter[str],
     azs_in_nodes: TCounter[str],
-) -> Sequence[int | None]:
+) -> NodeBackupIndices:
     node_to_backup_index: list[int | None] = [None] * len(nodes)
     # This is strictly speaking just best-effort assignment
     for (backup_az, backup_n), (node_az, node_n) in zip(azs_in_backup.most_common(), azs_in_nodes.most_common()):

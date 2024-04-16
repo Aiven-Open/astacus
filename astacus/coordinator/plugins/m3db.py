@@ -14,6 +14,7 @@ from .base import (
     CoordinatorPlugin,
     ListHexdigestsStep,
     MapNodesStep,
+    NodeBackupIndices,
     OperationContext,
     RestoreStep,
     SnapshotStep,
@@ -191,7 +192,7 @@ def validate_m3_config(placement_nodes: Sequence[m3placement.M3PlacementNode], n
 def rewrite_m3db_placement(
     *,
     key: ETCDKey,
-    node_to_backup_index: Sequence[int | None],
+    node_to_backup_index: NodeBackupIndices,
     src_placement_nodes: Sequence[m3placement.M3PlacementNode],
     dst_placement_nodes: Sequence[m3placement.M3PlacementNode],
     nodes: Sequence[CoordinatorNode],

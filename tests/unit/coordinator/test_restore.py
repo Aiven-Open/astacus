@@ -9,7 +9,7 @@ from astacus.common import exceptions, ipc
 from astacus.common.ipc import Plugin
 from astacus.common.rohmustorage import MultiRohmuStorage
 from astacus.coordinator.config import CoordinatorNode
-from astacus.coordinator.plugins.base import get_node_to_backup_index
+from astacus.coordinator.plugins.base import get_node_to_backup_index, NodeBackupIndices
 from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext as does_not_raise
 from dataclasses import dataclass
