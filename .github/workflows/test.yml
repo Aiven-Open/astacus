@@ -34,8 +34,8 @@ jobs:
       - name: Install requirements
         run: pip install -e '.[cassandra,dev,f${{ matrix.fedora-version }}]'
 
-      - name: Execute unit-tests
-        run: make unittest
+      - name: Execute lints and tests
+        run: make tests
 
       - id: upload-codecov
         # Third-party action pinned to v2.1.0
