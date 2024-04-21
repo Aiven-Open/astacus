@@ -24,11 +24,11 @@ from .manifest import (
 from .parts import list_parts_to_attach
 from .replication import DatabaseReplica, get_databases_replicas, get_shard_and_replica, sync_replicated_database
 from astacus.common import ipc
-from astacus.common.asyncstorage import AsyncJsonStorage
 from astacus.common.exceptions import TransientException
 from astacus.common.limiter import gather_limited
+from astacus.common.storage import JsonStorage
 from astacus.coordinator.cluster import Cluster
-from astacus.coordinator.manifest import download_backup_manifest
+from astacus.coordinator.manifest import download_backup_manifest_sync
 from astacus.coordinator.plugins.base import (
     BackupManifestStep,
     ComputeKeptBackupsStep,
@@ -36,6 +36,7 @@ from astacus.coordinator.plugins.base import (
     Step,
     StepFailedError,
     StepsContext,
+    SyncStep,
 )
 from astacus.coordinator.plugins.zookeeper import ChangeWatch, TransactionError, ZooKeeperClient
 from base64 import b64decode
@@ -682,7 +683,7 @@ class RestoreReplicaStep(Step[None]):
 
 
 @dataclasses.dataclass
-class RestoreObjectStorageFilesStep(Step[None]):
+class RestoreObjectStorageFilesStep(SyncStep[None]):
     """
     If the source and target disks are not the same, restore object storage files by copying them
     from the source to the target disk.
@@ -691,7 +692,7 @@ class RestoreObjectStorageFilesStep(Step[None]):
     source_disks: Disks
     target_disks: Disks
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
+    def run_sync_step(self, cluster: Cluster, context: StepsContext) -> None:
         clickhouse_manifest = context.get_result(ClickHouseManifestStep)
         for object_storage_files in clickhouse_manifest.object_storage_files:
             if len(object_storage_files.files) > 0:
@@ -704,7 +705,7 @@ class RestoreObjectStorageFilesStep(Step[None]):
                     raise StepFailedError(f"Target disk named {disk_name!r} isn't configured as object storage")
                 if source_storage.get_config() != target_storage.get_config():
                     paths = [file.path for file in object_storage_files.files]
-                    await target_storage.copy_items_from(source_storage, paths)
+                    target_storage.copy_items_from(source_storage, paths)
 
 
 @dataclasses.dataclass
@@ -777,16 +778,16 @@ class SyncTableReplicasStep(Step[None]):
 
 
 @dataclasses.dataclass
-class DeleteDanglingObjectStorageFilesStep(Step[None]):
+class DeleteDanglingObjectStorageFilesStep(SyncStep[None]):
     """
     Delete object storage files that were created before the most recent backup
     and that are not part of any backup.
     """
 
     disks: Disks
-    json_storage: AsyncJsonStorage
+    json_storage: JsonStorage
 
-    async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
+    def run_sync_step(self, cluster: Cluster, context: StepsContext) -> None:
         backup_manifests = context.get_result(ComputeKeptBackupsStep)
         if len(backup_manifests) < 1:
             logger.info("no backup manifest, not deleting any object storage disk file")
@@ -797,7 +798,7 @@ class DeleteDanglingObjectStorageFilesStep(Step[None]):
 
         kept_paths: dict[str, set[str]] = {}
         for manifest_min in backup_manifests:
-            manifest_data = await download_backup_manifest(self.json_storage, manifest_min.filename)
+            manifest_data = download_backup_manifest_sync(self.json_storage, manifest_min.filename)
             clickhouse_manifest = ClickHouseManifest.from_plugin_data(manifest_data.plugin_data)
             for object_storage_files in clickhouse_manifest.object_storage_files:
                 disk_kept_paths = kept_paths.setdefault(object_storage_files.disk_name, set())
@@ -809,7 +810,7 @@ class DeleteDanglingObjectStorageFilesStep(Step[None]):
                 raise StepFailedError(f"Could not find object storage disk named {disk_name!r}")
             keys_to_remove = []
             logger.info("found %d object storage files to keep in disk %r", len(disk_kept_paths), disk_name)
-            disk_object_storage_items = await disk_object_storage.list_items()
+            disk_object_storage_items = disk_object_storage.list_items()
             for item in disk_object_storage_items:
                 # We don't know if objects newer than the latest backup should be kept or not,
                 # so we leave them for now. We'll delete them if necessary once there is a newer
@@ -826,7 +827,7 @@ class DeleteDanglingObjectStorageFilesStep(Step[None]):
             for key_to_remove in keys_to_remove:
                 # We should really have a batch delete operation there, but it's missing from rohmu
                 logger.debug("deleting object storage file in disk %r : %r", disk_name, key_to_remove)
-                await disk_object_storage.delete_item(key_to_remove)
+                disk_object_storage.delete_item(key_to_remove)
 
 
 @dataclasses.dataclass
