@@ -15,7 +15,6 @@ from astacus.coordinator.plugins.base import (
     StepFailedError,
     StepsContext,
 )
-from astacus.coordinator.plugins.clickhouse.async_object_storage import MemoryObjectStorage, ObjectStorage, ObjectStorageItem
 from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, StubClickHouseClient
 from astacus.coordinator.plugins.clickhouse.config import (
     ClickHouseConfiguration,
@@ -35,6 +34,7 @@ from astacus.coordinator.plugins.clickhouse.manifest import (
     ReplicatedDatabase,
     Table,
 )
+from astacus.coordinator.plugins.clickhouse.object_storage import MemoryObjectStorage, ObjectStorage, ObjectStorageItem
 from astacus.coordinator.plugins.clickhouse.replication import DatabaseReplica
 from astacus.coordinator.plugins.clickhouse.steps import (
     AttachMergeTreePartsStep,

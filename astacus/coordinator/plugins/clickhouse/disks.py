@@ -2,9 +2,9 @@
 Copyright (c) 2023 Aiven Ltd
 See LICENSE for details
 """
-from .async_object_storage import ObjectStorage, ThreadSafeRohmuStorage
 from .config import DiskConfiguration, DiskType
 from .escaping import escape_for_file_name, unescape_from_file_name
+from .object_storage import ObjectStorage, ThreadSafeRohmuStorage
 from astacus.common.magic import DEFAULT_EMBEDDED_FILE_SIZE
 from astacus.common.snapshot import SnapshotGroup
 from collections.abc import Sequence
