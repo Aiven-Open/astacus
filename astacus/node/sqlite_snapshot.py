@@ -127,7 +127,7 @@ class SQLiteSnapshotter(Snapshotter[SQLiteSnapshot]):
             if any(parent.name == magic.ASTACUS_TMPDIR for parent in dir_path.parents):
                 continue
             rel_dir = dir_path.relative_to(self._src)
-            (self._dst / rel_dir).mkdir(parents=True, exist_ok=True)
+            (self._dst / rel_dir).mkdir(parents=True, exist_ok=True, mode=0o770)
             for f in files:
                 rel_path = str(rel_dir / f)
                 if not (dir_path / f).is_symlink() and self._groups.any_match(rel_path):
