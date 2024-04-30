@@ -32,7 +32,7 @@ jobs:
           cache: "pip"
 
       - name: Install requirements
-        run: pip install -e '.[cassandra,dev,f${{ matrix.fedora-version }}]'
+        run: pip install -e '.[cassandra,f${{ matrix.fedora-version }}-dev,f${{ matrix.fedora-version }}]'
 
       - name: Execute lints and tests
         run: make tests
