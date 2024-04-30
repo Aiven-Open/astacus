@@ -12,6 +12,10 @@ import pytest
 CLICKHOUSE_PATH_OPTION = "--clickhouse-path"
 CLICKHOUSE_RESTORE_PATH_OPTION = "--clickhouse-restore-path"
 
+pytest_plugins = [
+    "tests.plugins.asyncio_loop",
+]
+
 
 def pytest_addoption(parser: Parser) -> None:
     parser.addoption(
