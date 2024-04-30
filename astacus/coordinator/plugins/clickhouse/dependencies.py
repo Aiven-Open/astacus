@@ -3,8 +3,8 @@ Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
 from astacus.coordinator.plugins.clickhouse.manifest import AccessEntity, Table
-from collections.abc import Sequence
-from typing import Callable, Hashable, TypeVar
+from collections.abc import Hashable, Sequence
+from typing import Callable, TypeVar
 
 # noinspection PyCompatibility
 import graphlib
