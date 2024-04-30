@@ -4,7 +4,7 @@ See LICENSE for details
 """
 from astacus.common.utils import build_netloc
 from astacus.coordinator.plugins.zookeeper import KazooZooKeeperClient
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from pathlib import Path
 from types import MappingProxyType
 
@@ -19,16 +19,6 @@ import tempfile
 import threading
 
 logger = logging.getLogger(__name__)
-
-
-@pytest.fixture(scope="module", name="event_loop")
-def fixture_event_loop() -> Iterator[asyncio.AbstractEventLoop]:
-    # This is the same as the original `event_loop` fixture from `pytest_asyncio`
-    # but with a module scope, re-declaring this fixture is their suggested way
-    # of locally increasing the scope of this fixture.
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
 
 
 async def get_command_path(name: str) -> Path | None:
@@ -147,7 +137,7 @@ def fixture_ports() -> Ports:
     return Ports()
 
 
-@pytest.fixture(scope="module", name="zookeeper")
+@pytest.fixture(name="zookeeper")
 async def fixture_zookeeper(ports: Ports) -> AsyncIterator[Service]:
     async with create_zookeeper(ports) as zookeeper:
         yield zookeeper
