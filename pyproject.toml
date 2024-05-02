@@ -94,7 +94,7 @@ dev = [
     # Needed by pre-commit to lint and test the project
     "pre-commit>=3.7.0",
     "anyio==3.5.0",
-    "pylint==2.17.4",
+    "pylint==3.0.4",
     "pytest-cov==3.0.0",
     "pytest-mock==3.10.0",
     "pytest-order==1.0.0",
