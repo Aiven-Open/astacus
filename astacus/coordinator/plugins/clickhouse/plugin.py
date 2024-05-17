@@ -224,5 +224,8 @@ class ClickHousePlugin(CoordinatorPlugin):
                 json_storage=context.json_storage,
                 hexdigest_storage=context.hexdigest_storage,
             ),
-            DeleteDanglingObjectStorageFilesStep(disks=disks, json_storage=context.json_storage),
+            DeleteDanglingObjectStorageFilesStep(
+                disks=disks,
+                json_storage=context.json_storage.storage,
+            ),
         ]

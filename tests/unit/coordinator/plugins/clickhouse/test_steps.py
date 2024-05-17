@@ -15,11 +15,6 @@ from astacus.coordinator.plugins.base import (
     StepFailedError,
     StepsContext,
 )
-from astacus.coordinator.plugins.clickhouse.async_object_storage import (
-    AsyncObjectStorage,
-    MemoryAsyncObjectStorage,
-    ObjectStorageItem,
-)
 from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, StubClickHouseClient
 from astacus.coordinator.plugins.clickhouse.config import (
     ClickHouseConfiguration,
@@ -39,6 +34,7 @@ from astacus.coordinator.plugins.clickhouse.manifest import (
     ReplicatedDatabase,
     Table,
 )
+from astacus.coordinator.plugins.clickhouse.object_storage import MemoryObjectStorage, ObjectStorage, ObjectStorageItem
 from astacus.coordinator.plugins.clickhouse.replication import DatabaseReplica
 from astacus.coordinator.plugins.clickhouse.steps import (
     AttachMergeTreePartsStep,
@@ -980,8 +976,8 @@ async def test_restore_object_storage_files() -> None:
         ObjectStorageItem(key=file.path, last_modified=datetime.datetime(2020, 1, 2, tzinfo=datetime.timezone.utc))
         for file in SAMPLE_MANIFEST.object_storage_files[0].files
     ]
-    source_object_storage = MemoryAsyncObjectStorage.from_items(object_storage_items)
-    target_object_storage = MemoryAsyncObjectStorage()
+    source_object_storage = MemoryObjectStorage.from_items(object_storage_items)
+    target_object_storage = MemoryObjectStorage()
     source_disks = Disks(disks=[create_object_storage_disk("remote", source_object_storage)])
     target_disks = Disks(disks=[create_object_storage_disk("remote", target_object_storage)])
     step = RestoreObjectStorageFilesStep(source_disks=source_disks, target_disks=target_disks)
@@ -989,11 +985,11 @@ async def test_restore_object_storage_files() -> None:
     context = StepsContext()
     context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
     await step.run_step(cluster, context)
-    assert await target_object_storage.list_items() == object_storage_items
+    assert target_object_storage.list_items() == object_storage_items
 
 
 async def test_restore_object_storage_files_does_nothing_is_storages_have_same_config() -> None:
-    same_object_storage = mock.Mock(spec_set=AsyncObjectStorage)
+    same_object_storage = mock.Mock(spec_set=ObjectStorage)
     source_disks = Disks(disks=[create_object_storage_disk("remote", same_object_storage)])
     target_disks = Disks(disks=[create_object_storage_disk("remote", same_object_storage)])
     step = RestoreObjectStorageFilesStep(source_disks=source_disks, target_disks=target_disks)
@@ -1006,7 +1002,7 @@ async def test_restore_object_storage_files_does_nothing_is_storages_have_same_c
 
 async def test_restore_object_storage_files_fails_if_source_disk_has_no_object_storage_config() -> None:
     source_disks = Disks(disks=[create_object_storage_disk("remote", None)])
-    target_disks = Disks(disks=[create_object_storage_disk("remote", MemoryAsyncObjectStorage())])
+    target_disks = Disks(disks=[create_object_storage_disk("remote", MemoryObjectStorage())])
     step = RestoreObjectStorageFilesStep(source_disks=source_disks, target_disks=target_disks)
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
@@ -1016,7 +1012,7 @@ async def test_restore_object_storage_files_fails_if_source_disk_has_no_object_s
 
 
 async def test_restore_object_storage_files_fails_if_target_disk_has_no_object_storage_config() -> None:
-    source_disks = Disks(disks=[create_object_storage_disk("remote", MemoryAsyncObjectStorage())])
+    source_disks = Disks(disks=[create_object_storage_disk("remote", MemoryObjectStorage())])
     target_disks = Disks(disks=[create_object_storage_disk("remote", None)])
     step = RestoreObjectStorageFilesStep(source_disks=source_disks, target_disks=target_disks)
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
@@ -1127,7 +1123,7 @@ def check_each_pair_of_calls_has_the_same_session_id(mock_calls: Sequence[MockCa
 
 
 async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
-    object_storage = MemoryAsyncObjectStorage.from_items(
+    object_storage = MemoryObjectStorage.from_items(
         [
             ObjectStorageItem(
                 key="not_used/and_old", last_modified=datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)
@@ -1188,12 +1184,12 @@ async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
         storage=MemoryJsonStorage(items={b.filename: msgspec.json.encode(b) for b in manifests})
     )
     disks = Disks(disks=[create_object_storage_disk("remote", object_storage)])
-    step = DeleteDanglingObjectStorageFilesStep(disks=disks, json_storage=async_json_storage)
+    step = DeleteDanglingObjectStorageFilesStep(disks=disks, json_storage=async_json_storage.storage)
     cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
     context = StepsContext()
     context.set_result(ComputeKeptBackupsStep, [ManifestMin.from_manifest(b) for b in manifests])
     await step.run_step(cluster, context)
-    assert await object_storage.list_items() == [
+    assert object_storage.list_items() == [
         # Only not_used/and_old was deleted
         ObjectStorageItem(key="abc/defghi", last_modified=datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)),
         ObjectStorageItem(key="jkl/mnopqr", last_modified=datetime.datetime(2020, 1, 2, tzinfo=datetime.timezone.utc)),
@@ -1241,7 +1237,7 @@ async def test_run_partition_cmd_on_every_node(
             client.execute.assert_not_called()
 
 
-def create_object_storage_disk(name: str, object_storage: AsyncObjectStorage | None) -> Disk:
+def create_object_storage_disk(name: str, object_storage: ObjectStorage | None) -> Disk:
     return Disk(type=DiskType.object_storage, name=name, path_parts=("disks", name), object_storage=object_storage)
 
 

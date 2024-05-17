@@ -2,9 +2,9 @@
 Copyright (c) 2023 Aiven Ltd
 See LICENSE for details
 """
-from .async_object_storage import AsyncObjectStorage, RohmuAsyncObjectStorage, ThreadSafeRohmuStorage
 from .config import DiskConfiguration, DiskType
 from .escaping import escape_for_file_name, unescape_from_file_name
+from .object_storage import ObjectStorage, ThreadSafeRohmuStorage
 from astacus.common.magic import DEFAULT_EMBEDDED_FILE_SIZE
 from astacus.common.snapshot import SnapshotGroup
 from collections.abc import Sequence
@@ -28,16 +28,16 @@ class Disk:
     type: DiskType
     name: str
     path_parts: tuple[str, ...]
-    object_storage: AsyncObjectStorage | None = None
+    object_storage: ObjectStorage | None = None
 
     @classmethod
     def from_disk_config(cls, config: DiskConfiguration, storage_name: str | None = None) -> "Disk":
         if config.object_storage is None:
-            object_storage: RohmuAsyncObjectStorage | None = None
+            object_storage: ThreadSafeRohmuStorage | None = None
         else:
             config_name = storage_name if storage_name is not None else config.object_storage.default_storage
             storage_config = config.object_storage.storages[config_name]
-            object_storage = RohmuAsyncObjectStorage(storage=ThreadSafeRohmuStorage(config=storage_config))
+            object_storage = ThreadSafeRohmuStorage(config=storage_config)
         return Disk(
             type=config.type,
             name=config.name,
@@ -93,7 +93,7 @@ class Disks:
             for disk in self.disks
         ]
 
-    def get_object_storage(self, *, disk_name: str) -> AsyncObjectStorage | None:
+    def get_object_storage(self, *, disk_name: str) -> ObjectStorage | None:
         for disk in self.disks:
             if disk.name == disk_name:
                 return disk.object_storage

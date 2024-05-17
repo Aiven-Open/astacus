@@ -17,6 +17,7 @@ from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.manifest import download_backup_manifest, download_backup_min_manifest
 from collections import Counter
 from collections.abc import Sequence, Set
+from starlette.concurrency import run_in_threadpool
 from typing import Any, Counter as TCounter, Generic, TypeVar
 
 import dataclasses
@@ -68,6 +69,14 @@ class OperationContext:
 
 class Step(Generic[StepResult_co]):
     async def run_step(self, cluster: Cluster, context: StepsContext) -> StepResult_co:
+        raise NotImplementedError
+
+
+class SyncStep(Step[StepResult_co]):
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> StepResult_co:
+        return await run_in_threadpool(self.run_sync_step, cluster, context)
+
+    def run_sync_step(self, cluster: Cluster, context: StepsContext) -> StepResult_co:
         raise NotImplementedError
 
 
