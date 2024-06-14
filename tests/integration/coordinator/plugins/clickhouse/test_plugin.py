@@ -282,6 +282,13 @@ async def setup_cluster_content(clients: Sequence[HttpClickHouseClient], use_nam
         b"CREATE MATERIALIZED VIEW default.materialized_view_deleted_source to default.data_table_for_mv "
         b"AS SELECT toInt32(thekey * 3) as thekey3 FROM default.source_table_for_view_deleted"
     )
+    await clients[0].execute(
+        b"CREATE DICTIONARY default.dictionary (thekey UInt32, thedata String) "
+        b"PRIMARY KEY thekey "
+        b"SOURCE(CLICKHOUSE(DB 'default' TABLE 'replicated_merge_tree')) "
+        b"LAYOUT(FLAT()) "
+        b"LIFETIME(0)"
+    )
     await clients[0].execute(b"INSERT INTO default.source_table_for_view_deleted VALUES (7, '7')")
     await clients[2].execute(b"INSERT INTO default.source_table_for_view_deleted VALUES (9, '9')")
     await clients[0].execute(b"DROP TABLE default.source_table_for_view_deleted")
@@ -540,3 +547,12 @@ async def test_restores_integration_tables(
         if not await is_engine_available(client, table_engine):
             pytest.skip(f"Table engine {table_engine.value} not available")
         assert bool(await client.execute(f"EXISTS TABLE {table_name}".encode()))
+
+
+async def test_restores_dictionaries(restored_cluster: Sequence[ClickHouseClient]) -> None:
+    s1_data = [["123", "foo"], ["456", "bar"]]
+    s2_data = [["789", "baz"]]
+    cluster_data = [s1_data, s1_data, s2_data]
+    for client, expected in zip(restored_cluster, cluster_data):
+        await client.execute(b"SYSTEM RELOAD DICTIONARY default.dictionary")
+        assert await client.execute(b"SELECT * FROM default.dictionary") == expected
