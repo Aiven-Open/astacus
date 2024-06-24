@@ -79,7 +79,7 @@ USER_CONFIG = """
 ClickHouseCommand = Sequence[str | Path]
 
 
-@pytest.fixture(scope="module", name="clickhouse_command")
+@pytest.fixture(scope="function", name="clickhouse_command")
 async def fixture_clickhouse_command(request: FixtureRequest) -> ClickHouseCommand:
     clickhouse_path = request.config.getoption(CLICKHOUSE_PATH_OPTION)
     if clickhouse_path is None:
@@ -91,7 +91,7 @@ async def fixture_clickhouse_command(request: FixtureRequest) -> ClickHouseComma
     return get_clickhouse_command(clickhouse_path)
 
 
-@pytest.fixture(scope="module", name="clickhouse_restore_command")
+@pytest.fixture(scope="function", name="clickhouse_restore_command")
 def fixture_clickhouse_restore_command(request: FixtureRequest, clickhouse_command: ClickHouseCommand) -> ClickHouseCommand:
     clickhouse_restore_path = request.config.getoption(CLICKHOUSE_RESTORE_PATH_OPTION)
     if clickhouse_restore_path is None:
@@ -103,7 +103,7 @@ def get_clickhouse_command(clickhouse_path: Path) -> ClickHouseCommand:
     return [clickhouse_path] if clickhouse_path.name.endswith("-server") else [clickhouse_path, "server"]
 
 
-@pytest.fixture(scope="module", name="clickhouse")
+@pytest.fixture(scope="function", name="clickhouse")
 async def fixture_clickhouse(ports: Ports, clickhouse_command: ClickHouseCommand) -> AsyncIterator[Service]:
     async with create_clickhouse_service(ports, clickhouse_command) as service:
         yield service
@@ -192,13 +192,13 @@ class MinioService:
             s3_client.delete_bucket(Bucket=bucket_name)  # type: ignore[attr-defined]
 
 
-@pytest.fixture(scope="module", name="minio")
+@pytest.fixture(scope="function", name="minio")
 async def fixture_minio(ports: Ports) -> AsyncIterator[MinioService]:
     async with create_minio_service(ports) as service:
         yield service
 
 
-@pytest.fixture(scope="module", name="minio_bucket")
+@pytest.fixture(scope="function", name="minio_bucket")
 async def fixture_minio_bucket(minio: MinioService) -> AsyncIterator[MinioBucket]:
     with minio.bucket(bucket_name="clickhouse-bucket") as bucket:
         yield bucket

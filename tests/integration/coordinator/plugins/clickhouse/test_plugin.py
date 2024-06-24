@@ -93,7 +93,7 @@ async def restorable_cluster_manager(
         yield storage_path
 
 
-@pytest.fixture(scope="module", name="restorable_cluster")
+@pytest.fixture(scope="function", name="restorable_cluster")
 async def fixture_restorable_cluster(
     ports: Ports,
     clickhouse_command: ClickHouseCommand,
@@ -148,7 +148,7 @@ async def restored_cluster_manager(
                     yield clients
 
 
-@pytest.fixture(scope="module", name="restored_cluster", params=[*get_restore_steps_names(), None])
+@pytest.fixture(scope="function", name="restored_cluster", params=[*get_restore_steps_names(), None])
 async def fixture_restored_cluster(
     ports: Ports,
     request: SubRequest,
