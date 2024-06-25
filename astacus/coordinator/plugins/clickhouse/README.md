@@ -43,6 +43,7 @@
   },
   "replicated_access_zookeeper_path": "/clickhouse/access",
   "replicated_databases_zookeeper_path": "/clickhouse/databases",
+  "replicated_user_defined_zookeeper_path": "/clickhouse/user_defined_functions",
   "replicated_databases_settings": {
     "max_broken_tables_ratio": 0.5,
     "max_replication_lag_to_enqueue": 10,

@@ -27,9 +27,11 @@ from .steps import (
     RestoreObjectStorageFilesStep,
     RestoreReplicaStep,
     RestoreReplicatedDatabasesStep,
+    RestoreUserDefinedFunctionsStep,
     RetrieveAccessEntitiesStep,
     RetrieveDatabasesAndTablesStep,
     RetrieveMacrosStep,
+    RetrieveUserDefinedFunctionsStep,
     SyncDatabaseReplicasStep,
     SyncTableReplicasStep,
     UnfreezeTablesStep,
@@ -64,6 +66,7 @@ class ClickHousePlugin(CoordinatorPlugin):
     clickhouse: ClickHouseConfiguration = ClickHouseConfiguration()
     replicated_access_zookeeper_path: str = "/clickhouse/access"
     replicated_databases_zookeeper_path: str = "/clickhouse/databases"
+    replicated_user_defined_zookeeper_path: str | None = None
     replicated_databases_settings: ReplicatedDatabaseSettings = ReplicatedDatabaseSettings()
     freeze_name: str = "astacus"
     disks: Sequence[DiskConfiguration] = [DiskConfiguration(type=DiskType.local, path=Path(""), name="default")]
@@ -76,6 +79,7 @@ class ClickHousePlugin(CoordinatorPlugin):
     max_concurrent_create_databases: int = 10
     max_concurrent_create_databases_per_node: int = 10
     sync_databases_timeout: float = 60.0
+    sync_user_defined_functions_timeout: float = 60.0
     restart_replica_timeout: float = 300.0
     # Deprecated parameter, ignored
     max_concurrent_restart_replica: int = 10
@@ -114,6 +118,10 @@ class ClickHousePlugin(CoordinatorPlugin):
             RetrieveAccessEntitiesStep(
                 zookeeper_client=zookeeper_client,
                 access_entities_path=self.replicated_access_zookeeper_path,
+            ),
+            RetrieveUserDefinedFunctionsStep(
+                zookeeper_client=zookeeper_client,
+                replicated_user_defined_zookeeper_path=self.replicated_user_defined_zookeeper_path,
             ),
             RetrieveDatabasesAndTablesStep(clients=clickhouse_clients),
             RetrieveMacrosStep(clients=clickhouse_clients),
@@ -201,6 +209,12 @@ class ClickHousePlugin(CoordinatorPlugin):
                 clients=clients,
                 sync_timeout=self.sync_tables_timeout,
                 max_concurrent_sync_per_node=self.max_concurrent_sync_per_node,
+            ),
+            RestoreUserDefinedFunctionsStep(
+                zookeeper_client=zookeeper_client,
+                replicated_user_defined_zookeeper_path=self.replicated_user_defined_zookeeper_path,
+                clients=clients,
+                sync_user_defined_functions_timeout=self.sync_user_defined_functions_timeout,
             ),
             # Keeping this step last avoids access from non-admin users while we are still restoring
             RestoreAccessEntitiesStep(

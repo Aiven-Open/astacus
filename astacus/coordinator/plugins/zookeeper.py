@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.common.exceptions import TransientException
 from asyncio import to_thread
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
@@ -72,9 +73,9 @@ class ZooKeeperConnection:
 
         Auto-creates all parent nodes if they don't exist.
 
-        Does nothing if the node did not already exist.
+        Does nothing if the node already exists.
 
-        Returns `True` if the node was created
+        Returns `True` if the node was created.
         """
         try:
             await self.create(path, value)
