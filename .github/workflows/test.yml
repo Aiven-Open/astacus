@@ -18,7 +18,8 @@ jobs:
           - fedora-version: "38"
             python-version: "3.11"
           - fedora-version: "39"
-            python-version: "3.12"
+            # https://github.com/pydantic/pydantic/issues/9637
+            python-version: "3.12.3"
     steps:
       - uses: actions/checkout@v3
 
