@@ -89,7 +89,14 @@ class SQLiteSnapshot(Snapshot):
             self.db.unlink()
         else:
             self.db.parent.mkdir(parents=True, exist_ok=True)
-        con = sqlite3.connect(self.db, isolation_level=None, check_same_thread=False)
+        # Python 3.12+ fetch result are not consistent in multi-threading application
+        # and causing an API misuse error.
+        # The multithreading use is intended and supported because threadsafety is set to 3.
+        # In serialized mode, SQLite can be safely used by multiple threads with no restriction.
+        # Current solution is to set cached_statements=0 when connecting to the database.
+        # See issue https://github.com/python/cpython/issues/118172
+        assert sqlite3.threadsafety == 3, "sqlite is not multithreading safe."
+        con = sqlite3.connect(self.db, isolation_level=None, check_same_thread=False, cached_statements=0)
         con.executescript(
             """
             begin;
