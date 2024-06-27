@@ -20,6 +20,7 @@ from .manifest import (
     ClickHouseObjectStorageFiles,
     ReplicatedDatabase,
     Table,
+    UserDefinedFunction,
 )
 from .parts import list_parts_to_attach
 from .replication import DatabaseReplica, get_databases_replicas, get_shard_and_replica, sync_replicated_database
@@ -38,7 +39,7 @@ from astacus.coordinator.plugins.base import (
     StepsContext,
     SyncStep,
 )
-from astacus.coordinator.plugins.zookeeper import ChangeWatch, TransactionError, ZooKeeperClient
+from astacus.coordinator.plugins.zookeeper import ChangeWatch, NoNodeError, TransactionError, ZooKeeperClient
 from base64 import b64decode
 from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
 from typing import Any, cast, TypeVar
@@ -48,8 +49,10 @@ import base64
 import dataclasses
 import logging
 import msgspec
+import os
 import re
 import secrets
+import time
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -149,6 +152,33 @@ class RetrieveAccessEntitiesStep(Step[Sequence[AccessEntity]]):
                 # With care, we could instead look at what exactly changed and just update the minimum
                 raise TransientException("Concurrent modification during access entities retrieval")
         return access_entities
+
+
+@dataclasses.dataclass
+class RetrieveUserDefinedFunctionsStep(Step[Sequence[UserDefinedFunction]]):
+    zookeeper_client: ZooKeeperClient
+    replicated_user_defined_zookeeper_path: str | None
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> Sequence[UserDefinedFunction]:
+        if self.replicated_user_defined_zookeeper_path is None:
+            return []
+
+        user_defined_functions: list[UserDefinedFunction] = []
+        async with self.zookeeper_client.connect() as connection:
+            change_watch = ChangeWatch()
+            try:
+                children = await connection.get_children(self.replicated_user_defined_zookeeper_path, watch=change_watch)
+            except NoNodeError:
+                # The path doesn't exist, no user defined functions to restore
+                return []
+
+            for child in children:
+                user_defined_function_path = os.path.join(self.replicated_user_defined_zookeeper_path, child)
+                user_defined_function_value = await connection.get(user_defined_function_path, watch=change_watch)
+                user_defined_functions.append(UserDefinedFunction(path=child, create_query=user_defined_function_value))
+            if change_watch.has_changed:
+                raise TransientException("Concurrent modification during user_defined_function entities retrieval")
+        return user_defined_functions
 
 
 @dataclasses.dataclass
@@ -273,9 +303,11 @@ class PrepareClickHouseManifestStep(Step[dict[str, Any]]):
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> dict[str, Any]:
         databases, tables = context.get_result(RetrieveDatabasesAndTablesStep)
+        user_defined_functions = context.get_result(RetrieveUserDefinedFunctionsStep)
         manifest = ClickHouseManifest(
             version=ClickHouseBackupVersion.V2,
             access_entities=context.get_result(RetrieveAccessEntitiesStep),
+            user_defined_functions=user_defined_functions,
             replicated_databases=databases,
             tables=tables,
             object_storage_files=context.get_result(CollectObjectStorageFilesStep),
@@ -433,6 +465,25 @@ async def run_on_every_node(
     per_node_concurrency_limit: int,
 ) -> None:
     await asyncio.gather(*[gather_limited(per_node_concurrency_limit, fn(client)) for client in clients])
+
+
+async def wait_for_condition_on_every_node(
+    clients: Iterable[ClickHouseClient],
+    condition: Callable[[ClickHouseClient], Awaitable[bool]],
+    description: str,
+    timeout_seconds: float,
+    recheck_every_seconds: float = 1.0,
+) -> None:
+    async def wait_for_condition(client: ClickHouseClient) -> None:
+        start_time = time.monotonic()
+        while True:
+            if await condition(client):
+                return
+            if time.monotonic() - start_time > timeout_seconds:
+                raise StepFailedError(f"Timeout while waiting for {description}")
+            await asyncio.sleep(recheck_every_seconds)
+
+    await asyncio.gather(*(wait_for_condition(client) for client in clients))
 
 
 def get_restore_table_query(table: Table) -> bytes:
@@ -625,6 +676,39 @@ class RestoreAccessEntitiesStep(Step[None]):
                     # but we're not supposed to restore into a completely different
                     # ZooKeeper storage.
                     pass
+
+
+@dataclasses.dataclass
+class RestoreUserDefinedFunctionsStep(Step[None]):
+    zookeeper_client: ZooKeeperClient
+    replicated_user_defined_zookeeper_path: str | None
+    clients: Sequence[ClickHouseClient]
+    sync_user_defined_functions_timeout: float
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
+        if self.replicated_user_defined_zookeeper_path is None:
+            return
+
+        clickhouse_manifest = context.get_result(ClickHouseManifestStep)
+        if not clickhouse_manifest.user_defined_functions:
+            return
+
+        async with self.zookeeper_client.connect() as connection:
+            for user_defined_function in clickhouse_manifest.user_defined_functions:
+                path = os.path.join(self.replicated_user_defined_zookeeper_path, user_defined_function.path)
+                await connection.try_create(path, user_defined_function.create_query)
+
+        async def check_function_count(client: ClickHouseClient) -> bool:
+            count = await client.execute(b"""SELECT count(*) FROM system.functions WHERE origin = 'SQLUserDefined'""")
+            assert isinstance(count[0][0], str)
+            return int(count[0][0]) >= len(clickhouse_manifest.user_defined_functions)
+
+        await wait_for_condition_on_every_node(
+            clients=self.clients,
+            condition=check_function_count,
+            description="user defined functions to be restored",
+            timeout_seconds=self.sync_user_defined_functions_timeout,
+        )
 
 
 @dataclasses.dataclass

@@ -2,12 +2,14 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.coordinator.plugins.clickhouse.manifest import (
     AccessEntity,
     ClickHouseBackupVersion,
     ClickHouseManifest,
     ReplicatedDatabase,
     Table,
+    UserDefinedFunction,
 )
 from base64 import b64encode
 
@@ -46,6 +48,24 @@ SERIALIZED_TABLE = {
     "create_query": b64encode(b"CREATE TABLE ...").decode(),
     "dependencies": [[b64encode(b"db").decode(), b64encode(b"othertable").decode()]],
 }
+SAMPLE_USER_DEFINED_FUNCTIONS = [
+    UserDefinedFunction(
+        path="user_defined_function_1.sql", create_query=b"CREATE FUNCTION user_defined_function_1 AS (x) -> x + 1;\n"
+    ),
+    UserDefinedFunction(
+        path="user_defined_function_2.sql", create_query=b"CREATE FUNCTION user_defined_function_2 AS (x) -> x + 2;\n"
+    ),
+]
+SERIALIZED_USER_DEFINED_FUNCTIONS = [
+    {
+        "path": "user_defined_function_1.sql",
+        "create_query": b64encode(b"CREATE FUNCTION user_defined_function_1 AS (x) -> x + 1;\n"),
+    },
+    {
+        "path": "user_defined_function_2.sql",
+        "create_query": b64encode(b"CREATE FUNCTION user_defined_function_2 AS (x) -> x + 2;\n"),
+    },
+]
 
 
 @pytest.mark.parametrize(
@@ -128,6 +148,7 @@ def test_clickhouse_manifest_from_plugin_data() -> None:
             "access_entities": [SERIALIZED_ACCESS_ENTITY],
             "replicated_databases": [SERIALIZED_DATABASE],
             "tables": [SERIALIZED_TABLE],
+            "user_defined_functions": SERIALIZED_USER_DEFINED_FUNCTIONS,
         }
     )
     assert manifest == ClickHouseManifest(
@@ -135,6 +156,7 @@ def test_clickhouse_manifest_from_plugin_data() -> None:
         access_entities=[SAMPLE_ACCESS_ENTITY],
         replicated_databases=[SAMPLE_DATABASE],
         tables=[SAMPLE_TABLE],
+        user_defined_functions=SAMPLE_USER_DEFINED_FUNCTIONS,
     )
 
 
@@ -167,4 +189,5 @@ def test_clickhouse_manifest_to_plugin_data() -> None:
         "replicated_databases": [SERIALIZED_DATABASE],
         "tables": [SERIALIZED_TABLE],
         "object_storage_files": [],
+        "user_defined_functions": [],
     }

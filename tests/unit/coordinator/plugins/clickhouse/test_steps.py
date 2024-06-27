@@ -33,6 +33,7 @@ from astacus.coordinator.plugins.clickhouse.manifest import (
     ClickHouseObjectStorageFiles,
     ReplicatedDatabase,
     Table,
+    UserDefinedFunction,
 )
 from astacus.coordinator.plugins.clickhouse.object_storage import MemoryObjectStorage, ObjectStorage, ObjectStorageItem
 from astacus.coordinator.plugins.clickhouse.replication import DatabaseReplica
@@ -55,15 +56,18 @@ from astacus.coordinator.plugins.clickhouse.steps import (
     RestoreObjectStorageFilesStep,
     RestoreReplicaStep,
     RestoreReplicatedDatabasesStep,
+    RestoreUserDefinedFunctionsStep,
     RetrieveAccessEntitiesStep,
     RetrieveDatabasesAndTablesStep,
     RetrieveMacrosStep,
+    RetrieveUserDefinedFunctionsStep,
     run_partition_cmd_on_every_node,
     SyncDatabaseReplicasStep,
     SyncTableReplicasStep,
     TABLES_LIST_QUERY,
     UnfreezeTablesStep,
     ValidateConfigStep,
+    wait_for_condition_on_every_node,
 )
 from astacus.coordinator.plugins.zookeeper import FakeZooKeeperClient, ZooKeeperClient
 from base64 import b64encode
@@ -131,6 +135,15 @@ SAMPLE_OBJET_STORAGE_FILES = [
     )
 ]
 
+SAMPLE_USER_DEFINED_FUNCTIONS = [
+    UserDefinedFunction(
+        path="user_defined_function_1.sql", create_query=b"CREATE FUNCTION user_defined_function_1 AS (x) -> x + 1;\n"
+    ),
+    UserDefinedFunction(
+        path="user_defined_function_2.sql", create_query=b"CREATE FUNCTION user_defined_function_2 AS (x) -> x + 2;\n"
+    ),
+]
+
 SAMPLE_MANIFEST_V1 = ClickHouseManifest(
     version=ClickHouseBackupVersion.V1,
     access_entities=SAMPLE_ENTITIES,
@@ -144,6 +157,7 @@ SAMPLE_MANIFEST = ClickHouseManifest(
     replicated_databases=SAMPLE_DATABASES,
     tables=SAMPLE_TABLES,
     object_storage_files=SAMPLE_OBJET_STORAGE_FILES,
+    user_defined_functions=SAMPLE_USER_DEFINED_FUNCTIONS,
 )
 
 SAMPLE_MANIFEST_ENCODED = SAMPLE_MANIFEST.to_plugin_data()
@@ -184,7 +198,7 @@ async def test_validate_step_require_equal_nodes_count(clickhouse_count: int, co
             await step.run_step(cluster, StepsContext())
 
 
-async def create_zookeper_access_entities(zookeeper_client: ZooKeeperClient) -> None:
+async def create_zookeeper_access_entities(zookeeper_client: ZooKeeperClient) -> None:
     async with zookeeper_client.connect() as connection:
         await asyncio.gather(
             connection.create("/clickhouse/access/P/a_policy", str(uuid.UUID(int=1)).encode()),
@@ -204,10 +218,34 @@ async def create_zookeper_access_entities(zookeeper_client: ZooKeeperClient) -> 
 
 async def test_retrieve_access_entities() -> None:
     zookeeper_client = FakeZooKeeperClient()
-    await create_zookeper_access_entities(zookeeper_client)
+    await create_zookeeper_access_entities(zookeeper_client)
     step = RetrieveAccessEntitiesStep(zookeeper_client=zookeeper_client, access_entities_path="/clickhouse/access")
     access_entities = await step.run_step(Cluster(nodes=[]), StepsContext())
     assert access_entities == SAMPLE_ENTITIES
+
+
+async def create_zookeeper_user_defined_functions(zookeeper_client: ZooKeeperClient) -> None:
+    async with zookeeper_client.connect() as connection:
+        await asyncio.gather(
+            connection.create(
+                "/clickhouse/user_defined_functions/user_defined_function_1.sql",
+                b"CREATE FUNCTION user_defined_function_1 AS (x) -> x + 1;\n",
+            ),
+            connection.create(
+                "/clickhouse/user_defined_functions/user_defined_function_2.sql",
+                b"CREATE FUNCTION user_defined_function_2 AS (x) -> x + 2;\n",
+            ),
+        )
+
+
+async def test_retrieve_user_defined_functions() -> None:
+    zookeeper_client = FakeZooKeeperClient()
+    await create_zookeeper_user_defined_functions(zookeeper_client)
+    step = RetrieveUserDefinedFunctionsStep(
+        zookeeper_client=zookeeper_client, replicated_user_defined_zookeeper_path="/clickhouse/user_defined_functions/"
+    )
+    user_defined_functions = await step.run_step(Cluster(nodes=[]), StepsContext())
+    assert user_defined_functions == SAMPLE_USER_DEFINED_FUNCTIONS
 
 
 class TrappedZooKeeperClient(FakeZooKeeperClient):
@@ -233,7 +271,7 @@ class TrappedZooKeeperClient(FakeZooKeeperClient):
 
 async def test_retrieve_access_entities_fails_from_concurrent_updates() -> None:
     zookeeper_client = TrappedZooKeeperClient()
-    await create_zookeper_access_entities(zookeeper_client)
+    await create_zookeeper_access_entities(zookeeper_client)
     # This fixed value is not ideal, we need to wait for a few reads before injecting a concurrent
     # update and see it cause problems, because we must do an update after something was
     # read by the step.
@@ -509,6 +547,7 @@ async def test_create_clickhouse_manifest() -> None:
     context.set_result(RetrieveAccessEntitiesStep, SAMPLE_ENTITIES)
     context.set_result(RetrieveDatabasesAndTablesStep, (SAMPLE_DATABASES, SAMPLE_TABLES))
     context.set_result(CollectObjectStorageFilesStep, SAMPLE_OBJET_STORAGE_FILES)
+    context.set_result(RetrieveUserDefinedFunctionsStep, SAMPLE_USER_DEFINED_FUNCTIONS)
     assert await step.run_step(Cluster(nodes=[]), context) == SAMPLE_MANIFEST_ENCODED
 
 
@@ -1022,6 +1061,30 @@ async def test_restore_object_storage_files_fails_if_target_disk_has_no_object_s
         await step.run_step(cluster, context)
 
 
+async def test_restore_user_defined_functions_step() -> None:
+    clickhouse_client = mock_clickhouse_client()
+    clickhouse_client.execute.return_value = [["2"]]
+    zk_client = FakeZooKeeperClient()
+    context = StepsContext()
+    context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
+    step = RestoreUserDefinedFunctionsStep(
+        zookeeper_client=zk_client,
+        replicated_user_defined_zookeeper_path="/clickhouse/user_defined_functions/",
+        clients=[clickhouse_client],
+        sync_user_defined_functions_timeout=10.0,
+    )
+    await step.run_step(Cluster(nodes=[]), context)
+    async with zk_client.connect() as connection:
+        for user_defined_function in SAMPLE_USER_DEFINED_FUNCTIONS:
+            assert (
+                await connection.get(f"/clickhouse/user_defined_functions/{user_defined_function.path}")
+                == user_defined_function.create_query
+            )
+    assert clickhouse_client.mock_calls == [
+        mock.call.execute(b"SELECT count(*) FROM system.functions WHERE origin = 'SQLUserDefined'")
+    ]
+
+
 async def test_attaches_all_mergetree_parts_in_manifest() -> None:
     client_1 = mock_clickhouse_client()
     client_2 = mock_clickhouse_client()
@@ -1272,3 +1335,29 @@ def test_get_restore_table_query(original_query: bytes, rewritten_query: bytes):
         dependencies=[],
     )
     assert get_restore_table_query(table) == rewritten_query
+
+
+class TestWaitForConditionOnEveryNode:
+    async def test_succeeds(self) -> None:
+        client_1 = mock_clickhouse_client()
+        client_2 = mock_clickhouse_client()
+        clients = [client_1, client_2]
+        for client in clients:
+            client.execute.return_value = [["1"]]
+
+        async def cond(client: ClickHouseClient) -> bool:
+            return await client.execute(b"SELECT 1") == [["1"]]
+
+        await wait_for_condition_on_every_node(clients, cond, "for select 1", 1, 0.5)
+        for client in clients:
+            assert client.mock_calls == [mock.call.execute(b"SELECT 1")]
+
+    async def test_timeout(self) -> None:
+        client = mock_clickhouse_client()
+        client.execute.return_value = [["0"]]
+
+        async def cond(client: ClickHouseClient) -> bool:
+            return False
+
+        with pytest.raises(StepFailedError, match="Timeout while waiting for for select 1"):
+            await wait_for_condition_on_every_node([client], cond, "for select 1", 0.1, 0.05)

@@ -313,6 +313,7 @@ async def setup_cluster_content(clients: Sequence[HttpClickHouseClient], use_nam
     await clients[2].execute(b"INSERT INTO default.in_object_storage VALUES (789, 'baz')")
     # This won't be backed up
     await clients[0].execute(b"INSERT INTO default.memory VALUES (123, 'foo')")
+    await clients[0].execute(b"CREATE FUNCTION `linear_equation_\x80` AS (x, k, b) -> k*x + b")
 
 
 async def setup_cluster_users(clients: Sequence[HttpClickHouseClient]) -> None:
@@ -556,3 +557,11 @@ async def test_restores_dictionaries(restored_cluster: Sequence[ClickHouseClient
     for client, expected in zip(restored_cluster, cluster_data):
         await client.execute(b"SYSTEM RELOAD DICTIONARY default.dictionary")
         assert await client.execute(b"SELECT * FROM default.dictionary") == expected
+
+
+async def test_restores_user_defined_functions(restored_cluster: Sequence[ClickHouseClient]) -> None:
+    for client in restored_cluster:
+        functions = await client.execute(b"SELECT base64Encode(name) FROM system.functions WHERE origin = 'SQLUserDefined'")
+        assert functions == [[_b64_str(b"linear_equation_\x80")]]
+        result = await client.execute(b"SELECT `linear_equation_\x80`(1, 2, 3)")
+        assert result == [[5]]
