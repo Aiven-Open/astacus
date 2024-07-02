@@ -445,7 +445,9 @@ class RestoreDeltasStep(Step[None]):
             # Since deltas can be uploaded from a different set of nodes than the base backup,
             # explicitly re-match current nodes to delta manifest nodes on each restore.
             if self.partial_restore_nodes and not self.contains_partial_restore_hostnames(delta_manifest):
-                logger.info("Skipped %s, because no data from it maps to partial restore nodes")
+                logger.info(
+                    "Skipped manifest from %s, because no data from it maps to partial restore nodes", delta_manifest.start
+                )
                 continue
             node_to_backup_index = get_node_to_backup_index(
                 partial_restore_nodes=self.partial_restore_nodes,
