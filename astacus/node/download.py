@@ -48,6 +48,7 @@ class Downloader(ThreadLocalStorage):
 
     def _download_snapshotfile(self, snapshotfile: ipc.SnapshotFile) -> None:
         if self._snapshotfile_already_exists(snapshotfile):
+            logger.info("Skipping download of %s, already exists", snapshotfile.relative_path)
             return
 
         relative_path = snapshotfile.relative_path
@@ -77,6 +78,7 @@ class Downloader(ThreadLocalStorage):
         src_path = self.dst / snapshotfile_src.relative_path
         dst_path = self.dst / snapshotfile.relative_path
         dst_path.parent.mkdir(parents=True, exist_ok=True)
+        logger.info("copy after download %s, %s", src_path, dst_path)
         shutil.copy(src_path, dst_path)
         os.utime(dst_path, ns=(snapshotfile.mtime_ns, snapshotfile.mtime_ns))
 

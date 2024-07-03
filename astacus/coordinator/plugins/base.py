@@ -25,6 +25,7 @@ import datetime
 import httpx
 import logging
 import msgspec
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -439,9 +440,15 @@ class RestoreDeltasStep(Step[None]):
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         deltas_to_restore = sorted(context.get_result(self.delta_manifests_step), key=lambda m: m.start)
+        deltas_to_clear = sorted(context.get_result(self.delta_manifests_step), key=lambda m: m.start)
+        stop_at = time.monotonic() + 15
 
         for delta_manifest in deltas_to_restore:
             delta_name = delta_manifest.filename
+            if time.monotonic() > stop_at:
+                logger.info("Stopped restoring deltas at %s", delta_manifest.start)
+                raise StepFailedError(f"Restoring deltas took too long, stopped at {delta_manifest.start}")
+            logger.info("Restoring only delta started %s", delta_manifest.start)
             # Since deltas can be uploaded from a different set of nodes than the base backup,
             # explicitly re-match current nodes to delta manifest nodes on each restore.
             if self.partial_restore_nodes and not self.contains_partial_restore_hostnames(delta_manifest):
@@ -466,6 +473,25 @@ class RestoreDeltasStep(Step[None]):
                 node_to_backup_index=node_to_backup_index,
                 delta_manifest=delta_manifest,
             )
+            logger.info("dowloaing only delta finshed %s", delta_manifest.start)
+
+        for delta_manifest in deltas_to_clear:
+            delta_name = delta_manifest.filename
+            if self.partial_restore_nodes and not self.contains_partial_restore_hostnames(delta_manifest):
+                logger.info(
+                    "Skipped manifest from %s, because no data from it maps to partial restore nodes", delta_manifest.start
+                )
+                continue
+            node_to_backup_index = get_node_to_backup_index(
+                partial_restore_nodes=self.partial_restore_nodes,
+                snapshot_results=delta_manifest.snapshot_results,
+                nodes=cluster.nodes,
+            )
+            nodes = [
+                cluster.nodes[node_index]
+                for node_index, backup_index in enumerate(node_to_backup_index)
+                if backup_index is not None
+            ]
             await self.restore_delta(delta_name, nodes=nodes, cluster=cluster)
             await self.clear_delta(
                 delta_name,

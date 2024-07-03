@@ -19,14 +19,14 @@ logger = logging.getLogger(__name__)
 
 class ClearOp(NodeOp[ipc.SnapshotClearRequest, ipc.NodeResult]):
     snapshotter: Snapshotter | None = None
-    is_snaphot_outdated: bool = True
+    is_snapshot_outdated: bool = True
 
     def create_result(self) -> ipc.NodeResult:
         return ipc.NodeResult()
 
     def start(self, snapshotter: Snapshotter, *, is_snapshot_outdated: bool) -> NodeOp.StartResult:
         logger.info("start_clear %r", self.req)
-        self.is_snaphot_outdated = is_snapshot_outdated
+        self.is_snapshot_outdated = is_snapshot_outdated
         self.snapshotter = snapshotter
         return self.start_op(op_name="clear", op=self, fun=self.clear)
 
@@ -34,7 +34,7 @@ class ClearOp(NodeOp[ipc.SnapshotClearRequest, ipc.NodeResult]):
         assert self.snapshotter is not None
         with self.snapshotter.lock:
             self.check_op_id()
-            if self.is_snaphot_outdated:
+            if self.is_snapshot_outdated:
                 self.snapshotter.perform_snapshot(progress=Progress())
             progress = self.result.progress
             progress.start(len(self.snapshotter.snapshot))
