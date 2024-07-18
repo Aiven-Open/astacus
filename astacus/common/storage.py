@@ -234,13 +234,21 @@ class ThreadLocalStorage:
     def __init__(self, *, storage: Storage) -> None:
         self.threadlocal = threading.local()
         self.storage = storage
+        self.local_storages: list[Storage] = []
+        self.local_storages_lock = threading.Lock()
 
-    @property
-    def local_storage(self) -> Storage:
+    def get_storage(self) -> Storage:
         local_storage = getattr(self.threadlocal, "storage", None)
         if local_storage is None:
             local_storage = self.storage.copy()
+            with self.local_storages_lock:
+                self.local_storages.append(local_storage)
             setattr(self.threadlocal, "storage", local_storage)
         else:
             assert isinstance(local_storage, Storage)
         return local_storage
+
+    def close(self) -> None:
+        for local_storage in self.local_storages:
+            local_storage.close()
+        self.local_storages.clear()

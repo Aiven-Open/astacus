@@ -9,14 +9,16 @@ Most of the snapshot steps should be implementable by using the API of
 this module with proper parameters.
 
 """
-
 from .node import NodeOp
 from .snapshotter import Snapshotter
 from .uploader import Uploader
 from astacus.common import ipc, utils
 from astacus.common.rohmustorage import RohmuStorage
+from astacus.common.storage import ThreadLocalStorage
 from astacus.node.snapshot import Snapshot
+from collections.abc import Iterator
 
+import contextlib
 import logging
 
 logger = logging.getLogger(__name__)
@@ -54,10 +56,18 @@ class SnapshotOp(NodeOp[ipc.SnapshotRequestV2, ipc.SnapshotResult]):
 class UploadOp(NodeOp[ipc.SnapshotUploadRequestV20221129, ipc.SnapshotUploadResult]):
     snapshot: Snapshot | None = None
 
-    @property
-    def storage(self) -> RohmuStorage:
+    @contextlib.contextmanager
+    def create_thread_local_storage(self) -> Iterator[ThreadLocalStorage]:
         assert self.config.object_storage is not None
-        return RohmuStorage(self.config.object_storage, storage=self.req.storage)
+        storage = RohmuStorage(self.config.object_storage, storage=self.req.storage)
+        try:
+            thread_local_storage = ThreadLocalStorage(storage=storage)
+            try:
+                yield thread_local_storage
+            finally:
+                thread_local_storage.close()
+        finally:
+            storage.close()
 
     def create_result(self) -> ipc.SnapshotUploadResult:
         return ipc.SnapshotUploadResult()
@@ -69,19 +79,20 @@ class UploadOp(NodeOp[ipc.SnapshotUploadRequestV20221129, ipc.SnapshotUploadResu
 
     def upload(self) -> None:
         assert self.snapshot is not None
-        uploader = Uploader(storage=self.storage)
-        # 'snapshotter' is global; ensure we have sole access to it
-        with self.snapshot.lock:
-            self.check_op_id()
-            self.result.total_size, self.result.total_stored_size = uploader.write_hashes_to_storage(
-                snapshot=self.snapshot,
-                hashes=self.req.hashes,
-                parallel=self.config.parallel.uploads,
-                progress=self.result.progress,
-                still_running_callback=self.still_running_callback,
-                validate_file_hashes=self.req.validate_file_hashes,
-            )
-            self.result.progress.done()
+        with self.create_thread_local_storage() as thread_local_storage:
+            uploader = Uploader(thread_local_storage=thread_local_storage)
+            # 'snapshotter' is global; ensure we have sole access to it
+            with self.snapshot.lock:
+                self.check_op_id()
+                self.result.total_size, self.result.total_stored_size = uploader.write_hashes_to_storage(
+                    snapshot=self.snapshot,
+                    hashes=self.req.hashes,
+                    parallel=self.config.parallel.uploads,
+                    progress=self.result.progress,
+                    still_running_callback=self.still_running_callback,
+                    validate_file_hashes=self.req.validate_file_hashes,
+                )
+                self.result.progress.done()
 
 
 class ReleaseOp(NodeOp[ipc.SnapshotReleaseRequest, ipc.NodeResult]):
