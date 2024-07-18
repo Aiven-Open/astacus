@@ -223,12 +223,15 @@ class SteppedCoordinatorOp(LockedCoordinatorOp):
     steps: Sequence[Step[Any]]
     step_progress: dict[int, Progress]
 
-    def __init__(self, *, c: Coordinator = Depends(), attempts: int, steps: Sequence[Step[Any]]):
+    def __init__(
+        self, *, c: Coordinator = Depends(), attempts: int, steps: Sequence[Step[Any]], operation_context: OperationContext
+    ) -> None:
         super().__init__(c=c)
         self.state = c.state
         self.attempts = attempts
         self.steps = steps
         self.step_progress = {}
+        self.operation_context = operation_context
 
     @property
     def progress(self) -> Progress:
@@ -243,8 +246,13 @@ class SteppedCoordinatorOp(LockedCoordinatorOp):
                 stats_tags: Tags = {"op": name, "attempt": str(attempt)}
                 async with self.stats.async_timing_manager("astacus_attempt_duration", stats_tags):
                     try:
-                        if await self.try_run(cluster, context):
-                            return
+                        try:
+                            if await self.try_run(cluster, context):
+                                return
+                        finally:
+                            if self.operation_context is not None:
+                                self.operation_context.json_storage.storage.close()
+                                self.operation_context.hexdigest_storage.storage.close()
                     except exceptions.TransientException as ex:
                         logger.info("%s - transient failure: %r", name, ex)
         except exceptions.PermanentException as ex:
@@ -287,9 +295,9 @@ class BackupOp(SteppedCoordinatorOp):
         return BackupOp(c=c)
 
     def __init__(self, *, c: Coordinator) -> None:
-        context = c.get_operation_context()
-        steps = c.get_plugin().get_backup_steps(context=context)
-        super().__init__(c=c, attempts=c.config.backup_attempts, steps=steps)
+        operation_context = c.get_operation_context()
+        steps = c.get_plugin().get_backup_steps(context=operation_context)
+        super().__init__(c=c, attempts=c.config.backup_attempts, steps=steps, operation_context=operation_context)
 
 
 class DeltaBackupOp(SteppedCoordinatorOp):
@@ -298,9 +306,9 @@ class DeltaBackupOp(SteppedCoordinatorOp):
         return DeltaBackupOp(c=c)
 
     def __init__(self, *, c: Coordinator) -> None:
-        context = c.get_operation_context()
-        steps = c.get_plugin().get_delta_backup_steps(context=context)
-        super().__init__(c=c, attempts=c.config.backup_attempts, steps=steps)
+        operation_context = c.get_operation_context()
+        steps = c.get_plugin().get_delta_backup_steps(context=operation_context)
+        super().__init__(c=c, attempts=c.config.backup_attempts, steps=steps, operation_context=operation_context)
 
 
 class RestoreOp(SteppedCoordinatorOp):
@@ -309,10 +317,10 @@ class RestoreOp(SteppedCoordinatorOp):
         return RestoreOp(c=c, req=req)
 
     def __init__(self, *, c: Coordinator, req: ipc.RestoreRequest) -> None:
-        context = c.get_operation_context(requested_storage=req.storage)
-        steps = c.get_plugin().get_restore_steps(context=context, req=req)
+        operation_context = c.get_operation_context(requested_storage=req.storage)
+        steps = c.get_plugin().get_restore_steps(context=operation_context, req=req)
         if req.stop_after_step is not None:
             step_names = [step.__class__.__name__ for step in steps]
             step_index = step_names.index(req.stop_after_step)
             steps = steps[: step_index + 1]
-        super().__init__(c=c, attempts=1, steps=steps)  # c.config.restore_attempts
+        super().__init__(c=c, attempts=1, steps=steps, operation_context=operation_context)  # c.config.restore_attempts

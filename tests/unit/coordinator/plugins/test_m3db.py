@@ -107,6 +107,7 @@ async def test_m3_backup(coordinator: Coordinator, plugin: M3DBPlugin, etcd_clie
             RetrieveEtcdAgainStep(etcd_client=etcd_client, etcd_prefixes=etcd_prefixes),
             PrepareM3ManifestStep(placement_nodes=plugin.placement_nodes),
         ],
+        operation_context=Mock(),
     )
     context = StepsContext()
     with respx.mock:
@@ -145,6 +146,7 @@ async def test_m3_restore(coordinator: Coordinator, plugin: M3DBPlugin, etcd_cli
             RewriteEtcdStep(placement_nodes=plugin.placement_nodes, partial_restore_nodes=partial_restore_nodes),
             RestoreEtcdStep(etcd_client=etcd_client, partial_restore_nodes=partial_restore_nodes),
         ],
+        operation_context=Mock(),
     )
     context = StepsContext()
     context.set_result(

@@ -55,6 +55,7 @@ async def test_op_stats() -> None:
             DummyStep2(),
             DummyStep3(),
         ],
+        operation_context=Mock(),
     )
     operation.op_id = operation.info.op_id
     operation.stats = stats
