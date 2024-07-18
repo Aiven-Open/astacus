@@ -43,7 +43,7 @@ pytestmark = [
 
 SAMPLE_URL_ENGINE_DDL: Final[str] = (
     "CREATE TABLE default.url_engine_table (`thekey` UInt32, `thedata` String) "
-    "ENGINE = URL('http://127.0.0.1:12345/', 'CSV')"
+    "ENGINE = URL('https://127.0.0.1:12345/', 'CSV')"
 )
 
 
