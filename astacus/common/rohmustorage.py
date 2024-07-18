@@ -128,6 +128,9 @@ class RohmuStorage(Storage):
         if not self.config.compression.algorithm and not self.config.encryption_key_id:
             raise exceptions.CompressionOrEncryptionRequired()
 
+    def close(self) -> None:
+        self.storage.close()
+
     @rohmu_error_wrapper
     def _download_key_to_file(self, key, f: FileLike) -> bool:
         with tempfile.TemporaryFile(dir=self.config.temporary_directory) as temp_file:

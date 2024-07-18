@@ -37,6 +37,10 @@ class CachingJsonStorage(JsonStorage):
         self.backend_storage = backend_storage
         self.cache_storage = cache_storage
 
+    def close(self) -> None:
+        self.backend_storage.close()
+        self.cache_storage.close()
+
     @property
     def _backend_json_set(self) -> set[str]:
         if self._backend_json_set_cache is None:

@@ -19,6 +19,9 @@ import os
 class MemoryJsonStorage(JsonStorage):
     items: dict[str, bytes]
 
+    def close(self) -> None:
+        pass
+
     def delete_json(self, name: str) -> None:
         try:
             del self.items[name]
@@ -49,6 +52,9 @@ class MemoryJsonStorage(JsonStorage):
 @dataclasses.dataclass(frozen=True)
 class MemoryHexDigestStorage(HexDigestStorage):
     items: dict[str, bytes]
+
+    def close(self) -> None:
+        pass
 
     def delete_hexdigest(self, hexdigest: str) -> None:
         del self.items[hexdigest]

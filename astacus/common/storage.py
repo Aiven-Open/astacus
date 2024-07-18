@@ -37,6 +37,10 @@ class StorageUploadResult(msgspec.Struct, kw_only=True, frozen=True):
 
 class HexDigestStorage(ABC):
     @abstractmethod
+    def close(self) -> None:
+        ...
+
+    @abstractmethod
     def delete_hexdigest(self, hexdigest: str) -> None:
         ...
 
@@ -69,6 +73,10 @@ class HexDigestStorage(ABC):
 
 
 class JsonStorage(ABC):
+    @abstractmethod
+    def close(self) -> None:
+        pass
+
     @abstractmethod
     def delete_json(self, name: str) -> None:
         ...
@@ -124,6 +132,9 @@ class FileStorage(Storage):
         self.path.mkdir(parents=True, exist_ok=True)
         self.hexdigest_suffix = hexdigest_suffix
         self.json_suffix = json_suffix
+
+    def close(self) -> None:
+        pass
 
     def copy(self) -> "FileStorage":
         return FileStorage(path=self.path, hexdigest_suffix=self.hexdigest_suffix, json_suffix=self.json_suffix)
