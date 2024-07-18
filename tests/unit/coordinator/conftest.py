@@ -4,10 +4,11 @@ See LICENSE for details
 """
 from .test_restore import BACKUP_MANIFEST
 from astacus.common.ipc import Plugin
-from astacus.common.rohmustorage import MultiRohmuStorage, RohmuStorage
+from astacus.common.rohmustorage import RohmuStorage
 from astacus.coordinator.api import router
 from astacus.coordinator.config import CoordinatorConfig, CoordinatorNode
 from astacus.coordinator.coordinator import LockedCoordinatorOp
+from astacus.coordinator.storage_factory import StorageFactory
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pathlib import Path
@@ -25,21 +26,19 @@ def fixture_storage(tmp_path: Path) -> RohmuStorage:
     return RohmuStorage(config=create_rohmu_config(tmp_path))
 
 
-@pytest.fixture(name="mstorage")
-def fixture_mstorage(tmp_path: Path) -> MultiRohmuStorage:
-    return MultiRohmuStorage(config=create_rohmu_config(tmp_path))
-
-
-@pytest.fixture(name="populated_mstorage")
-def fixture_populated_mstorage(mstorage: MultiRohmuStorage) -> MultiRohmuStorage:
-    x = mstorage.get_storage("x")
-    x.upload_json("backup-1", BACKUP_MANIFEST)
-    x.upload_json("backup-2", BACKUP_MANIFEST)
-    x.upload_hexdigest_bytes("DEADBEEF", b"foobar")
-    y = mstorage.get_storage("y")
-    y.upload_json("backup-3", BACKUP_MANIFEST)
-    y.upload_hexdigest_bytes("DEADBEEF", b"foobar")
-    return mstorage
+@pytest.fixture(name="populated_storage_factory")
+def fixture_populated_storage_factory(tmp_path: Path) -> StorageFactory:
+    storage_factory = StorageFactory(storage_config=create_rohmu_config(tmp_path))
+    x_json = storage_factory.create_json_storage("x")
+    x_json.upload_json("backup-1", BACKUP_MANIFEST)
+    x_json.upload_json("backup-2", BACKUP_MANIFEST)
+    x_hexdigest = storage_factory.create_hexdigest_storage("x")
+    x_hexdigest.upload_hexdigest_bytes("DEADBEEF", b"foobar")
+    y_json = storage_factory.create_json_storage("y")
+    y_json.upload_json("backup-3", BACKUP_MANIFEST)
+    y_hexdigest = storage_factory.create_hexdigest_storage("y")
+    y_hexdigest.upload_hexdigest_bytes("DEADBEEF", b"foobar")
+    return storage_factory
 
 
 @pytest.fixture(name="client")

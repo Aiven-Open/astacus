@@ -7,15 +7,16 @@ Test that the coordinator restore endpoint works.
 """
 from astacus.common import exceptions, ipc
 from astacus.common.ipc import Plugin
-from astacus.common.rohmustorage import MultiRohmuStorage
 from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins.base import get_node_to_backup_index
+from astacus.coordinator.storage_factory import StorageFactory
 from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext as does_not_raise
 from dataclasses import dataclass
 from datetime import datetime, UTC
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -69,11 +70,18 @@ class RestoreTest:
         RestoreTest(partial=True),
     ],
 )
-def test_restore(rt: RestoreTest, app: FastAPI, client: TestClient, mstorage: MultiRohmuStorage) -> None:
+def test_restore(rt: RestoreTest, app: FastAPI, client: TestClient, tmp_path: Path) -> None:
     # pylint: disable=too-many-statements
     # Create fake backup (not pretty but sufficient?)
-    storage = mstorage.get_storage(rt.storage_name)
+    storage_factory = StorageFactory(
+        storage_config=app.state.coordinator_config.object_storage,
+        object_storage_cache=app.state.coordinator_config.object_storage_cache,
+    )
+    storage = storage_factory.create_json_storage(rt.storage_name)
     storage.upload_json(BACKUP_NAME, BACKUP_MANIFEST)
+    storage_name = rt.storage_name
+    if storage_name is None:
+        storage_name = storage_factory.storage_config.default_storage
     nodes = app.state.coordinator_config.nodes
     with respx.mock:
         for i, node in enumerate(nodes):
@@ -86,7 +94,7 @@ def test_restore(rt: RestoreTest, app: FastAPI, client: TestClient, mstorage: Mu
                     def match_download(request: httpx.Request) -> httpx.Response | None:
                         if rt.fail_at == 2:
                             return None
-                        if json.loads(request.read())["storage"] != storage.storage_name:
+                        if json.loads(request.read())["storage"] != storage_name:
                             return None
                         if json.loads(request.read())["root_globs"] != ["*"]:
                             return None

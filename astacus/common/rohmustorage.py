@@ -6,7 +6,7 @@ See LICENSE for details
 Rohmu-specific actual object storage implementation
 
 """
-from .storage import MultiStorage, Storage, StorageUploadResult
+from .storage import Storage, StorageUploadResult
 from .utils import AstacusModel, fifo_cache
 from astacus.common import exceptions
 from collections.abc import Iterator, Mapping
@@ -241,17 +241,3 @@ class RohmuStorage(Storage):
             data.seek(0)
             self._upload_key_from_file(key, data, len(data))
         return True
-
-
-class MultiRohmuStorage(MultiStorage[RohmuStorage]):
-    def __init__(self, *, config: RohmuConfig) -> None:
-        self.config = config
-
-    def get_storage(self, name: str | None) -> RohmuStorage:
-        return RohmuStorage(config=self.config, storage=name)
-
-    def get_default_storage_name(self) -> str:
-        return self.config.default_storage
-
-    def list_storages(self) -> list[str]:
-        return sorted(self.config.storages.keys())

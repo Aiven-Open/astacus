@@ -10,7 +10,6 @@ Test stats sending.
 from astacus.common import op
 from astacus.common.ipc import Plugin
 from astacus.common.statsd import StatsClient
-from astacus.common.storage import MultiStorage
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorConfig
 from astacus.coordinator.coordinator import Coordinator, SteppedCoordinatorOp
@@ -18,7 +17,7 @@ from astacus.coordinator.plugins.base import Step, StepsContext
 from astacus.coordinator.state import CoordinatorState
 from fastapi import BackgroundTasks
 from starlette.datastructures import URL
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 class DummyStep(Step[bool]):
@@ -46,8 +45,7 @@ async def test_op_stats() -> None:
         config=CoordinatorConfig(plugin=Plugin.files),
         state=CoordinatorState(),
         stats=stats,
-        hexdigest_mstorage=MultiStorage(),
-        json_mstorage=MultiStorage(),
+        storage_factory=Mock(),
     )
     operation = SteppedCoordinatorOp(
         c=coordinator,

@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from pathlib import Path
 from rohmu.typing import FileLike
-from typing import BinaryIO, Callable, ContextManager, Generic, ParamSpec, TypeAlias, TypeVar
+from typing import BinaryIO, Callable, ContextManager, ParamSpec, TypeAlias, TypeVar
 
 import contextlib
 import io
@@ -197,37 +197,6 @@ class FileStorage(Storage):
         with path.open(mode="wb") as f:
             f.write(data)
         return True
-
-
-class MultiStorage(Generic[T]):
-    def get_default_storage(self) -> T:
-        return self.get_storage(self.get_default_storage_name())
-
-    def get_default_storage_name(self) -> str:
-        raise NotImplementedError
-
-    def get_storage(self, name: str) -> T:
-        raise NotImplementedError
-
-    def list_storages(self) -> list[str]:
-        raise NotImplementedError
-
-
-class MultiFileStorage(MultiStorage[FileStorage]):
-    def __init__(self, path, **kw):
-        self.path = Path(path)
-        self.kw = kw
-        self._storages = set()
-
-    def get_storage(self, name: str) -> FileStorage:
-        self._storages.add(name)
-        return FileStorage(self.path / name, **self.kw)
-
-    def get_default_storage_name(self) -> str:
-        return sorted(self._storages)[-1]
-
-    def list_storages(self) -> list[str]:
-        return sorted(self._storages)
 
 
 class ThreadLocalStorage:
