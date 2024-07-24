@@ -6,7 +6,7 @@ Test that the cleanup endpoint behaves as advertised
 """
 
 from astacus.common import ipc
-from astacus.common.rohmustorage import MultiRohmuStorage
+from astacus.coordinator.storage_factory import StorageFactory
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -19,7 +19,7 @@ FAILS = [1, None]
 def _run(
     *,
     client: TestClient,
-    populated_mstorage: MultiRohmuStorage,
+    storage_factory: StorageFactory,
     app: FastAPI,
     fail_at: int | None = None,
     retention: ipc.Retention,
@@ -27,9 +27,9 @@ def _run(
     exp_digests: int,
 ) -> None:
     app.state.coordinator_config.retention = retention
-    assert len(populated_mstorage.get_storage("x").list_jsons()) == 2
-    populated_mstorage.get_storage("x").upload_hexdigest_bytes("TOBEDELETED", b"x")
-    assert len(populated_mstorage.get_storage("x").list_hexdigests()) == 2
+    assert len(storage_factory.create_json_storage("x").list_jsons()) == 2
+    storage_factory.create_hexdigest_storage("x").upload_hexdigest_bytes("TOBEDELETED", b"x")
+    assert len(storage_factory.create_hexdigest_storage("x").list_hexdigests()) == 2
     nodes = app.state.coordinator_config.nodes
     with respx.mock:
         for node in nodes:
@@ -51,18 +51,18 @@ def _run(
         assert response.json() == {"state": "fail"}
         return
     assert response.json() == {"state": "done"}
-    assert len(populated_mstorage.get_storage("x").list_jsons()) == exp_jsons
-    assert len(populated_mstorage.get_storage("x").list_hexdigests()) == exp_digests
+    assert len(storage_factory.create_json_storage("x").list_jsons()) == exp_jsons
+    assert len(storage_factory.create_hexdigest_storage("x").list_hexdigests()) == exp_digests
 
 
 @pytest.mark.parametrize("fail_at", FAILS)
 def test_api_cleanup_flow(
-    fail_at: int | None, client: TestClient, populated_mstorage: MultiRohmuStorage, app: FastAPI
+    fail_at: int | None, client: TestClient, populated_storage_factory: StorageFactory, app: FastAPI
 ) -> None:
     _run(
         fail_at=fail_at,
         client=client,
-        populated_mstorage=populated_mstorage,
+        storage_factory=populated_storage_factory,
         app=app,
         retention=ipc.Retention(maximum_backups=1),
         exp_jsons=1,
@@ -84,12 +84,12 @@ def test_api_cleanup_flow(
     ],
 )
 def test_api_cleanup_retention(
-    data: tuple[ipc.Retention, int, int], client: TestClient, populated_mstorage: MultiRohmuStorage, app: FastAPI
+    data: tuple[ipc.Retention, int, int], client: TestClient, populated_storage_factory: StorageFactory, app: FastAPI
 ) -> None:
     retention, exp_jsons, exp_digests = data
     _run(
         client=client,
-        populated_mstorage=populated_mstorage,
+        storage_factory=populated_storage_factory,
         app=app,
         retention=retention,
         exp_jsons=exp_jsons,

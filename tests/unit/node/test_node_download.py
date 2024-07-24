@@ -6,7 +6,7 @@ See LICENSE for details
 from astacus.common import ipc, magic, utils
 from astacus.common.progress import Progress
 from astacus.common.snapshot import SnapshotGroup
-from astacus.common.storage import FileStorage
+from astacus.common.storage import FileStorage, ThreadLocalStorage
 from astacus.node.download import Downloader
 from astacus.node.sqlite_snapshot import SQLiteSnapshot
 from astacus.node.uploader import Uploader
@@ -58,7 +58,8 @@ def test_download(
     db2 = Path(root / "db2")
 
     snapshot, snapshotter = build_snapshot_and_snapshotter(dst2, dst3, db2, SQLiteSnapshot, [SnapshotGroup("**")])
-    downloader = Downloader(storage=storage, snapshotter=snapshotter, dst=dst2, parallel=1)
+    thread_local_storage = ThreadLocalStorage(storage=storage)
+    downloader = Downloader(thread_local_storage=thread_local_storage, snapshotter=snapshotter, dst=dst2, parallel=1)
     with snapshotter.lock:
         downloader.download_from_storage(progress=Progress(), snapshotstate=ss1)
 

@@ -17,10 +17,10 @@ from astacus.common.ipc import (
     SnapshotState,
     SnapshotUploadResult,
 )
-from astacus.common.rohmustorage import MultiRohmuStorage
 from astacus.coordinator import api
 from astacus.coordinator.api import get_cache_entries_from_list_response
 from astacus.coordinator.list import compute_deduplicated_snapshot_file_stats, list_backups
+from astacus.coordinator.storage_factory import StorageFactory
 from fastapi.testclient import TestClient
 from pathlib import Path
 from pytest_mock import MockerFixture
@@ -31,9 +31,7 @@ import datetime
 import pytest
 
 
-def test_api_list(client: TestClient, populated_mstorage: MultiRohmuStorage, mocker: MockerFixture) -> None:
-    assert populated_mstorage
-
+def test_api_list(client: TestClient, populated_storage_factory: StorageFactory, mocker: MockerFixture) -> None:
     def _run():
         response = client.get("/list")
         assert response.status_code == 200, response.json()
@@ -224,13 +222,14 @@ def test_compute_deduplicated_snapshot_file_stats(backup_manifest: BackupManifes
 
 def test_api_list_deduplication(backup_manifest: BackupManifest, tmp_path: Path) -> None:
     """Test the list backup operation correctly deduplicates snapshot files when computing stats."""
-    multi_rohmu_storage = MultiRohmuStorage(config=create_rohmu_config(tmp_path))
-    storage = multi_rohmu_storage.get_storage("x")
-    storage.upload_json("backup-1", backup_manifest)
-    storage.upload_hexdigest_bytes("FAKEDIGEST", b"fake-digest-data")
+    storage_factory = StorageFactory(storage_config=create_rohmu_config(tmp_path))
+    json_storage = storage_factory.create_json_storage("x")
+    json_storage.upload_json("backup-1", backup_manifest)
+    hexdigest_storage = storage_factory.create_hexdigest_storage("x")
+    hexdigest_storage.upload_hexdigest_bytes("FAKEDIGEST", b"fake-digest-data")
 
     list_request = ListRequest(storage="x")
-    list_response = list_backups(req=list_request, json_mstorage=multi_rohmu_storage, cache={})
+    list_response = list_backups(req=list_request, storage_factory=storage_factory, cache={})
     expected_response = ListResponse(
         storages=[
             ListForStorage(
@@ -258,17 +257,18 @@ def test_api_list_deduplication(backup_manifest: BackupManifest, tmp_path: Path)
 
 
 def test_list_can_use_cache_from_previous_response(backup_manifest: BackupManifest, tmp_path: Path) -> None:
-    multi_rohmu_storage = MultiRohmuStorage(config=create_rohmu_config(tmp_path))
-    storage = multi_rohmu_storage.get_storage("x")
-    storage.upload_json("backup-1", backup_manifest)
-    storage.upload_hexdigest_bytes("FAKEDIGEST", b"fake-digest-data")
+    storage_factory = StorageFactory(storage_config=create_rohmu_config(tmp_path))
+    json_storage = storage_factory.create_json_storage("x")
+    json_storage.upload_json("backup-1", backup_manifest)
+    hexdigest_storage = storage_factory.create_hexdigest_storage("x")
+    hexdigest_storage.upload_hexdigest_bytes("FAKEDIGEST", b"fake-digest-data")
 
     list_request = ListRequest(storage="x")
-    first_list_response = list_backups(req=list_request, json_mstorage=multi_rohmu_storage, cache={})
+    first_list_response = list_backups(req=list_request, storage_factory=storage_factory, cache={})
     cached_entries = get_cache_entries_from_list_response(first_list_response)
 
-    with mock.patch.object(storage, "download_json") as dowload_json:
-        second_list_response = list_backups(req=list_request, json_mstorage=multi_rohmu_storage, cache=cached_entries)
+    with mock.patch.object(json_storage, "download_json") as dowload_json:
+        second_list_response = list_backups(req=list_request, storage_factory=storage_factory, cache=cached_entries)
         tested_entries = 0
         for storage_entry in second_list_response.storages:
             for backup_entry in storage_entry.backups:
@@ -280,16 +280,17 @@ def test_list_can_use_cache_from_previous_response(backup_manifest: BackupManife
 
 
 def test_list_does_not_return_stale_cache_entries(backup_manifest: BackupManifest, tmp_path: Path) -> None:
-    multi_rohmu_storage = MultiRohmuStorage(config=create_rohmu_config(tmp_path))
-    storage = multi_rohmu_storage.get_storage("x")
-    storage.upload_json("backup-1", backup_manifest)
-    storage.upload_hexdigest_bytes("FAKEDIGEST", b"fake-digest-data")
+    storage_factory = StorageFactory(storage_config=create_rohmu_config(tmp_path))
+    json_storage = storage_factory.create_json_storage("x")
+    json_storage.upload_json("backup-1", backup_manifest)
+    hexdigest_storage = storage_factory.create_hexdigest_storage("x")
+    hexdigest_storage.upload_hexdigest_bytes("FAKEDIGEST", b"fake-digest-data")
 
     list_request = ListRequest(storage="x")
-    first_list_response = list_backups(req=list_request, json_mstorage=multi_rohmu_storage, cache={})
+    first_list_response = list_backups(req=list_request, storage_factory=storage_factory, cache={})
     cached_entries = get_cache_entries_from_list_response(first_list_response)
-    storage.delete_json("backup-1")
-    second_list_response = list_backups(req=list_request, json_mstorage=multi_rohmu_storage, cache=cached_entries)
+    json_storage.delete_json("backup-1")
+    second_list_response = list_backups(req=list_request, storage_factory=storage_factory, cache=cached_entries)
     assert second_list_response.storages == [ListForStorage(storage_name="x", backups=[])]
 
 

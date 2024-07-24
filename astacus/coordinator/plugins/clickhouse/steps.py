@@ -781,15 +781,21 @@ class RestoreObjectStorageFilesStep(SyncStep[None]):
         for object_storage_files in clickhouse_manifest.object_storage_files:
             if len(object_storage_files.files) > 0:
                 disk_name = object_storage_files.disk_name
-                source_storage = self.source_disks.get_object_storage(disk_name=disk_name)
+                source_storage = self.source_disks.create_object_storage(disk_name=disk_name)
                 if source_storage is None:
                     raise StepFailedError(f"Source disk named {disk_name!r} isn't configured as object storage")
-                target_storage = self.target_disks.get_object_storage(disk_name=disk_name)
-                if target_storage is None:
-                    raise StepFailedError(f"Target disk named {disk_name!r} isn't configured as object storage")
-                if source_storage.get_config() != target_storage.get_config():
-                    paths = [file.path for file in object_storage_files.files]
-                    target_storage.copy_items_from(source_storage, paths)
+                try:
+                    target_storage = self.target_disks.create_object_storage(disk_name=disk_name)
+                    if target_storage is None:
+                        raise StepFailedError(f"Target disk named {disk_name!r} isn't configured as object storage")
+                    try:
+                        if source_storage.get_config() != target_storage.get_config():
+                            paths = [file.path for file in object_storage_files.files]
+                            target_storage.copy_items_from(source_storage, paths)
+                    finally:
+                        target_storage.close()
+                finally:
+                    source_storage.close()
 
 
 @dataclasses.dataclass
@@ -889,29 +895,32 @@ class DeleteDanglingObjectStorageFilesStep(SyncStep[None]):
                 disk_kept_paths.update((file.path for file in object_storage_files.files))
 
         for disk_name, disk_kept_paths in sorted(kept_paths.items()):
-            disk_object_storage = self.disks.get_object_storage(disk_name=disk_name)
+            disk_object_storage = self.disks.create_object_storage(disk_name=disk_name)
             if disk_object_storage is None:
                 raise StepFailedError(f"Could not find object storage disk named {disk_name!r}")
-            keys_to_remove = []
-            logger.info("found %d object storage files to keep in disk %r", len(disk_kept_paths), disk_name)
-            disk_object_storage_items = disk_object_storage.list_items()
-            for item in disk_object_storage_items:
-                # We don't know if objects newer than the latest backup should be kept or not,
-                # so we leave them for now. We'll delete them if necessary once there is a newer
-                # backup to tell us if they are still used or not.
-                if item.last_modified < newest_backup_start_time and item.key not in disk_kept_paths:
-                    logger.debug("dangling object storage file in disk %r : %r", disk_name, item.key)
-                    keys_to_remove.append(item.key)
-            disk_available_paths = [item.key for item in disk_object_storage_items]
-            for disk_kept_path in disk_kept_paths:
-                if disk_kept_path not in disk_available_paths:
-                    # Make sure the non-deleted files are actually in object storage
-                    raise StepFailedError(f"missing object storage file in disk {disk_name!r}: {disk_kept_path!r}")
-            logger.info("found %d object storage files to remove in disk %r", len(keys_to_remove), disk_name)
-            for key_to_remove in keys_to_remove:
-                # We should really have a batch delete operation there, but it's missing from rohmu
-                logger.debug("deleting object storage file in disk %r : %r", disk_name, key_to_remove)
-                disk_object_storage.delete_item(key_to_remove)
+            try:
+                keys_to_remove = []
+                logger.info("found %d object storage files to keep in disk %r", len(disk_kept_paths), disk_name)
+                disk_object_storage_items = disk_object_storage.list_items()
+                for item in disk_object_storage_items:
+                    # We don't know if objects newer than the latest backup should be kept or not,
+                    # so we leave them for now. We'll delete them if necessary once there is a newer
+                    # backup to tell us if they are still used or not.
+                    if item.last_modified < newest_backup_start_time and item.key not in disk_kept_paths:
+                        logger.debug("dangling object storage file in disk %r : %r", disk_name, item.key)
+                        keys_to_remove.append(item.key)
+                disk_available_paths = [item.key for item in disk_object_storage_items]
+                for disk_kept_path in disk_kept_paths:
+                    if disk_kept_path not in disk_available_paths:
+                        # Make sure the non-deleted files are actually in object storage
+                        raise StepFailedError(f"missing object storage file in disk {disk_name!r}: {disk_kept_path!r}")
+                logger.info("found %d object storage files to remove in disk %r", len(keys_to_remove), disk_name)
+                for key_to_remove in keys_to_remove:
+                    # We should really have a batch delete operation there, but it's missing from rohmu
+                    logger.debug("deleting object storage file in disk %r : %r", disk_name, key_to_remove)
+                    disk_object_storage.delete_item(key_to_remove)
+            finally:
+                disk_object_storage.close()
 
 
 @dataclasses.dataclass

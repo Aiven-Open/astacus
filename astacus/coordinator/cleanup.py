@@ -21,7 +21,7 @@ class CleanupOp(SteppedCoordinatorOp):
         return CleanupOp(c=c, req=req)
 
     def __init__(self, *, c: Coordinator, req: ipc.CleanupRequest) -> None:
-        context = c.get_operation_context()
+        operation_context = c.get_operation_context()
         if req.retention is None:
             retention = ipc.Retention(
                 minimum_backups=c.config.retention.minimum_backups,
@@ -34,8 +34,10 @@ class CleanupOp(SteppedCoordinatorOp):
                 maximum_backups=coalesce(req.retention.maximum_backups, c.config.retention.maximum_backups),
                 keep_days=coalesce(req.retention.keep_days, c.config.retention.keep_days),
             )
-        steps = c.get_plugin().get_cleanup_steps(context=context, retention=retention, explicit_delete=req.explicit_delete)
-        super().__init__(c=c, attempts=1, steps=steps)
+        steps = c.get_plugin().get_cleanup_steps(
+            context=operation_context, retention=retention, explicit_delete=req.explicit_delete
+        )
+        super().__init__(c=c, attempts=1, steps=steps, operation_context=operation_context)
 
 
 def coalesce(a: int | None, b: int | None) -> int | None:

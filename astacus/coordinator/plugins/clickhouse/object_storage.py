@@ -27,6 +27,10 @@ class ObjectStorageItem:
 
 class ObjectStorage(ABC):
     @abstractmethod
+    def close(self) -> None:
+        ...
+
+    @abstractmethod
     def get_config(self) -> RohmuStorageConfig | dict:
         ...
 
@@ -48,6 +52,9 @@ class ThreadSafeRohmuStorage(ObjectStorage):
         self.config = config
         self._storage = rohmu.get_transfer_from_model(config)
         self._storage_lock = threading.Lock()
+
+    def close(self) -> None:
+        self._storage.close()
 
     def get_config(self) -> RohmuStorageConfig | dict:
         return self.config
@@ -81,6 +88,9 @@ class ThreadSafeRohmuStorage(ObjectStorage):
 @dataclasses.dataclass(frozen=True)
 class MemoryObjectStorage(ObjectStorage):
     items: dict[str, ObjectStorageItem] = dataclasses.field(default_factory=dict)
+
+    def close(self) -> None:
+        pass
 
     @classmethod
     def from_items(cls, items: Sequence[ObjectStorageItem]) -> Self:

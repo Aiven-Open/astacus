@@ -136,7 +136,7 @@ async def _list_backups(
             if cached_list_response is not None
             else {}
         )
-        list_response = await to_thread(list_backups, req=req, json_mstorage=c.json_mstorage, cache=cache)
+        list_response = await to_thread(list_backups, req=req, storage_factory=c.storage_factory, cache=cache)
         c.state.cached_list_response = CachedListResponse(
             coordinator_config=coordinator_config,
             list_request=req,
@@ -158,7 +158,7 @@ def get_cache_entries_from_list_response(list_response: ipc.ListResponse) -> Cac
 async def _list_delta_backups(*, storage: Annotated[str, Body()] = "", c: Coordinator = Depends(), request: Request):
     req = ipc.ListRequest(storage=storage)
     # This is not supposed to be called very often, no caching necessary
-    return await to_thread(list_delta_backups, req=req, json_mstorage=c.json_mstorage)
+    return await to_thread(list_delta_backups, req=req, storage_factory=c.storage_factory)
 
 
 @router.post("/cleanup")

@@ -5,7 +5,7 @@ See LICENSE for details
 
 from astacus.common import magic
 from astacus.common.snapshot import SnapshotGroup
-from astacus.common.storage import FileStorage
+from astacus.common.storage import FileStorage, ThreadLocalStorage
 from astacus.node.api import router as node_router
 from astacus.node.config import NodeConfig
 from astacus.node.snapshot import Snapshot
@@ -61,7 +61,7 @@ def fixture_client(app) -> TestClient:
 
 @pytest.fixture(name="uploader")
 def fixture_uploader(storage):
-    return Uploader(storage=storage)
+    return Uploader(thread_local_storage=ThreadLocalStorage(storage=storage))
 
 
 @pytest.fixture(name="storage")

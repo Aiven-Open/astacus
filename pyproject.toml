@@ -30,7 +30,7 @@ dependencies = [
     "protobuf < 3.21",
     "pydantic < 2",
     "pyyaml",
-    "rohmu >= 2.2.0",
+    "rohmu >= 2.5.0",
     "sentry-sdk",
     "starlette",
     "tabulate",
@@ -59,7 +59,8 @@ f38 = [
     "protobuf == 3.19.6",
     # pydantic on Fedora 38 is actually 1.10.2, but 1.10.2 is incompatible with
     # mypy >= 1.4.0, this was fixed in pydantic 1.10.9: https://github.com/pydantic/pydantic/pull/5928
-    "pydantic == 1.10.9",
+    # Further than that, rohmu >= 2.5.0 requires pydantic >= 1.10.17 because of the "v1" namespace broken compatibility.
+    "pydantic == 1.10.17",
     "pyyaml == 6.0.0",
     "requests == 2.28.2",
     "starlette == 0.27.0",
@@ -82,7 +83,9 @@ f39 = [
     "kazoo == 2.8.0",
     "protobuf == 3.19.6",
     "pyasyncore == 1.0.2",
-    "pydantic == 1.10.14",
+    # pydantic on Fedora 39 is actually 1.10.14.
+    # rohmu requires pydantic >= 1.10.17 because of the "v1" namespace broken compatibility.
+    "pydantic == 1.10.17",
     "pyyaml == 6.0.1",
     "requests == 2.28.2",
     "starlette == 0.27.0",

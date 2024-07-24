@@ -9,18 +9,18 @@ The basic file restoration steps should be implementable by using the
 API of this module with proper parameters.
 
 """
-
 from .node import NodeOp
 from .snapshotter import Snapshotter
 from astacus.common import ipc, utils
 from astacus.common.progress import Progress
 from astacus.common.rohmustorage import RohmuStorage
-from astacus.common.storage import JsonStorage, Storage, ThreadLocalStorage
+from astacus.common.storage import JsonStorage, ThreadLocalStorage
 from astacus.common.utils import get_umask
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 
 import base64
+import contextlib
 import getpass
 import logging
 import msgspec
@@ -31,15 +31,21 @@ import subprocess
 logger = logging.getLogger(__name__)
 
 
-class Downloader(ThreadLocalStorage):
+class Downloader:
     def __init__(
-        self, *, dst: Path, snapshotter: Snapshotter, parallel: int, storage: Storage, copy_dst_owner: bool = False
+        self,
+        *,
+        dst: Path,
+        snapshotter: Snapshotter,
+        parallel: int,
+        thread_local_storage: ThreadLocalStorage,
+        copy_dst_owner: bool = False,
     ) -> None:
-        super().__init__(storage=storage)
         self.dst = dst
         self.snapshotter = snapshotter
         self.snapshot = snapshotter.snapshot
         self.parallel = parallel
+        self.thread_local_storage = thread_local_storage
         self.copy_dst_owner = copy_dst_owner
 
     def _snapshotfile_already_exists(self, snapshotfile: ipc.SnapshotFile) -> bool:
@@ -55,7 +61,7 @@ class Downloader(ThreadLocalStorage):
         download_path.parent.mkdir(parents=True, exist_ok=True)
         with utils.open_path_with_atomic_rename(download_path) as f:
             if snapshotfile.hexdigest:
-                self.local_storage.download_hexdigest_to_file(snapshotfile.hexdigest, f)
+                self.thread_local_storage.get_storage().download_hexdigest_to_file(snapshotfile.hexdigest, f)
             else:
                 assert snapshotfile.content_b64 is not None
                 f.write(base64.b64decode(snapshotfile.content_b64))
@@ -158,10 +164,18 @@ class Downloader(ThreadLocalStorage):
 class DownloadOp(NodeOp[ipc.SnapshotDownloadRequest, ipc.NodeResult]):
     snapshotter: Snapshotter | None = None
 
-    @property
-    def storage(self) -> RohmuStorage:
+    @contextlib.contextmanager
+    def create_thread_local_storage(self) -> Iterator[ThreadLocalStorage]:
         assert self.config.object_storage is not None
-        return RohmuStorage(self.config.object_storage, storage=self.req.storage)
+        storage = RohmuStorage(self.config.object_storage, storage=self.req.storage)
+        try:
+            thread_local_storage = ThreadLocalStorage(storage=storage)
+            try:
+                yield thread_local_storage
+            finally:
+                thread_local_storage.close()
+        finally:
+            storage.close()
 
     def create_result(self) -> ipc.NodeResult:
         return ipc.NodeResult()
@@ -174,25 +188,26 @@ class DownloadOp(NodeOp[ipc.SnapshotDownloadRequest, ipc.NodeResult]):
     def download(self) -> None:
         assert self.snapshotter is not None
         # Actual 'restore from backup'
-        snapshot = download_snapshot(self.storage, self.req.backup_name, self.req.snapshot_index)
-        snapshotstate = snapshot.state
-        assert snapshotstate is not None
+        with self.create_thread_local_storage() as thread_local_storage:
+            snapshot = download_snapshot(thread_local_storage.get_storage(), self.req.backup_name, self.req.snapshot_index)
+            snapshotstate = snapshot.state
+            assert snapshotstate is not None
 
-        # 'snapshotter' is global; ensure we have sole access to it
-        with self.snapshotter.lock:
-            self.check_op_id()
-            downloader = Downloader(
-                dst=self.config.root,
-                snapshotter=self.snapshotter,
-                storage=self.storage,
-                parallel=self.config.parallel.downloads,
-                copy_dst_owner=self.config.copy_root_owner,
-            )
-            downloader.download_from_storage(
-                snapshotstate=snapshotstate,
-                progress=self.result.progress,
-                still_running_callback=self.still_running_callback,
-            )
+            # 'snapshotter' is global; ensure we have sole access to it
+            with self.snapshotter.lock:
+                self.check_op_id()
+                downloader = Downloader(
+                    dst=self.config.root,
+                    snapshotter=self.snapshotter,
+                    parallel=self.config.parallel.downloads,
+                    copy_dst_owner=self.config.copy_root_owner,
+                    thread_local_storage=thread_local_storage,
+                )
+                downloader.download_from_storage(
+                    snapshotstate=snapshotstate,
+                    progress=self.result.progress,
+                    still_running_callback=self.still_running_callback,
+                )
 
 
 class Skip(msgspec.Struct):

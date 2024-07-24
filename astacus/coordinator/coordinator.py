@@ -3,15 +3,13 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 from .plugins.base import CoordinatorPlugin, OperationContext, Step, StepFailedError, StepsContext
+from .storage_factory import StorageFactory
 from astacus.common import asyncstorage, exceptions, ipc, op, statsd, utils
-from astacus.common.cachingjsonstorage import MultiCachingJsonStorage
 from astacus.common.dependencies import get_request_url
 from astacus.common.magic import ErrorCode
 from astacus.common.op import Op
 from astacus.common.progress import Progress
-from astacus.common.rohmustorage import MultiRohmuStorage
 from astacus.common.statsd import StatsClient, Tags
-from astacus.common.storage import JsonStorage, MultiFileStorage, MultiStorage
 from astacus.common.utils import AsyncSleeper
 from astacus.coordinator.cluster import Cluster, LockResult, WaitResultError
 from astacus.coordinator.config import coordinator_config, CoordinatorConfig, CoordinatorNode
@@ -27,7 +25,6 @@ from urllib.parse import urlunsplit
 import asyncio
 import contextlib
 import logging
-import mmap
 import socket
 import time
 
@@ -38,18 +35,15 @@ def coordinator_stats(config: CoordinatorConfig = Depends(coordinator_config)) -
     return StatsClient(config=config.statsd)
 
 
-def coordinator_hexdigest_mstorage(config: CoordinatorConfig = Depends(coordinator_config)) -> MultiStorage:
-    assert config.object_storage
-    return MultiRohmuStorage(config=config.object_storage)
-
-
-def coordinator_json_mstorage(config: CoordinatorConfig = Depends(coordinator_config)) -> MultiStorage:
-    assert config.object_storage
-    mstorage = MultiRohmuStorage(config=config.object_storage)
-    if config.object_storage_cache:
-        file_mstorage = MultiFileStorage(config.object_storage_cache)
-        return MultiCachingJsonStorage(backend_mstorage=mstorage, cache_mstorage=file_mstorage)
-    return mstorage
+def coordinator_storage_factory(
+    config: CoordinatorConfig = Depends(coordinator_config), state: CoordinatorState = Depends(coordinator_state)
+) -> StorageFactory:
+    assert config.object_storage is not None
+    return StorageFactory(
+        storage_config=config.object_storage,
+        object_storage_cache=config.object_storage_cache,
+        state=state,
+    )
 
 
 class Coordinator(op.OpMixin):
@@ -64,67 +58,36 @@ class Coordinator(op.OpMixin):
         config: CoordinatorConfig = Depends(coordinator_config),
         state: CoordinatorState = Depends(coordinator_state),
         stats: statsd.StatsClient = Depends(coordinator_stats),
-        hexdigest_mstorage: MultiStorage = Depends(coordinator_hexdigest_mstorage),
-        json_mstorage: MultiStorage = Depends(coordinator_json_mstorage),
+        storage_factory: StorageFactory = Depends(coordinator_storage_factory),
     ):
         self.request_url = request_url
         self.background_tasks = background_tasks
         self.config = config
         self.state = state
         self.stats = stats
-
-        self.hexdigest_mstorage = hexdigest_mstorage
-        self.json_mstorage = json_mstorage
+        self.storage_factory = storage_factory
 
     def get_operation_context(self, *, requested_storage: str = "") -> OperationContext:
         storage_name = self.get_storage_name(requested_storage=requested_storage)
+        json_storage = asyncstorage.AsyncJsonStorage(self.storage_factory.create_json_storage(storage_name))
+        hexdigest_storage = asyncstorage.AsyncHexDigestStorage(
+            storage=self.storage_factory.create_hexdigest_storage(storage_name),
+        )
         return OperationContext(
             storage_name=storage_name,
-            json_storage=self.get_json_storage(storage_name),
-            hexdigest_storage=self.get_hexdigest_storage(storage_name),
+            json_storage=json_storage,
+            hexdigest_storage=hexdigest_storage,
         )
 
     def get_plugin(self) -> CoordinatorPlugin:
         return get_plugin(self.config.plugin).parse_obj(self.config.plugin_config)
 
-    def get_storage_name(self, *, requested_storage: str = ""):
-        return requested_storage if requested_storage else self.json_mstorage.get_default_storage_name()
-
-    def get_hexdigest_storage(self, storage_name: str) -> asyncstorage.AsyncHexDigestStorage:
-        return asyncstorage.AsyncHexDigestStorage(self.hexdigest_mstorage.get_storage(storage_name))
-
-    def get_json_storage(self, storage_name: str) -> asyncstorage.AsyncJsonStorage:
-        storage = CacheClearingJsonStorage(state=self.state, storage=self.json_mstorage.get_storage(storage_name))
-        return asyncstorage.AsyncJsonStorage(storage)
+    def get_storage_name(self, *, requested_storage: str = "") -> str:
+        assert self.config.object_storage is not None
+        return requested_storage if requested_storage else self.config.object_storage.default_storage
 
     def is_busy(self) -> bool:
         return bool(self.state.op and self.state.op_info.op_status in (Op.Status.running.value, Op.Status.starting.value))
-
-
-class CacheClearingJsonStorage(JsonStorage):
-    def __init__(self, state: CoordinatorState, storage: JsonStorage) -> None:
-        self.state = state
-        self.storage = storage
-
-    def delete_json(self, name: str) -> None:
-        try:
-            return self.storage.delete_json(name)
-        finally:
-            self.state.cached_list_response = None
-
-    @contextlib.contextmanager
-    def open_json_bytes(self, name: str) -> Iterator[mmap.mmap]:
-        with self.storage.open_json_bytes(name) as json_bytes:
-            yield json_bytes
-
-    def list_jsons(self) -> list[str]:
-        return self.storage.list_jsons()
-
-    def upload_json_bytes(self, name: str, data: bytes | mmap.mmap) -> bool:
-        try:
-            return self.storage.upload_json_bytes(name, data)
-        finally:
-            self.state.cached_list_response = None
 
 
 class CoordinatorOp(op.Op):
@@ -260,12 +223,15 @@ class SteppedCoordinatorOp(LockedCoordinatorOp):
     steps: Sequence[Step[Any]]
     step_progress: dict[int, Progress]
 
-    def __init__(self, *, c: Coordinator = Depends(), attempts: int, steps: Sequence[Step[Any]]):
+    def __init__(
+        self, *, c: Coordinator = Depends(), attempts: int, steps: Sequence[Step[Any]], operation_context: OperationContext
+    ) -> None:
         super().__init__(c=c)
         self.state = c.state
         self.attempts = attempts
         self.steps = steps
         self.step_progress = {}
+        self.operation_context = operation_context
 
     @property
     def progress(self) -> Progress:
@@ -280,8 +246,13 @@ class SteppedCoordinatorOp(LockedCoordinatorOp):
                 stats_tags: Tags = {"op": name, "attempt": str(attempt)}
                 async with self.stats.async_timing_manager("astacus_attempt_duration", stats_tags):
                     try:
-                        if await self.try_run(cluster, context):
-                            return
+                        try:
+                            if await self.try_run(cluster, context):
+                                return
+                        finally:
+                            if self.operation_context is not None:
+                                self.operation_context.json_storage.storage.close()
+                                self.operation_context.hexdigest_storage.storage.close()
                     except exceptions.TransientException as ex:
                         logger.info("%s - transient failure: %r", name, ex)
         except exceptions.PermanentException as ex:
@@ -324,9 +295,9 @@ class BackupOp(SteppedCoordinatorOp):
         return BackupOp(c=c)
 
     def __init__(self, *, c: Coordinator) -> None:
-        context = c.get_operation_context()
-        steps = c.get_plugin().get_backup_steps(context=context)
-        super().__init__(c=c, attempts=c.config.backup_attempts, steps=steps)
+        operation_context = c.get_operation_context()
+        steps = c.get_plugin().get_backup_steps(context=operation_context)
+        super().__init__(c=c, attempts=c.config.backup_attempts, steps=steps, operation_context=operation_context)
 
 
 class DeltaBackupOp(SteppedCoordinatorOp):
@@ -335,9 +306,9 @@ class DeltaBackupOp(SteppedCoordinatorOp):
         return DeltaBackupOp(c=c)
 
     def __init__(self, *, c: Coordinator) -> None:
-        context = c.get_operation_context()
-        steps = c.get_plugin().get_delta_backup_steps(context=context)
-        super().__init__(c=c, attempts=c.config.backup_attempts, steps=steps)
+        operation_context = c.get_operation_context()
+        steps = c.get_plugin().get_delta_backup_steps(context=operation_context)
+        super().__init__(c=c, attempts=c.config.backup_attempts, steps=steps, operation_context=operation_context)
 
 
 class RestoreOp(SteppedCoordinatorOp):
@@ -346,10 +317,10 @@ class RestoreOp(SteppedCoordinatorOp):
         return RestoreOp(c=c, req=req)
 
     def __init__(self, *, c: Coordinator, req: ipc.RestoreRequest) -> None:
-        context = c.get_operation_context(requested_storage=req.storage)
-        steps = c.get_plugin().get_restore_steps(context=context, req=req)
+        operation_context = c.get_operation_context(requested_storage=req.storage)
+        steps = c.get_plugin().get_restore_steps(context=operation_context, req=req)
         if req.stop_after_step is not None:
             step_names = [step.__class__.__name__ for step in steps]
             step_index = step_names.index(req.stop_after_step)
             steps = steps[: step_index + 1]
-        super().__init__(c=c, attempts=1, steps=steps)  # c.config.restore_attempts
+        super().__init__(c=c, attempts=1, steps=steps, operation_context=operation_context)  # c.config.restore_attempts

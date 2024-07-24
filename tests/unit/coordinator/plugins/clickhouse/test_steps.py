@@ -1301,7 +1301,12 @@ async def test_run_partition_cmd_on_every_node(
 
 
 def create_object_storage_disk(name: str, object_storage: ObjectStorage | None) -> Disk:
-    return Disk(type=DiskType.object_storage, name=name, path_parts=("disks", name), object_storage=object_storage)
+    return Disk(
+        type=DiskType.object_storage,
+        name=name,
+        path_parts=("disks", name),
+        object_storage_factory=lambda: object_storage,
+    )
 
 
 @pytest.mark.parametrize(

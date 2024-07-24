@@ -13,12 +13,16 @@ from astacus.common.storage import ThreadLocalStorage
 from astacus.node.snapshot import Snapshot
 from collections.abc import Sequence
 
+import dataclasses
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-class Uploader(ThreadLocalStorage):
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class Uploader:
+    thread_local_storage: ThreadLocalStorage
+
     def write_hashes_to_storage(
         self,
         *,
@@ -39,7 +43,7 @@ class Uploader(ThreadLocalStorage):
 
         def _upload_hexdigest_in_thread(work: tuple[str, list[SnapshotFile]]):
             hexdigest, files = work
-            storage = self.local_storage
+            storage = self.thread_local_storage.get_storage()
 
             assert hexdigest
             files = list(snapshot.get_files_for_digest(hexdigest))

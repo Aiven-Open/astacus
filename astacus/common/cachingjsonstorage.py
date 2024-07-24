@@ -22,7 +22,7 @@ exists, its contents stay the same.
 
 """
 from .exceptions import NotFoundException
-from .storage import JsonStorage, MultiStorage
+from .storage import JsonStorage
 from collections.abc import Iterator
 
 import contextlib
@@ -36,6 +36,10 @@ class CachingJsonStorage(JsonStorage):
     def __init__(self, *, backend_storage: JsonStorage, cache_storage: JsonStorage) -> None:
         self.backend_storage = backend_storage
         self.cache_storage = cache_storage
+
+    def close(self) -> None:
+        self.backend_storage.close()
+        self.cache_storage.close()
 
     @property
     def _backend_json_set(self) -> set[str]:
@@ -84,20 +88,3 @@ class CachingJsonStorage(JsonStorage):
         self.backend_storage.upload_json_bytes(name, data)
         self._backend_json_set_add(name)
         return True
-
-
-class MultiCachingJsonStorage(MultiStorage[CachingJsonStorage]):
-    def __init__(self, *, backend_mstorage: MultiStorage, cache_mstorage: MultiStorage) -> None:
-        self.cache_mstorage = cache_mstorage
-        self.backend_mstorage = backend_mstorage
-
-    def get_storage(self, name: str) -> CachingJsonStorage:
-        return CachingJsonStorage(
-            backend_storage=self.backend_mstorage.get_storage(name), cache_storage=self.cache_mstorage.get_storage(name)
-        )
-
-    def get_default_storage_name(self) -> str:
-        return self.backend_mstorage.get_default_storage_name()
-
-    def list_storages(self) -> list[str]:
-        return self.backend_mstorage.list_storages()

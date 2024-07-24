@@ -4,7 +4,8 @@ See LICENSE for details
 
 """
 from astacus.common import ipc, magic
-from astacus.common.storage import JsonStorage, MultiStorage
+from astacus.common.storage import JsonStorage
+from astacus.coordinator.storage_factory import StorageFactory
 from collections import defaultdict
 from collections.abc import Iterator, Mapping
 from typing import TypeAlias
@@ -73,28 +74,28 @@ def _iter_backups(
 
 def _iter_storages(
     req: ipc.ListRequest,
-    json_mstorage: MultiStorage,
+    storage_factory: StorageFactory,
     cache: CachedListEntries,
     backup_prefix: str = magic.JSON_BACKUP_PREFIX,
 ) -> Iterator[ipc.ListForStorage]:
     # req.storage is optional, used to constrain listing just to the
     # given storage. by default, we list all storages.
-    for storage_name in sorted(json_mstorage.list_storages()):
+    for storage_name in sorted(storage_factory.list_storages()):
         if not req.storage or req.storage == storage_name:
             storage_cache = cache.get(storage_name, {})
-            backups = list(
-                _iter_backups(
-                    json_mstorage.get_storage(storage_name), backup_prefix=backup_prefix, storage_cache=storage_cache
-                )
-            )
+            storage = storage_factory.create_json_storage(storage_name)
+            try:
+                backups = list(_iter_backups(storage, backup_prefix=backup_prefix, storage_cache=storage_cache))
+            finally:
+                storage.close()
             yield ipc.ListForStorage(storage_name=storage_name, backups=backups)
 
 
-def list_backups(*, req: ipc.ListRequest, json_mstorage: MultiStorage, cache: CachedListEntries) -> ipc.ListResponse:
-    return ipc.ListResponse(storages=list(_iter_storages(req, json_mstorage, cache=cache)))
+def list_backups(*, req: ipc.ListRequest, storage_factory: StorageFactory, cache: CachedListEntries) -> ipc.ListResponse:
+    return ipc.ListResponse(storages=list(_iter_storages(req, storage_factory, cache=cache)))
 
 
-def list_delta_backups(*, req: ipc.ListRequest, json_mstorage: MultiStorage) -> ipc.ListResponse:
+def list_delta_backups(*, req: ipc.ListRequest, storage_factory: StorageFactory) -> ipc.ListResponse:
     return ipc.ListResponse(
-        storages=list(_iter_storages(req, json_mstorage, cache={}, backup_prefix=magic.JSON_DELTA_PREFIX))
+        storages=list(_iter_storages(req, storage_factory, cache={}, backup_prefix=magic.JSON_DELTA_PREFIX))
     )

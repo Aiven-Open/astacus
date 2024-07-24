@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from pathlib import Path
 from rohmu.typing import FileLike
-from typing import BinaryIO, Callable, ContextManager, Generic, ParamSpec, TypeAlias, TypeVar
+from typing import BinaryIO, Callable, ContextManager, ParamSpec, TypeAlias, TypeVar
 
 import contextlib
 import io
@@ -36,6 +36,10 @@ class StorageUploadResult(msgspec.Struct, kw_only=True, frozen=True):
 
 
 class HexDigestStorage(ABC):
+    @abstractmethod
+    def close(self) -> None:
+        ...
+
     @abstractmethod
     def delete_hexdigest(self, hexdigest: str) -> None:
         ...
@@ -69,6 +73,10 @@ class HexDigestStorage(ABC):
 
 
 class JsonStorage(ABC):
+    @abstractmethod
+    def close(self) -> None:
+        pass
+
     @abstractmethod
     def delete_json(self, name: str) -> None:
         ...
@@ -124,6 +132,9 @@ class FileStorage(Storage):
         self.path.mkdir(parents=True, exist_ok=True)
         self.hexdigest_suffix = hexdigest_suffix
         self.json_suffix = json_suffix
+
+    def close(self) -> None:
+        pass
 
     def copy(self) -> "FileStorage":
         return FileStorage(path=self.path, hexdigest_suffix=self.hexdigest_suffix, json_suffix=self.json_suffix)
@@ -188,48 +199,25 @@ class FileStorage(Storage):
         return True
 
 
-class MultiStorage(Generic[T]):
-    def get_default_storage(self) -> T:
-        return self.get_storage(self.get_default_storage_name())
-
-    def get_default_storage_name(self) -> str:
-        raise NotImplementedError
-
-    def get_storage(self, name: str) -> T:
-        raise NotImplementedError
-
-    def list_storages(self) -> list[str]:
-        raise NotImplementedError
-
-
-class MultiFileStorage(MultiStorage[FileStorage]):
-    def __init__(self, path, **kw):
-        self.path = Path(path)
-        self.kw = kw
-        self._storages = set()
-
-    def get_storage(self, name: str) -> FileStorage:
-        self._storages.add(name)
-        return FileStorage(self.path / name, **self.kw)
-
-    def get_default_storage_name(self) -> str:
-        return sorted(self._storages)[-1]
-
-    def list_storages(self) -> list[str]:
-        return sorted(self._storages)
-
-
 class ThreadLocalStorage:
     def __init__(self, *, storage: Storage) -> None:
         self.threadlocal = threading.local()
         self.storage = storage
+        self.local_storages: list[Storage] = []
+        self.local_storages_lock = threading.Lock()
 
-    @property
-    def local_storage(self) -> Storage:
+    def get_storage(self) -> Storage:
         local_storage = getattr(self.threadlocal, "storage", None)
         if local_storage is None:
             local_storage = self.storage.copy()
+            with self.local_storages_lock:
+                self.local_storages.append(local_storage)
             setattr(self.threadlocal, "storage", local_storage)
         else:
             assert isinstance(local_storage, Storage)
         return local_storage
+
+    def close(self) -> None:
+        for local_storage in self.local_storages:
+            local_storage.close()
+        self.local_storages.clear()

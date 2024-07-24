@@ -7,7 +7,7 @@ from .escaping import escape_for_file_name, unescape_from_file_name
 from .object_storage import ObjectStorage, ThreadSafeRohmuStorage
 from astacus.common.magic import DEFAULT_EMBEDDED_FILE_SIZE
 from astacus.common.snapshot import SnapshotGroup
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Final
 from uuid import UUID
 
@@ -23,27 +23,38 @@ class PartFilePathError(ValueError):
         super().__init__(f"Unexpected part file path {file_path}: {error}")
 
 
+def none_factory() -> None:
+    return None
+
+
 @dataclasses.dataclass(frozen=True, slots=True)
 class Disk:
     type: DiskType
     name: str
     path_parts: tuple[str, ...]
-    object_storage: ObjectStorage | None = None
+    object_storage_factory: Callable[[], ObjectStorage | None] = none_factory
 
     @classmethod
     def from_disk_config(cls, config: DiskConfiguration, storage_name: str | None = None) -> "Disk":
         if config.object_storage is None:
-            object_storage: ThreadSafeRohmuStorage | None = None
+            object_storage_factory: Callable[[], ObjectStorage | None] = none_factory
         else:
             config_name = storage_name if storage_name is not None else config.object_storage.default_storage
-            storage_config = config.object_storage.storages[config_name]
-            object_storage = ThreadSafeRohmuStorage(config=storage_config)
+            object_storage_config = config.object_storage.storages[config_name]
+
+            def create_storage() -> ObjectStorage:
+                return ThreadSafeRohmuStorage(config=object_storage_config)
+
+            object_storage_factory = create_storage
         return Disk(
             type=config.type,
             name=config.name,
             path_parts=config.path.parts,
-            object_storage=object_storage,
+            object_storage_factory=object_storage_factory,
         )
+
+    def create_object_storage(self) -> ObjectStorage | None:
+        return self.object_storage_factory()
 
 
 class ParsedPath(msgspec.Struct, kw_only=True, frozen=True):
@@ -93,10 +104,10 @@ class Disks:
             for disk in self.disks
         ]
 
-    def get_object_storage(self, *, disk_name: str) -> ObjectStorage | None:
+    def create_object_storage(self, *, disk_name: str) -> ObjectStorage | None:
         for disk in self.disks:
             if disk.name == disk_name:
-                return disk.object_storage
+                return disk.create_object_storage()
         return None
 
     def _get_disk(self, path_parts: Sequence[str]) -> Disk | None:

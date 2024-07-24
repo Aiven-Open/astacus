@@ -187,23 +187,25 @@ def test_other_disk_parsed_path_to_path() -> None:
 
 def test_disk_can_load_default_object_storage_config() -> None:
     disk = Disk.from_disk_config(SAMPLE_SECONDARY_DISK_CONFIGURATION)
-    assert disk.object_storage is not None
-    config = disk.object_storage.get_config()
+    object_storage = disk.create_object_storage()
+    assert object_storage is not None
+    config = object_storage.get_config()
     assert isinstance(config, rohmu.LocalObjectStorageConfig)
     assert config.directory == Path("default-bucket")
 
 
 def test_disk_can_load_alternate_object_storage_config() -> None:
     disk = Disk.from_disk_config(SAMPLE_SECONDARY_DISK_CONFIGURATION, storage_name="recovery")
-    assert disk.object_storage is not None
-    config = disk.object_storage.get_config()
+    object_storage = disk.create_object_storage()
+    assert object_storage is not None
+    config = object_storage.get_config()
     assert isinstance(config, rohmu.LocalObjectStorageConfig)
     assert config.directory == Path("recovery-bucket")
 
 
 def test_disks_can_load_default_object_storage_config() -> None:
     disks = Disks.from_disk_configs(SAMPLE_DISKS_CONFIGURATION)
-    storage = disks.get_object_storage(disk_name="secondary")
+    storage = disks.create_object_storage(disk_name="secondary")
     assert storage is not None
     config = storage.get_config()
     assert isinstance(config, rohmu.LocalObjectStorageConfig)
@@ -212,7 +214,7 @@ def test_disks_can_load_default_object_storage_config() -> None:
 
 def test_disks_can_load_alternate_object_storage_config() -> None:
     disks = Disks.from_disk_configs(SAMPLE_DISKS_CONFIGURATION, storage_name="recovery")
-    storage = disks.get_object_storage(disk_name="secondary")
+    storage = disks.create_object_storage(disk_name="secondary")
     assert storage is not None
     config = storage.get_config()
     assert isinstance(config, rohmu.LocalObjectStorageConfig)
