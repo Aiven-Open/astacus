@@ -1027,7 +1027,7 @@ async def test_restore_object_storage_files() -> None:
     assert target_object_storage.list_items() == object_storage_items
 
 
-async def test_restore_object_storage_files_does_nothing_is_storages_have_same_config() -> None:
+async def test_restore_object_storage_files_does_nothing_if_storages_have_same_config() -> None:
     same_object_storage = mock.Mock(spec_set=ObjectStorage)
     source_disks = Disks(disks=[create_object_storage_disk("remote", same_object_storage)])
     target_disks = Disks(disks=[create_object_storage_disk("remote", same_object_storage)])
