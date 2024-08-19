@@ -791,7 +791,7 @@ class RestoreObjectStorageFilesStep(SyncStep[None]):
                     try:
                         if source_storage.get_config() != target_storage.get_config():
                             paths = [file.path for file in object_storage_files.files]
-                            target_storage.copy_items_from(source_storage, paths)
+                            target_storage.copy_items_from(source_storage, paths, stats=cluster.stats)
                     finally:
                         target_storage.close()
                 finally:
