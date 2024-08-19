@@ -188,8 +188,8 @@ class ClickHousePlugin(CoordinatorPlugin):
                 sync_timeout=self.sync_databases_timeout,
             ),
             MapNodesStep(partial_restore_nodes=req.partial_restore_nodes),
-            RestoreStep(storage_name=context.storage_name, partial_restore_nodes=req.partial_restore_nodes),
             RestoreObjectStorageFilesStep(source_disks=source_disks, target_disks=disks),
+            RestoreStep(storage_name=context.storage_name, partial_restore_nodes=req.partial_restore_nodes),
             AttachMergeTreePartsStep(
                 clients=clients,
                 disks=disks,
