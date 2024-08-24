@@ -41,9 +41,10 @@ class Disk:
         else:
             config_name = storage_name if storage_name is not None else config.object_storage.default_storage
             object_storage_config = config.object_storage.storages[config_name]
+            copy_config = config.object_storage.copy_config
 
             def create_storage() -> ObjectStorage:
-                return ThreadSafeRohmuStorage(config=object_storage_config)
+                return ThreadSafeRohmuStorage(config=object_storage_config, copy_config=copy_config)
 
             object_storage_factory = create_storage
         return Disk(

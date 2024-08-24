@@ -9,6 +9,7 @@ from astacus.coordinator.plugins.zookeeper import KazooZooKeeperClient, ZooKeepe
 from astacus.coordinator.plugins.zookeeper_config import ZooKeeperConfiguration
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Literal
 
 import enum
 
@@ -39,9 +40,19 @@ class DiskType(enum.Enum):
     object_storage = "object_storage"
 
 
+class DirectCopyConfig(AstacusModel):
+    method: Literal["direct"] = "direct"
+
+
+class LocalCopyConfig(AstacusModel):
+    method: Literal["local"] = "local"
+    temporary_directory: str
+
+
 class DiskObjectStorageConfiguration(AstacusModel):
     default_storage: str
     storages: Mapping[str, RohmuStorageConfig]
+    copy_config: DirectCopyConfig | LocalCopyConfig = DirectCopyConfig()
 
 
 class DiskConfiguration(AstacusModel):
