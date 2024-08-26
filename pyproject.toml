@@ -30,7 +30,7 @@ dependencies = [
     "protobuf < 3.21",
     "pydantic < 2",
     "pyyaml",
-    "rohmu >= 2.5.0",
+    "rohmu >= 2.7.0",
     "sentry-sdk",
     "starlette",
     "tabulate",
@@ -134,7 +134,6 @@ source = "vcs"
 
 [tool.hatch.build.hooks.vcs]
 version-file = "astacus/version.py"
-
 
 [tool.black]
 line-length = 125
