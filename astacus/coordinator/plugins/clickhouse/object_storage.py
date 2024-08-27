@@ -119,6 +119,7 @@ def _copy_via_local_filesystem(
     for keys_copied, key in enumerate(keys):
         with tempfile.TemporaryFile(dir=copy_config.temporary_directory) as temp_file:
             metadata = source.get_contents_to_fileobj(key, temp_file)
+            temp_file.seek(0)
             target.store_file_object(key, temp_file, metadata)
         if stats:
             stats.gauge(
