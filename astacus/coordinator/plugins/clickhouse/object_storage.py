@@ -8,8 +8,7 @@ from astacus.common.rohmustorage import RohmuStorageConfig
 from astacus.common.statsd import StatsClient
 from collections.abc import Iterator, Sequence
 from rohmu import BaseTransfer
-from rohmu.errors import FileNotFoundFromStorageError
-from typing import Any, Self
+from typing import Any
 
 import contextlib
 import dataclasses
@@ -126,39 +125,3 @@ def _copy_via_local_filesystem(
                 keys_to_copy - keys_copied,
                 tags={"copy_method": copy_config.method},
             )
-
-
-@dataclasses.dataclass(frozen=True)
-class MemoryObjectStorage(ObjectStorage):
-    items: dict[str, ObjectStorageItem] = dataclasses.field(default_factory=dict)
-
-    def close(self) -> None:
-        pass
-
-    @classmethod
-    def from_items(cls, items: Sequence[ObjectStorageItem]) -> Self:
-        return cls(items={item.key: item for item in items})
-
-    def get_config(self) -> dict:
-        # Exposing the object id in the config ensures that the same memory storage
-        # has the same config as itself and a different config as another memory storage.
-        # Using a manually picked name would be more error-prone: we want two object
-        # storages to share state when their config is equal (= they are reading and
-        # writing to the same place), that wouldn't happen with two identically named
-        # *memory* object storages.
-        return {"memory_id": id(self)}
-
-    def list_items(self) -> list[ObjectStorageItem]:
-        return list(self.items.values())
-
-    def delete_item(self, key: str) -> None:
-        if key not in self.items:
-            raise FileNotFoundFromStorageError(key)
-        logger.info("deleting item: %r", key)
-        self.items.pop(key)
-
-    def copy_items_from(self, source: "ObjectStorage", keys: Sequence[str], *, stats: StatsClient | None) -> None:
-        keys_set = set(keys)
-        for source_item in source.list_items():
-            if source_item.key in keys_set:
-                self.items[source_item.key] = source_item

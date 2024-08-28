@@ -35,7 +35,7 @@ from astacus.coordinator.plugins.clickhouse.manifest import (
     Table,
     UserDefinedFunction,
 )
-from astacus.coordinator.plugins.clickhouse.object_storage import MemoryObjectStorage, ObjectStorage, ObjectStorageItem
+from astacus.coordinator.plugins.clickhouse.object_storage import ObjectStorage, ObjectStorageItem
 from astacus.coordinator.plugins.clickhouse.replication import DatabaseReplica
 from astacus.coordinator.plugins.clickhouse.steps import (
     AttachMergeTreePartsStep,
@@ -73,6 +73,7 @@ from astacus.coordinator.plugins.zookeeper import FakeZooKeeperClient, ZooKeeper
 from base64 import b64encode
 from collections.abc import Awaitable, Iterable, Sequence
 from pathlib import Path
+from tests.unit.coordinator.plugins.clickhouse.object_storage import MemoryObjectStorage
 from tests.unit.storage import MemoryJsonStorage
 from unittest import mock
 from unittest.mock import _Call as MockCall  # pylint: disable=protected-access
