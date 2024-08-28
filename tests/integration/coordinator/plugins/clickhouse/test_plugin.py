@@ -13,6 +13,7 @@ from astacus.coordinator.plugins.clickhouse.client import (
     escape_sql_string,
     HttpClickHouseClient,
 )
+from astacus.coordinator.plugins.clickhouse.config import CopyMethod
 from astacus.coordinator.plugins.clickhouse.engines import TableEngine
 from astacus.coordinator.plugins.clickhouse.plugin import ClickHousePlugin
 from collections.abc import AsyncIterable, AsyncIterator, Sequence
@@ -28,10 +29,11 @@ from tests.integration.coordinator.plugins.clickhouse.conftest import (
     RestorableSource,
     run_astacus_command,
 )
-from typing import Final
+from typing import Final, Iterable
 from unittest import mock
 
 import base64
+import dataclasses
 import pytest
 import tempfile
 
@@ -110,6 +112,7 @@ async def restored_cluster_manager(
     stop_after_step: str | None,
     clickhouse_restore_command: ClickHouseCommand,
     minio_bucket: MinioBucket,
+    object_storage_copy_method: CopyMethod,
 ) -> AsyncIterator[Sequence[ClickHouseClient]]:
     restorable_source = RestorableSource(
         astacus_storage_path=restorable_cluster / "astacus_backup", clickhouse_object_storage_prefix="restorable/"
@@ -127,7 +130,13 @@ async def restored_cluster_manager(
             with tempfile.TemporaryDirectory(prefix="storage_") as storage_path_str:
                 storage_path = Path(storage_path_str)
                 async with create_astacus_cluster(
-                    storage_path, zookeeper, clickhouse_cluster, ports, minio_bucket, restorable_source
+                    storage_path,
+                    zookeeper,
+                    clickhouse_cluster,
+                    ports,
+                    minio_bucket,
+                    object_storage_copy_method,
+                    restorable_source,
                 ) as astacus_cluster:
                     # To test if we can survive transient failures during an entire restore operation,
                     # we first run a partial restore that stops after one of the restore steps,
@@ -148,7 +157,30 @@ async def restored_cluster_manager(
                     yield clients
 
 
-@pytest.fixture(scope="module", name="restored_cluster", params=[*get_restore_steps_names(), None])
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class RestorationTestCase:
+    stop_after_step: str | None
+    object_storage_copy_method: CopyMethod
+
+    @property
+    def test_id(self) -> str:
+        return self.stop_after_step or self.object_storage_copy_method
+
+
+def restoration_test_cases() -> Iterable[RestorationTestCase]:
+    # Does not make sense to test both copy methods in partial failure scenarios, since the post-effect of both
+    # copy methods is the same: data in the target tiered storage. Test only direct copy.
+    partial_failure_cases = [
+        RestorationTestCase(stop_after_step=step, object_storage_copy_method=CopyMethod.direct)
+        for step in get_restore_steps_names()
+    ]
+    different_copy_method_cases = [
+        RestorationTestCase(stop_after_step=None, object_storage_copy_method=method) for method in CopyMethod
+    ]
+    return partial_failure_cases + different_copy_method_cases
+
+
+@pytest.fixture(scope="module", name="restored_cluster", params=restoration_test_cases(), ids=lambda p: p.test_id)
 async def fixture_restored_cluster(
     ports: Ports,
     request: SubRequest,
@@ -156,9 +188,14 @@ async def fixture_restored_cluster(
     clickhouse_restore_command: ClickHouseCommand,
     minio_bucket: MinioBucket,
 ) -> AsyncIterable[Sequence[ClickHouseClient]]:
-    stop_after_step: str | None = request.param
+    test_case: RestorationTestCase = request.param
     async with restored_cluster_manager(
-        restorable_cluster, ports, stop_after_step, clickhouse_restore_command, minio_bucket
+        restorable_cluster,
+        ports,
+        test_case.stop_after_step,
+        clickhouse_restore_command,
+        minio_bucket,
+        test_case.object_storage_copy_method,
     ) as clients:
         yield clients
 
@@ -172,7 +209,12 @@ async def fixture_function_restored_cluster(
 ) -> AsyncIterable[Sequence[ClickHouseClient]]:
     async with restorable_cluster_manager(ports, clickhouse_command, function_minio_bucket) as restorable_cluster:
         async with restored_cluster_manager(
-            restorable_cluster, ports, None, clickhouse_restore_command, function_minio_bucket
+            restorable_cluster,
+            ports,
+            None,
+            clickhouse_restore_command,
+            function_minio_bucket,
+            CopyMethod.direct,  # is irrelevant in the context of materialized views restoration
         ) as clients:
             yield clients
 

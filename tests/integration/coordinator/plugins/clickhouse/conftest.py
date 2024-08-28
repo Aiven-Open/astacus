@@ -14,9 +14,12 @@ from astacus.coordinator.plugins.clickhouse.client import HttpClickHouseClient
 from astacus.coordinator.plugins.clickhouse.config import (
     ClickHouseConfiguration,
     ClickHouseNode,
+    CopyMethod,
+    DirectCopyConfig,
     DiskConfiguration,
     DiskObjectStorageConfiguration,
     DiskType,
+    LocalCopyConfig,
     ReplicatedDatabaseSettings,
 )
 from astacus.coordinator.plugins.clickhouse.plugin import ClickHousePlugin
@@ -320,10 +323,11 @@ async def create_astacus_cluster(
     clickhouse_cluster: ClickHouseServiceCluster,
     ports: Ports,
     minio_bucket: MinioBucket,
+    object_storage_copy_method: CopyMethod = CopyMethod.direct,
     restorable_source: RestorableSource | None = None,
 ) -> AsyncIterator[ServiceCluster]:
     configs = create_astacus_configs(
-        zookeeper, clickhouse_cluster, ports, Path(storage_path), minio_bucket, restorable_source
+        zookeeper, clickhouse_cluster, ports, Path(storage_path), minio_bucket, object_storage_copy_method, restorable_source
     )
     async with contextlib.AsyncExitStack() as stack:
         astacus_services_coro: Sequence[Awaitable] = [
@@ -506,12 +510,23 @@ def run_astacus_command(astacus_cluster: ServiceCluster, *args: str) -> None:
         raise AstacusCommandError(f"Command {all_args} on {astacus_url} failed")
 
 
+def create_object_storage_copy_config(
+    object_storage_copy_method: CopyMethod, tmp_path: Path
+) -> DirectCopyConfig | LocalCopyConfig:
+    match object_storage_copy_method:
+        case CopyMethod.direct:
+            return DirectCopyConfig()
+        case CopyMethod.local:
+            return LocalCopyConfig(temporary_directory=str(tmp_path))
+
+
 def create_astacus_configs(
     zookeeper: Service,
     clickhouse_cluster: ClickHouseServiceCluster,
     ports: Ports,
     storage_path: Path,
     minio_bucket: MinioBucket,
+    object_storage_copy_method: CopyMethod,
     restorable_source: RestorableSource | None = None,
 ) -> Sequence[GlobalConfig]:
     storage_tmp_path = storage_path / "tmp"
@@ -555,6 +570,7 @@ def create_astacus_configs(
             bucket_name=minio_bucket.name,
             prefix=restorable_source.clickhouse_object_storage_prefix,
         )
+    object_storage_copy_config = create_object_storage_copy_config(object_storage_copy_method, storage_tmp_path)
     return [
         GlobalConfig(
             coordinator=CoordinatorConfig(
@@ -599,6 +615,7 @@ def create_astacus_configs(
                             object_storage=DiskObjectStorageConfiguration(
                                 default_storage="default",
                                 storages=disk_storages,
+                                copy_config=object_storage_copy_config,
                             ),
                         ),
                     ],
