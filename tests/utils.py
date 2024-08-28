@@ -2,8 +2,10 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.common.rohmustorage import RohmuCompressionType, RohmuConfig
 from collections.abc import Sequence
+from functools import cache
 from pathlib import Path
 from typing import Final
 
@@ -85,9 +87,14 @@ def parse_clickhouse_version(command_output: bytes) -> tuple[int, ...]:
     return version_tuple
 
 
-def get_clickhouse_version(command: Sequence[str | Path]) -> tuple[int, ...]:
+@cache
+def _get_clickhouse_version(command: tuple[str | Path, ...]) -> tuple[int, ...]:
     version_command_output = subprocess.check_output([*command, "--version"])
     return parse_clickhouse_version(version_command_output)
+
+
+def get_clickhouse_version(command: Sequence[str | Path]) -> tuple[int, ...]:
+    return _get_clickhouse_version(tuple(command))
 
 
 def is_cassandra_driver_importable() -> bool:
