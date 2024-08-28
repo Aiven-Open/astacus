@@ -13,6 +13,7 @@ from typing import Any
 import contextlib
 import dataclasses
 import datetime
+import functools
 import logging
 import rohmu
 import tempfile
@@ -80,30 +81,41 @@ class ThreadSafeRohmuStorage(ObjectStorage):
             raise NotImplementedError("Copying items is only supported from another ThreadSafeRohmuStorage")
         with source.get_storage() as source_storage:
             with self.get_storage() as target_storage:
-                self._copy_items_between(keys, source_storage=source_storage, target_storage=target_storage, stats=stats)
-
-    def _copy_items_between(
-        self,
-        keys: Sequence[str],
-        *,
-        source_storage: BaseTransfer[Any],
-        target_storage: BaseTransfer[Any],
-        stats: StatsClient | None,
-    ) -> None:
-        match self.copy_config:
-            case DirectCopyConfig():
-                logger.info("Copying the keys using the cloud APIs")
-                target_storage.copy_files_from(source=source_storage, keys=keys)
-            case LocalCopyConfig():
-                logger.info("Copying the keys by downloading from source/uploading to target")
-                _copy_via_local_filesystem(
-                    keys, source=source_storage, target=target_storage, copy_config=self.copy_config, stats=stats
+                copy_items_between(
+                    keys,
+                    copy_config=self.copy_config,
+                    source_storage=source_storage,
+                    target_storage=target_storage,
+                    stats=stats,
                 )
 
     @contextlib.contextmanager
     def get_storage(self) -> Iterator[BaseTransfer[Any]]:
         with self._storage_lock:
             yield self._storage
+
+
+def copy_items_between(
+    keys: Sequence[str],
+    *,
+    copy_config: DirectCopyConfig | LocalCopyConfig,
+    source_storage: BaseTransfer[Any],
+    target_storage: BaseTransfer[Any],
+    stats: StatsClient | None,
+) -> None:
+    total_keys = len(keys)
+    match copy_config:
+        case DirectCopyConfig():
+            logger.info("Copying %i keys using the cloud APIs", total_keys)
+            emit_direct_copy_progress = (
+                functools.partial(emit_copy_progress_metric, stats, copy_config.method) if stats else None
+            )
+            target_storage.copy_files_from(source=source_storage, keys=keys, progress_fn=emit_direct_copy_progress)
+        case LocalCopyConfig():
+            logger.info("Copying %i keys by downloading from source/uploading to target", total_keys)
+            _copy_via_local_filesystem(
+                keys, source=source_storage, target=target_storage, copy_config=copy_config, stats=stats
+            )
 
 
 def _copy_via_local_filesystem(
@@ -115,13 +127,19 @@ def _copy_via_local_filesystem(
     stats: StatsClient | None,
 ) -> None:
     keys_to_copy = len(keys)
-    for keys_copied, key in enumerate(keys):
+    for keys_copied, key in enumerate(keys, start=1):
         with tempfile.TemporaryFile(dir=copy_config.temporary_directory) as temp_file:
             metadata = source.get_contents_to_fileobj(key, temp_file)
             target.store_file_object(key, temp_file, metadata)
         if stats:
-            stats.gauge(
-                "astacus_restore_clickhouse_tiered_storage_keys_remaining",
-                keys_to_copy - keys_copied,
-                tags={"copy_method": copy_config.method},
+            emit_copy_progress_metric(
+                stats=stats, copy_method=copy_config.method, completed_files=keys_copied, total_files=keys_to_copy
             )
+
+
+def emit_copy_progress_metric(stats: StatsClient, copy_method: str, completed_files: int, total_files: int) -> None:
+    stats.gauge(
+        "astacus_copy_tiered_object_storage_files_remaining",
+        total_files - completed_files,
+        tags={"copy_method": copy_method},
+    )

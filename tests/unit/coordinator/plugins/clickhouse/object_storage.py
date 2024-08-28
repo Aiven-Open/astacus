@@ -5,7 +5,7 @@ See LICENSE for details
 
 
 from astacus.common.statsd import StatsClient
-from astacus.coordinator.plugins.clickhouse.object_storage import ObjectStorage, ObjectStorageItem
+from astacus.coordinator.plugins.clickhouse.object_storage import emit_copy_progress_metric, ObjectStorage, ObjectStorageItem
 from collections.abc import Sequence
 from rohmu.errors import FileNotFoundFromStorageError
 from typing import Self
@@ -47,6 +47,14 @@ class MemoryObjectStorage(ObjectStorage):
 
     def copy_items_from(self, source: "ObjectStorage", keys: Sequence[str], *, stats: StatsClient | None) -> None:
         keys_set = set(keys)
-        for source_item in source.list_items():
+        keys_to_copy = len(keys_set)
+        for keys_copied, source_item in enumerate(source.list_items(), start=1):
             if source_item.key in keys_set:
                 self.items[source_item.key] = source_item
+            if stats:
+                emit_copy_progress_metric(
+                    stats=stats,
+                    copy_method="memory",
+                    completed_files=keys_copied,
+                    total_files=keys_to_copy,
+                )
