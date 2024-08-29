@@ -6,6 +6,7 @@ See LICENSE for details
 from astacus.common.asyncstorage import AsyncJsonStorage
 from astacus.common.exceptions import TransientException
 from astacus.common.ipc import BackupManifest, ManifestMin, Plugin, SnapshotFile, SnapshotResult, SnapshotState
+from astacus.common.statsd import StatsClient
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.plugins.base import (
@@ -19,8 +20,10 @@ from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, Stub
 from astacus.coordinator.plugins.clickhouse.config import (
     ClickHouseConfiguration,
     ClickHouseNode,
+    DirectCopyConfig,
     DiskConfiguration,
     DiskType,
+    LocalCopyConfig,
     ReplicatedDatabaseSettings,
 )
 from astacus.coordinator.plugins.clickhouse.disks import Disk, Disks
@@ -35,7 +38,7 @@ from astacus.coordinator.plugins.clickhouse.manifest import (
     Table,
     UserDefinedFunction,
 )
-from astacus.coordinator.plugins.clickhouse.object_storage import MemoryObjectStorage, ObjectStorage, ObjectStorageItem
+from astacus.coordinator.plugins.clickhouse.object_storage import copy_items_between, ObjectStorage, ObjectStorageItem
 from astacus.coordinator.plugins.clickhouse.replication import DatabaseReplica
 from astacus.coordinator.plugins.clickhouse.steps import (
     AttachMergeTreePartsStep,
@@ -71,11 +74,15 @@ from astacus.coordinator.plugins.clickhouse.steps import (
 )
 from astacus.coordinator.plugins.zookeeper import FakeZooKeeperClient, ZooKeeperClient
 from base64 import b64encode
-from collections.abc import Awaitable, Iterable, Sequence
+from collections.abc import Awaitable, Collection, Iterable, Sequence
 from pathlib import Path
+from rohmu import BaseTransfer
+from rohmu.object_storage.base import ObjectTransferProgressCallback
+from tests.unit.coordinator.plugins.clickhouse.object_storage import MemoryObjectStorage
 from tests.unit.storage import MemoryJsonStorage
+from typing import Any
 from unittest import mock
-from unittest.mock import _Call as MockCall  # pylint: disable=protected-access
+from unittest.mock import _Call as MockCall, patch  # pylint: disable=protected-access
 
 import asyncio
 import base64
@@ -83,6 +90,7 @@ import datetime
 import msgspec
 import pytest
 import sys
+import tempfile
 import uuid
 
 pytestmark = [pytest.mark.clickhouse]
@@ -1010,21 +1018,84 @@ async def test_restore_replica() -> None:
         check_each_pair_of_calls_has_the_same_session_id(client.mock_calls)
 
 
-async def test_restore_object_storage_files() -> None:
+@pytest.mark.parametrize("with_stats", [False, True])
+async def test_restore_object_storage_files(with_stats: bool) -> None:
+    clickhouse_source_object_storage_files = SAMPLE_MANIFEST.object_storage_files[0].files
     object_storage_items = [
         ObjectStorageItem(key=file.path, last_modified=datetime.datetime(2020, 1, 2, tzinfo=datetime.timezone.utc))
-        for file in SAMPLE_MANIFEST.object_storage_files[0].files
+        for file in clickhouse_source_object_storage_files
     ]
     source_object_storage = MemoryObjectStorage.from_items(object_storage_items)
     target_object_storage = MemoryObjectStorage()
     source_disks = Disks(disks=[create_object_storage_disk("remote", source_object_storage)])
     target_disks = Disks(disks=[create_object_storage_disk("remote", target_object_storage)])
     step = RestoreObjectStorageFilesStep(source_disks=source_disks, target_disks=target_disks)
-    cluster = Cluster(nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")])
+    stats = mock.Mock(spec_set=StatsClient)
+    cluster = Cluster(
+        nodes=[CoordinatorNode(url="node1"), CoordinatorNode(url="node2")], stats=stats if with_stats else None
+    )
     context = StepsContext()
     context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
+
     await step.run_step(cluster, context)
+
     assert target_object_storage.list_items() == object_storage_items
+    if with_stats:
+        assert len(clickhouse_source_object_storage_files) == stats.gauge.call_count
+        assert stats.gauge.call_args_list == [
+            mock.call("astacus_copy_tiered_object_storage_files_remaining", 2, tags={"copy_method": "memory"}),
+            mock.call("astacus_copy_tiered_object_storage_files_remaining", 1, tags={"copy_method": "memory"}),
+            mock.call("astacus_copy_tiered_object_storage_files_remaining", 0, tags={"copy_method": "memory"}),
+        ]
+
+
+def _mock_copy_files_from(
+    *,
+    source: BaseTransfer[Any],
+    keys: Collection[str],
+    progress_fn: ObjectTransferProgressCallback | None = None,
+) -> None:
+    total_files = len(keys)
+    for index, _ in enumerate(keys, start=1):
+        if progress_fn is not None:
+            progress_fn(index, total_files)
+
+
+async def test_copy_items_between_with_direct_copy_method() -> None:
+    stats = mock.Mock(spec_set=StatsClient)
+    source_object_storage = mock.Mock(spec_set=BaseTransfer[Any])
+    target_object_storage = mock.Mock(spec_set=BaseTransfer[Any])
+    target_object_storage.copy_files_from = _mock_copy_files_from
+    copy_items_between(
+        keys=["key1", "key2"],
+        copy_config=DirectCopyConfig(),
+        source_storage=source_object_storage,
+        target_storage=target_object_storage,
+        stats=stats,
+    )
+    assert stats.gauge.call_args_list == [
+        mock.call("astacus_copy_tiered_object_storage_files_remaining", 1, tags={"copy_method": "direct"}),
+        mock.call("astacus_copy_tiered_object_storage_files_remaining", 0, tags={"copy_method": "direct"}),
+    ]
+
+
+async def test_copy_items_between_with_local_copy_method() -> None:
+    stats = mock.Mock(spec_set=StatsClient)
+    source_object_storage = mock.Mock(spec_set=BaseTransfer[Any])
+    target_object_storage = mock.Mock(spec_set=BaseTransfer[Any])
+    with patch.object(tempfile, "TemporaryFile") as mock_tempfile:
+        copy_items_between(
+            keys=["key1", "key2"],
+            copy_config=LocalCopyConfig(temporary_directory="tmp"),
+            source_storage=source_object_storage,
+            target_storage=target_object_storage,
+            stats=stats,
+        )
+    assert stats.gauge.call_args_list == [
+        mock.call("astacus_copy_tiered_object_storage_files_remaining", 1, tags={"copy_method": "local"}),
+        mock.call("astacus_copy_tiered_object_storage_files_remaining", 0, tags={"copy_method": "local"}),
+    ]
+    assert mock_tempfile.call_args_list == [mock.call(dir="tmp"), mock.call(dir="tmp")]
 
 
 async def test_restore_object_storage_files_does_nothing_if_storages_have_same_config() -> None:

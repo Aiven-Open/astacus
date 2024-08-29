@@ -8,12 +8,12 @@ from astacus.common.rohmustorage import RohmuStorageConfig
 from astacus.common.statsd import StatsClient
 from collections.abc import Iterator, Sequence
 from rohmu import BaseTransfer
-from rohmu.errors import FileNotFoundFromStorageError
-from typing import Any, Self
+from typing import Any
 
 import contextlib
 import dataclasses
 import datetime
+import functools
 import logging
 import rohmu
 import tempfile
@@ -81,30 +81,41 @@ class ThreadSafeRohmuStorage(ObjectStorage):
             raise NotImplementedError("Copying items is only supported from another ThreadSafeRohmuStorage")
         with source.get_storage() as source_storage:
             with self.get_storage() as target_storage:
-                self._copy_items_between(keys, source_storage=source_storage, target_storage=target_storage, stats=stats)
-
-    def _copy_items_between(
-        self,
-        keys: Sequence[str],
-        *,
-        source_storage: BaseTransfer[Any],
-        target_storage: BaseTransfer[Any],
-        stats: StatsClient | None,
-    ) -> None:
-        match self.copy_config:
-            case DirectCopyConfig():
-                logger.info("Copying the keys using the cloud APIs")
-                target_storage.copy_files_from(source=source_storage, keys=keys)
-            case LocalCopyConfig():
-                logger.info("Copying the keys by downloading from source/uploading to target")
-                _copy_via_local_filesystem(
-                    keys, source=source_storage, target=target_storage, copy_config=self.copy_config, stats=stats
+                copy_items_between(
+                    keys,
+                    copy_config=self.copy_config,
+                    source_storage=source_storage,
+                    target_storage=target_storage,
+                    stats=stats,
                 )
 
     @contextlib.contextmanager
     def get_storage(self) -> Iterator[BaseTransfer[Any]]:
         with self._storage_lock:
             yield self._storage
+
+
+def copy_items_between(
+    keys: Sequence[str],
+    *,
+    copy_config: DirectCopyConfig | LocalCopyConfig,
+    source_storage: BaseTransfer[Any],
+    target_storage: BaseTransfer[Any],
+    stats: StatsClient | None,
+) -> None:
+    total_keys = len(keys)
+    match copy_config:
+        case DirectCopyConfig():
+            logger.info("Copying %i keys using the cloud APIs", total_keys)
+            emit_direct_copy_progress = (
+                functools.partial(emit_copy_progress_metric, stats, copy_config.method) if stats else None
+            )
+            target_storage.copy_files_from(source=source_storage, keys=keys, progress_fn=emit_direct_copy_progress)
+        case LocalCopyConfig():
+            logger.info("Copying %i keys by downloading from source/uploading to target", total_keys)
+            _copy_via_local_filesystem(
+                keys, source=source_storage, target=target_storage, copy_config=copy_config, stats=stats
+            )
 
 
 def _copy_via_local_filesystem(
@@ -116,50 +127,20 @@ def _copy_via_local_filesystem(
     stats: StatsClient | None,
 ) -> None:
     keys_to_copy = len(keys)
-    for keys_copied, key in enumerate(keys):
+    for keys_copied, key in enumerate(keys, start=1):
         with tempfile.TemporaryFile(dir=copy_config.temporary_directory) as temp_file:
             metadata = source.get_contents_to_fileobj(key, temp_file)
             temp_file.seek(0)
             target.store_file_object(key, temp_file, metadata)
         if stats:
-            stats.gauge(
-                "astacus_restore_clickhouse_tiered_storage_keys_remaining",
-                keys_to_copy - keys_copied,
-                tags={"copy_method": copy_config.method},
+            emit_copy_progress_metric(
+                stats=stats, copy_method=copy_config.method, completed_files=keys_copied, total_files=keys_to_copy
             )
 
 
-@dataclasses.dataclass(frozen=True)
-class MemoryObjectStorage(ObjectStorage):
-    items: dict[str, ObjectStorageItem] = dataclasses.field(default_factory=dict)
-
-    def close(self) -> None:
-        pass
-
-    @classmethod
-    def from_items(cls, items: Sequence[ObjectStorageItem]) -> Self:
-        return cls(items={item.key: item for item in items})
-
-    def get_config(self) -> dict:
-        # Exposing the object id in the config ensures that the same memory storage
-        # has the same config as itself and a different config as another memory storage.
-        # Using a manually picked name would be more error-prone: we want two object
-        # storages to share state when their config is equal (= they are reading and
-        # writing to the same place), that wouldn't happen with two identically named
-        # *memory* object storages.
-        return {"memory_id": id(self)}
-
-    def list_items(self) -> list[ObjectStorageItem]:
-        return list(self.items.values())
-
-    def delete_item(self, key: str) -> None:
-        if key not in self.items:
-            raise FileNotFoundFromStorageError(key)
-        logger.info("deleting item: %r", key)
-        self.items.pop(key)
-
-    def copy_items_from(self, source: "ObjectStorage", keys: Sequence[str], *, stats: StatsClient | None) -> None:
-        keys_set = set(keys)
-        for source_item in source.list_items():
-            if source_item.key in keys_set:
-                self.items[source_item.key] = source_item
+def emit_copy_progress_metric(stats: StatsClient, copy_method: str, completed_files: int, total_files: int) -> None:
+    stats.gauge(
+        "astacus_copy_tiered_object_storage_files_remaining",
+        total_files - completed_files,
+        tags={"copy_method": copy_method},
+    )
