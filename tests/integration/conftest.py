@@ -137,7 +137,7 @@ def fixture_ports() -> Ports:
     return Ports()
 
 
-@pytest.fixture(scope="module", name="zookeeper")
+@pytest.fixture(name="zookeeper")
 async def fixture_zookeeper(ports: Ports) -> AsyncIterator[Service]:
     async with create_zookeeper(ports) as zookeeper:
         yield zookeeper
