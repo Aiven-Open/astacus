@@ -118,12 +118,14 @@ class ClickHouseObjectStorageFile(AstacusModel):
 class ClickHouseObjectStorageFiles(AstacusModel):
     disk_name: str
     files: list[ClickHouseObjectStorageFile]
+    total_size_bytes: int | None = None
 
     @classmethod
     def from_plugin_data(cls, data: dict[str, Any]) -> Self:
         return cls(
             disk_name=data["disk_name"],
             files=[ClickHouseObjectStorageFile.from_plugin_data(item) for item in data["files"]],
+            total_size_bytes=data.get("total_size_bytes"),
         )
 
 

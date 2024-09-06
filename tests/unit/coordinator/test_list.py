@@ -17,6 +17,7 @@ from astacus.common.ipc import (
     SnapshotResult,
     SnapshotState,
     SnapshotUploadResult,
+    TieredStorageResults,
 )
 from astacus.coordinator import api
 from astacus.coordinator.api import get_cache_entries_from_list_response
@@ -54,6 +55,7 @@ def test_api_list(client: TestClient, populated_storage_factory: StorageFactory,
                             "total_size": 6,
                             "upload_size": 6,
                             "upload_stored_size": 10,
+                            "tiered_storage_size": None,
                         },
                         {
                             "attempt": 1,
@@ -68,6 +70,7 @@ def test_api_list(client: TestClient, populated_storage_factory: StorageFactory,
                             "total_size": 6,
                             "upload_size": 6,
                             "upload_stored_size": 10,
+                            "tiered_storage_size": None,
                         },
                     ],
                     "storage_name": "x",
@@ -87,6 +90,7 @@ def test_api_list(client: TestClient, populated_storage_factory: StorageFactory,
                             "total_size": 6,
                             "upload_size": 6,
                             "upload_stored_size": 10,
+                            "tiered_storage_size": None,
                         }
                     ],
                     "storage_name": "y",
@@ -211,7 +215,8 @@ def fixture_backup_manifest() -> BackupManifest:
             SnapshotUploadResult(total_size=4000, total_stored_size=3000),
             SnapshotUploadResult(total_size=5000, total_stored_size=4000),
         ],
-        plugin=Plugin.clickhouse,
+        plugin=Plugin.cassandra,
+        tiered_storage_results=TieredStorageResults(n_objects=100, total_size_bytes=1000),
     )
 
 
@@ -240,7 +245,7 @@ def test_api_list_deduplication(backup_manifest: BackupManifest, tmp_path: Path)
                         name="1",
                         start=datetime.datetime(2020, 1, 2, 3, 4, 5, 678, tzinfo=datetime.timezone.utc),
                         end=datetime.datetime(2020, 1, 2, 5, 6, 7, 891, tzinfo=datetime.timezone.utc),
-                        plugin=Plugin("clickhouse"),
+                        plugin=Plugin.cassandra,
                         attempt=1,
                         nodes=2,
                         cluster_files=6,
@@ -249,6 +254,7 @@ def test_api_list_deduplication(backup_manifest: BackupManifest, tmp_path: Path)
                         total_size=9000,
                         upload_size=9000,
                         upload_stored_size=7000,
+                        tiered_storage_size=1000,
                     )
                 ],
             ),

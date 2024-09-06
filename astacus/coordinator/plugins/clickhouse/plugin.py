@@ -16,6 +16,7 @@ from .steps import (
     AttachMergeTreePartsStep,
     ClickHouseManifestStep,
     CollectObjectStorageFilesStep,
+    CollectTieredStorageResultsStep,
     DeleteDanglingObjectStorageFilesStep,
     FreezeTablesStep,
     GetVersionsStep,
@@ -141,12 +142,14 @@ class ClickHousePlugin(CoordinatorPlugin):
             ),
             # Prepare the manifest for restore
             CollectObjectStorageFilesStep(disks=disks),
+            CollectTieredStorageResultsStep(),
             MoveFrozenPartsStep(disks=disks),
             PrepareClickHouseManifestStep(),
             UploadManifestStep(
                 json_storage=context.json_storage,
                 plugin=Plugin.clickhouse,
                 plugin_manifest_step=PrepareClickHouseManifestStep,
+                tiered_storage_results_step=CollectTieredStorageResultsStep,
             ),
         ]
 

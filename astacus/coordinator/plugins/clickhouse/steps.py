@@ -271,6 +271,7 @@ class CollectObjectStorageFilesStep(Step[list[ClickHouseObjectStorageFiles]]):
     async def run_step(self, cluster: Cluster, context: StepsContext) -> list[ClickHouseObjectStorageFiles]:
         snapshot_results: Sequence[ipc.SnapshotResult] = context.get_result(SnapshotStep)
         object_storage_files: dict[str, set[str]] = {}
+        total_size_bytes = 0
         for snapshot_result in snapshot_results:
             assert snapshot_result.state is not None
             for snapshot_file in snapshot_result.state.files:
@@ -287,12 +288,31 @@ class CollectObjectStorageFilesStep(Step[list[ClickHouseObjectStorageFiles]]):
                         raise StepFailedError(f"Invalid file metadata in {snapshot_file.relative_path}: {e}") from e
                     for object_metadata in file_metadata.objects:
                         object_storage_files.setdefault(parsed_path.disk.name, set()).add(object_metadata.relative_path)
+                        total_size_bytes += object_metadata.size_bytes
         return [
             ClickHouseObjectStorageFiles(
-                disk_name=disk_name, files=[ClickHouseObjectStorageFile(path=path) for path in sorted(paths)]
+                disk_name=disk_name,
+                files=[ClickHouseObjectStorageFile(path=path) for path in sorted(paths)],
+                total_size_bytes=total_size_bytes,
             )
             for disk_name, paths in sorted(object_storage_files.items())
         ]
+
+
+class CollectTieredStorageResultsStep(Step[ipc.TieredStorageResults]):
+    """
+    ClickHouse specific tiered storage result step.
+    """
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> ipc.TieredStorageResults:
+        object_storage_files = context.get_result(CollectObjectStorageFilesStep)
+        n_objects = 0
+        total_size_bytes = 0
+        for object_storage_file in object_storage_files:
+            n_objects += len(object_storage_file.files)
+            if object_storage_file.total_size_bytes is not None:
+                total_size_bytes += object_storage_file.total_size_bytes
+        return ipc.TieredStorageResults(n_objects=n_objects, total_size_bytes=total_size_bytes)
 
 
 @dataclasses.dataclass
