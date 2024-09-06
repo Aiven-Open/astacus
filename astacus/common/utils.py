@@ -8,6 +8,7 @@ See LICENSE for details
 Shared utilities (between coordinator and node)
 
 """
+
 from __future__ import annotations
 
 from abc import ABC
@@ -42,19 +43,8 @@ class AstacusModel(BaseModel):
         # enumname.value (it is also slightly less safe but oh well)
         use_enum_values = True
 
-        # Extra values should be errors, as they are most likely typos
-        # which lead to grief when not detected. However, if we ever
-        # start deprecating some old fields and not wanting to parse
-        # them, this might need to be revisited.
-        extra = "forbid"
-
         # Validate field default values too
         validate_all = True
-
-        # Validate also assignments
-        # validate_assignment = True
-        # TBD: Figure out why this doesn't work in some unit tests;
-        # possibly the tests themselves are broken
 
     def jsondict(self, **kw):
         # By default,
