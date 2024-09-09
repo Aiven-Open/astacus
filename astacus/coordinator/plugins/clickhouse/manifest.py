@@ -46,6 +46,24 @@ class UserDefinedFunction(AstacusModel):
         return cls(path=data["path"], create_query=b64decode(data["create_query"]))
 
 
+class KeeperMapRow(AstacusModel):
+    key: str
+    value: bytes
+
+    @classmethod
+    def from_plugin_data(cls, data: Mapping[str, Any]) -> Self:
+        return cls(key=data["key"], value=b64decode(data["value"]))
+
+
+class KeeperMapTable(AstacusModel):
+    name: str
+    data: Sequence[KeeperMapRow]
+
+    @classmethod
+    def from_plugin_data(cls, data: Mapping[str, Any]) -> Self:
+        return cls(name=data["name"], data=[KeeperMapRow.from_plugin_data(item) for item in data["data"]])
+
+
 class ReplicatedDatabase(AstacusModel):
     name: bytes
     # This is optional because of older backups without uuids
@@ -136,7 +154,8 @@ class ClickHouseManifest(AstacusModel):
     user_defined_functions: Sequence[UserDefinedFunction] = []
     replicated_databases: Sequence[ReplicatedDatabase] = []
     tables: Sequence[Table] = []
-    object_storage_files: list[ClickHouseObjectStorageFiles] = []
+    object_storage_files: Sequence[ClickHouseObjectStorageFiles] = []
+    keeper_map_tables: Sequence[KeeperMapTable] = []
 
     def to_plugin_data(self) -> dict[str, Any]:
         return encode_manifest_data(self.dict())
@@ -154,6 +173,7 @@ class ClickHouseManifest(AstacusModel):
             object_storage_files=[
                 ClickHouseObjectStorageFiles.from_plugin_data(item) for item in data.get("object_storage_files", [])
             ],
+            keeper_map_tables=[KeeperMapTable.from_plugin_data(item) for item in data.get("keeper_map_tables", [])],
         )
 
 

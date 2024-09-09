@@ -7,6 +7,8 @@ from astacus.coordinator.plugins.clickhouse.manifest import (
     AccessEntity,
     ClickHouseBackupVersion,
     ClickHouseManifest,
+    KeeperMapRow,
+    KeeperMapTable,
     ReplicatedDatabase,
     Table,
     UserDefinedFunction,
@@ -64,6 +66,36 @@ SERIALIZED_USER_DEFINED_FUNCTIONS = [
     {
         "path": "user_defined_function_2.sql",
         "create_query": b64encode(b"CREATE FUNCTION user_defined_function_2 AS (x) -> x + 2;\n"),
+    },
+]
+SAMPLE_KEEPER_MAP_TABLE_DATA = [
+    KeeperMapTable(
+        name="name1",
+        data=[
+            KeeperMapRow(key="key1", value=b"value1"),
+            KeeperMapRow(key="key2", value=b"value2"),
+        ],
+    ),
+    KeeperMapTable(
+        name="name2",
+        data=[
+            KeeperMapRow(key="key3", value=b"value3"),
+        ],
+    ),
+]
+SERIALIZED_KEEPER_MAP_TABLE_DATA = [
+    {
+        "name": "name1",
+        "data": [
+            {"key": "key1", "value": b64encode(b"value1").decode()},
+            {"key": "key2", "value": b64encode(b"value2").decode()},
+        ],
+    },
+    {
+        "name": "name2",
+        "data": [
+            {"key": "key3", "value": b64encode(b"value3").decode()},
+        ],
     },
 ]
 
@@ -149,6 +181,7 @@ def test_clickhouse_manifest_from_plugin_data() -> None:
             "replicated_databases": [SERIALIZED_DATABASE],
             "tables": [SERIALIZED_TABLE],
             "user_defined_functions": SERIALIZED_USER_DEFINED_FUNCTIONS,
+            "keeper_map_tables": SERIALIZED_KEEPER_MAP_TABLE_DATA,
         }
     )
     assert manifest == ClickHouseManifest(
@@ -157,6 +190,7 @@ def test_clickhouse_manifest_from_plugin_data() -> None:
         replicated_databases=[SAMPLE_DATABASE],
         tables=[SAMPLE_TABLE],
         user_defined_functions=SAMPLE_USER_DEFINED_FUNCTIONS,
+        keeper_map_tables=SAMPLE_KEEPER_MAP_TABLE_DATA,
     )
 
 
@@ -182,6 +216,7 @@ def test_clickhouse_manifest_to_plugin_data() -> None:
         access_entities=[SAMPLE_ACCESS_ENTITY],
         replicated_databases=[SAMPLE_DATABASE],
         tables=[SAMPLE_TABLE],
+        keeper_map_tables=SAMPLE_KEEPER_MAP_TABLE_DATA,
     ).to_plugin_data()
     assert serialized_manifest == {
         "version": "v2",
@@ -190,4 +225,5 @@ def test_clickhouse_manifest_to_plugin_data() -> None:
         "tables": [SERIALIZED_TABLE],
         "object_storage_files": [],
         "user_defined_functions": [],
+        "keeper_map_tables": SERIALIZED_KEEPER_MAP_TABLE_DATA,
     }

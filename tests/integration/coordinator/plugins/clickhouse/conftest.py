@@ -415,6 +415,7 @@ def create_clickhouse_configs(
                     <interserver_http_host>localhost</interserver_http_host>
                     <interserver_http_port>{interserver_http_port}</interserver_http_port>
                     <user_defined_zookeeper_path>/clickhouse/user_defined_functions/</user_defined_zookeeper_path>
+                    <keeper_map_path_prefix>/clickhouse/keeper_map</keeper_map_path_prefix>
                     <zookeeper>
                         <node>
                             <host>{zookeeper.host}</host>
@@ -604,6 +605,8 @@ def create_astacus_configs(
                     ],
                     sync_databases_timeout=10.0,
                     sync_tables_timeout=30.0,
+                    sync_keeper_map_data_timeout=10.0,
+                    keeper_map_path_prefix="/clickhouse/keeper_map",
                 ).jsondict(),
             ),
             node=NodeConfig(

@@ -24,12 +24,14 @@ from .steps import (
     PrepareClickHouseManifestStep,
     RemoveFrozenTablesStep,
     RestoreAccessEntitiesStep,
+    RestoreKeeperMapTableDataStep,
     RestoreObjectStorageFilesStep,
     RestoreReplicaStep,
     RestoreReplicatedDatabasesStep,
     RestoreUserDefinedFunctionsStep,
     RetrieveAccessEntitiesStep,
     RetrieveDatabasesAndTablesStep,
+    RetrieveKeeperMapTableDataStep,
     RetrieveMacrosStep,
     RetrieveUserDefinedFunctionsStep,
     SyncDatabaseReplicasStep,
@@ -68,6 +70,7 @@ class ClickHousePlugin(CoordinatorPlugin):
     replicated_databases_zookeeper_path: str = "/clickhouse/databases"
     replicated_user_defined_zookeeper_path: str | None = None
     replicated_databases_settings: ReplicatedDatabaseSettings = ReplicatedDatabaseSettings()
+    keeper_map_path_prefix: str | None = None
     freeze_name: str = "astacus"
     disks: Sequence[DiskConfiguration] = [DiskConfiguration(type=DiskType.local, path=Path(""), name="default")]
     drop_databases_timeout: float = 300.0
@@ -96,6 +99,7 @@ class ClickHousePlugin(CoordinatorPlugin):
     max_concurrent_attach: int = 10
     max_concurrent_attach_per_node: int = 10
     sync_tables_timeout: float = 3600.0
+    sync_keeper_map_data_timeout: float = 120.0
     # Deprecated parameter, ignored
     max_concurrent_sync: int = 100
     max_concurrent_sync_per_node: int = 10
@@ -125,6 +129,10 @@ class ClickHousePlugin(CoordinatorPlugin):
             ),
             RetrieveDatabasesAndTablesStep(clients=clickhouse_clients),
             RetrieveMacrosStep(clients=clickhouse_clients),
+            RetrieveKeeperMapTableDataStep(
+                zookeeper_client=zookeeper_client,
+                keeper_map_path_prefix=self.keeper_map_path_prefix,
+            ),
             # Then freeze all tables
             FreezeTablesStep(
                 clients=clickhouse_clients, freeze_name=self.freeze_name, freeze_unfreeze_timeout=self.freeze_timeout
@@ -215,6 +223,12 @@ class ClickHousePlugin(CoordinatorPlugin):
                 replicated_user_defined_zookeeper_path=self.replicated_user_defined_zookeeper_path,
                 clients=clients,
                 sync_user_defined_functions_timeout=self.sync_user_defined_functions_timeout,
+            ),
+            RestoreKeeperMapTableDataStep(
+                zookeeper_client=zookeeper_client,
+                keeper_map_path_prefix=self.keeper_map_path_prefix,
+                clients=clients,
+                sync_keeper_map_data_timeout=self.sync_keeper_map_data_timeout,
             ),
             # Keeping this step last avoids access from non-admin users while we are still restoring
             RestoreAccessEntitiesStep(

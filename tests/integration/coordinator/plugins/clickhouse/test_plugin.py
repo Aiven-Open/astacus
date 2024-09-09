@@ -15,6 +15,7 @@ from astacus.coordinator.plugins.clickhouse.client import (
 )
 from astacus.coordinator.plugins.clickhouse.engines import TableEngine
 from astacus.coordinator.plugins.clickhouse.plugin import ClickHousePlugin
+from astacus.coordinator.plugins.clickhouse.steps import wait_for_condition_on_every_node
 from collections.abc import AsyncIterable, AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -314,6 +315,22 @@ async def setup_cluster_content(clients: Sequence[HttpClickHouseClient], use_nam
     # This won't be backed up
     await clients[0].execute(b"INSERT INTO default.memory VALUES (123, 'foo')")
     await clients[0].execute(b"CREATE FUNCTION `linear_equation_\x80` AS (x, k, b) -> k*x + b")
+    # KeeperMap
+    await clients[0].execute(
+        b"CREATE TABLE default.keeper_map (key UInt32, value String) ENGINE = KeeperMap('keeper_map') PRIMARY KEY key"
+    )
+    await clients[0].execute(b"INSERT INTO default.keeper_map VALUES (1, 'one'), (2, 'two')")
+
+    # wait for every zookeeper node to receive the update
+    async def keeper_map_has_replicated(client: ClickHouseClient) -> bool:
+        return len(await client.execute(b"SELECT * FROM default.keeper_map")) == 2
+
+    await wait_for_condition_on_every_node(
+        clients,
+        keeper_map_has_replicated,
+        "waiting for keeper_map to be replicated",
+        timeout_seconds=5,
+    )
 
 
 async def setup_cluster_users(clients: Sequence[HttpClickHouseClient]) -> None:
@@ -565,3 +582,9 @@ async def test_restores_user_defined_functions(restored_cluster: Sequence[ClickH
         assert functions == [[_b64_str(b"linear_equation_\x80")]]
         result = await client.execute(b"SELECT `linear_equation_\x80`(1, 2, 3)")
         assert result == [[5]]
+
+
+async def test_restores_keeper_map_tables(restored_cluster: Sequence[ClickHouseClient]) -> None:
+    for client in restored_cluster:
+        result = await client.execute(b"SELECT key, value FROM default.keeper_map ORDER BY key")
+        assert result == [[1, "one"], [2, "two"]]

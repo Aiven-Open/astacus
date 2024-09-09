@@ -34,6 +34,8 @@ from astacus.coordinator.plugins.clickhouse.manifest import (
     ClickHouseManifest,
     ClickHouseObjectStorageFile,
     ClickHouseObjectStorageFiles,
+    KeeperMapRow,
+    KeeperMapTable,
     ReplicatedDatabase,
     Table,
     UserDefinedFunction,
@@ -56,12 +58,14 @@ from astacus.coordinator.plugins.clickhouse.steps import (
     PrepareClickHouseManifestStep,
     RemoveFrozenTablesStep,
     RestoreAccessEntitiesStep,
+    RestoreKeeperMapTableDataStep,
     RestoreObjectStorageFilesStep,
     RestoreReplicaStep,
     RestoreReplicatedDatabasesStep,
     RestoreUserDefinedFunctionsStep,
     RetrieveAccessEntitiesStep,
     RetrieveDatabasesAndTablesStep,
+    RetrieveKeeperMapTableDataStep,
     RetrieveMacrosStep,
     RetrieveUserDefinedFunctionsStep,
     run_partition_cmd_on_every_node,
@@ -151,6 +155,21 @@ SAMPLE_USER_DEFINED_FUNCTIONS = [
         path="user_defined_function_2.sql", create_query=b"CREATE FUNCTION user_defined_function_2 AS (x) -> x + 2;\n"
     ),
 ]
+SAMPLE_KEEPER_MAP_TABLES = [
+    KeeperMapTable(
+        name="name1",
+        data=[
+            KeeperMapRow(key="key1", value=b"value1"),
+            KeeperMapRow(key="key2", value=b"value2"),
+        ],
+    ),
+    KeeperMapTable(
+        name="name2",
+        data=[
+            KeeperMapRow(key="key3", value=b"value3"),
+        ],
+    ),
+]
 
 SAMPLE_MANIFEST_V1 = ClickHouseManifest(
     version=ClickHouseBackupVersion.V1,
@@ -166,6 +185,7 @@ SAMPLE_MANIFEST = ClickHouseManifest(
     tables=SAMPLE_TABLES,
     object_storage_files=SAMPLE_OBJET_STORAGE_FILES,
     user_defined_functions=SAMPLE_USER_DEFINED_FUNCTIONS,
+    keeper_map_tables=SAMPLE_KEEPER_MAP_TABLES,
 )
 
 SAMPLE_MANIFEST_ENCODED = SAMPLE_MANIFEST.to_plugin_data()
@@ -254,6 +274,26 @@ async def test_retrieve_user_defined_functions() -> None:
     )
     user_defined_functions = await step.run_step(Cluster(nodes=[]), StepsContext())
     assert user_defined_functions == SAMPLE_USER_DEFINED_FUNCTIONS
+
+
+async def create_zookeeper_keeper_map_table_data(zookeeper_client: ZooKeeperClient) -> None:
+    async with zookeeper_client.connect() as connection:
+        await asyncio.gather(
+            connection.create("/clickhouse/keeper_map/name1/data/key1", b"value1"),
+            connection.create("/clickhouse/keeper_map/name1/data/key2", b"value2"),
+            connection.create("/clickhouse/keeper_map/name2/data/key3", b"value3"),
+        )
+
+
+async def test_retrieve_keeper_map_table_data() -> None:
+    zookeeper_client = FakeZooKeeperClient()
+    await create_zookeeper_keeper_map_table_data(zookeeper_client)
+    step = RetrieveKeeperMapTableDataStep(
+        zookeeper_client=zookeeper_client,
+        keeper_map_path_prefix="/clickhouse/keeper_map/",
+    )
+    keeper_map_data = await step.run_step(Cluster(nodes=[]), StepsContext())
+    assert keeper_map_data == SAMPLE_KEEPER_MAP_TABLES
 
 
 class TrappedZooKeeperClient(FakeZooKeeperClient):
@@ -556,6 +596,7 @@ async def test_create_clickhouse_manifest() -> None:
     context.set_result(RetrieveDatabasesAndTablesStep, (SAMPLE_DATABASES, SAMPLE_TABLES))
     context.set_result(CollectObjectStorageFilesStep, SAMPLE_OBJET_STORAGE_FILES)
     context.set_result(RetrieveUserDefinedFunctionsStep, SAMPLE_USER_DEFINED_FUNCTIONS)
+    context.set_result(RetrieveKeeperMapTableDataStep, SAMPLE_KEEPER_MAP_TABLES)
     assert await step.run_step(Cluster(nodes=[]), context) == SAMPLE_MANIFEST_ENCODED
 
 
@@ -1153,6 +1194,39 @@ async def test_restore_user_defined_functions_step() -> None:
             )
     assert clickhouse_client.mock_calls == [
         mock.call.execute(b"SELECT count(*) FROM system.functions WHERE origin = 'SQLUserDefined'")
+    ]
+
+
+async def test_restore_keeper_map_table_data_step() -> None:
+    clickhouse_client = mock_clickhouse_client()
+    clickhouse_client.execute.return_value = [["1"]]
+    zk_client = FakeZooKeeperClient()
+    context = StepsContext()
+    context.set_result(ClickHouseManifestStep, SAMPLE_MANIFEST)
+    step = RestoreKeeperMapTableDataStep(
+        zookeeper_client=zk_client,
+        keeper_map_path_prefix="/clickhouse/keeper_map_table/",
+        clients=[clickhouse_client],
+        sync_keeper_map_data_timeout=10.0,
+    )
+    async with zk_client.connect() as connection:
+        await connection.create("/clickhouse/keeper_map_table/name1", b"")
+        await connection.create("/clickhouse/keeper_map_table/name1/data", b"")
+        await connection.create("/clickhouse/keeper_map_table/name2", b"")
+        await connection.create("/clickhouse/keeper_map_table/name2/data", b"")
+    await step.run_step(Cluster(nodes=[]), context)
+    async with zk_client.connect() as connection:
+        assert (await connection.get_children_with_data("/clickhouse/keeper_map_table/name1/data/")) == {
+            "key1": b"value1",
+            "key2": b"value2",
+        }
+        assert (await connection.get_children_with_data("/clickhouse/keeper_map_table/name2/data/")) == {
+            "key3": b"value3",
+        }
+    assert clickhouse_client.mock_calls == [
+        mock.call.execute(
+            b"SELECT count(*) FROM system.zookeeper WHERE path = '/clickhouse/keeper_map_table/name2/data' AND name = 'key3'"
+        ),
     ]
 
 
