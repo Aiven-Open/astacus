@@ -4,6 +4,7 @@ See LICENSE for details
 """
 
 from astacus.coordinator.plugins.zookeeper import (
+    ChildrenWithData,
     KazooZooKeeperClient,
     NodeExistsError,
     NoNodeError,
@@ -11,10 +12,12 @@ from astacus.coordinator.plugins.zookeeper import (
     RuntimeInconsistency,
     TransactionError,
 )
+from collections.abc import Callable, Iterable
+from kazoo.client import KazooClient
 from tests.integration.conftest import create_zookeeper, get_kazoo_host, Ports, Service
 
 import dataclasses
-import kazoo.client
+import logging
 import pytest
 import secrets
 import time
@@ -23,6 +26,8 @@ pytestmark = [
     pytest.mark.clickhouse,
     pytest.mark.order("second_to_last"),
 ]
+
+logger = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass
@@ -35,7 +40,7 @@ class ZNode:
 def fixture_znode(zookeeper: Service) -> ZNode:
     name = secrets.token_hex()
     znode = ZNode(path=f"/test/{name}", content=b"the_content")
-    base_client = kazoo.client.KazooClient(hosts=[get_kazoo_host(zookeeper)])
+    base_client = KazooClient(hosts=[get_kazoo_host(zookeeper)])
     base_client.start()
     base_client.create(znode.path, znode.content, makepath=True)
     base_client.stop()
@@ -125,3 +130,101 @@ async def test_kazoo_zookeeper_client_bounded_failure_time(ports: Ports) -> None
             elapsed_time = time.monotonic() - start_time
             # We allow for a bit of margin
             assert elapsed_time < 10.0
+
+
+class TestGetChildrenWithData:
+    @pytest.fixture(name="kazoo_client")
+    def fixture_kazoo_client(self, zookeeper: Service) -> Iterable[KazooClient]:
+        client = KazooClient(get_kazoo_host(zookeeper))
+        client.start()
+        yield client
+        client.stop()
+
+    def do_once_then_sleep(self, func: Callable[[], None]) -> Callable[[], None]:
+        call_count = 0
+
+        def wrapped() -> None:
+            nonlocal call_count
+            if call_count == 0:
+                func()
+            elif call_count == 1:
+                time.sleep(2)
+            call_count += 1
+
+        return wrapped
+
+    def test_works(self, kazoo_client: KazooClient) -> None:
+        kazoo_client.create("/test_works", b"")
+        kazoo_client.create("/test_works/child1", b"child1")
+        kazoo_client.create("/test_works/child2", b"child2")
+        kazoo_client.create("/test_works/child3", b"child3")
+        assert ChildrenWithData(kazoo_client, "/test_works").get() == {
+            "child1": b"child1",
+            "child2": b"child2",
+            "child3": b"child3",
+        }
+
+    def test_fails_if_node_doesnt_exist(self, kazoo_client: KazooClient) -> None:
+        with pytest.raises(NoNodeError):
+            ChildrenWithData(kazoo_client, "/test_fails_if_node_doesnt_exist").get()
+
+    def test_fails_if_node_is_deleted(self, kazoo_client: KazooClient) -> None:
+        @self.do_once_then_sleep
+        def fault() -> None:
+            kazoo_client.delete("/test_fails_if_node_is_deleted/child1")
+            kazoo_client.delete("/test_fails_if_node_is_deleted/child2")
+            kazoo_client.delete("/test_fails_if_node_is_deleted/child3")
+            kazoo_client.delete("/test_fails_if_node_is_deleted")
+
+        kazoo_client.create("/test_fails_if_node_is_deleted", b"")
+        kazoo_client.create("/test_fails_if_node_is_deleted/child1", b"child1")
+        kazoo_client.create("/test_fails_if_node_is_deleted/child2", b"child2")
+        kazoo_client.create("/test_fails_if_node_is_deleted/child3", b"child3")
+        with pytest.raises(NoNodeError):
+            ChildrenWithData(kazoo_client, "/test_fails_if_node_is_deleted", get_children_fault=fault).get()
+
+    async def test_works_with_adding_node(self, kazoo_client: KazooClient) -> None:
+        @self.do_once_then_sleep
+        def fault() -> None:
+            kazoo_client.create("/test_works_with_adding_node/child4", b"child4")
+
+        kazoo_client.create("/test_works_with_adding_node", b"")
+        kazoo_client.create("/test_works_with_adding_node/child1", b"child1")
+        kazoo_client.create("/test_works_with_adding_node/child2", b"child2")
+        kazoo_client.create("/test_works_with_adding_node/child3", b"child3")
+        assert ChildrenWithData(kazoo_client, "/test_works_with_adding_node", get_data_fault=fault).get() == {
+            "child1": b"child1",
+            "child2": b"child2",
+            "child3": b"child3",
+            "child4": b"child4",
+        }
+
+    async def test_works_with_removing_node(self, kazoo_client: KazooClient) -> None:
+        @self.do_once_then_sleep
+        def fault() -> None:
+            kazoo_client.delete("/test_works_with_removing_node/child2")
+
+        kazoo_client.create("/test_works_with_removing_node", b"")
+        kazoo_client.create("/test_works_with_removing_node/child1", b"child1")
+        kazoo_client.create("/test_works_with_removing_node/child2", b"child2")
+        kazoo_client.create("/test_works_with_removing_node/child3", b"child3")
+        assert ChildrenWithData(kazoo_client, "/test_works_with_removing_node", get_data_fault=fault).get() == {
+            "child1": b"child1",
+            "child3": b"child3",
+        }
+
+    async def test_works_with_changing_node(self, kazoo_client: KazooClient) -> None:
+        @self.do_once_then_sleep
+        def fault() -> None:
+            kazoo_client.set("/test_works_with_changing_node/child2", b"child2_changed")
+
+        kazoo_client.create("/test_works_with_changing_node", b"")
+        kazoo_client.create("/test_works_with_changing_node/child1", b"child1")
+        kazoo_client.create("/test_works_with_changing_node/child2", b"child2")
+        kazoo_client.create("/test_works_with_changing_node/child3", b"child3")
+
+        assert ChildrenWithData(kazoo_client, "/test_works_with_changing_node", get_data_fault=fault).get() == {
+            "child2": b"child2_changed",
+            "child3": b"child3",
+            "child1": b"child1",
+        }
