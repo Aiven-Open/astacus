@@ -72,16 +72,16 @@ test: lint copyright unittest
 isort:
 	pre-commit run isort --all-files
 
-.PHONY: black
-black:
-	pre-commit run black --all-files
+.PHONY: ruff
+ruff:
+	pre-commit run ruff-format --all-files
 
 .PHONY: mypy
 mypy:
 	pre-commit run mypy --all-files
 
 .PHONY: reformat
-reformat: isort black
+reformat: isort ruff
 
 .PHONY: pre-commit
 pre-commit: $(GENERATED)
