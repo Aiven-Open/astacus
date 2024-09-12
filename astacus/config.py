@@ -7,6 +7,7 @@ Root-level astacus configuration, which includes
 - coordinator configuration
 - node configuration
 """
+
 from astacus.common import magic
 from astacus.common.magic import StrEnum
 from astacus.common.rohmustorage import RohmuConfig

@@ -3,6 +3,7 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 
 """
+
 from astacus.common import ipc, magic
 from astacus.common.storage import JsonStorage
 from astacus.coordinator.storage_factory import StorageFactory

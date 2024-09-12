@@ -4,6 +4,7 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 
 """
+
 from .exceptions import NotFoundException
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
@@ -37,12 +38,10 @@ class StorageUploadResult(msgspec.Struct, kw_only=True, frozen=True):
 
 class HexDigestStorage(ABC):
     @abstractmethod
-    def close(self) -> None:
-        ...
+    def close(self) -> None: ...
 
     @abstractmethod
-    def delete_hexdigest(self, hexdigest: str) -> None:
-        ...
+    def delete_hexdigest(self, hexdigest: str) -> None: ...
 
     def download_hexdigest_bytes(self, hexdigest: str) -> bytes:
         b = io.BytesIO()
@@ -51,8 +50,7 @@ class HexDigestStorage(ABC):
         return b.read()
 
     @abstractmethod
-    def download_hexdigest_to_file(self, hexdigest: str, f: FileLike) -> bool:
-        ...
+    def download_hexdigest_to_file(self, hexdigest: str, f: FileLike) -> bool: ...
 
     def download_hexdigest_to_path(self, hexdigest: str, filename: str | Path) -> None:
         tempfilename = f"{filename}.tmp"
@@ -61,15 +59,13 @@ class HexDigestStorage(ABC):
         os.rename(tempfilename, filename)
 
     @abstractmethod
-    def list_hexdigests(self) -> list[str]:
-        ...
+    def list_hexdigests(self) -> list[str]: ...
 
     def upload_hexdigest_bytes(self, hexdigest: str, data: bytes) -> StorageUploadResult:
         return self.upload_hexdigest_from_file(hexdigest, io.BytesIO(data), len(data))
 
     @abstractmethod
-    def upload_hexdigest_from_file(self, hexdigest: str, f: BinaryIO, file_size: int) -> StorageUploadResult:
-        ...
+    def upload_hexdigest_from_file(self, hexdigest: str, f: BinaryIO, file_size: int) -> StorageUploadResult: ...
 
 
 class JsonStorage(ABC):
@@ -78,20 +74,16 @@ class JsonStorage(ABC):
         pass
 
     @abstractmethod
-    def delete_json(self, name: str) -> None:
-        ...
+    def delete_json(self, name: str) -> None: ...
 
     @abstractmethod
-    def open_json_bytes(self, name: str) -> ContextManager[mmap.mmap]:
-        ...
+    def open_json_bytes(self, name: str) -> ContextManager[mmap.mmap]: ...
 
     @abstractmethod
-    def list_jsons(self) -> list[str]:
-        ...
+    def list_jsons(self) -> list[str]: ...
 
     @abstractmethod
-    def upload_json_bytes(self, name: str, data: bytes | mmap.mmap) -> bool:
-        ...
+    def upload_json_bytes(self, name: str, data: bytes | mmap.mmap) -> bool: ...
 
     def upload_json(self, name: str, data: msgspec.Struct) -> bool:
         json_bytes = msgspec.json.encode(data)
@@ -108,8 +100,7 @@ class Storage(HexDigestStorage, JsonStorage, ABC):
     # This is abstract class which has whatever APIs necessary. Due to that,
     # it is expected not to implement the abstract methods.
     @abstractmethod
-    def copy(self) -> "Storage":
-        ...
+    def copy(self) -> "Storage": ...
 
 
 def file_error_wrapper(fun: Callable[P, T]) -> Callable[P, T]:

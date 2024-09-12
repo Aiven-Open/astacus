@@ -2,6 +2,7 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
+
 from .magic import DEFAULT_EMBEDDED_FILE_SIZE, StrEnum
 from .progress import Progress
 from .utils import now, SizeLimitedFile

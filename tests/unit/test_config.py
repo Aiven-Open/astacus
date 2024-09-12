@@ -2,6 +2,7 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus import config
 from fastapi import FastAPI
 from pathlib import Path

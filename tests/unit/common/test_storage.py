@@ -7,6 +7,7 @@ Test that RohmuStorage works as advertised.
 TBD: Test with something else than local files?
 
 """
+
 from astacus.common import exceptions
 from astacus.common.cachingjsonstorage import CachingJsonStorage
 from astacus.common.rohmustorage import RohmuConfig, RohmuStorage

@@ -2,6 +2,7 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.common import ipc
 from astacus.common.rohmustorage import RohmuConfig
 from astacus.common.statsd import StatsdConfig

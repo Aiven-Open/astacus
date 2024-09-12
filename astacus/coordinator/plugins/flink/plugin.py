@@ -4,6 +4,7 @@ See LICENSE for details
 Flink backup/restore plugin
 
 """
+
 from astacus.common import ipc
 from astacus.common.ipc import Plugin
 from astacus.coordinator.plugins.base import (

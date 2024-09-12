@@ -5,6 +5,7 @@ See LICENSE for details
 Common base classes for the plugins
 
 """
+
 from __future__ import annotations
 
 from astacus.common import exceptions, ipc, magic, utils

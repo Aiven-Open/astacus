@@ -8,6 +8,7 @@ snapshot/restore functionality. m3db plugin will simply ensure etcd
 state is consistent.
 
 """
+
 from .base import (
     BackupManifestStep,
     BackupNameStep,

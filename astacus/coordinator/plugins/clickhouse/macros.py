@@ -2,6 +2,7 @@
 Copyright (c) 2022 Aiven Ltd
 See LICENSE for details
 """
+
 from .client import ClickHouseClient
 from base64 import b64decode
 from collections.abc import Mapping

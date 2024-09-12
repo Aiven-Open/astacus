@@ -3,7 +3,6 @@ Copyright (c) 2024 Aiven Ltd
 See LICENSE for details
 """
 
-
 from astacus.common.statsd import StatsClient
 from astacus.coordinator.plugins.clickhouse.object_storage import emit_copy_progress_metric, ObjectStorage, ObjectStorageItem
 from collections.abc import Sequence

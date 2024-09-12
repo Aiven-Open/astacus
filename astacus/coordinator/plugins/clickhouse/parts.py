@@ -7,6 +7,7 @@ Replicated family of table engines.
 
 This does not support shards, but this is the right place to add support for them.
 """
+
 from .disks import Disks
 from .manifest import Table
 from astacus.common.ipc import SnapshotFile, SnapshotResult

@@ -8,6 +8,7 @@ See LICENSE for details
 Shared utilities (between coordinator and node)
 
 """
+
 from __future__ import annotations
 
 from abc import ABC
@@ -357,18 +358,15 @@ UpdateBinary: TypeAlias = Literal["w+b"]
 
 
 @overload
-def open_path_with_atomic_rename(path: os.PathLike, *, mode: UpdateBinary) -> ContextManager[IO[bytes]]:
-    ...
+def open_path_with_atomic_rename(path: os.PathLike, *, mode: UpdateBinary) -> ContextManager[IO[bytes]]: ...
 
 
 @overload
-def open_path_with_atomic_rename(path: os.PathLike, *, mode: Write) -> ContextManager[TextIO]:
-    ...
+def open_path_with_atomic_rename(path: os.PathLike, *, mode: Write) -> ContextManager[TextIO]: ...
 
 
 @overload
-def open_path_with_atomic_rename(path: os.PathLike) -> ContextManager[IO[bytes]]:
-    ...
+def open_path_with_atomic_rename(path: os.PathLike) -> ContextManager[IO[bytes]]: ...
 
 
 def open_path_with_atomic_rename(path: os.PathLike, *, mode: str = "w+b") -> ContextManager[TextIO | IO[bytes]]:

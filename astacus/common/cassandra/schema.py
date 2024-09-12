@@ -5,6 +5,7 @@ See LICENSE for details
 Schema-related parts are based on basebackup_schema.py of Cashew
 
 """
+
 from .client import CassandraSession
 from .utils import is_system_keyspace
 from astacus.common.utils import AstacusModel

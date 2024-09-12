@@ -2,6 +2,7 @@
 Copyright (c) 2022 Aiven Ltd
 See LICENSE for details
 """
+
 from collections.abc import Sequence
 from tests.utils import parse_clickhouse_version
 

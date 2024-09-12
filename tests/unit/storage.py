@@ -2,6 +2,7 @@
 Copyright (c) 2023 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.common import exceptions
 from astacus.common.storage import HexDigestStorage, JsonStorage, StorageUploadResult
 from collections.abc import Iterator

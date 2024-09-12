@@ -2,6 +2,7 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
+
 from .test_restore import BACKUP_MANIFEST
 from astacus.common.ipc import Plugin
 from astacus.common.rohmustorage import RohmuStorage

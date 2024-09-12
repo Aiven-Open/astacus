@@ -2,6 +2,7 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
+
 from .plugins.base import CoordinatorPlugin, OperationContext, Step, StepFailedError, StepsContext
 from .storage_factory import StorageFactory
 from astacus.common import asyncstorage, exceptions, ipc, op, statsd, utils

@@ -2,6 +2,7 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.common.rohmustorage import RohmuCompressionType, RohmuConfig
 from collections.abc import Sequence
 from pathlib import Path

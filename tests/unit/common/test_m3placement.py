@@ -6,6 +6,7 @@ See LICENSE for details
 Some tests of the m3 placement rewriter in common
 
 """
+
 from astacus.common import m3placement
 from astacus.proto import m3_placement_pb2
 

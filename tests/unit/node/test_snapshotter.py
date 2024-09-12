@@ -2,6 +2,7 @@
 Copyright (c) 2023 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.common.progress import Progress
 from astacus.common.snapshot import SnapshotGroup
 from astacus.node.snapshotter import hash_hexdigest_readable

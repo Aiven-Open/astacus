@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.coordinator.plugins.clickhouse.macros import Macros
 from astacus.coordinator.plugins.clickhouse.manifest import ReplicatedDatabase
 from astacus.coordinator.plugins.clickhouse.replication import DatabaseReplica, get_databases_replicas

@@ -4,6 +4,7 @@ See LICENSE for details
 cassandra backup/restore plugin steps
 
 """
+
 from .model import CassandraConfigurationNode, CassandraManifest, CassandraManifestNode
 from .utils import get_schema_hash
 from astacus.common import exceptions

@@ -6,6 +6,7 @@ See LICENSE for details
 Test that the plugin m3 specific flow (backup + restore) works
 
 """
+
 from astacus.common import ipc
 from astacus.common.etcd import b64encode_to_str, ETCDClient
 from astacus.common.statsd import StatsClient

@@ -2,6 +2,7 @@
 Copyright (c) 2023 Aiven Ltd
 See LICENSE for details
 """
+
 from .config import DiskConfiguration, DiskType
 from .escaping import escape_for_file_name, unescape_from_file_name
 from .object_storage import ObjectStorage, ThreadSafeRohmuStorage

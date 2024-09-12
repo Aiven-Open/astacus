@@ -2,6 +2,7 @@
 Copyright (c) 2022 Aiven Ltd
 See LICENSE for details
 """
+
 from _pytest.config.argparsing import Parser
 from argparse import ArgumentTypeError
 from pathlib import Path

@@ -4,6 +4,7 @@ See LICENSE for details
 cassandra backup/restore plugin
 
 """
+
 from .model import CassandraConfigurationNode
 from .utils import delta_snapshot_groups, run_subop, snapshot_groups
 from astacus.common import ipc

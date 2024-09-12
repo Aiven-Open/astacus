@@ -71,15 +71,18 @@ class CassandraClient:
             ssl_options = {}
 
         try:
-            with Cluster(
-                connect_timeout=15,
-                contact_points=hostnames,
-                control_connection_timeout=15,
-                port=config.get_port(),
-                ssl_options=ssl_options,
-                auth_provider=PlainTextAuthProvider(config.username, config.password),
-                load_balancing_policy=WhiteListRoundRobinPolicy(hostnames),
-            ) as cluster, cluster.connect() as session:
+            with (
+                Cluster(
+                    connect_timeout=15,
+                    contact_points=hostnames,
+                    control_connection_timeout=15,
+                    port=config.get_port(),
+                    ssl_options=ssl_options,
+                    auth_provider=PlainTextAuthProvider(config.username, config.password),
+                    load_balancing_policy=WhiteListRoundRobinPolicy(hostnames),
+                ) as cluster,
+                cluster.connect() as session,
+            ):
                 yield CassandraSession(cluster, session)
         except NoHostAvailable as ex:
             if isinstance(ex.errors, dict):
