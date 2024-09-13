@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.common import asyncstorage, ipc
 from astacus.common.storage import JsonStorage
 from starlette.concurrency import run_in_threadpool

@@ -2,6 +2,7 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.common.cassandra.config import CassandraClientConfiguration
 from astacus.common.magic import StrEnum
 from astacus.common.rohmustorage import RohmuConfig

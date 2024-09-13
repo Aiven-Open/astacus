@@ -6,6 +6,7 @@ See LICENSE for details
 Rohmu-specific actual object storage implementation
 
 """
+
 from .storage import Storage, StorageUploadResult
 from .utils import AstacusModel, fifo_cache
 from astacus.common import exceptions

@@ -5,6 +5,7 @@ See LICENSE for details
 Client commands for Astacus tool
 
 """
+
 from astacus.common import ipc, magic, utils
 from astacus.common.utils import exponential_backoff, http_request
 from tabulate import tabulate

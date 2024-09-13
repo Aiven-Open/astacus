@@ -4,6 +4,7 @@ See LICENSE for details
 cassandra backup/restore plugin utilities
 
 """
+
 from astacus.common import ipc
 from astacus.common.cassandra.config import SNAPSHOT_NAME
 from astacus.common.snapshot import SnapshotGroup

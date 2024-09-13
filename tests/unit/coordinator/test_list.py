@@ -4,6 +4,7 @@ See LICENSE for details
 
 Test that the list endpoint behaves as advertised
 """
+
 from astacus.common.ipc import (
     BackupManifest,
     ListForStorage,

@@ -14,6 +14,7 @@ This is combination of:
 - pydantic configuration + async_timing_manager + explicit typing
 
 """
+
 from .magic import StrEnum
 from .utils import AstacusModel
 from contextlib import asynccontextmanager, contextmanager

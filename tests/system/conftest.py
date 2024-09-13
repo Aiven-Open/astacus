@@ -2,6 +2,7 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
+
 from _pytest.config import Config
 from astacus.common.utils import AstacusModel, exponential_backoff
 from collections.abc import AsyncIterator, Mapping, Sequence

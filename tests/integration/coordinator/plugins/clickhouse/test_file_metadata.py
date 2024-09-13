@@ -2,6 +2,7 @@
 Copyright (c) 2023 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.coordinator.plugins.clickhouse.file_metadata import FileMetadata, InvalidFileMetadata, ObjectMetadata
 
 import pytest

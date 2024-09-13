@@ -3,7 +3,6 @@ Copyright (c) 2023 Aiven Ltd
 See LICENSE for details
 """
 
-
 from astacus.coordinator.plugins.base import StepsContext
 from tests.utils import is_cassandra_driver_importable
 

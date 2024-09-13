@@ -4,6 +4,7 @@ Copyright (c) 2023 Aiven Ltd
 See LICENSE for details
 
 """
+
 from astacus.common.snapshot import SnapshotGroup
 from astacus.node.snapshot_groups import CompiledGroup, CompiledGroups, glob_compile
 from pathlib import Path

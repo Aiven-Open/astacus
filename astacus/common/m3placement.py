@@ -10,6 +10,7 @@ desirable to use it outside and due to that it is stand-alone module,
 as opposed to part of astacus.coordinator.plugins.m3db.
 
 """
+
 from astacus.common.utils import AstacusModel
 from astacus.proto import m3_placement_pb2
 from collections.abc import Sequence

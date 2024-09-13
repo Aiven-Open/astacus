@@ -3,7 +3,6 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 
-
 from fastapi.testclient import TestClient
 
 

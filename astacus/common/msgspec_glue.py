@@ -2,6 +2,7 @@
 Copyright (c) 2024 Aiven Ltd
 See LICENSE for details
 """
+
 from pydantic import PydanticValueError
 from pydantic.fields import ModelField
 from pydantic.validators import _VALIDATORS

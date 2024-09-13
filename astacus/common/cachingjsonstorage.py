@@ -21,6 +21,7 @@ assumption is that backups are immutable, that is, if file backup-X
 exists, its contents stay the same.
 
 """
+
 from .exceptions import NotFoundException
 from .storage import JsonStorage
 from collections.abc import Iterator

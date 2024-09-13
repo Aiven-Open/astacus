@@ -9,6 +9,7 @@ The basic file restoration steps should be implementable by using the
 API of this module with proper parameters.
 
 """
+
 from .node import NodeOp
 from .snapshotter import Snapshotter
 from astacus.common import ipc, utils

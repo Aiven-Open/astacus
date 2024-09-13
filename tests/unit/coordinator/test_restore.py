@@ -5,6 +5,7 @@ See LICENSE for details
 Test that the coordinator restore endpoint works.
 
 """
+
 from astacus.common import exceptions, ipc
 from astacus.common.ipc import Plugin
 from astacus.coordinator.config import CoordinatorNode

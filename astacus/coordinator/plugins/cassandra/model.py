@@ -4,6 +4,7 @@ See LICENSE for details
 cassandra backup/restore plugin models
 
 """
+
 from astacus.common.cassandra.schema import CassandraSchema
 from astacus.common.utils import AstacusModel
 from collections.abc import Sequence

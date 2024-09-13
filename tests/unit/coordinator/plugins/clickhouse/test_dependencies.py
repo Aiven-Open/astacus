@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.coordinator.plugins.clickhouse.dependencies import (
     access_entities_sorted_by_dependencies,
     tables_sorted_by_dependencies,

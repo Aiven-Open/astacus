@@ -4,6 +4,7 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 
 """
+
 from collections.abc import Iterable, Iterator, Sequence
 from typing import Self, TypeVar
 

@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.common.ipc import SnapshotFile, SnapshotResult, SnapshotState
 from astacus.coordinator.plugins.clickhouse.disks import Disks
 from astacus.coordinator.plugins.clickhouse.manifest import Table

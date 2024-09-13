@@ -2,6 +2,7 @@
 Copyright (c) 2023 Aiven Ltd
 See LICENSE for details
 """
+
 from .config import DirectCopyConfig, LocalCopyConfig
 from abc import ABC, abstractmethod
 from astacus.common.rohmustorage import RohmuStorageConfig
@@ -30,24 +31,19 @@ class ObjectStorageItem:
 
 class ObjectStorage(ABC):
     @abstractmethod
-    def close(self) -> None:
-        ...
+    def close(self) -> None: ...
 
     @abstractmethod
-    def get_config(self) -> RohmuStorageConfig | dict:
-        ...
+    def get_config(self) -> RohmuStorageConfig | dict: ...
 
     @abstractmethod
-    def list_items(self) -> list[ObjectStorageItem]:
-        ...
+    def list_items(self) -> list[ObjectStorageItem]: ...
 
     @abstractmethod
-    def delete_item(self, key: str) -> None:
-        ...
+    def delete_item(self, key: str) -> None: ...
 
     @abstractmethod
-    def copy_items_from(self, source: "ObjectStorage", keys: Sequence[str], *, stats: StatsClient | None) -> None:
-        ...
+    def copy_items_from(self, source: "ObjectStorage", keys: Sequence[str], *, stats: StatsClient | None) -> None: ...
 
 
 class ThreadSafeRohmuStorage(ObjectStorage):

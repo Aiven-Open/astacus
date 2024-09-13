@@ -2,6 +2,7 @@
 Copyright (c) 2021 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.coordinator.plugins.clickhouse.client import HttpClickHouseClient
 from astacus.coordinator.plugins.clickhouse.config import ClickHouseConfiguration, ClickHouseNode, get_clickhouse_clients
 from astacus.coordinator.plugins.zookeeper import KazooZooKeeperClient, KazooZooKeeperConnection, ZooKeeperUser

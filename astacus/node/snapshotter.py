@@ -38,12 +38,10 @@ class Snapshotter(ABC, Generic[T]):
         return self.snapshot.lock
 
     @abstractmethod
-    def perform_snapshot(self, *, progress: Progress) -> None:
-        ...
+    def perform_snapshot(self, *, progress: Progress) -> None: ...
 
     @abstractmethod
-    def release(self, hexdigests: Iterable[str], *, progress: Progress) -> None:
-        ...
+    def release(self, hexdigests: Iterable[str], *, progress: Progress) -> None: ...
 
     def get_snapshot_state(self) -> SnapshotState:
         return SnapshotState(root_globs=self._groups.root_globs(), files=list(self.snapshot.get_all_files()))

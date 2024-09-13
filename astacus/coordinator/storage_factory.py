@@ -2,6 +2,7 @@
 Copyright (c) 2024 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.common.cachingjsonstorage import CachingJsonStorage
 from astacus.common.rohmustorage import RohmuConfig, RohmuStorage
 from astacus.common.storage import FileStorage, HexDigestStorage, JsonStorage

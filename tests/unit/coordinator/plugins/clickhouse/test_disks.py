@@ -2,6 +2,7 @@
 Copyright (c) 2023 Aiven Ltd
 See LICENSE for details
 """
+
 from astacus.common.snapshot import SnapshotGroup
 from astacus.coordinator.plugins.clickhouse.config import DiskConfiguration, DiskObjectStorageConfiguration, DiskType
 from astacus.coordinator.plugins.clickhouse.disks import Disk, Disks, ParsedPath, PartFilePathError

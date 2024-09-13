@@ -4,6 +4,7 @@ See LICENSE for details
 
 Hot-reloading of astacus configuration
 """
+
 from pathlib import Path
 from tests.system.conftest import astacus_ls, astacus_run, create_astacus_config, TestNode
 

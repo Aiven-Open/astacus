@@ -6,6 +6,7 @@ See LICENSE for details
 Classes for working with snapshot groups.
 
 """
+
 from astacus.common.snapshot import SnapshotGroup
 from collections.abc import Iterable, Sequence
 from pathlib import Path

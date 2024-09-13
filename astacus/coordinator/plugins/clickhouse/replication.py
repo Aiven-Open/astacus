@@ -2,6 +2,7 @@
 Copyright (c) 2022 Aiven Ltd
 See LICENSE for details
 """
+
 from .client import ClickHouseClient, escape_sql_identifier, unescape_sql_string
 from .macros import MacroExpansionError, Macros
 from .manifest import ReplicatedDatabase

@@ -3,6 +3,7 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 
 """
+
 from .config import node_config, NodeConfig
 from .snapshotter import Snapshotter
 from .state import node_state, NodeState
