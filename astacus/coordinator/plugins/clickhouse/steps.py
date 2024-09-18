@@ -18,6 +18,8 @@ from .manifest import (
     ClickHouseManifest,
     ClickHouseObjectStorageFile,
     ClickHouseObjectStorageFiles,
+    KeeperMapRow,
+    KeeperMapTable,
     ReplicatedDatabase,
     Table,
     UserDefinedFunction,
@@ -169,7 +171,7 @@ class RetrieveUserDefinedFunctionsStep(Step[Sequence[UserDefinedFunction]]):
             try:
                 children = await connection.get_children(self.replicated_user_defined_zookeeper_path, watch=change_watch)
             except NoNodeError:
-                # The path doesn't exist, no user defined functions to restore
+                # The path doesn't exist, no user defined functions to retrieve
                 return []
 
             for child in children:
@@ -179,6 +181,39 @@ class RetrieveUserDefinedFunctionsStep(Step[Sequence[UserDefinedFunction]]):
             if change_watch.has_changed:
                 raise TransientException("Concurrent modification during user_defined_function entities retrieval")
         return user_defined_functions
+
+
+@dataclasses.dataclass
+class RetrieveKeeperMapTableDataStep(Step[Sequence[KeeperMapTable]]):
+    zookeeper_client: ZooKeeperClient
+    keeper_map_path_prefix: str | None
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> Sequence[KeeperMapTable]:
+        if self.keeper_map_path_prefix is None:
+            return []
+
+        async with self.zookeeper_client.connect() as connection:
+            change_watch = ChangeWatch()
+            try:
+                children = await connection.get_children(self.keeper_map_path_prefix, watch=change_watch)
+            except NoNodeError:
+                logger.exception("KeeperMap path %s not found", self.keeper_map_path_prefix)
+                return []
+
+            tables = []
+            for child in children:
+                keeper_map_table_path = os.path.join(self.keeper_map_path_prefix, child)
+                data_path = os.path.join(keeper_map_table_path, "data")
+                data = await connection.get_children_with_data(data_path)
+                tables.append(
+                    KeeperMapTable(
+                        name=child,
+                        data=[KeeperMapRow(key=k, value=v) for k, v in sorted(data.items())],
+                    )
+                )
+                if change_watch.has_changed:
+                    raise TransientException("Concurrent table addition / deletion during KeeperMap backup")
+        return tables
 
 
 @dataclasses.dataclass
@@ -324,6 +359,7 @@ class PrepareClickHouseManifestStep(Step[dict[str, Any]]):
     async def run_step(self, cluster: Cluster, context: StepsContext) -> dict[str, Any]:
         databases, tables = context.get_result(RetrieveDatabasesAndTablesStep)
         user_defined_functions = context.get_result(RetrieveUserDefinedFunctionsStep)
+        keeper_map_tables = context.get_result(RetrieveKeeperMapTableDataStep)
         manifest = ClickHouseManifest(
             version=ClickHouseBackupVersion.V2,
             access_entities=context.get_result(RetrieveAccessEntitiesStep),
@@ -331,6 +367,7 @@ class PrepareClickHouseManifestStep(Step[dict[str, Any]]):
             replicated_databases=databases,
             tables=tables,
             object_storage_files=context.get_result(CollectObjectStorageFilesStep),
+            keeper_map_tables=keeper_map_tables,
         )
         return manifest.to_plugin_data()
 
@@ -729,6 +766,65 @@ class RestoreUserDefinedFunctionsStep(Step[None]):
             description="user defined functions to be restored",
             timeout_seconds=self.sync_user_defined_functions_timeout,
         )
+
+
+@dataclasses.dataclass
+class RestoreKeeperMapTableDataStep(Step[None]):
+    zookeeper_client: ZooKeeperClient
+    keeper_map_path_prefix: str | None
+    clients: Sequence[ClickHouseClient]
+    sync_keeper_map_data_timeout: float
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
+        if self.keeper_map_path_prefix is None:
+            return
+
+        clickhouse_manifest = context.get_result(ClickHouseManifestStep)
+
+        if not clickhouse_manifest.keeper_map_tables:
+            return
+
+        data_path = None
+        row = None
+        async with self.zookeeper_client.connect() as connection:
+            transaction = connection.transaction()
+            for table in clickhouse_manifest.keeper_map_tables:
+                if not table.data:
+                    continue
+
+                data_path = os.path.join(self.keeper_map_path_prefix, table.name, "data")
+                if not await connection.exists(data_path):
+                    # RestoreReplicatedDatabasesStep should have created this
+                    # parent znode and some other metadata znodes for the table.
+                    raise StepFailedError(
+                        f"KeeperMap table data path {data_path} doesn't exist in "
+                        "ZooKeeper, should have been created by RestoreReplicatedDatabasesStep"
+                    )
+                for row in table.data:
+                    row_path = os.path.join(data_path, row.key)
+                    transaction.create(row_path, row.value)
+            await transaction.commit()
+
+        if data_path is not None and row is not None:
+            # Wait for final restored row to be visible on all nodes.
+            # Note that each ClickHouse instance maintains a single zookeeper
+            # session so reading from the system table will see the same data as
+            # reading from the KeeperMap table.
+            async def check_row_existence(client: ClickHouseClient) -> bool:
+                escaped_data_path = escape_sql_string(data_path.encode())
+                escaped_name = escape_sql_string(row.key.encode())
+                query = f"SELECT count(*) FROM system.zookeeper WHERE path = {escaped_data_path} AND name = {escaped_name}"
+                logging.debug("Checking KeeperMap has synced with query: %s", query)
+                result = await client.execute(query.encode())
+                assert isinstance(result[0][0], str)
+                return bool(int(result[0][0]))
+
+            await wait_for_condition_on_every_node(
+                clients=self.clients,
+                condition=check_row_existence,
+                description="KeeperMap table data to be restored",
+                timeout_seconds=self.sync_keeper_map_data_timeout,
+            )
 
 
 @dataclasses.dataclass

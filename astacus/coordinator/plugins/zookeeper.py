@@ -5,9 +5,13 @@ See LICENSE for details
 
 from astacus.common.exceptions import TransientException
 from asyncio import to_thread
-from collections.abc import AsyncIterator, Callable, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Mapping, MutableSet, Sequence
 from kazoo.client import EventType, KazooClient, KeeperState, TransactionRequest, WatchedEvent
+from kazoo.exceptions import ConnectionClosedError
+from kazoo.protocol.states import KazooState
+from kazoo.recipe.watchers import ChildrenWatch, DataWatch
 from kazoo.retry import KazooRetry
+from queue import Empty, Queue
 
 import asyncio
 import contextlib
@@ -15,6 +19,7 @@ import dataclasses
 import enum
 import kazoo.exceptions
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +67,19 @@ class ZooKeeperConnection:
     async def get_children(self, path: str, watch: Watcher | None = None) -> Sequence[str]:
         """
         Returns the sorted list of all children of the given `path`.
+
+        Raises `NoNodeError` if the node does not exist.
+        """
+        raise NotImplementedError
+
+    async def get_children_with_data(
+        self,
+        path: str,
+        get_data_fault: Callable[[], None] = lambda: None,
+        get_children_fault: Callable[[], None] = lambda: None,
+    ) -> dict[str, bytes]:
+        """
+        Returns a dictionary of all children of the given `path` with their data.
 
         Raises `NoNodeError` if the node does not exist.
         """
@@ -223,7 +241,7 @@ class KazooZooKeeperTransaction(ZooKeeperTransaction):
 
 class KazooZooKeeperConnection(ZooKeeperConnection):
     def __init__(self, client: KazooClient):
-        self.client = client
+        self._client = client
 
     async def __aenter__(self) -> "KazooZooKeeperConnection":
         await to_thread(self.client.start)
@@ -233,9 +251,15 @@ class KazooZooKeeperConnection(ZooKeeperConnection):
         await to_thread(self._stop_and_close)
 
     def _stop_and_close(self) -> None:
-        self.client.stop()
-        self.client.close()
-        self.client = None
+        self._client.stop()
+        self._client.close()
+        self._client = None
+
+    @property
+    def client(self) -> KazooClient:
+        if self._client is None:
+            raise RuntimeError("Connection is closed")
+        return self._client
 
     async def get(self, path: str, watch: Watcher | None = None) -> bytes:
         try:
@@ -249,6 +273,20 @@ class KazooZooKeeperConnection(ZooKeeperConnection):
             return sorted(await to_thread(self.client.retry, self.client.get_children, path, watch=watch))
         except kazoo.exceptions.NoNodeError as e:
             raise NoNodeError(path) from e
+
+    async def get_children_with_data(
+        self,
+        path: str,
+        get_data_fault: Callable[[], None] = lambda: None,
+        get_children_fault: Callable[[], None] = lambda: None,
+    ) -> dict[str, bytes]:
+        children_with_data = ChildrenWithData(
+            self.client,
+            path,
+            get_data_fault=get_data_fault,
+            get_children_fault=get_children_fault,
+        )
+        return await to_thread(children_with_data.get)
 
     async def create(self, path: str, value: bytes) -> None:
         try:
@@ -383,6 +421,20 @@ class FakeZooKeeperConnection(ZooKeeperConnection):
                 self.watches.setdefault(parts, []).append(watch)
             return sorted([existing_parts[-1] for existing_parts in storage.keys() if existing_parts[:-1] == parts])
 
+    async def get_children_with_data(
+        self,
+        path: str,
+        get_data_fault: Callable[[], None] = lambda: None,
+        get_children_fault: Callable[[], None] = lambda: None,
+    ) -> dict[str, bytes]:
+        assert self in self.client.connections
+        parts = parse_path(path)
+        async with self.client.get_storage() as storage:
+            # dictionaries maintain insertion order since Python 3.6 so the result is sorted
+            return {
+                existing_parts[-1]: data for existing_parts, data in sorted(storage.items()) if existing_parts[:-1] == parts
+            }
+
     async def create(self, path: str, value: bytes) -> None:
         assert self in self.client.connections
         async with self.client.get_storage() as storage:
@@ -474,3 +526,147 @@ def delete_sort_key(pair: tuple[tuple[str, ...], WatchedEvent]) -> tuple[int, in
     # And for the same path, the child event is before the delete event
     parts, event = pair
     return -len(parts), 0 if event.type == EventType.CHILD else 1
+
+
+class ExistsWatch:
+    """Fires (at least) once when the node is deleted.  Should attempt to
+    maintain the watch accross session state changes.
+
+    Copied from kazoo.recipe.watchers.DataWatch.
+    """
+
+    def __init__(self, client: KazooClient, path: str, callback: Callable[[], None]) -> None:
+        self._client = client
+        self._path = path
+        self._callback = callback
+        self._stopped = False
+        self._run_lock = client.handler.lock_object()
+
+        self._client.add_listener(self._session_watcher)
+        self._exists_watcher()
+
+    def stop(self) -> None:
+        if self._stopped:
+            return
+
+        self._client.remove_listener(self._session_watcher)
+        self._stopped = True
+
+    def _exists_watcher(self, event: WatchedEvent | None = None) -> None:
+        if event is not None:
+            logger.debug("ExistsWatch: %s", event)
+
+        if self._stopped:
+            return
+
+        try:
+            with self._run_lock:
+                if self._client.exists(self._path, self._exists_watcher) is None:
+                    self._callback()
+                    self.stop()
+        except ConnectionClosedError:
+            pass
+
+    def _session_watcher(self, state):
+        if state == KazooState.CONNECTED:
+            self._client.handler.spawn(self._exists_watcher)
+
+
+class ChildrenWithData:
+    """Get the data for every child of the given path.
+
+    We use watches here so that if the children change while we are fetching
+    the data for other children, we will maintain a (somewhat) consistent view.
+    ZK ensures that watches are triggered in order.
+
+    Since ChildrenWatch and DataWatch already have retries, this function does
+    not need to be called with client.retry.
+
+    `get_children_fault` and `get_data_fault` hooks can be used to help with
+    testing.
+    """
+
+    def __init__(
+        self,
+        client: KazooClient,
+        path: str,
+        get_children_fault: Callable[[], None] = lambda: None,
+        get_data_fault: Callable[[], None] = lambda: None,
+    ) -> None:
+        self.client = client
+        self.path = path
+        self.running = False
+        # protects current_children and result
+        self.lock = client.handler.rlock_object()
+        self.result: dict[str, bytes] = {}
+        self.current_children: MutableSet[str] = set()
+        self.queue: Queue[str] = Queue()
+        self.get_children_fault = get_children_fault
+        self.get_data_fault = get_data_fault
+
+    def get(self) -> dict[str, bytes]:
+        self.running = True
+
+        parent_watch = self._watch_exists_parent()
+
+        self._watch_children()
+
+        while self.running:
+            with self.lock:
+                try:
+                    child = self.queue.get(block=False)
+                except Empty:
+                    # we have data for all children
+                    self.running = False
+                    parent_watch.stop()
+                    return self.result
+
+            self.watch_data(child)
+
+        # if we get here, the parent node was deleted
+        raise NoNodeError(self.path)
+
+    def _watch_exists_parent(self) -> ExistsWatch:
+        def watcher() -> None:
+            logger.debug("watch_parent: %s, node deleted", self.path)
+            self.running = False
+
+        return ExistsWatch(self.client, self.path, watcher)
+
+    def _watch_children(self) -> ChildrenWatch:
+        def watcher(children: list[str]) -> bool:
+            self.get_children_fault()
+            if not self.running:
+                return False
+
+            with self.lock:
+                logger.debug("watch_children: %s", children)
+                for child in children:
+                    if child not in self.current_children:
+                        self.queue.put(child)
+                self.current_children = set(children)
+                self.result = {k: v for k, v in self.result.items() if k in self.current_children}
+
+            return True
+
+        return self.client.ChildrenWatch(self.path, watcher)
+
+    def watch_data(self, child: str) -> DataWatch:
+        def watcher(data: bytes | None, stat: dict | None) -> bool:
+            self.get_data_fault()
+            if not self.running:
+                return False
+
+            with self.lock:
+                logger.debug("watch_data for %s: %s", child, data)
+                if data is None:
+                    self.current_children.discard(child)
+                    self.result.pop(child, None)
+                    return False
+
+                if child not in self.current_children:
+                    return False
+                self.result[child] = data
+                return True
+
+        return self.client.DataWatch(os.path.join(self.path, child), watcher)
