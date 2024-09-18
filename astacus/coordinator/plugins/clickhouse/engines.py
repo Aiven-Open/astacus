@@ -11,3 +11,4 @@ class TableEngine(enum.Enum):
     MySQL = "MySQL"
     PostgreSQL = "PostgreSQL"
     S3 = "S3"
+    KeeperMap = "KeeperMap"
