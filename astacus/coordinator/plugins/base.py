@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from astacus.common import exceptions, ipc, magic, utils
 from astacus.common.asyncstorage import AsyncHexDigestStorage, AsyncJsonStorage
-from astacus.common.ipc import Retention
+from astacus.common.ipc import Retention, TieredStorageResults
 from astacus.common.snapshot import SnapshotGroup
 from astacus.common.utils import AstacusModel
 from astacus.coordinator.cluster import Cluster, Result
@@ -236,6 +236,7 @@ class UploadManifestStep(Step[None]):
     plugin_manifest_step: type[Step[dict[str, Any]]] | None = None
     snapshot_step: type[Step[Sequence[ipc.SnapshotResult]]] | None = SnapshotStep
     upload_step: type[Step[Sequence[ipc.SnapshotUploadResult]]] | None = UploadBlocksStep
+    tiered_storage_results_step: type[Step[TieredStorageResults]] | None = None
     backup_prefix: str = magic.JSON_BACKUP_PREFIX
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
@@ -248,6 +249,9 @@ class UploadManifestStep(Step[None]):
                 upload_results=context.get_result(self.upload_step) if self.upload_step else [],
                 plugin=self.plugin,
                 plugin_data=plugin_data,
+                tiered_storage_results=(
+                    context.get_result(self.tiered_storage_results_step) if self.tiered_storage_results_step else None
+                ),
             )
         )
         backup_name = self._make_backup_name(context)
@@ -855,8 +859,10 @@ async def get_nodes_metadata(
         "metadata", caller="get_nodes_metadata", method="get", nodes=nodes, json=False
     )
     return [
-        ipc.MetadataResult(version="", features=[])
-        if not isinstance(response, httpx.Response)
-        else msgspec.json.decode(response.content, type=ipc.MetadataResult)
+        (
+            ipc.MetadataResult(version="", features=[])
+            if not isinstance(response, httpx.Response)
+            else msgspec.json.decode(response.content, type=ipc.MetadataResult)
+        )
         for response in metadata_responses
     ]

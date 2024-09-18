@@ -132,7 +132,7 @@ SAMPLE_TABLES = [
     ),
 ]
 
-SAMPLE_OBJET_STORAGE_FILES = [
+SAMPLE_OBJECT_STORAGE_FILES = [
     ClickHouseObjectStorageFiles(
         disk_name="remote",
         files=[
@@ -140,6 +140,7 @@ SAMPLE_OBJET_STORAGE_FILES = [
             ClickHouseObjectStorageFile(path="jkl/mnopqr"),
             ClickHouseObjectStorageFile(path="stu/vwxyza"),
         ],
+        total_size_bytes=400,
     )
 ]
 
@@ -164,7 +165,7 @@ SAMPLE_MANIFEST = ClickHouseManifest(
     access_entities=SAMPLE_ENTITIES,
     replicated_databases=SAMPLE_DATABASES,
     tables=SAMPLE_TABLES,
-    object_storage_files=SAMPLE_OBJET_STORAGE_FILES,
+    object_storage_files=SAMPLE_OBJECT_STORAGE_FILES,
     user_defined_functions=SAMPLE_USER_DEFINED_FUNCTIONS,
 )
 
@@ -444,8 +445,8 @@ async def test_retrieve_macros() -> None:
     ]
 
 
-def create_remote_file(path: str, remote_path: str) -> SnapshotFile:
-    metadata = f"""3\n1\t100\n100\t{remote_path}\n1\n0\n""".encode()
+def create_remote_file(path: str, remote_path: str, size: int) -> SnapshotFile:
+    metadata = f"""3\n1\t{size}\n{size}\t{remote_path}\n1\n0\n""".encode()
     return SnapshotFile(
         relative_path=f"disks/remote/{path}",
         file_size=len(metadata),
@@ -472,10 +473,12 @@ async def test_collect_object_storage_file_steps() -> None:
                     create_remote_file(
                         f"store/{table_uuid_parts}/all_0_0_0/columns.txt",
                         "abc/defghi",
+                        size=100,
                     ),
                     create_remote_file(
                         f"store/{table_uuid_parts}/all_0_0_0/data.bin",
                         "jkl/mnopqr",
+                        size=100,
                     ),
                 ],
             )
@@ -487,17 +490,19 @@ async def test_collect_object_storage_file_steps() -> None:
                     create_remote_file(
                         f"store/{table_uuid_parts}/all_0_0_0/columns.txt",
                         "abc/defghi",
+                        size=0,
                     ),
                     create_remote_file(
                         f"store/{table_uuid_parts}/all_0_0_0/data.bin",
                         "stu/vwxyza",
+                        size=200,
                     ),
                 ],
             )
         ),
     ]
     context.set_result(SnapshotStep, snapshot_results)
-    assert await step.run_step(Cluster(nodes=[]), context) == SAMPLE_OBJET_STORAGE_FILES
+    assert await step.run_step(Cluster(nodes=[]), context) == SAMPLE_OBJECT_STORAGE_FILES
 
 
 async def test_move_frozen_parts_steps() -> None:
@@ -554,7 +559,7 @@ async def test_create_clickhouse_manifest() -> None:
     context = StepsContext()
     context.set_result(RetrieveAccessEntitiesStep, SAMPLE_ENTITIES)
     context.set_result(RetrieveDatabasesAndTablesStep, (SAMPLE_DATABASES, SAMPLE_TABLES))
-    context.set_result(CollectObjectStorageFilesStep, SAMPLE_OBJET_STORAGE_FILES)
+    context.set_result(CollectObjectStorageFilesStep, SAMPLE_OBJECT_STORAGE_FILES)
     context.set_result(RetrieveUserDefinedFunctionsStep, SAMPLE_USER_DEFINED_FUNCTIONS)
     assert await step.run_step(Cluster(nodes=[]), context) == SAMPLE_MANIFEST_ENCODED
 
@@ -1437,3 +1442,22 @@ class TestWaitForConditionOnEveryNode:
 
         with pytest.raises(StepFailedError, match="Timeout while waiting for for select 1"):
             await wait_for_condition_on_every_node([client], cond, "for select 1", 0.1, 0.05)
+
+
+def test_collect_tiered_storage_results_step() -> None:
+    context = StepsContext()
+    context.set_result(
+        CollectObjectStorageFilesStep,
+        [
+            ClickHouseObjectStorageFiles(
+                disk_name="remote1",
+                files=[ClickHouseObjectStorageFile(path=path) for path in ("abc", "def")],
+                total_size_bytes=1000,
+            ),
+            ClickHouseObjectStorageFiles(
+                disk_name="remote2",
+                files=[ClickHouseObjectStorageFile(path=path) for path in ("ghi",)],
+                total_size_bytes=2000,
+            ),
+        ],
+    )

@@ -296,6 +296,11 @@ class RestoreRequest(msgspec.Struct, kw_only=True):
     stop_after_step: str | None = None
 
 
+class TieredStorageResults(msgspec.Struct, kw_only=True):
+    n_objects: int
+    total_size_bytes: int
+
+
 # coordinator.plugins backup/restore
 class BackupManifest(msgspec.Struct, kw_only=True):
     # When was (this) backup attempt started
@@ -321,6 +326,8 @@ class BackupManifest(msgspec.Struct, kw_only=True):
 
     # Semi-redundant but simplifies handling; automatically set on download
     filename: str = ""
+
+    tiered_storage_results: TieredStorageResults | None = None
 
 
 class ManifestMin(msgspec.Struct, kw_only=True):
@@ -357,6 +364,8 @@ class ListSingleBackup(msgspec.Struct, frozen=True, kw_only=True):
     # using the files' hexdigest as key. As such, they are *not* sourced from BackupManifest.
     cluster_files: int
     cluster_data_size: int
+    # Total size in bytes of files in tiered storage
+    tiered_storage_size: int | None = None
 
 
 class ListForStorage(msgspec.Struct, kw_only=True):

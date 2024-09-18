@@ -57,6 +57,7 @@ def _iter_backups(
         upload_size = sum(x.total_size for x in manifest.upload_results)
         upload_stored_size = sum(x.total_stored_size for x in manifest.upload_results)
         cluster_files, cluster_data_size = compute_deduplicated_snapshot_file_stats(manifest)
+        tiered_storage_size = manifest.tiered_storage_results.total_size_bytes if manifest.tiered_storage_results else None
         yield ipc.ListSingleBackup(
             name=backup_name,
             start=manifest.start,
@@ -70,6 +71,7 @@ def _iter_backups(
             cluster_data_size=cluster_data_size,
             upload_size=upload_size,
             upload_stored_size=upload_stored_size,
+            tiered_storage_size=tiered_storage_size,
         )
 
 
