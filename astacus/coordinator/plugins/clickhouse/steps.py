@@ -197,7 +197,7 @@ class RetrieveKeeperMapTableDataStep(Step[Sequence[KeeperMapTable]]):
             try:
                 children = await connection.get_children(self.keeper_map_path_prefix, watch=change_watch)
             except NoNodeError:
-                logger.exception("KeeperMap path %s not found", self.keeper_map_path_prefix)
+                # The path doesn't exist, no keeper map tables to retrieve
                 return []
 
             tables = []
