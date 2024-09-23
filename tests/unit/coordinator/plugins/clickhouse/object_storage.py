@@ -44,6 +44,10 @@ class MemoryObjectStorage(ObjectStorage):
         logger.info("deleting item: %r", key)
         self.items.pop(key)
 
+    def delete_items(self, keys: Sequence[str]) -> None:
+        for key in keys:
+            self.delete_item(key)
+
     def copy_items_from(self, source: "ObjectStorage", keys: Sequence[str], *, stats: StatsClient | None) -> None:
         keys_set = set(keys)
         keys_to_copy = len(keys_set)

@@ -30,7 +30,7 @@ dependencies = [
     "protobuf < 3.21",
     "pydantic < 2",
     "pyyaml",
-    "rohmu >= 2.7.0",
+    "rohmu@git+ssh://git@github.com/Aiven-Open/rohmu#egg=fe750f754d2648564e7130bd790e53a5fdc170b3",
     "sentry-sdk",
     "starlette",
     "tabulate",
@@ -131,6 +131,9 @@ astacus = "astacus.main:main"
 
 [tool.hatch.version]
 source = "vcs"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.isort]
 no_sections = true
