@@ -204,7 +204,12 @@ class RetrieveKeeperMapTableDataStep(Step[Sequence[KeeperMapTable]]):
             for child in children:
                 keeper_map_table_path = os.path.join(self.keeper_map_path_prefix, child)
                 data_path = os.path.join(keeper_map_table_path, "data")
-                data = await connection.get_children_with_data(data_path)
+                try:
+                    data = await connection.get_children_with_data(data_path)
+                except NoNodeError:
+                    logger.info("ZNode %s is missing, table was dropped.  Skipping", data_path)
+                    continue
+
                 tables.append(
                     KeeperMapTable(
                         name=child,
