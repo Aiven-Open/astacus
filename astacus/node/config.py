@@ -11,7 +11,7 @@ from astacus.common.utils import AstacusModel
 from collections.abc import Sequence
 from fastapi import Request
 from pathlib import Path
-from pydantic import DirectoryPath, Field, validator
+from pydantic.v1 import DirectoryPath, Field, validator
 
 APP_KEY = "node_config"
 

@@ -14,7 +14,7 @@ from astacus.common.cassandra.config import SNAPSHOT_GLOB, SNAPSHOT_NAME
 from astacus.common.exceptions import TransientException
 from collections.abc import Callable
 from pathlib import Path
-from pydantic import DirectoryPath
+from pydantic.v1 import DirectoryPath
 
 import contextlib
 import logging

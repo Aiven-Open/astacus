@@ -3,9 +3,9 @@ Copyright (c) 2024 Aiven Ltd
 See LICENSE for details
 """
 
-from pydantic import PydanticValueError
-from pydantic.fields import ModelField
-from pydantic.validators import _VALIDATORS
+from pydantic.v1 import PydanticValueError
+from pydantic.v1.fields import ModelField
+from pydantic.v1.validators import _VALIDATORS
 from starlette.responses import JSONResponse
 from typing import Any
 

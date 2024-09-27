@@ -17,7 +17,7 @@ from collections.abc import AsyncIterable, AsyncIterator, Callable, Hashable, It
 from contextlib import contextmanager
 from multiprocessing.dummy import Pool  # fastapi + fork = bad idea
 from pathlib import Path
-from pydantic import BaseModel
+from pydantic.v1 import BaseModel
 from typing import Any, ContextManager, Final, Generic, IO, Literal, overload, TextIO, TypeAlias, TypeVar
 
 import asyncio

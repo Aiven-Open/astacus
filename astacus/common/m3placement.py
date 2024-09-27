@@ -14,7 +14,7 @@ as opposed to part of astacus.coordinator.plugins.m3db.
 from astacus.common.utils import AstacusModel
 from astacus.proto import m3_placement_pb2
 from collections.abc import Sequence
-from pydantic import validator
+from pydantic.v1 import validator
 
 MAXIMUM_PROTOBUF_STR_LENGTH = 127
 

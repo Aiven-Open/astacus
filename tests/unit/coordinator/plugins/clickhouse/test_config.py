@@ -14,7 +14,7 @@ from astacus.coordinator.plugins.zookeeper_config import (
 )
 from collections.abc import Sequence
 from kazoo.client import KazooClient
-from pydantic import SecretStr
+from pydantic.v1 import SecretStr
 from typing import cast
 
 import pytest

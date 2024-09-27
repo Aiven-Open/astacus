@@ -15,7 +15,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 from enum import Enum
-from pydantic import Field
+from pydantic.v1 import Field
 from rohmu import errors, rohmufile
 from rohmu.compressor import CompressionStream
 from rohmu.encryptor import EncryptorStream

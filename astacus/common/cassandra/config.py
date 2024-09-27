@@ -19,7 +19,7 @@ https://github.com/samuelcolvin/pydantic/issues/3376
 from astacus.common.utils import AstacusModel
 from collections.abc import Sequence
 from pathlib import Path
-from pydantic import root_validator
+from pydantic.v1 import root_validator
 
 import yaml
 

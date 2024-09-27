@@ -12,14 +12,13 @@ jobs:
     strategy:
       max-parallel: 4
       matrix:
-        fedora-version: ["38", "39"]
+        fedora-version: ["39", "40"]
 
         include:
-          - fedora-version: "38"
-            python-version: "3.11"
           - fedora-version: "39"
-            # https://github.com/pydantic/pydantic/issues/9637
-            python-version: "3.12.3"
+            python-version: "3.12.6"
+          - fedora-version: "40"
+            python-version: "3.12.6"
     steps:
       - uses: actions/checkout@v3
 

@@ -6,7 +6,7 @@ See LICENSE for details
 from astacus.common.utils import AstacusModel, build_netloc
 from astacus.coordinator.plugins.zookeeper import KazooZooKeeperClient, ZooKeeperClient, ZooKeeperUser
 from collections.abc import Sequence
-from pydantic import SecretStr
+from pydantic.v1 import SecretStr
 
 
 class ZooKeeperNode(AstacusModel):

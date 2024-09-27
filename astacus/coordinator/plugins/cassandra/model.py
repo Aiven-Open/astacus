@@ -8,7 +8,7 @@ cassandra backup/restore plugin models
 from astacus.common.cassandra.schema import CassandraSchema
 from astacus.common.utils import AstacusModel
 from collections.abc import Sequence
-from pydantic import root_validator
+from pydantic.v1 import root_validator
 from uuid import UUID
 
 
