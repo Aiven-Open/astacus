@@ -17,6 +17,7 @@ classifiers=[
     "Intended Audience :: System Administrators",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Database :: Database Engines/Servers",
     "Topic :: Software Development :: Libraries",
 ]
@@ -101,7 +102,7 @@ dev = [
     "pytest-timeout==2.1.0",
     "pytest-watch==4.2.0",
     "pytest==7.2.2",
-    "mypy==1.9.0",
+    "mypy==1.11.2",
     # Types for things that don't seem to have them
     "types-botocore>=1.0.2",
     "types-PyYAML>=6.0.12.2",
@@ -148,3 +149,43 @@ source = [
      "astacus",
      "tests"
 ]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = [
+  "pydantic.v1.mypy",
+  "pydantic.mypy",
+]
+exclude = [
+  "setup.py",
+  "vendor/",
+  "venv/",
+  "astacus/proto/",
+]
+show_error_codes = true
+warn_unreachable = true
+no_implicit_reexport = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_subclassing_any = true
+
+[tool.pydantic-mypy]
+# even if Config.extra != forbid, prevent extra args
+init_forbid_extra = true
+# validate types on __init__, do not go for type coercion
+init_typed = true
+# We don't want use of indirect population without explicit alias
+warn_required_dynamic_aliases = true
+
+[[tool.mypy.overrides]]
+module = "cassandra.*,graphlib,kazoo.*,systemd"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "google.protobuf"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "astacus.common.cassandra,astacus.coordinator.cassandra,astacus.node.cassandra"
+disallow_incomplete_defs = true
+disallow_untyped_defs = true
