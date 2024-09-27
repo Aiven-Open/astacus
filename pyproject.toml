@@ -43,34 +43,6 @@ dependencies = [
 cassandra = [
     "cassandra-driver == 3.20.2",
 ]
-f38 = [
-    "cramjam == 2.8.3",
-    "cryptography == 37.0.2",
-    "fastapi == 0.99.0",
-    # h11 on Fedora 38 is actually 0.13.0, but 0.13.0 is rejeceted by httpcore 0.15.0
-    # See: https://github.com/encode/httpcore/blob/0.15.0/setup.py#L56-L57
-    # See also: https://github.com/python-hyper/h11/compare/v0.12.0...v0.13.0 if you're looking for meaningful differences.
-    "h11 == 0.12.0",
-    "httpcore == 0.15.0",
-    "httplib2 == 0.20.4",
-    "httpx == 0.24.1",
-    "msgspec == 0.18.6",
-    "kazoo == 2.8.0",
-    "protobuf == 3.19.6",
-    # pydantic on Fedora 38 is actually 1.10.2, but 1.10.2 is incompatible with
-    # mypy >= 1.4.0, this was fixed in pydantic 1.10.9: https://github.com/pydantic/pydantic/pull/5928
-    # Further than that, rohmu >= 2.5.0 requires pydantic >= 1.10.17 because of the "v1" namespace broken compatibility.
-    "pydantic == 1.10.17",
-    "pyyaml == 6.0.0",
-    "requests == 2.28.2",
-    "starlette == 0.27.0",
-    "tabulate == 0.9.0",
-    "uritemplate == 4.1.1",
-    "urllib3 == 1.26.18",
-    "uvicorn == 0.15.0",
-    "wcmatch == 8.4.1",
-    "zstandard == 0.21.0",
-]
 f39 = [
     "cramjam == 2.8.3",
     "cryptography == 41.0.7",
@@ -95,6 +67,28 @@ f39 = [
     "uvicorn == 0.23.2",
     "wcmatch == 8.4.1",
     "zstandard == 0.21.0",
+]
+f40 = [
+    "cramjam == 2.8.3",
+    "cryptography == 41.0.7",
+    "fastapi == 0.111.1",
+    "h11 == 0.14.0",
+    "httpcore == 1.0.2",
+    "httplib2 == 0.21.0",
+    "httpx == 0.26.0",
+    "msgspec == 0.18.6",
+    "kazoo == 2.8.0",
+    "protobuf == 3.19.6",
+    "pyasyncore == 1.0.2",
+    # pydantic on Fedora 40 is actually v2.
+    "pydantic == 1.10.17",
+    "pyyaml == 6.0.1",
+    "requests == 2.31.0",
+    "tabulate == 0.9.0",
+    "uritemplate == 4.1.1",
+    "uvicorn == 0.23.2",
+    "wcmatch == 8.5.2",
+    "zstandard == 0.22.0",
 ]
 dev = [
     # Needed by pre-commit to lint and test the project
