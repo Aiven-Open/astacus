@@ -15,9 +15,9 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext as does_not_raise
 from dataclasses import dataclass
 from datetime import datetime, UTC
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 from pathlib import Path
+from starlette.applications import Starlette
+from starlette.testclient import TestClient
 from typing import Any
 
 import httpx
@@ -71,7 +71,7 @@ class RestoreTest:
         RestoreTest(partial=True),
     ],
 )
-def test_restore(rt: RestoreTest, app: FastAPI, client: TestClient, tmp_path: Path) -> None:
+def test_restore(rt: RestoreTest, app: Starlette, client: TestClient, tmp_path: Path) -> None:
     # pylint: disable=too-many-statements
     # Create fake backup (not pretty but sufficient?)
     storage_factory = StorageFactory(
@@ -159,6 +159,7 @@ def test_restore(rt: RestoreTest, app: FastAPI, client: TestClient, tmp_path: Pa
             assert response.json().get("state") == "done"
             assert response.json().get("progress") is not None
             assert response.json().get("progress")["final"]
+
         if rt.fail_at == 5 or rt.fail_at is None:
             assert response.json().get("progress")["handled"] == 10
             assert response.json().get("progress")["failed"] == 0

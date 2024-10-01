@@ -15,10 +15,10 @@ from . import magic
 from .exceptions import ExpiredOperationException
 from .statsd import StatsClient
 from .utils import AstacusModel
+from astacus.starlette import JSONHTTPException
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from fastapi import HTTPException
 from starlette.background import BackgroundTasks
 from starlette.datastructures import URL
 from typing import Any, Optional
@@ -149,11 +149,11 @@ class OpMixin:
 
         return Op.StartResult(op_id=op.op_id, status_url=status_url)
 
-    def get_op_and_op_info(self, *, op_id, op_name=None):
+    def get_op_and_op_info(self, *, op_id: int, op_name: str | None = None):
         op_info = self.state.op_info
         if op_id != op_info.op_id or (op_name and op_name != op_info.op_name):
             logger.info("request for nonexistent %s.%s != %r", op_name, op_id, op_info)
-            raise HTTPException(
+            raise JSONHTTPException(
                 404,
                 {
                     "code": magic.ErrorCode.operation_id_mismatch,

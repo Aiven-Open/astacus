@@ -2,7 +2,7 @@
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 
-It is responsible for setting up the FastAPI app, with the sub-routers
+It is responsible for setting up the Starlette app, with the sub-routers
 mapped ( coordinator + node) and configured (by loading configuration
 entries from both JSON file, as well as accepting configuration
 entries from command line (later part TBD).
@@ -17,8 +17,9 @@ from astacus import config
 from astacus.coordinator.api import router as coordinator_router
 from astacus.coordinator.state import app_coordinator_state
 from astacus.node.api import router as node_router
-from fastapi import FastAPI
+from astacus.starlette import EXCEPTION_HANDLERS
 from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
+from starlette.applications import Starlette
 
 import logging
 import os
@@ -28,27 +29,23 @@ import uvicorn
 
 logger = logging.getLogger(__name__)
 
-app: FastAPI | None = None
-
 
 def init_app():
-    """Initialize the FastAPI app.
-
-    It is stored in a global here because uvicorn we currently use is
-    older than the 8/2020 version which added factory function
-    support; once factory support is enabled, we could consider
-    switching to using init_app as factory.
-    """
+    """Initialize the Starlette app."""
     config_path = os.environ.get("ASTACUS_CONFIG")
     assert config_path
-    api = FastAPI()
-    api.include_router(node_router, prefix="/node", tags=["node"])
-    api.include_router(coordinator_router, tags=["coordinator"])
+    api = Starlette(
+        routes=[
+            node_router.mount("/node"),
+            coordinator_router.mount(),
+        ],
+        exception_handlers=EXCEPTION_HANDLERS,
+    )
 
     @api.on_event("shutdown")
     async def _shutdown_event():
-        if app is not None:
-            state = await app_coordinator_state(app=app)
+        if api is not None:
+            state = await app_coordinator_state(app=api)
             state.shutting_down = True
 
     gconfig = config.set_global_config_from_path(api, config_path)
@@ -56,13 +53,7 @@ def init_app():
     if sentry_dsn:
         sentry_sdk.init(dsn=sentry_dsn)  # pylint: disable=abstract-class-instantiated
         api.add_middleware(SentryAsgiMiddleware)
-    global app  # pylint: disable=global-statement
-    app = api
     return api
-
-
-if os.environ.get("ASTACUS_CONFIG"):
-    init_app()
 
 
 def _systemd_notify_ready():
@@ -80,7 +71,8 @@ def _systemd_notify_ready():
 def _run_server(args) -> bool:
     # On reload (and following init_app), the app is configured based on this
     os.environ["ASTACUS_CONFIG"] = args.config
-    uconfig = init_app().state.global_config.uvicorn
+    app = init_app()
+    uconfig = app.state.global_config.uvicorn
     _systemd_notify_ready()
     # uvicorn log_level option overrides log levels defined in log_config.
     # This is fine, except that the list of overridden loggers depends on the version: it changes at version 0.12.
@@ -91,7 +83,7 @@ def _run_server(args) -> bool:
     # We don't want debug-level info from kazoo, this leaks znode content to logs.
     kazoo_log_level = max(log_level, logging.INFO)
     uvicorn.run(
-        "astacus.server:app",
+        app,
         host=uconfig.host,
         port=uconfig.port,
         reload=uconfig.reload,

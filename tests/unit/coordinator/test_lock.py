@@ -8,8 +8,8 @@ Test that the coordinator lock endpoint works.
 
 from astacus.common.magic import LockCall
 from astacus.common.statsd import StatsClient
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from starlette.applications import Starlette
+from starlette.testclient import TestClient
 from unittest.mock import patch
 
 import respx
@@ -21,7 +21,7 @@ def test_status_nonexistent(client: TestClient) -> None:
     assert response.json() == {"detail": {"code": "operation_id_mismatch", "message": "Unknown operation id", "op": 123}}
 
 
-def test_lock_no_nodes(app: FastAPI, client: TestClient) -> None:
+def test_lock_no_nodes(app: Starlette, client: TestClient) -> None:
     nodes = app.state.coordinator_config.nodes
     nodes.clear()
 
@@ -34,10 +34,10 @@ def test_lock_no_nodes(app: FastAPI, client: TestClient) -> None:
     status_url = response.json()["status_url"]
     response = client.get(status_url)
     assert response.status_code == 200, response.json()
-    assert response.json() == {"state": "done"}
+    assert response.json() == {"state": "done", "progress": None}
 
 
-def test_lock_ok(app: FastAPI, client: TestClient) -> None:
+def test_lock_ok(app: Starlette, client: TestClient) -> None:
     nodes = app.state.coordinator_config.nodes
     with respx.mock:
         for node in nodes:
@@ -47,12 +47,12 @@ def test_lock_ok(app: FastAPI, client: TestClient) -> None:
 
         response = client.get(response.json()["status_url"])
         assert response.status_code == 200, response.json()
-        assert response.json() == {"state": "done"}
+        assert response.json() == {"state": "done", "progress": None}
 
         assert app.state.coordinator_state.op_info.op_id == 1
 
 
-def test_lock_onefail(app: FastAPI, client: TestClient) -> None:
+def test_lock_onefail(app: Starlette, client: TestClient) -> None:
     nodes = app.state.coordinator_config.nodes
     with respx.mock:
         for i, node in enumerate(nodes):
@@ -65,4 +65,4 @@ def test_lock_onefail(app: FastAPI, client: TestClient) -> None:
 
     response = client.get(response.json()["status_url"])
     assert response.status_code == 200, response.json()
-    assert response.json() == {"state": "fail"}
+    assert response.json() == {"state": "fail", "progress": None}

@@ -9,11 +9,11 @@ from astacus.common.cassandra.utils import SYSTEM_KEYSPACES
 from astacus.node.api import READONLY_SUBOPS
 from astacus.node.config import CassandraAccessLevel, CassandraNodeConfig
 from collections.abc import Callable, Sequence
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 from httpx import Response
 from pathlib import Path
 from pytest_mock import MockerFixture
+from starlette.applications import Starlette
+from starlette.testclient import TestClient
 from tests.unit.conftest import CassandraTestConfig
 from types import ModuleType
 
@@ -30,7 +30,7 @@ def fixture_astacus_node_cassandra() -> ModuleType:
 class CassandraTestEnv(CassandraTestConfig):
     cassandra_node_config: CassandraNodeConfig
 
-    def __init__(self, *, app: FastAPI, client: TestClient, mocker: MockerFixture, tmp_path: Path) -> None:
+    def __init__(self, *, app: Starlette, client: TestClient, mocker: MockerFixture, tmp_path: Path) -> None:
         super().__init__(mocker=mocker, tmp_path=tmp_path)
         self.app = app
         self.client = client
@@ -60,7 +60,7 @@ class CassandraTestEnv(CassandraTestConfig):
 
 
 @pytest.fixture(name="ctenv")
-def fixture_ctenv(app: FastAPI, client: TestClient, mocker: MockerFixture, tmp_path: Path) -> CassandraTestEnv:
+def fixture_ctenv(app: Starlette, client: TestClient, mocker: MockerFixture, tmp_path: Path) -> CassandraTestEnv:
     return CassandraTestEnv(app=app, client=client, mocker=mocker, tmp_path=tmp_path)
 
 
@@ -68,7 +68,7 @@ def fixture_ctenv(app: FastAPI, client: TestClient, mocker: MockerFixture, tmp_p
     "subop", set(ipc.CassandraSubOp) - {ipc.CassandraSubOp.get_schema_hash, ipc.CassandraSubOp.restore_sstables}
 )
 def test_api_cassandra_subop(
-    app: FastAPI, ctenv: CassandraTestEnv, mocker: MockerFixture, subop: ipc.CassandraSubOp
+    app: Starlette, ctenv: CassandraTestEnv, mocker: MockerFixture, subop: ipc.CassandraSubOp
 ) -> None:
     req_json = {"tokens": ["42", "7"]}
 

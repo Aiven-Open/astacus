@@ -10,10 +10,11 @@ from astacus.coordinator.api import router
 from astacus.coordinator.config import CoordinatorConfig, CoordinatorNode
 from astacus.coordinator.coordinator import LockedCoordinatorOp
 from astacus.coordinator.storage_factory import StorageFactory
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from astacus.starlette import EXCEPTION_HANDLERS
 from pathlib import Path
 from pytest_mock import MockerFixture
+from starlette.applications import Starlette
+from starlette.testclient import TestClient
 from tests.utils import create_rohmu_config
 
 import asyncio
@@ -43,7 +44,7 @@ def fixture_populated_storage_factory(tmp_path: Path) -> StorageFactory:
 
 
 @pytest.fixture(name="client")
-def fixture_client(app: FastAPI) -> TestClient:
+def fixture_client(app: Starlette) -> TestClient:
     client = TestClient(app)
 
     # One ping at API to populate the fixtures (ugh)
@@ -69,9 +70,11 @@ COORDINATOR_NODES = [
 
 
 @pytest.fixture(name="app")
-def fixture_app(mocker: MockerFixture, sleepless: None, storage: RohmuStorage, tmp_path: Path) -> FastAPI:
-    app = FastAPI()
-    app.include_router(router, tags=["coordinator"])
+def fixture_app(mocker: MockerFixture, sleepless: None, storage: RohmuStorage, tmp_path: Path) -> Starlette:
+    app = Starlette(
+        routes=router.get_routes(),
+        exception_handlers=EXCEPTION_HANDLERS,
+    )
     app.state.coordinator_config = CoordinatorConfig(
         object_storage=create_rohmu_config(tmp_path),
         plugin=Plugin.files,

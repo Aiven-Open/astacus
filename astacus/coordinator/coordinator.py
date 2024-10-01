@@ -3,6 +3,8 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 
+from __future__ import annotations
+
 from .plugins.base import CoordinatorPlugin, OperationContext, Step, StepFailedError, StepsContext
 from .storage_factory import StorageFactory
 from astacus.common import asyncstorage, exceptions, ipc, op, statsd, utils
@@ -16,11 +18,13 @@ from astacus.coordinator.cluster import Cluster, LockResult, WaitResultError
 from astacus.coordinator.config import coordinator_config, CoordinatorConfig, CoordinatorNode
 from astacus.coordinator.plugins import get_plugin
 from astacus.coordinator.state import coordinator_state, CoordinatorState
+from astacus.starlette import JSONHTTPException
 from collections.abc import Awaitable, Callable, Iterator, Sequence
-from fastapi import BackgroundTasks, Depends, HTTPException
 from functools import cached_property
+from starlette.background import BackgroundTasks
 from starlette.datastructures import URL
-from typing import Any
+from starlette.requests import Request
+from typing import Any, TypeVar
 from urllib.parse import urlunsplit
 
 import asyncio
@@ -32,13 +36,11 @@ import time
 logger = logging.getLogger(__name__)
 
 
-def coordinator_stats(config: CoordinatorConfig = Depends(coordinator_config)) -> StatsClient:
+def coordinator_stats(config: CoordinatorConfig) -> StatsClient:
     return StatsClient(config=config.statsd)
 
 
-def coordinator_storage_factory(
-    config: CoordinatorConfig = Depends(coordinator_config), state: CoordinatorState = Depends(coordinator_state)
-) -> StorageFactory:
+def coordinator_storage_factory(config: CoordinatorConfig, state: CoordinatorState) -> StorageFactory:
     assert config.object_storage is not None
     return StorageFactory(
         storage_config=config.object_storage,
@@ -51,15 +53,28 @@ class Coordinator(op.OpMixin):
     state: CoordinatorState
     """ Convenience dependency which contains sub-dependencies most API endpoints need """
 
+    @classmethod
+    async def create_from_request(cls, request: Request, background_tasks: BackgroundTasks) -> Coordinator:
+        config = coordinator_config(request)
+        state = await coordinator_state(request)
+        return cls(
+            request_url=get_request_url(request),
+            background_tasks=background_tasks,
+            config=config,
+            state=state,
+            stats=coordinator_stats(config),
+            storage_factory=coordinator_storage_factory(config=config, state=state),
+        )
+
     def __init__(
         self,
         *,
-        request_url: URL = Depends(get_request_url),
+        request_url: URL,
         background_tasks: BackgroundTasks,
-        config: CoordinatorConfig = Depends(coordinator_config),
-        state: CoordinatorState = Depends(coordinator_state),
-        stats: statsd.StatsClient = Depends(coordinator_stats),
-        storage_factory: StorageFactory = Depends(coordinator_storage_factory),
+        config: CoordinatorConfig,
+        state: CoordinatorState,
+        stats: statsd.StatsClient,
+        storage_factory: StorageFactory,
     ):
         self.request_url = request_url
         self.background_tasks = background_tasks
@@ -90,9 +105,12 @@ class Coordinator(op.OpMixin):
     def is_busy(self) -> bool:
         return bool(self.state.op and self.state.op_info.op_status in (Op.Status.running.value, Op.Status.starting.value))
 
+    def create_op(self, op_type: type[CoordinatorOpT], *args: Any, **kwargs: Any) -> CoordinatorOpT:
+        return op_type(c=self, *args, **kwargs)
+
 
 class CoordinatorOp(op.Op):
-    def __init__(self, *, c: Coordinator = Depends()):
+    def __init__(self, *, c: Coordinator):
         super().__init__(info=c.state.op_info, op_id=c.allocate_op_id(), stats=c.stats)
         self.request_url = c.request_url
         self.nodes = c.config.nodes
@@ -116,10 +134,13 @@ class CoordinatorOp(op.Op):
         return AsyncSleeper()
 
 
+CoordinatorOpT = TypeVar("CoordinatorOpT", bound=CoordinatorOp)
+
+
 class LockedCoordinatorOp(CoordinatorOp):
     op_started: float | None  # set when op_info.status is set to starting
 
-    def __init__(self, *, c: Coordinator = Depends()):
+    def __init__(self, *, c: Coordinator):
         super().__init__(c=c)
         self.ttl = c.config.default_lock_ttl
         self.initial_lock_start = time.monotonic()
@@ -138,7 +159,7 @@ class LockedCoordinatorOp(CoordinatorOp):
         if result is not LockResult.ok:
             # Ensure we don't wind up holding partial lock on the cluster
             await cluster.request_unlock(locker=self.locker)
-            raise HTTPException(
+            raise JSONHTTPException(
                 409,
                 {
                     "code": ErrorCode.cluster_lock_unavailable,
@@ -225,7 +246,7 @@ class SteppedCoordinatorOp(LockedCoordinatorOp):
     step_progress: dict[int, Progress]
 
     def __init__(
-        self, *, c: Coordinator = Depends(), attempts: int, steps: Sequence[Step[Any]], operation_context: OperationContext
+        self, *, c: Coordinator, attempts: int, steps: Sequence[Step[Any]], operation_context: OperationContext
     ) -> None:
         super().__init__(c=c)
         self.state = c.state
@@ -291,10 +312,6 @@ class SteppedCoordinatorOp(LockedCoordinatorOp):
 
 
 class BackupOp(SteppedCoordinatorOp):
-    @staticmethod
-    async def create(*, c: Coordinator = Depends()) -> "BackupOp":
-        return BackupOp(c=c)
-
     def __init__(self, *, c: Coordinator) -> None:
         operation_context = c.get_operation_context()
         steps = c.get_plugin().get_backup_steps(context=operation_context)
@@ -302,10 +319,6 @@ class BackupOp(SteppedCoordinatorOp):
 
 
 class DeltaBackupOp(SteppedCoordinatorOp):
-    @staticmethod
-    async def create(*, c: Coordinator = Depends()) -> "DeltaBackupOp":
-        return DeltaBackupOp(c=c)
-
     def __init__(self, *, c: Coordinator) -> None:
         operation_context = c.get_operation_context()
         steps = c.get_plugin().get_delta_backup_steps(context=operation_context)
@@ -313,10 +326,6 @@ class DeltaBackupOp(SteppedCoordinatorOp):
 
 
 class RestoreOp(SteppedCoordinatorOp):
-    @staticmethod
-    async def create(*, c: Coordinator = Depends(), req: ipc.RestoreRequest = ipc.RestoreRequest()) -> "RestoreOp":
-        return RestoreOp(c=c, req=req)
-
     def __init__(self, *, c: Coordinator, req: ipc.RestoreRequest) -> None:
         operation_context = c.get_operation_context(requested_storage=req.storage)
         steps = c.get_plugin().get_restore_steps(context=operation_context, req=req)

@@ -13,7 +13,8 @@ from astacus.common import ipc, utils
 from astacus.common.op import OpState
 from astacus.coordinator.config import CoordinatorConfig
 from dataclasses import dataclass
-from fastapi import FastAPI, Request
+from starlette.applications import Starlette
+from starlette.requests import Request
 
 import msgspec
 import time
@@ -43,7 +44,7 @@ class CoordinatorState(OpState):
     shutting_down: bool = False
 
 
-async def app_coordinator_state(app: FastAPI) -> CoordinatorState:
+async def app_coordinator_state(app: Starlette) -> CoordinatorState:
     return utils.get_or_create_state(state=app.state, key=APP_KEY, factory=CoordinatorState)
 
 

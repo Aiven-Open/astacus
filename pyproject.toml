@@ -23,10 +23,9 @@ classifiers=[
 license = { text = "Apache License 2.0" }
 dynamic = ["version"]
 dependencies = [
-    "fastapi",
     "httpx",
-    "msgspec",
     "kazoo",
+    "msgspec",
     "protobuf < 3.21",
     "pydantic < 2",
     "pyyaml",
@@ -46,7 +45,6 @@ cassandra = [
 f39 = [
     "cramjam == 2.8.3",
     "cryptography == 41.0.7",
-    "fastapi == 0.103.0",
     "h11 == 0.14.0",
     "httpcore == 0.17.3",
     "httplib2 == 0.21.0",
@@ -71,7 +69,6 @@ f39 = [
 f40 = [
     "cramjam == 2.8.3",
     "cryptography == 41.0.7",
-    "fastapi == 0.111.1",
     "h11 == 0.14.0",
     "httpcore == 1.0.2",
     "httplib2 == 0.21.0",
