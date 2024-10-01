@@ -10,9 +10,9 @@ from astacus.common.storage import JsonObject
 from astacus.node.snapshot_op import SnapshotOp
 from astacus.node.sqlite_snapshot import SQLiteSnapshot
 from astacus.node.uploader import Uploader
-from fastapi.testclient import TestClient
 from pathlib import Path
 from pytest_mock import MockerFixture
+from starlette.testclient import TestClient
 from tests.unit.node.conftest import build_snapshot_and_snapshotter, create_files_at_path
 
 import msgspec

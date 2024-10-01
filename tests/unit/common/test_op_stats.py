@@ -15,7 +15,7 @@ from astacus.coordinator.config import CoordinatorConfig
 from astacus.coordinator.coordinator import Coordinator, SteppedCoordinatorOp
 from astacus.coordinator.plugins.base import Step, StepsContext
 from astacus.coordinator.state import CoordinatorState
-from fastapi import BackgroundTasks
+from starlette.background import BackgroundTasks
 from starlette.datastructures import URL
 from unittest.mock import Mock, patch
 

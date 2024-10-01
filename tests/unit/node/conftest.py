@@ -12,17 +12,16 @@ from astacus.node.snapshot import Snapshot
 from astacus.node.snapshotter import Snapshotter
 from astacus.node.sqlite_snapshot import SQLiteSnapshot, SQLiteSnapshotter
 from astacus.node.uploader import Uploader
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 from pathlib import Path
+from starlette.applications import Starlette
+from starlette.testclient import TestClient
 
 import pytest
 
 
 @pytest.fixture(name="app")
-def fixture_app(tmp_path: Path) -> FastAPI:
-    app = FastAPI()
-    app.include_router(node_router, prefix="/node", tags=["node"])
+def fixture_app(tmp_path: Path) -> Starlette:
+    app = Starlette(routes=[node_router.mount("/node")])
     root = tmp_path / "root"
     db_path = tmp_path / "db_path"
     backup_root = tmp_path / "backup-root"

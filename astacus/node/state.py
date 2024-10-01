@@ -11,7 +11,7 @@ By design it cannot be persisted to disk, but e.g. op_info can be if necessary.
 from astacus.common import utils
 from astacus.common.op import OpState
 from dataclasses import dataclass
-from fastapi import Request
+from starlette.requests import Request
 from threading import Lock
 
 import time

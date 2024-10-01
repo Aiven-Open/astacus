@@ -4,20 +4,22 @@ See LICENSE for details
 """
 
 from .cleanup import CleanupOp
-from .coordinator import BackupOp, Coordinator, DeltaBackupOp, RestoreOp
+from .coordinator import BackupOp, Coordinator, CoordinatorOp, DeltaBackupOp, RestoreOp
 from .list import CachedListEntries, list_backups, list_delta_backups
 from .lockops import LockOps
 from .state import CachedListResponse
 from astacus import config
 from astacus.common import ipc
 from astacus.common.magic import StrEnum
-from astacus.common.msgspec_glue import register_msgspec_glue, StructResponse
 from astacus.common.op import Op
+from astacus.common.progress import Progress
 from astacus.config import APP_HASH_KEY, get_config_content_and_hash
+from astacus.starlette import get_query_param, Router
 from asyncio import to_thread
 from collections.abc import Sequence
-from fastapi import APIRouter, Body, Depends, HTTPException, Request
-from typing import Annotated
+from starlette.background import BackgroundTasks
+from starlette.exceptions import HTTPException
+from starlette.requests import Request
 from urllib.parse import urljoin
 
 import logging
@@ -25,8 +27,7 @@ import msgspec
 import os
 import time
 
-register_msgspec_glue()
-router = APIRouter()
+router = Router()
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ async def root():
 
 
 @router.post("/config/reload")
-async def config_reload(*, request: Request, c: Coordinator = Depends()):
+async def config_reload(*, request: Request) -> dict:
     """Reload astacus configuration"""
     config_path = os.environ.get("ASTACUS_CONFIG")
     assert config_path is not None
@@ -61,7 +62,7 @@ async def config_reload(*, request: Request, c: Coordinator = Depends()):
 
 
 @router.get("/config/status")
-async def config_status(*, request: Request):
+async def config_status(*, request: Request) -> dict:
     config_path = os.environ.get("ASTACUS_CONFIG")
     assert config_path is not None
     _, config_hash = get_config_content_and_hash(config_path)
@@ -70,53 +71,56 @@ async def config_status(*, request: Request):
 
 
 @router.post("/lock")
-async def lock(*, locker: str, c: Coordinator = Depends(), op: LockOps = Depends()):
+async def lock(*, request: Request, background_tasks: BackgroundTasks) -> LockStartResult:
+    c = await Coordinator.create_from_request(request, background_tasks)
+    locker = get_query_param(request, "locker")
+    op = c.create_op(LockOps, locker=locker)
     result = c.start_op(op_name=OpName.lock, op=op, fun=op.lock)
     return LockStartResult(unlock_url=urljoin(str(c.request_url), f"../unlock?locker={locker}"), **result.dict())
 
 
 @router.post("/unlock")
-def unlock(*, locker: str, c: Coordinator = Depends(), op: LockOps = Depends()):
+async def unlock(*, request: Request, background_tasks: BackgroundTasks) -> Op.StartResult:
+    c = await Coordinator.create_from_request(request, background_tasks)
+    locker = get_query_param(request, "locker")
+    op = c.create_op(LockOps, locker=locker)
     return c.start_op(op_name=OpName.unlock, op=op, fun=op.unlock)
 
 
 @router.post("/backup")
-async def backup(*, c: Coordinator = Depends(), op: BackupOp = Depends(BackupOp.create)):
+async def backup(*, request: Request, background_tasks: BackgroundTasks) -> Op.StartResult:
+    c = await Coordinator.create_from_request(request, background_tasks)
+    op = c.create_op(BackupOp)
     runner = await op.acquire_cluster_lock()
     return c.start_op(op_name=OpName.backup, op=op, fun=runner)
 
 
 @router.post("/delta/backup")
-async def delta_backup(*, c: Coordinator = Depends(), op: DeltaBackupOp = Depends(DeltaBackupOp.create)):
+async def delta_backup(*, request: Request, background_tasks: BackgroundTasks) -> Op.StartResult:
+    c = await Coordinator.create_from_request(request, background_tasks)
+    op = c.create_op(DeltaBackupOp)
     runner = await op.acquire_cluster_lock()
     return c.start_op(op_name=OpName.backup, op=op, fun=runner)
 
 
+class RestoreRequest(msgspec.Struct, kw_only=True):
+    storage: str
+    name: str
+    partial_restore_nodes: Sequence[ipc.PartialRestoreRequestNode] | None
+    stop_after_step: str | None
+
+
 @router.post("/restore")
-async def restore(
-    *,
-    c: Coordinator = Depends(),
-    storage: Annotated[str, Body()] = "",
-    name: Annotated[str, Body()] = "",
-    partial_restore_nodes: Annotated[Sequence[ipc.PartialRestoreRequestNode] | None, Body()] = None,
-    stop_after_step: Annotated[str | None, Body()] = None,
-):
-    req = ipc.RestoreRequest(
-        storage=storage,
-        name=name,
-        partial_restore_nodes=partial_restore_nodes,
-        stop_after_step=stop_after_step,
-    )
-    op = RestoreOp(c=c, req=req)
+async def restore(*, body: ipc.RestoreRequest, request: Request, background_tasks: BackgroundTasks) -> Op.StartResult:
+    c = await Coordinator.create_from_request(request, background_tasks)
+    op = RestoreOp(c=c, req=body)
     runner = await op.acquire_cluster_lock()
     return c.start_op(op_name=OpName.restore, op=op, fun=runner)
 
 
 @router.get("/list")
-async def _list_backups(
-    *, storage: Annotated[str, Body()] = "", c: Coordinator = Depends(), request: Request
-) -> StructResponse:
-    req = ipc.ListRequest(storage=storage)
+async def _list_backups(*, body: ipc.ListRequest, request: Request, background_tasks: BackgroundTasks) -> ipc.ListResponse:
+    c = await Coordinator.create_from_request(request, background_tasks)
     coordinator_config = c.config
     cached_list_response = c.state.cached_list_response
     if cached_list_response is not None:
@@ -126,7 +130,7 @@ async def _list_backups(
             and cached_list_response.coordinator_config == coordinator_config
             and cached_list_response.list_request
         ):
-            return StructResponse(cached_list_response.list_response)
+            return cached_list_response.list_response
     if c.state.cached_list_running:
         raise HTTPException(status_code=429, detail="Already caching list result")
     c.state.cached_list_running = True
@@ -136,15 +140,15 @@ async def _list_backups(
             if cached_list_response is not None
             else {}
         )
-        list_response = await to_thread(list_backups, req=req, storage_factory=c.storage_factory, cache=cache)
+        list_response = await to_thread(list_backups, req=body, storage_factory=c.storage_factory, cache=cache)
         c.state.cached_list_response = CachedListResponse(
             coordinator_config=coordinator_config,
-            list_request=req,
+            list_request=body,
             list_response=list_response,
         )
     finally:
         c.state.cached_list_running = False
-    return StructResponse(list_response)
+    return list_response
 
 
 def get_cache_entries_from_list_response(list_response: ipc.ListResponse) -> CachedListEntries:
@@ -155,40 +159,50 @@ def get_cache_entries_from_list_response(list_response: ipc.ListResponse) -> Cac
 
 
 @router.get("/delta/list")
-async def _list_delta_backups(*, storage: Annotated[str, Body()] = "", c: Coordinator = Depends(), request: Request):
-    req = ipc.ListRequest(storage=storage)
+async def _list_delta_backups(
+    *, body: ipc.ListRequest, request: Request, background_tasks: BackgroundTasks
+) -> ipc.ListResponse:
+    c = await Coordinator.create_from_request(request, background_tasks)
     # This is not supposed to be called very often, no caching necessary
-    return await to_thread(list_delta_backups, req=req, storage_factory=c.storage_factory)
+    return await to_thread(list_delta_backups, req=body, storage_factory=c.storage_factory)
 
 
 @router.post("/cleanup")
 async def cleanup(
-    *,
-    storage: Annotated[str, Body()] = "",
-    retention: Annotated[ipc.Retention | None, Body()] = None,
-    explicit_delete: Annotated[Sequence[str], Body()] = (),
-    c: Coordinator = Depends(),
-):
-    req = ipc.CleanupRequest(storage=storage, retention=retention, explicit_delete=list(explicit_delete))
-    op = CleanupOp(c=c, req=req)
+    *, request: Request, background_tasks: BackgroundTasks, body: ipc.CleanupRequest = ipc.CleanupRequest()
+) -> Op.StartResult:
+    c = await Coordinator.create_from_request(request, background_tasks)
+    op = CleanupOp(c=c, req=body)
     runner = await op.acquire_cluster_lock()
     return c.start_op(op_name=OpName.cleanup, op=op, fun=runner)
 
 
-@router.get("/{op_name}/{op_id}")
-@router.get("/delta/{op_name}/{op_id}")
-def op_status(*, op_name: OpName, op_id: int, c: Coordinator = Depends()):
+class OpStatusResult(msgspec.Struct, kw_only=True):
+    state: Op.Status | None
+    progress: Progress | None
+
+
+@router.get("/{op_name:str}/{op_id:int}")
+@router.get("/delta/{op_name:str}/{op_id:int}")
+async def op_status(*, request: Request, background_tasks: BackgroundTasks) -> OpStatusResult:
+    c = await Coordinator.create_from_request(request, background_tasks)
+    op_name = OpName(request.path_params["op_name"])
+    op_id: int = request.path_params["op_id"]
     op, op_info = c.get_op_and_op_info(op_id=op_id, op_name=op_name)
-    result = {"state": op_info.op_status}
-    if isinstance(op, (BackupOp, DeltaBackupOp, RestoreOp)):
-        result["progress"] = msgspec.to_builtins(op.progress)
+    result = OpStatusResult(state=op_info.op_status, progress=None)
+    if isinstance(op, BackupOp | DeltaBackupOp | RestoreOp):
+        result.progress = op.progress
     return result
 
 
-@router.put("/{op_name}/{op_id}/sub-result")
-@router.put("/delta/{op_name}/{op_id}/sub-result")
-async def op_sub_result(*, op_name: OpName, op_id: int, c: Coordinator = Depends()):
+@router.put("/{op_name:str}/{op_id:int}/sub-result")
+@router.put("/delta/{op_name:str}/{op_id:int}/sub-result")
+async def op_sub_result(*, request: Request, background_tasks: BackgroundTasks) -> None:
+    c = await Coordinator.create_from_request(request, background_tasks)
+    op_name = OpName(request.path_params["op_name"])
+    op_id: int = request.path_params["op_id"]
     op, _ = c.get_op_and_op_info(op_id=op_id, op_name=op_name)
+    assert isinstance(op, CoordinatorOp)
     # We used to have results available here, but not use those
     # that was wasting a lot of memory by generating the same result twice.
     if not op.subresult_sleeper:
@@ -197,5 +211,6 @@ async def op_sub_result(*, op_name: OpName, op_id: int, c: Coordinator = Depends
 
 
 @router.get("/busy")
-async def is_busy(*, c: Coordinator = Depends()) -> bool:
+async def is_busy(*, request: Request, background_tasks: BackgroundTasks) -> bool:
+    c = await Coordinator.create_from_request(request, background_tasks)
     return c.is_busy()

@@ -7,8 +7,8 @@ Test that the cleanup endpoint behaves as advertised
 
 from astacus.common import ipc
 from astacus.coordinator.storage_factory import StorageFactory
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from starlette.applications import Starlette
+from starlette.testclient import TestClient
 
 import pytest
 import respx
@@ -20,7 +20,7 @@ def _run(
     *,
     client: TestClient,
     storage_factory: StorageFactory,
-    app: FastAPI,
+    app: Starlette,
     fail_at: int | None = None,
     retention: ipc.Retention,
     exp_jsons: int,
@@ -48,16 +48,16 @@ def _run(
 
     assert response.status_code == 200, response.json()
     if fail_at:
-        assert response.json() == {"state": "fail"}
+        assert response.json() == {"progress": None, "state": "fail"}
         return
-    assert response.json() == {"state": "done"}
+    assert response.json() == {"progress": None, "state": "done"}
     assert len(storage_factory.create_json_storage("x").list_jsons()) == exp_jsons
     assert len(storage_factory.create_hexdigest_storage("x").list_hexdigests()) == exp_digests
 
 
 @pytest.mark.parametrize("fail_at", FAILS)
 def test_api_cleanup_flow(
-    fail_at: int | None, client: TestClient, populated_storage_factory: StorageFactory, app: FastAPI
+    fail_at: int | None, client: TestClient, populated_storage_factory: StorageFactory, app: Starlette
 ) -> None:
     _run(
         fail_at=fail_at,
@@ -84,7 +84,7 @@ def test_api_cleanup_flow(
     ],
 )
 def test_api_cleanup_retention(
-    data: tuple[ipc.Retention, int, int], client: TestClient, populated_storage_factory: StorageFactory, app: FastAPI
+    data: tuple[ipc.Retention, int, int], client: TestClient, populated_storage_factory: StorageFactory, app: Starlette
 ) -> None:
     retention, exp_jsons, exp_digests = data
     _run(

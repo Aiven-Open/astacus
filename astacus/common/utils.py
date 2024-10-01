@@ -15,7 +15,7 @@ from abc import ABC
 from collections import deque
 from collections.abc import AsyncIterable, AsyncIterator, Callable, Hashable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
-from multiprocessing.dummy import Pool  # fastapi + fork = bad idea
+from multiprocessing.dummy import Pool  # starlette + fork = bad idea
 from pathlib import Path
 from pydantic.v1 import BaseModel
 from typing import Any, ContextManager, Final, Generic, IO, Literal, overload, TextIO, TypeAlias, TypeVar
@@ -83,9 +83,8 @@ def http_request(url, *, caller, method="get", timeout=10, ignore_status_code: b
     """Wrapper for requests.request which handles timeouts as non-exceptions,
     and returns only valid results that we actually care about.
 
-    This is here primarily so that some requests stuff
-    (e.g. fastapi.testclient) still works, but we can mock things to
-    our hearts content in test code by doing 'things' here.
+    This is here primarily so that some requests stuffstill works, but we can
+    mock things to our hearts content in test code by doing 'things' here.
     """
     # TBD: may need to redact url in future, if we actually wind up
     # using passwords in urls here.

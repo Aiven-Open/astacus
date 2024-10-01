@@ -6,8 +6,8 @@ See LICENSE for details
 Dependency injection helper functions.
 """
 
-from fastapi import Request
 from starlette.datastructures import URL
+from starlette.requests import Request
 
 
 def get_request_url(request: Request) -> URL:
