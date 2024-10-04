@@ -1040,10 +1040,7 @@ class DeleteDanglingObjectStorageFilesStep(SyncStep[None]):
                         # Make sure the non-deleted files are actually in object storage
                         raise StepFailedError(f"missing object storage file in disk {disk_name!r}: {disk_kept_path!r}")
                 logger.info("found %d object storage files to remove in disk %r", len(keys_to_remove), disk_name)
-                for key_to_remove in keys_to_remove:
-                    # We should really have a batch delete operation there, but it's missing from rohmu
-                    logger.debug("deleting object storage file in disk %r : %r", disk_name, key_to_remove)
-                    disk_object_storage.delete_item(key_to_remove)
+                disk_object_storage.delete_items(keys_to_remove)
             finally:
                 disk_object_storage.close()
 

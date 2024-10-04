@@ -43,6 +43,9 @@ class ObjectStorage(ABC):
     def delete_item(self, key: str) -> None: ...
 
     @abstractmethod
+    def delete_items(self, keys: Sequence[str]) -> None: ...
+
+    @abstractmethod
     def copy_items_from(self, source: "ObjectStorage", keys: Sequence[str], *, stats: StatsClient | None) -> None: ...
 
 
@@ -67,6 +70,10 @@ class ThreadSafeRohmuStorage(ObjectStorage):
     def delete_item(self, key: str) -> None:
         with self._storage_lock:
             self._storage.delete_key(key)
+
+    def delete_items(self, keys: Sequence[str]) -> None:
+        with self._storage_lock:
+            self._storage.delete_keys(keys)
 
     def copy_items_from(self, source: ObjectStorage, keys: Sequence[str], *, stats: StatsClient | None) -> None:
         # In theory this could deadlock if some other place was locking the same two storages
