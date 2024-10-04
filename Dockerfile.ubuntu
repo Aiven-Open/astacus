@@ -1,7 +1,6 @@
 # -*- dockerfile -*-
 
 FROM ubuntu:22.04
-MAINTAINER "Markus Stenberg <mstenber@aiven.io>"
 
 RUN apt-get update
 RUN apt-get install -y sudo make

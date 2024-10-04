@@ -1,7 +1,6 @@
 # -*- dockerfile -*-
 
-FROM fedora:38
-MAINTAINER "Markus Stenberg <mstenber@aiven.io>"
+FROM fedora:40
 
 RUN dnf install -y sudo make
 
