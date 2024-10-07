@@ -27,7 +27,7 @@ from astacus.coordinator.plugins.m3db import (
 from astacus.coordinator.state import CoordinatorState
 from collections.abc import Sequence
 from dataclasses import dataclass
-from fastapi import BackgroundTasks
+from starlette.background import BackgroundTasks
 from starlette.datastructures import URL
 from tests.unit.common.test_m3placement import create_dummy_placement
 from unittest.mock import Mock

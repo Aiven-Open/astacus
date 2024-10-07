@@ -15,8 +15,9 @@ from astacus.common.statsd import StatsdConfig
 from astacus.common.utils import AstacusModel
 from astacus.coordinator.config import APP_KEY as COORDINATOR_CONFIG_KEY, CoordinatorConfig
 from astacus.node.config import APP_KEY as NODE_CONFIG_KEY, NodeConfig
-from fastapi import FastAPI, Request
 from pathlib import Path
+from starlette.applications import Starlette
+from starlette.requests import Request
 
 import hashlib
 import io
@@ -64,7 +65,7 @@ def get_config_content_and_hash(config_path: str | Path) -> tuple[str, str]:
     return config_content.decode(), config_hash
 
 
-def set_global_config_from_path(app: FastAPI, path: str | Path) -> GlobalConfig:
+def set_global_config_from_path(app: Starlette, path: str | Path) -> GlobalConfig:
     config_content, config_hash = get_config_content_and_hash(path)
     with io.StringIO(config_content) as config_file:
         config = GlobalConfig.parse_obj(yaml.safe_load(config_file))

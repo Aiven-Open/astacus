@@ -4,8 +4,8 @@ See LICENSE for details
 """
 
 from astacus import config
-from fastapi import FastAPI
 from pathlib import Path
+from starlette.applications import Starlette
 
 import pytest
 
@@ -25,7 +25,7 @@ def test_config_sample_load(path: Path, tmp_path: Path) -> None:
     (astacus_dir / "cassandra").mkdir()  # cassandra data
     (astacus_dir / "m3").mkdir()  # m3 data
 
-    app = FastAPI()
+    app = Starlette()
     rewritten_conf = tmp_path / "astacus.conf"
 
     conf = path.read_text()
