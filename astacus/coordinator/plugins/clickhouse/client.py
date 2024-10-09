@@ -25,6 +25,7 @@ class ClickHouseClient:
 class ClickHouseClientQueryError(Exception):
     # If we have to handle more error types, we might consider adding proper
     # rich error types and not display numeric values to the end user.
+    UNKNOWN_SETTING = 115
     SETTING_CONSTRAINT_VIOLATION = 452
 
     def __init__(

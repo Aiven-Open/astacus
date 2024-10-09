@@ -666,9 +666,9 @@ class RestoreReplicatedDatabasesStep(Step[None]):
             try:
                 await self.clients[0].execute(query, session_id=session_id)
             except ClickHouseClientQueryError as error:
-                if error.exception_code == error.SETTING_CONSTRAINT_VIOLATION:
+                if error.exception_code in (error.SETTING_CONSTRAINT_VIOLATION, error.UNKNOWN_SETTING):
                     # If we can't set the option, that's fine, either it's not needed or it will fail later anyway
-                    pass
+                    logger.info("Could not enable experimental setting, skipped; full error: %s", error)
                 else:
                     raise
 
