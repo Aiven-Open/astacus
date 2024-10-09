@@ -631,11 +631,30 @@ class RestoreReplicatedDatabasesStep(Step[None]):
             # we need to re-enable these custom global settings when creating the table again.
             # We can enable these settings unconditionally because they are harmless
             # for tables not needing them.
-            b"SET allow_experimental_annoy_index=true",
-            b"SET allow_experimental_geo_types=true",
+            # Upstream has introduced a similar list in the replica recovery context:
+            # https://github.com/ClickHouse/ClickHouse/commit/48ed54e822f6ed6f6bdd67db3df7a4a58e550bbb
+            # the two should be kept in sync until system.tables captures the query context.
+            b"SET allow_experimental_inverted_index=true",
+            b"SET allow_experimental_codecs=true",
+            b"SET allow_experimental_live_view=true",
+            b"SET allow_experimental_window_view=true",
+            b"SET allow_experimental_funnel_functions=true",
+            b"SET allow_experimental_nlp_functions=true",
+            b"SET allow_experimental_hash_functions=true",
             b"SET allow_experimental_object_type=true",
-            b"SET allow_suspicious_codecs=true",
+            b"SET allow_experimental_annoy_index=true",
+            b"SET allow_experimental_usearch_index=true",
+            b"SET allow_experimental_bigint_types=true",
+            b"SET allow_experimental_window_functions=true",
+            b"SET allow_experimental_geo_types=true",
+            b"SET allow_experimental_map_type=true",
             b"SET allow_suspicious_low_cardinality_types=true",
+            b"SET allow_suspicious_fixed_string_types=true",
+            b"SET allow_suspicious_indices=true",
+            b"SET allow_suspicious_codecs=true",
+            b"SET allow_hyperscan=true",
+            b"SET allow_simdjson=true",
+            b"SET allow_deprecated_syntax_for_merge_tree=true",
             # If a table was created with flatten_nested=0, we must be careful to not re-create the
             # table with flatten_nested=1, since this would recreate the table with a different schema.
             # If a table was created with flatten_nested=1, the query in system.tables.create_table_query
