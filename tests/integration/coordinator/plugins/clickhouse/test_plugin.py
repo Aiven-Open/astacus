@@ -29,6 +29,7 @@ from tests.integration.coordinator.plugins.clickhouse.conftest import (
     RestorableSource,
     run_astacus_command,
 )
+from tests.utils import get_clickhouse_version
 from typing import Final
 from unittest import mock
 
@@ -87,7 +88,11 @@ async def restorable_cluster_manager(
                     storage_path, zookeeper, clickhouse_cluster, ports, minio_bucket
                 ) as astacus_cluster:
                     clients = [get_clickhouse_client(service) for service in clickhouse_cluster.services]
-                    await setup_cluster_content(clients, clickhouse_cluster.use_named_collections)
+                    await setup_cluster_content(
+                        clients,
+                        clickhouse_cluster.use_named_collections,
+                        get_clickhouse_version(clickhouse_command),
+                    )
                     await setup_cluster_users(clients)
                     run_astacus_command(astacus_cluster, "backup")
         # We have destroyed everything except the backup storage dir
@@ -183,7 +188,9 @@ async def sync_replicated_table(clients: Sequence[ClickHouseClient], table_name:
         await client.execute(f"SYSTEM SYNC REPLICA default.{escape_sql_identifier(table_name.encode())} STRICT".encode())
 
 
-async def setup_cluster_content(clients: Sequence[HttpClickHouseClient], use_named_collections: bool) -> None:
+async def setup_cluster_content(
+    clients: Sequence[HttpClickHouseClient], use_named_collections: bool, clickhouse_version: tuple[int, ...]
+) -> None:
     for client in clients:
         await client.execute(b"DROP DATABASE default SYNC")
         await client.execute(
@@ -232,12 +239,13 @@ async def setup_cluster_content(clients: Sequence[HttpClickHouseClient], use_nam
         b"SETTINGS index_granularity=8192 "
         b"SETTINGS flatten_nested=0"
     )
-    await clients[0].execute(
-        b"CREATE TABLE default.array_tuple_flatten (thekey UInt32, thedata Array(Tuple(a UInt32, b UInt32))) "
-        b"ENGINE = ReplicatedMergeTree ORDER BY (thekey) "
-        b"SETTINGS index_granularity=8192 "
-        b"SETTINGS flatten_nested=1"
-    )
+    if clickhouse_version < (24, 3):
+        await clients[0].execute(
+            b"CREATE TABLE default.array_tuple_flatten (thekey UInt32, thedata Array(Tuple(a UInt32, b UInt32))) "
+            b"ENGINE = ReplicatedMergeTree ORDER BY (thekey) "
+            b"SETTINGS index_granularity=8192 "
+            b"SETTINGS flatten_nested=1"
+        )
     # integrations - note most of these never actually attempt to connect to the remote server.
     if await is_engine_available(clients[0], TableEngine.PostgreSQL):
         await clients[0].execute(
@@ -307,7 +315,8 @@ async def setup_cluster_content(clients: Sequence[HttpClickHouseClient], use_nam
     await clients[0].execute(b"INSERT INTO default.nested_not_flatten VALUES (123, [(4, 5)])")
     await clients[0].execute(b"INSERT INTO default.nested_flatten VALUES (123, [4], [5])")
     await clients[0].execute(b"INSERT INTO default.array_tuple_not_flatten VALUES (123, [(4, 5)])")
-    await clients[0].execute(b"INSERT INTO default.array_tuple_flatten VALUES (123, [4], [5])")
+    if clickhouse_version < (24, 3):
+        await clients[0].execute(b"INSERT INTO default.array_tuple_flatten VALUES (123, [4], [5])")
     # And some object storage data
     await clients[0].execute(b"INSERT INTO default.in_object_storage VALUES (123, 'foo')")
     await clients[1].execute(b"INSERT INTO default.in_object_storage VALUES (456, 'bar')")
@@ -409,7 +418,9 @@ async def test_restores_table_with_nullable_key(restored_cluster: Sequence[Click
         assert response == []
 
 
-async def test_restores_table_with_nested_fields(restored_cluster: Sequence[ClickHouseClient]) -> None:
+async def test_restores_table_with_nested_fields(
+    restored_cluster: Sequence[ClickHouseClient], clickhouse_command: ClickHouseCommand
+) -> None:
     client = restored_cluster[0]
     response = await client.execute(b"SELECT thekey, thedata FROM default.nested_not_flatten ORDER BY thekey")
     assert response == [[123, [{"a": 4, "b": 5}]]]
@@ -417,8 +428,11 @@ async def test_restores_table_with_nested_fields(restored_cluster: Sequence[Clic
     assert response == [[123, [4], [5]]]
     response = await client.execute(b"SELECT thekey, thedata FROM default.array_tuple_not_flatten ORDER BY thekey")
     assert response == [[123, [{"a": 4, "b": 5}]]]
-    response = await client.execute(b"SELECT thekey, thedata.a, thedata.b FROM default.array_tuple_flatten ORDER BY thekey")
-    assert response == [[123, [4], [5]]]
+    if get_clickhouse_version(clickhouse_command) < (24, 3):
+        response = await client.execute(
+            b"SELECT thekey, thedata.a, thedata.b FROM default.array_tuple_flatten ORDER BY thekey"
+        )
+        assert response == [[123, [4], [5]]]
 
 
 async def test_restores_function_table(restored_cluster: Sequence[ClickHouseClient]) -> None:
@@ -545,7 +559,9 @@ async def test_cleanup_does_not_break_object_storage_disk_files(
                     storage_path, zookeeper, clickhouse_cluster, ports, minio_bucket
                 ) as astacus_cluster:
                     clients = [get_clickhouse_client(service) for service in clickhouse_cluster.services]
-                    await setup_cluster_content(clients, clickhouse_cluster.use_named_collections)
+                    await setup_cluster_content(
+                        clients, clickhouse_cluster.use_named_collections, get_clickhouse_version(clickhouse_command)
+                    )
                     await setup_cluster_users(clients)
                     run_astacus_command(astacus_cluster, "backup")
                     run_astacus_command(astacus_cluster, "backup")
