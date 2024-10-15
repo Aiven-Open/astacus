@@ -14,7 +14,6 @@ repos:
     hooks:
       # Run the formatter.
       - id: ruff-format
-        args: [--config=ruff.toml]
 
   - repo: https://github.com/timothycrosley/isort
     rev: 5.12.0

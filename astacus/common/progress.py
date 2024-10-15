@@ -59,7 +59,8 @@ class Progress(msgspec.Struct, kw_only=True):
             self.add_total(len(i))
         except TypeError:
             # Can't compute progress for this iterator
-            return i
+            yield from i
+            return None
 
         for item in i:
             yield item
