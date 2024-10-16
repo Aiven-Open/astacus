@@ -6,7 +6,7 @@ Main module for astacus.
 
 """
 
-from astacus import client, server
+from astacus import client, manifest, server
 
 import argparse
 import sys
@@ -17,6 +17,7 @@ def main():
     subparsers = parser.add_subparsers(title="Commands")
     server.create_server_parser(subparsers)
     client.create_client_parsers(parser, subparsers)
+    manifest.create_manifest_parsers(parser, subparsers)
     args = parser.parse_args()
     try:
         func = args.func
