@@ -14,11 +14,12 @@ from astacus.common.statsd import StatsClient
 from astacus.coordinator.api import OpName
 from astacus.coordinator.plugins.base import build_node_index_datas, NodeIndexData
 from astacus.node.api import metadata
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from starlette.applications import Starlette
+from starlette.testclient import TestClient
 from unittest.mock import Mock, patch
 
 import itertools
+import msgspec
 import pytest
 import respx
 
@@ -26,11 +27,11 @@ FAILS = [1, 2, 3, 4, 5, None]
 
 
 @pytest.mark.parametrize("fail_at", FAILS)
-def test_backup(fail_at: int | None, app: FastAPI, client: TestClient, storage: RohmuStorage) -> None:
+async def test_backup(fail_at: int | None, app: Starlette, client: TestClient, storage: RohmuStorage) -> None:
     nodes = app.state.coordinator_config.nodes
     with respx.mock:
         for node in nodes:
-            respx.get(f"{node.url}/metadata").respond(content=metadata().body)
+            respx.get(f"{node.url}/metadata").respond(content=msgspec.json.encode(await metadata()))
             respx.post(f"{node.url}/unlock?locker=x&ttl=0").respond(json={"locked": False})
             # Failure point 1: Lock fails
             respx.post(f"{node.url}/lock?locker=x&ttl=600").respond(json={"locked": fail_at != 1})
@@ -165,12 +166,12 @@ def test_upload_optimization(
 
 
 @patch("astacus.common.utils.monotonic_time")
-def test_backup_stats(mock_time: Mock, app: FastAPI, client: TestClient) -> None:
+async def test_backup_stats(mock_time: Mock, app: Starlette, client: TestClient) -> None:
     mock_time.side_effect = itertools.count(start=0.0, step=0.5)
     nodes = app.state.coordinator_config.nodes
     with respx.mock:
         for node in nodes:
-            respx.get(f"{node.url}/metadata").respond(content=metadata().body)
+            respx.get(f"{node.url}/metadata").respond(content=msgspec.json.encode(await metadata()))
             respx.post(f"{node.url}/unlock?locker=x&ttl=0").respond(json={"locked": False})
             respx.post(f"{node.url}/lock?locker=x&ttl=600").respond(json={"locked": True})
             respx.post(f"{node.url}/snapshot").respond(json={"op_id": 42, "status_url": f"{node.url}/snapshot/result"})

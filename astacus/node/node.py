@@ -14,9 +14,10 @@ from astacus.common.statsd import StatsClient
 from astacus.node.snapshot import Snapshot
 from astacus.node.sqlite_snapshot import SQLiteSnapshot, SQLiteSnapshotter
 from collections.abc import Sequence
-from fastapi import BackgroundTasks, Depends
 from pathlib import Path
+from starlette.background import BackgroundTasks
 from starlette.datastructures import URL
+from starlette.requests import Request
 from typing import Generic, TypeVar
 
 import logging
@@ -26,12 +27,12 @@ logger = logging.getLogger(__name__)
 SNAPSHOTTER_KEY = "node_snapshotter"
 DELTA_SNAPSHOTTER_KEY = "node_delta_snapshotter"
 
-Request = TypeVar("Request", bound=ipc.NodeRequest)
-Result = TypeVar("Result", bound=ipc.NodeResult)
+NodeRequestT = TypeVar("NodeRequestT", bound=ipc.NodeRequest)
+NodeResultT = TypeVar("NodeResultT", bound=ipc.NodeResult)
 
 
-class NodeOp(op.Op, Generic[Request, Result]):
-    def __init__(self, *, n: "Node", op_id: int, req: Request, stats: StatsClient) -> None:
+class NodeOp(op.Op, Generic[NodeRequestT, NodeResultT]):
+    def __init__(self, *, n: "Node", op_id: int, req: NodeRequestT, stats: StatsClient) -> None:
         super().__init__(info=n.state.op_info, op_id=op_id, stats=stats)
         self.start_op = n.start_op
         self.config = n.config
@@ -42,7 +43,7 @@ class NodeOp(op.Op, Generic[Request, Result]):
         # TBD: Could start some worker thread to send the self.result periodically
         # (or to some local start method )
 
-    def create_result(self) -> Result:
+    def create_result(self) -> NodeResultT:
         raise NotImplementedError
 
     def still_running_callback(self) -> bool:
@@ -84,7 +85,7 @@ class NodeOp(op.Op, Generic[Request, Result]):
         return True
 
 
-def node_stats(config: NodeConfig = Depends(node_config)) -> statsd.StatsClient:
+def node_stats(config: NodeConfig) -> statsd.StatsClient:
     return statsd.StatsClient(config=config.statsd)
 
 
@@ -92,15 +93,27 @@ class Node(op.OpMixin):
     state: NodeState
     """ Convenience dependency which contains sub-dependencies most API endpoints need """
 
+    @classmethod
+    def from_request(cls, request: Request, background_tasks: BackgroundTasks) -> "Node":
+        config = node_config(request)
+        return cls(
+            app_state=get_request_app_state(request),
+            request_url=get_request_url(request),
+            background_tasks=background_tasks,
+            config=config,
+            state=node_state(request),
+            stats=node_stats(config),
+        )
+
     def __init__(
         self,
         *,
-        app_state: object = Depends(get_request_app_state),
-        request_url: URL = Depends(get_request_url),
+        app_state: object,
+        request_url: URL,
         background_tasks: BackgroundTasks,
-        config: NodeConfig = Depends(node_config),
-        state: NodeState = Depends(node_state),
-        stats: statsd.StatsClient = Depends(node_stats),
+        config: NodeConfig,
+        state: NodeState,
+        stats: statsd.StatsClient,
     ) -> None:
         self.app_state = app_state
         self.request_url = request_url

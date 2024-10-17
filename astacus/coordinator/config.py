@@ -8,8 +8,8 @@ from astacus.common.rohmustorage import RohmuConfig
 from astacus.common.statsd import StatsdConfig
 from astacus.common.utils import AstacusModel
 from collections.abc import Sequence
-from fastapi import Request
 from pathlib import Path
+from starlette.requests import Request
 
 APP_KEY = "coordinator_config"
 

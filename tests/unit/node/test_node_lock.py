@@ -3,7 +3,7 @@ Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
 """
 
-from fastapi.testclient import TestClient
+from starlette.testclient import TestClient
 
 
 def test_api_lock_unlock(client: TestClient) -> None:
