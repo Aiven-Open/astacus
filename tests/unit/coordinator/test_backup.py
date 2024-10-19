@@ -106,7 +106,7 @@ def _ssresults(*kwarg_list) -> list[ipc.SnapshotResult]:
 
 
 @pytest.mark.parametrize(
-    "hexdigests,snapshot_results,uploads",
+    ("hexdigests", "snapshot_results", "uploads"),
     [
         ([], _ssresults({}, {}, {}, {}), []),
         (

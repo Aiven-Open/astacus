@@ -180,7 +180,7 @@ class ClickHouseManifest(AstacusModel):
 def encode_manifest_data(data: Any) -> Any:
     if isinstance(data, dict):
         return {key: encode_manifest_data(value) for key, value in data.items()}
-    if isinstance(data, (list, tuple)):
+    if isinstance(data, list | tuple):
         return [encode_manifest_data(item) for item in data]
     if isinstance(data, bytes):
         return b64encode(data).decode()

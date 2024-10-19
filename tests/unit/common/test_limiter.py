@@ -10,7 +10,7 @@ import pytest
 
 
 @pytest.mark.parametrize(
-    "limit,expected_trace",
+    ("limit", "expected_trace"),
     [
         (1, ["s1", "e1", "s2", "e2", "s3", "e3"]),
         (2, ["s1", "s2", "e2", "s3", "e3", "e1"]),
@@ -35,7 +35,7 @@ async def test_limiter(limit: int, expected_trace: Sequence[str]) -> None:
 
 
 @pytest.mark.parametrize(
-    "limit,expected_trace",
+    ("limit", "expected_trace"),
     [
         (1, ["s1", "e1", "s2", "e2", "s3", "e3"]),
         (2, ["s1", "s2", "e2", "s3", "e3", "e1"]),

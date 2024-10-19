@@ -33,7 +33,7 @@ async def test_run_subop(mocker: MockerFixture, start_ok: bool) -> None:
 
 
 @pytest.mark.parametrize(
-    "hashes,result",
+    ("hashes", "result"),
     [
         ([], ("", "Unable to retrieve schema hash at all")),
         ([1, 2], ("", "Multiple schema hashes present: [1, 2]")),

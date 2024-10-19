@@ -229,7 +229,7 @@ def _runtime_warning_context() -> Iterator[None]:
     """
     with warnings.catch_warnings(record=True) as _warnings:
         yield
-        rw = ["{w.filename}:{w.lineno}:{w.message}".format(w=w) for w in _warnings if w.category == RuntimeWarning]
+        rw = ["{w.filename}:{w.lineno}:{w.message}".format(w=w) for w in _warnings if w.category is RuntimeWarning]
         if rw:
             raise RuntimeError("{} Runtime Warning{},\n{}".format(len(rw), "" if len(rw) == 1 else "s", "\n".join(rw)))
 

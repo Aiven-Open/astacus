@@ -35,11 +35,15 @@ def test_get_authenticated_zookeeper_client() -> None:
         user=ZooKeeperConfigurationUser(username="local-user", password=SecretStr("secret")),
     )
     client = get_zookeeper_client(configuration)
-    assert client is not None and isinstance(client, KazooZooKeeperClient)
-    assert client.user is not None and isinstance(client.user, ZooKeeperUser)
+    assert client is not None
+    assert isinstance(client, KazooZooKeeperClient)
+    assert client.user is not None
+    assert isinstance(client.user, ZooKeeperUser)
     connection = client.connect()
-    assert connection is not None and isinstance(connection, KazooZooKeeperConnection)
-    assert connection.client is not None and isinstance(connection.client, KazooClient)
+    assert connection is not None
+    assert isinstance(connection, KazooZooKeeperConnection)
+    assert connection.client is not None
+    assert isinstance(connection.client, KazooClient)
     assert connection.client.auth_data == {("digest", "local-user:secret")}
 
 

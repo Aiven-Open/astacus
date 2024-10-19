@@ -110,7 +110,8 @@ class Progress(msgspec.Struct, kw_only=True):
         self.add_fail(info=f"upload_failure {hexdigest}")
 
     def done(self) -> None:
-        assert self.total is not None and self.handled <= self.total
+        assert self.total is not None
+        assert self.handled <= self.total
         assert not self.final
         self.final = True
         logger.info("done %r", self)

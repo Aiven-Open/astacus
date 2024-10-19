@@ -105,9 +105,9 @@ def build_snapshot_and_snapshotter(
     if snapshot_cls is SQLiteSnapshot:
         snapshot = SQLiteSnapshot(dst, db)
         snapshotter = SQLiteSnapshotter(src=src, dst=dst, snapshot=snapshot, groups=groups, parallel=2)
+        return snapshot, snapshotter
     else:
-        assert False
-    return snapshot, snapshotter
+        pytest.fail("Expected SQLite snapshotter class")
 
 
 def create_files_at_path(dir_: Path, files: list[tuple[str, bytes]]) -> None:

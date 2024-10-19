@@ -100,7 +100,7 @@ SERIALIZED_KEEPER_MAP_TABLE_DATA = [
 
 
 @pytest.mark.parametrize(
-    "engine,is_replicated,requires_freezing",
+    ("engine", "is_replicated", "requires_freezing"),
     [
         ("AggregatingMergeTree", False, True),
         ("Buffer", False, False),
@@ -154,9 +154,7 @@ def test_clickhouse_table_attributes(engine: str, is_replicated: bool, requires_
 
 
 def test_table_escaped_identifier() -> None:
-    table = Table(
-        database="débé".encode(), name=b"na`me", uuid=uuid.UUID(int=0), engine="DontCare", create_query=b""
-    )
+    table = Table(database="débé".encode(), name=b"na`me", uuid=uuid.UUID(int=0), engine="DontCare", create_query=b"")
     assert table.escaped_sql_identifier == "`d\\xc3\\xa9b\\xc3\\xa9`.`na\\`me`"
 
 

@@ -171,7 +171,7 @@ def test_restore(rt: RestoreTest, app: FastAPI, client: TestClient, tmp_path: Pa
 
 
 @pytest.mark.parametrize(
-    "node_azlist,backup_azlist,expected_index,exception",
+    ("node_azlist", "backup_azlist", "expected_index", "exception"),
     [
         # successful cases
         ([], [], [], does_not_raise()),
@@ -196,7 +196,7 @@ def test_node_to_backup_index(
 
 
 @pytest.mark.parametrize(
-    "partial_node_spec,expected_index,exception",
+    ("partial_node_spec", "expected_index", "exception"),
     [
         # 4 (supported) ways of expressing same thing
         ({"backup_index": 1, "node_index": 2}, [None, None, 1], does_not_raise()),

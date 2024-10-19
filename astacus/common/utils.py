@@ -12,11 +12,11 @@ from __future__ import annotations
 from abc import ABC
 from collections import deque
 from collections.abc import AsyncIterable, AsyncIterator, Callable, Hashable, Iterable, Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from multiprocessing.dummy import Pool  # fastapi + fork = bad idea
 from pathlib import Path
 from pydantic import BaseModel
-from typing import Any, ContextManager, Final, Generic, IO, Literal, overload, TextIO, TypeAlias, TypeVar
+from typing import Any, Final, Generic, IO, Literal, overload, TextIO, TypeAlias, TypeVar
 
 import asyncio
 import contextlib
@@ -294,7 +294,7 @@ def exponential_backoff(
 
 class SizeLimitedFile:
     def __init__(self, *, path, file_size):
-        self._f = open(path, "rb")  # pylint: disable=consider-using-with
+        self._f = open(path, "rb")  # noqa: SIM115
         self._file_size = file_size
         self.tell = self._f.tell
 
@@ -356,18 +356,18 @@ UpdateBinary: TypeAlias = Literal["w+b"]
 
 
 @overload
-def open_path_with_atomic_rename(path: os.PathLike, *, mode: UpdateBinary) -> ContextManager[IO[bytes]]: ...
+def open_path_with_atomic_rename(path: os.PathLike, *, mode: UpdateBinary) -> AbstractContextManager[IO[bytes]]: ...
 
 
 @overload
-def open_path_with_atomic_rename(path: os.PathLike, *, mode: Write) -> ContextManager[TextIO]: ...
+def open_path_with_atomic_rename(path: os.PathLike, *, mode: Write) -> AbstractContextManager[TextIO]: ...
 
 
 @overload
-def open_path_with_atomic_rename(path: os.PathLike) -> ContextManager[IO[bytes]]: ...
+def open_path_with_atomic_rename(path: os.PathLike) -> AbstractContextManager[IO[bytes]]: ...
 
 
-def open_path_with_atomic_rename(path: os.PathLike, *, mode: str = "w+b") -> ContextManager[TextIO | IO[bytes]]:
+def open_path_with_atomic_rename(path: os.PathLike, *, mode: str = "w+b") -> AbstractContextManager[TextIO | IO[bytes]]:
     return _open_path_with_atomic_rename(path, mode=mode)
 
 

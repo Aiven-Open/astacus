@@ -15,7 +15,7 @@ import pytest
 
 
 @pytest.mark.parametrize(
-    "fun_ex,expect_status,expect_ex",
+    ("fun_ex", "expect_status", "expect_ex"),
     [
         # Non-failing operation winds up in None
         (None, op.Op.Status.done, None),
@@ -52,5 +52,6 @@ async def test_opmixin_start_op(
             mixin.start_op(op=op_obj, op_name="dummy", fun=_sync)
         await mixin.background_tasks()
     except Exception as ex:  # pylint: disable=broad-except
-        assert expect_ex and isinstance(ex, expect_ex)
+        assert expect_ex
+        assert isinstance(ex, expect_ex)
     assert op_obj.info.op_status == expect_status

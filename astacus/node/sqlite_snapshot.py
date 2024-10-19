@@ -12,17 +12,11 @@ from collections.abc import Iterable
 from contextlib import closing
 from functools import cached_property
 from pathlib import Path
+from typing import override
 
 import logging
 import os
 import sqlite3
-import sys
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing import override
-
 
 logger = logging.getLogger(__name__)
 

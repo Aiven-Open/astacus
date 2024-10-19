@@ -6,9 +6,10 @@ See LICENSE for details.
 from .exceptions import NotFoundException
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager
 from pathlib import Path
 from rohmu.typing import FileLike
-from typing import BinaryIO, ContextManager, ParamSpec, TypeAlias, TypeVar
+from typing import BinaryIO, ParamSpec, TypeAlias, TypeVar
 
 import contextlib
 import io
@@ -75,7 +76,7 @@ class JsonStorage(ABC):
     def delete_json(self, name: str) -> None: ...
 
     @abstractmethod
-    def open_json_bytes(self, name: str) -> ContextManager[mmap.mmap]: ...
+    def open_json_bytes(self, name: str) -> AbstractContextManager[mmap.mmap]: ...
 
     @abstractmethod
     def list_jsons(self) -> list[str]: ...

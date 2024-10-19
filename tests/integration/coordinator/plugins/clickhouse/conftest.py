@@ -204,7 +204,7 @@ async def fixture_minio_bucket(minio: MinioService) -> AsyncIterator[MinioBucket
         yield bucket
 
 
-@pytest.fixture(scope="function", name="function_minio_bucket")
+@pytest.fixture(name="function_minio_bucket")
 async def fixture_function_minio_bucket(minio: MinioService) -> AsyncIterator[MinioBucket]:
     with minio.bucket(bucket_name="function-clickhouse-bucket") as bucket:
         yield bucket

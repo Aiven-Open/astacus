@@ -292,6 +292,9 @@ ignore = [
   # This configuration can't be enabled since certain operations in f-strings are forbidden.
   # For further details, refer to: 'ci/check_string_formats.py'.
   "UP032",
+  # non-pep695-type-alias
+  # Syntax not supported by mypy yet, expect using an experimental flag
+  "UP040"
 ]
 # A list of rule codes or prefixes for which unsafe fixes should be considered safe.
 extend-safe-fixes = [

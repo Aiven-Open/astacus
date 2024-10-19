@@ -72,7 +72,7 @@ def _test_jsonstorage(storage: JsonStorage) -> None:
 
 
 @pytest.mark.parametrize(
-    "engine,kw,ex",
+    ("engine", "kw", "ex"),
     [
         ("file", {}, None),
         ("rohmu", {}, None),

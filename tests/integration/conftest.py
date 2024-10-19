@@ -157,8 +157,6 @@ async def create_zookeeper(ports: Ports) -> AsyncIterator[Service]:
     java_path = await get_command_path("java")
     if java_path is None:
         pytest.skip("java installation not found")
-        # newer versions of mypy should be able to infer that this is unreachable
-        assert False
     port = ports.allocate()
     with tempfile.TemporaryDirectory(prefix=f"zookeeper_{port}_") as data_dir_str:
         data_dir = Path(data_dir_str)
@@ -175,7 +173,6 @@ log4j.appender.default.layout.ConversionPattern=[%-5p] %m%n
         command = get_zookeeper_command(java_path=java_path, data_dir=data_dir, port=port)
         if command is None:
             pytest.skip("zookeeper installation not found")
-            assert False
         async with contextlib.AsyncExitStack() as stack:
             max_attempts = 10
             for attempt in range(max_attempts):

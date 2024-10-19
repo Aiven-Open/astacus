@@ -179,7 +179,7 @@ async def cleanup(
 def op_status(*, op_name: OpName, op_id: int, c: Coordinator = Depends()):
     op, op_info = c.get_op_and_op_info(op_id=op_id, op_name=op_name)
     result = {"state": op_info.op_status}
-    if isinstance(op, (BackupOp, DeltaBackupOp, RestoreOp)):
+    if isinstance(op, BackupOp | DeltaBackupOp | RestoreOp):
         result["progress"] = msgspec.to_builtins(op.progress)
     return result
 

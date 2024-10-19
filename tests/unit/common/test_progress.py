@@ -11,7 +11,7 @@ import pytest
 
 
 @pytest.mark.parametrize(
-    "old_value,new_value,total,exp",
+    ("old_value", "new_value", "total", "exp"),
     [
         (0, 1, None, True),
         (8, 9, None, True),

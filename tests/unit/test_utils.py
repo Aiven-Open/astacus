@@ -9,7 +9,7 @@ import pytest
 
 
 @pytest.mark.parametrize(
-    "version_command_output,expected_version",
+    ("version_command_output", "expected_version"),
     [
         (b"ClickHouse server version 22.0.0.1 (official build).", (22, 0, 0, 1)),
         (b"ClickHouse server version 22.1.2.3.", (22, 1, 2, 3)),

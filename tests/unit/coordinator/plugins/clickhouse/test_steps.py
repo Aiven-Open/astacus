@@ -92,7 +92,6 @@ import base64
 import datetime
 import msgspec
 import pytest
-import sys
 import tempfile
 import uuid
 
@@ -193,15 +192,11 @@ SAMPLE_MANIFEST_ENCODED = SAMPLE_MANIFEST.to_plugin_data()
 
 def mock_clickhouse_client() -> mock.Mock:
     mock_client = mock.Mock(spec_set=ClickHouseClient)
-    if sys.version_info < (3, 8):
-        awaitable = asyncio.Future()
-        awaitable.set_result(mock.Mock(spec_set=list))
-        mock_client.execute.return_value = awaitable
     return mock_client
 
 
 @pytest.mark.parametrize(
-    "clickhouse_count,coordinator_count,success",
+    ("clickhouse_count", "coordinator_count", "success"),
     [
         (3, 3, True),
         (0, 0, True),
@@ -1383,15 +1378,11 @@ def check_each_pair_of_calls_has_the_same_session_id(mock_calls: Sequence[MockCa
 async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
     object_storage = MemoryObjectStorage.from_items(
         [
-            ObjectStorageItem(
-                key="not_used/and_old", last_modified=datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC)
-            ),
+            ObjectStorageItem(key="not_used/and_old", last_modified=datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC)),
             ObjectStorageItem(key="abc/defghi", last_modified=datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC)),
             ObjectStorageItem(key="jkl/mnopqr", last_modified=datetime.datetime(2020, 1, 2, tzinfo=datetime.UTC)),
             ObjectStorageItem(key="stu/vwxyza", last_modified=datetime.datetime(2020, 1, 3, tzinfo=datetime.UTC)),
-            ObjectStorageItem(
-                key="not_used/and_new", last_modified=datetime.datetime(2020, 1, 4, tzinfo=datetime.UTC)
-            ),
+            ObjectStorageItem(key="not_used/and_new", last_modified=datetime.datetime(2020, 1, 4, tzinfo=datetime.UTC)),
         ]
     )
     manifests = [
@@ -1468,7 +1459,7 @@ async def test_get_versions_step() -> None:
 
 
 @pytest.mark.parametrize(
-    "versions,called_node_indicies",
+    ("versions", "called_node_indicies"),
     [
         ([(23, 8), (23, 12)], [0, 1]),
         ([(23, 3), (23, 8)], [0]),
@@ -1505,7 +1496,7 @@ def create_object_storage_disk(name: str, object_storage: ObjectStorage | None) 
 
 
 @pytest.mark.parametrize(
-    "original_query,rewritten_query",
+    ("original_query", "rewritten_query"),
     [
         [
             b"CREATE VIEW FOO AS SELECT 1",

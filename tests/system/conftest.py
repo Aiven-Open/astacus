@@ -130,7 +130,7 @@ async def wait_url_up(url: str | URL) -> None:
             except httpx.NetworkError as ex:
                 logger.debug("URL %s gave exception %r", url, ex)
         else:
-            assert False, f"url {url} still not reachable"
+            pytest.fail(f"url {url} still not reachable")
 
 
 @pytest.fixture(name="rootdir")
