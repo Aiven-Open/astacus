@@ -6,7 +6,6 @@ from astacus.coordinator.plugins.clickhouse.manifest import AccessEntity, Table
 from collections.abc import Callable, Hashable, Sequence
 from typing import TypeVar
 
-# noinspection PyCompatibility
 import graphlib
 import re
 import uuid
