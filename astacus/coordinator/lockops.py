@@ -1,7 +1,5 @@
-"""
-
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 
 Implementation of the fictious 'lock' and 'unlock' API endpoints (we
 may or may not want them for debug purposes, but this is mostly all

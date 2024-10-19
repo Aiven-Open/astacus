@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 
 StatsD client
 
@@ -61,7 +60,7 @@ class StatsClient:
         tags = (tags or {}).copy()
         try:
             yield
-        except:  # noqa pylint: disable=broad-except,bare-except
+        except:
             tags["success"] = "0"
             self.timing(metric, time.monotonic() - start_time, tags=tags)
             raise
@@ -110,7 +109,7 @@ class StatsClient:
                 parts.append(pattern.format(separator, tag, val).encode("utf-8"))
         elif self._message_format == MessageFormat.telegraf:
             for tag, val in send_tags.items():
-                parts.insert(1, f",{tag}={val}".encode("utf-8"))
+                parts.insert(1, f",{tag}={val}".encode())
         else:
             raise NotImplementedError("Unsupported message format")
 

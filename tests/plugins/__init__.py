@@ -1,4 +1,3 @@
-"""
-Copyright (c) 2024 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2024 Aiven Ltd
+See LICENSE for details.
 """

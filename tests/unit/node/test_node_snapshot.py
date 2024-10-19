@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 """
 
 from astacus.common import ipc, magic, utils
@@ -159,7 +158,7 @@ def test_api_snapshot_error(client: TestClient, mocker: MockerFixture) -> None:
 
 @pytest.mark.timeout(2)
 @pytest.mark.parametrize(
-    "truncate_to,hashes_in_second_snapshot",
+    ("truncate_to", "hashes_in_second_snapshot"),
     [
         (magic.DEFAULT_EMBEDDED_FILE_SIZE - 1, 0),
         (magic.DEFAULT_EMBEDDED_FILE_SIZE + 1, 1),

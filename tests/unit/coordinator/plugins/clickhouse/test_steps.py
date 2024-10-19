@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2021 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2021 Aiven Ltd
+See LICENSE for details.
 """
 
 from astacus.common.asyncstorage import AsyncJsonStorage
@@ -86,14 +85,13 @@ from tests.unit.coordinator.plugins.clickhouse.object_storage import MemoryObjec
 from tests.unit.storage import MemoryJsonStorage
 from typing import Any
 from unittest import mock
-from unittest.mock import _Call as MockCall, patch  # pylint: disable=protected-access
+from unittest.mock import _Call as MockCall, patch
 
 import asyncio
 import base64
 import datetime
 import msgspec
 import pytest
-import sys
 import tempfile
 import uuid
 
@@ -194,15 +192,11 @@ SAMPLE_MANIFEST_ENCODED = SAMPLE_MANIFEST.to_plugin_data()
 
 def mock_clickhouse_client() -> mock.Mock:
     mock_client = mock.Mock(spec_set=ClickHouseClient)
-    if sys.version_info < (3, 8):
-        awaitable = asyncio.Future()
-        awaitable.set_result(mock.Mock(spec_set=list))
-        mock_client.execute.return_value = awaitable
     return mock_client
 
 
 @pytest.mark.parametrize(
-    "clickhouse_count,coordinator_count,success",
+    ("clickhouse_count", "coordinator_count", "success"),
     [
         (3, 3, True),
         (0, 0, True),
@@ -231,17 +225,17 @@ async def create_zookeeper_access_entities(zookeeper_client: ZooKeeperClient) ->
     async with zookeeper_client.connect() as connection:
         await asyncio.gather(
             connection.create("/clickhouse/access/P/a_policy", str(uuid.UUID(int=1)).encode()),
-            connection.create(f"/clickhouse/access/uuid/{str(uuid.UUID(int=1))}", b"ATTACH ROW POLICY ..."),
+            connection.create(f"/clickhouse/access/uuid/{uuid.UUID(int=1)!s}", b"ATTACH ROW POLICY ..."),
             connection.create("/clickhouse/access/Q/a_quota", str(uuid.UUID(int=2)).encode()),
-            connection.create(f"/clickhouse/access/uuid/{str(uuid.UUID(int=2))}", b"ATTACH QUOTA ..."),
+            connection.create(f"/clickhouse/access/uuid/{uuid.UUID(int=2)!s}", b"ATTACH QUOTA ..."),
             connection.create("/clickhouse/access/R/a_role", str(uuid.UUID(int=3)).encode()),
-            connection.create(f"/clickhouse/access/uuid/{str(uuid.UUID(int=3))}", b"ATTACH ROLE ..."),
+            connection.create(f"/clickhouse/access/uuid/{uuid.UUID(int=3)!s}", b"ATTACH ROLE ..."),
             connection.create("/clickhouse/access/S/a_settings_profile", str(uuid.UUID(int=4)).encode()),
-            connection.create(f"/clickhouse/access/uuid/{str(uuid.UUID(int=4))}", b"ATTACH SETTINGS PROFILE ..."),
+            connection.create(f"/clickhouse/access/uuid/{uuid.UUID(int=4)!s}", b"ATTACH SETTINGS PROFILE ..."),
             connection.create("/clickhouse/access/U/jos%C3%A9", str(uuid.UUID(int=5)).encode()),
-            connection.create(f"/clickhouse/access/uuid/{str(uuid.UUID(int=5))}", b"ATTACH USER ..."),
+            connection.create(f"/clickhouse/access/uuid/{uuid.UUID(int=5)!s}", b"ATTACH USER ..."),
             connection.create("/clickhouse/access/U/z%80enjoyer", str(uuid.UUID(int=6)).encode()),
-            connection.create(f"/clickhouse/access/uuid/{str(uuid.UUID(int=6))}", b"ATTACH USER \x80 ..."),
+            connection.create(f"/clickhouse/access/uuid/{uuid.UUID(int=6)!s}", b"ATTACH USER \x80 ..."),
         )
 
 
@@ -298,9 +292,7 @@ async def test_retrieve_keeper_map_table_data() -> None:
 
 
 class TrappedZooKeeperClient(FakeZooKeeperClient):
-    """
-    A fake ZooKeeper client with a trap: it will inject a concurrent write after a few reads.
-    """
+    """A fake ZooKeeper client with a trap: it will inject a concurrent write after a few reads."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -667,8 +659,8 @@ async def test_parse_clickhouse_manifest() -> None:
     context.set_result(
         BackupManifestStep,
         BackupManifest(
-            start=datetime.datetime(2020, 1, 2, 3, 4, 5, 678, tzinfo=datetime.timezone.utc),
-            end=datetime.datetime(2020, 1, 2, 5, 6, 7, 891, tzinfo=datetime.timezone.utc),
+            start=datetime.datetime(2020, 1, 2, 3, 4, 5, 678, tzinfo=datetime.UTC),
+            end=datetime.datetime(2020, 1, 2, 5, 6, 7, 891, tzinfo=datetime.UTC),
             attempt=1,
             snapshot_results=[],
             upload_results=[],
@@ -1042,9 +1034,9 @@ async def test_creating_all_access_entities_can_be_retried() -> None:
     async with client.connect() as connection:
         # Simulate a first partial restoration
         await connection.create("/clickhouse/access/P/a_policy", str(uuid.UUID(int=1)).encode())
-        await connection.create(f"/clickhouse/access/uuid/{str(uuid.UUID(int=1))}", b"ATTACH ROW POLICY ...")
+        await connection.create(f"/clickhouse/access/uuid/{uuid.UUID(int=1)!s}", b"ATTACH ROW POLICY ...")
         await connection.create("/clickhouse/access/Q/a_quota", str(uuid.UUID(int=2)).encode())
-        await connection.create(f"/clickhouse/access/uuid/{str(uuid.UUID(int=2))}", b"ATTACH QUOTA ...")
+        await connection.create(f"/clickhouse/access/uuid/{uuid.UUID(int=2)!s}", b"ATTACH QUOTA ...")
     await step.run_step(Cluster(nodes=[]), context)
     await check_restored_entities(client)
 
@@ -1059,17 +1051,17 @@ async def check_restored_entities(client: ZooKeeperClient) -> None:
         assert await connection.get_children("/clickhouse/access/S") == ["a_settings_profile"]
         assert await connection.get_children("/clickhouse/access/U") == ["jos%C3%A9", "z%80enjoyer"]
         assert await connection.get("/clickhouse/access/P/a_policy") == str(uuid.UUID(int=1)).encode()
-        assert await connection.get(f"/clickhouse/access/uuid/{str(uuid.UUID(int=1))}") == b"ATTACH ROW POLICY ..."
+        assert await connection.get(f"/clickhouse/access/uuid/{uuid.UUID(int=1)!s}") == b"ATTACH ROW POLICY ..."
         assert await connection.get("/clickhouse/access/Q/a_quota") == str(uuid.UUID(int=2)).encode()
-        assert await connection.get(f"/clickhouse/access/uuid/{str(uuid.UUID(int=2))}") == b"ATTACH QUOTA ..."
+        assert await connection.get(f"/clickhouse/access/uuid/{uuid.UUID(int=2)!s}") == b"ATTACH QUOTA ..."
         assert await connection.get("/clickhouse/access/R/a_role") == str(uuid.UUID(int=3)).encode()
-        assert await connection.get(f"/clickhouse/access/uuid/{str(uuid.UUID(int=3))}") == b"ATTACH ROLE ..."
+        assert await connection.get(f"/clickhouse/access/uuid/{uuid.UUID(int=3)!s}") == b"ATTACH ROLE ..."
         assert await connection.get("/clickhouse/access/S/a_settings_profile") == str(uuid.UUID(int=4)).encode()
-        assert await connection.get(f"/clickhouse/access/uuid/{str(uuid.UUID(int=4))}") == b"ATTACH SETTINGS PROFILE ..."
+        assert await connection.get(f"/clickhouse/access/uuid/{uuid.UUID(int=4)!s}") == b"ATTACH SETTINGS PROFILE ..."
         assert await connection.get("/clickhouse/access/U/jos%C3%A9") == str(uuid.UUID(int=5)).encode()
-        assert await connection.get(f"/clickhouse/access/uuid/{str(uuid.UUID(int=5))}") == b"ATTACH USER ..."
+        assert await connection.get(f"/clickhouse/access/uuid/{uuid.UUID(int=5)!s}") == b"ATTACH USER ..."
         assert await connection.get("/clickhouse/access/U/z%80enjoyer") == str(uuid.UUID(int=6)).encode()
-        assert await connection.get(f"/clickhouse/access/uuid/{str(uuid.UUID(int=6))}") == b"ATTACH USER \x80 ..."
+        assert await connection.get(f"/clickhouse/access/uuid/{uuid.UUID(int=6)!s}") == b"ATTACH USER \x80 ..."
 
 
 async def test_restore_replica() -> None:
@@ -1116,7 +1108,7 @@ async def test_restore_replica() -> None:
 async def test_restore_object_storage_files(with_stats: bool) -> None:
     clickhouse_source_object_storage_files = SAMPLE_MANIFEST.object_storage_files[0].files
     object_storage_items = [
-        ObjectStorageItem(key=file.path, last_modified=datetime.datetime(2020, 1, 2, tzinfo=datetime.timezone.utc))
+        ObjectStorageItem(key=file.path, last_modified=datetime.datetime(2020, 1, 2, tzinfo=datetime.UTC))
         for file in clickhouse_source_object_storage_files
     ]
     source_object_storage = MemoryObjectStorage.from_items(object_storage_items)
@@ -1296,7 +1288,7 @@ async def test_attaches_all_mergetree_parts_in_manifest() -> None:
     context.set_result(
         BackupManifestStep,
         BackupManifest(
-            start=datetime.datetime(2020, 1, 2, 3, tzinfo=datetime.timezone.utc),
+            start=datetime.datetime(2020, 1, 2, 3, tzinfo=datetime.UTC),
             attempt=1,
             snapshot_results=[
                 SnapshotResult(
@@ -1386,21 +1378,17 @@ def check_each_pair_of_calls_has_the_same_session_id(mock_calls: Sequence[MockCa
 async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
     object_storage = MemoryObjectStorage.from_items(
         [
-            ObjectStorageItem(
-                key="not_used/and_old", last_modified=datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)
-            ),
-            ObjectStorageItem(key="abc/defghi", last_modified=datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)),
-            ObjectStorageItem(key="jkl/mnopqr", last_modified=datetime.datetime(2020, 1, 2, tzinfo=datetime.timezone.utc)),
-            ObjectStorageItem(key="stu/vwxyza", last_modified=datetime.datetime(2020, 1, 3, tzinfo=datetime.timezone.utc)),
-            ObjectStorageItem(
-                key="not_used/and_new", last_modified=datetime.datetime(2020, 1, 4, tzinfo=datetime.timezone.utc)
-            ),
+            ObjectStorageItem(key="not_used/and_old", last_modified=datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC)),
+            ObjectStorageItem(key="abc/defghi", last_modified=datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC)),
+            ObjectStorageItem(key="jkl/mnopqr", last_modified=datetime.datetime(2020, 1, 2, tzinfo=datetime.UTC)),
+            ObjectStorageItem(key="stu/vwxyza", last_modified=datetime.datetime(2020, 1, 3, tzinfo=datetime.UTC)),
+            ObjectStorageItem(key="not_used/and_new", last_modified=datetime.datetime(2020, 1, 4, tzinfo=datetime.UTC)),
         ]
     )
     manifests = [
         BackupManifest(
-            start=datetime.datetime(2020, 1, 2, 10, tzinfo=datetime.timezone.utc),
-            end=datetime.datetime(2020, 1, 2, 11, tzinfo=datetime.timezone.utc),
+            start=datetime.datetime(2020, 1, 2, 10, tzinfo=datetime.UTC),
+            end=datetime.datetime(2020, 1, 2, 11, tzinfo=datetime.UTC),
             attempt=1,
             snapshot_results=[],
             upload_results=[],
@@ -1420,8 +1408,8 @@ async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
             filename="backup-2",
         ),
         BackupManifest(
-            start=datetime.datetime(2020, 1, 3, 10, tzinfo=datetime.timezone.utc),
-            end=datetime.datetime(2020, 1, 3, 11, tzinfo=datetime.timezone.utc),
+            start=datetime.datetime(2020, 1, 3, 10, tzinfo=datetime.UTC),
+            end=datetime.datetime(2020, 1, 3, 11, tzinfo=datetime.UTC),
             attempt=1,
             snapshot_results=[],
             upload_results=[],
@@ -1452,10 +1440,10 @@ async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
     await step.run_step(cluster, context)
     assert object_storage.list_items() == [
         # Only not_used/and_old was deleted
-        ObjectStorageItem(key="abc/defghi", last_modified=datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)),
-        ObjectStorageItem(key="jkl/mnopqr", last_modified=datetime.datetime(2020, 1, 2, tzinfo=datetime.timezone.utc)),
-        ObjectStorageItem(key="stu/vwxyza", last_modified=datetime.datetime(2020, 1, 3, tzinfo=datetime.timezone.utc)),
-        ObjectStorageItem(key="not_used/and_new", last_modified=datetime.datetime(2020, 1, 4, tzinfo=datetime.timezone.utc)),
+        ObjectStorageItem(key="abc/defghi", last_modified=datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC)),
+        ObjectStorageItem(key="jkl/mnopqr", last_modified=datetime.datetime(2020, 1, 2, tzinfo=datetime.UTC)),
+        ObjectStorageItem(key="stu/vwxyza", last_modified=datetime.datetime(2020, 1, 3, tzinfo=datetime.UTC)),
+        ObjectStorageItem(key="not_used/and_new", last_modified=datetime.datetime(2020, 1, 4, tzinfo=datetime.UTC)),
     ]
 
 
@@ -1471,7 +1459,7 @@ async def test_get_versions_step() -> None:
 
 
 @pytest.mark.parametrize(
-    "versions,called_node_indicies",
+    ("versions", "called_node_indicies"),
     [
         ([(23, 8), (23, 12)], [0, 1]),
         ([(23, 3), (23, 8)], [0]),
@@ -1508,7 +1496,7 @@ def create_object_storage_disk(name: str, object_storage: ObjectStorage | None) 
 
 
 @pytest.mark.parametrize(
-    "original_query,rewritten_query",
+    ("original_query", "rewritten_query"),
     [
         [
             b"CREATE VIEW FOO AS SELECT 1",

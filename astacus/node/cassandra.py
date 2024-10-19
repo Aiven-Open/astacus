@@ -1,7 +1,5 @@
-"""
-
-Copyright (c) 2021 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2021 Aiven Ltd
+See LICENSE for details.
 
 Cassandra handling that is run on every node in the Cluster
 
@@ -39,8 +37,7 @@ def ks_table_from_backup_path(p: Path) -> tuple[str, str]:
 
 
 class SimpleCassandraSubOp(NodeOp[ipc.NodeRequest, ipc.NodeResult]):
-    """
-    Generic class to handle no arguments in + no output out case subops.
+    """Generic class to handle no arguments in + no output out case subops.
 
     Due to that, it does not (really) care about request, and as far
     as result goes it only cares about progress.

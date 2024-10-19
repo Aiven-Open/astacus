@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2022 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2022 Aiven Ltd
+See LICENSE for details.
 """
 
 from astacus.common.utils import build_netloc
@@ -87,7 +86,7 @@ async def run_process_and_wait_for_pattern(
         try:
             try:
                 await asyncio.wait_for(pattern_found.wait(), timeout=timeout)
-            except asyncio.TimeoutError as e:
+            except TimeoutError as e:
                 raise PatternNotFoundError(
                     f"Pattern {pattern!r} not found after {timeout:.3f}s in output of {str_args}"
                 ) from e
@@ -129,7 +128,7 @@ def port_is_listening(hostname: str, port: int, timeout: float = 0.5) -> bool:
         connection = socket.create_connection((hostname, port), timeout)
         connection.close()
         return True
-    except socket.error:
+    except OSError:
         return False
 
 
@@ -158,8 +157,6 @@ async def create_zookeeper(ports: Ports) -> AsyncIterator[Service]:
     java_path = await get_command_path("java")
     if java_path is None:
         pytest.skip("java installation not found")
-        # newer versions of mypy should be able to infer that this is unreachable
-        assert False
     port = ports.allocate()
     with tempfile.TemporaryDirectory(prefix=f"zookeeper_{port}_") as data_dir_str:
         data_dir = Path(data_dir_str)
@@ -176,7 +173,6 @@ log4j.appender.default.layout.ConversionPattern=[%-5p] %m%n
         command = get_zookeeper_command(java_path=java_path, data_dir=data_dir, port=port)
         if command is None:
             pytest.skip("zookeeper installation not found")
-            assert False
         async with contextlib.AsyncExitStack() as stack:
             max_attempts = 10
             for attempt in range(max_attempts):

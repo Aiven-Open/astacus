@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 
 Test that the coordinator backup endpoint works.
 
@@ -107,7 +106,7 @@ def _ssresults(*kwarg_list) -> list[ipc.SnapshotResult]:
 
 
 @pytest.mark.parametrize(
-    "hexdigests,snapshot_results,uploads",
+    ("hexdigests", "snapshot_results", "uploads"),
     [
         ([], _ssresults({}, {}, {}, {}), []),
         (

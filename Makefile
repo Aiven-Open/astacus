@@ -40,13 +40,6 @@ test-dep-ubuntu:
 	tar vxf apache-zookeeper-$(ZOOKEEPER_VERSION)-bin.tar.gz --wildcards apache-zookeeper-$(ZOOKEEPER_VERSION)-bin/lib/*.jar
 	sudo cp -r apache-zookeeper-$(ZOOKEEPER_VERSION)-bin/lib /usr/share/zookeeper
 
-.PHONY: pylint
-pylint: $(GENERATED)
-	pre-commit run pylint --all-files
-
-.PHONY: flake8
-flake8: $(GENERATED)
-	pre-commit run flake8 --all-files
 
 .PHONY: copyright
 copyright:
@@ -69,15 +62,15 @@ unittest: $(GENERATED)
 test: lint copyright unittest
 
 .PHONY: isort
-isort:
+isort: $(GENERATED)
 	pre-commit run isort --all-files
 
 .PHONY: ruff
-ruff:
+ruff: $(GENERATED)
 	pre-commit run ruff-format --all-files
 
 .PHONY: mypy
-mypy:
+mypy: $(GENERATED)
 	pre-commit run mypy --all-files
 
 .PHONY: reformat

@@ -1,16 +1,15 @@
-"""
-
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 
 """
 
 from .exceptions import NotFoundException
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager
 from pathlib import Path
 from rohmu.typing import FileLike
-from typing import BinaryIO, Callable, ContextManager, ParamSpec, TypeAlias, TypeVar
+from typing import BinaryIO, ParamSpec, TypeAlias, TypeVar
 
 import contextlib
 import io
@@ -77,7 +76,7 @@ class JsonStorage(ABC):
     def delete_json(self, name: str) -> None: ...
 
     @abstractmethod
-    def open_json_bytes(self, name: str) -> ContextManager[mmap.mmap]: ...
+    def open_json_bytes(self, name: str) -> AbstractContextManager[mmap.mmap]: ...
 
     @abstractmethod
     def list_jsons(self) -> list[str]: ...
@@ -96,7 +95,6 @@ class JsonStorage(ABC):
 
 
 class Storage(HexDigestStorage, JsonStorage, ABC):
-    # pylint: disable=abstract-method
     # This is abstract class which has whatever APIs necessary. Due to that,
     # it is expected not to implement the abstract methods.
     @abstractmethod
@@ -104,7 +102,7 @@ class Storage(HexDigestStorage, JsonStorage, ABC):
 
 
 def file_error_wrapper(fun: Callable[P, T]) -> Callable[P, T]:
-    """Wrap rohmu exceptions in astacus ones; to be seen what is complete set"""
+    """Wrap rohmu exceptions in astacus ones; to be seen what is complete set."""
 
     def _f(*a: P.args, **kw: P.kwargs) -> T:
         try:
@@ -116,7 +114,7 @@ def file_error_wrapper(fun: Callable[P, T]) -> Callable[P, T]:
 
 
 class FileStorage(Storage):
-    """Implementation of the storage API, which just handles files - primarily useful for testing"""
+    """Implementation of the storage API, which just handles files - primarily useful for testing."""
 
     def __init__(self, path: str | Path, *, hexdigest_suffix: str = ".dat", json_suffix: str = ".json") -> None:
         self.path = Path(path)

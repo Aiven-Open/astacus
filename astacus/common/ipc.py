@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 """
 
 from .magic import DEFAULT_EMBEDDED_FILE_SIZE, StrEnum
@@ -18,7 +17,6 @@ import msgspec
 import socket
 
 # pydantic validators are class methods in disguise
-# pylint: disable=no-self-argument
 
 
 # These are the database plugins we support; list is intentionally
@@ -146,8 +144,7 @@ def create_snapshot_request(
 
 
 class SnapshotHash(msgspec.Struct, kw_only=True, frozen=True):
-    """
-    This class represents something that is to be stored in the object storage.
+    """This class represents something that is to be stored in the object storage.
 
     size is provided mainly to allow for even loading of nodes in case
     same hexdigest is available from multiple nodes.

@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2023 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2023 Aiven Ltd
+See LICENSE for details.
 
 When using remote storage disk in ClickHouse, the actual data is in object storage
 but there are still metadata files in local storage. This module contains functions
@@ -61,7 +60,7 @@ class FileMetadata:
         ]
         expected_objects_count = int(file_match.group("objects_count"))
         expected_objects_size = int(file_match.group("objects_size_bytes"))
-        total_objects_size = sum((object_metadata.size_bytes for object_metadata in objects_metadata))
+        total_objects_size = sum(object_metadata.size_bytes for object_metadata in objects_metadata)
         if len(objects_metadata) != expected_objects_count:
             raise InvalidFileMetadata(
                 f"Invalid file metadata objects count: expected {expected_objects_size}, got {len(objects_metadata)}"

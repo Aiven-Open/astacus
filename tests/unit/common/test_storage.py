@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 
 Test that RohmuStorage works as advertised.
 
@@ -73,7 +72,7 @@ def _test_jsonstorage(storage: JsonStorage) -> None:
 
 
 @pytest.mark.parametrize(
-    "engine,kw,ex",
+    ("engine", "kw", "ex"),
     [
         ("file", {}, None),
         ("rohmu", {}, None),

@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2021 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2021 Aiven Ltd
+See LICENSE for details.
 """
 
 from __future__ import annotations
@@ -95,9 +94,7 @@ def get_setting_repr(setting_name: str, value: _T) -> str:
 
 @dataclasses.dataclass
 class ValidateConfigStep(Step[None]):
-    """
-    Validates that we have the same number of astacus node and clickhouse nodes.
-    """
+    """Validates that we have the same number of astacus node and clickhouse nodes."""
 
     clickhouse: ClickHouseConfiguration
 
@@ -108,8 +105,7 @@ class ValidateConfigStep(Step[None]):
 
 @dataclasses.dataclass
 class RetrieveAccessEntitiesStep(Step[Sequence[AccessEntity]]):
-    """
-    Backups access entities (user, roles, quotas, row_policies, settings profiles) and their grants
+    """Backups access entities (user, roles, quotas, row_policies, settings profiles) and their grants
     from ZooKeeper. This requires using the replicated storage engine for users.
 
     Inside the `access_entities_path` ZooKeeper node, there is one child znode for each type of
@@ -223,8 +219,7 @@ class RetrieveKeeperMapTableDataStep(Step[Sequence[KeeperMapTable]]):
 
 @dataclasses.dataclass
 class RetrieveDatabasesAndTablesStep(Step[DatabasesAndTables]):
-    """
-    Retrieves the list of all databases that use the replicated database engine and their tables.
+    """Retrieves the list of all databases that use the replicated database engine and their tables.
 
     The table names, uuids and schemas of all tables are collected.
     The database names, uuids, shard and replica parameters are collected.
@@ -288,8 +283,7 @@ class RetrieveDatabasesAndTablesStep(Step[DatabasesAndTables]):
 
 @dataclasses.dataclass
 class RetrieveMacrosStep(Step[Sequence[Macros]]):
-    """
-    Retrieves the value of all macros on each server.
+    """Retrieves the value of all macros on each server.
 
     Returns a list of `Macros` objects, each item of the list matches one server.
     """
@@ -302,9 +296,7 @@ class RetrieveMacrosStep(Step[Sequence[Macros]]):
 
 @dataclasses.dataclass
 class CollectObjectStorageFilesStep(Step[list[ClickHouseObjectStorageFiles]]):
-    """
-    Collects the list of files that are referenced by metadata files in the backup.
-    """
+    """Collects the list of files that are referenced by metadata files in the backup."""
 
     disks: Disks
 
@@ -340,9 +332,7 @@ class CollectObjectStorageFilesStep(Step[list[ClickHouseObjectStorageFiles]]):
 
 
 class CollectTieredStorageResultsStep(Step[ipc.TieredStorageResults]):
-    """
-    ClickHouse specific tiered storage result step.
-    """
+    """ClickHouse specific tiered storage result step."""
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> ipc.TieredStorageResults:
         object_storage_files = context.get_result(CollectObjectStorageFilesStep)
@@ -357,9 +347,7 @@ class CollectTieredStorageResultsStep(Step[ipc.TieredStorageResults]):
 
 @dataclasses.dataclass
 class PrepareClickHouseManifestStep(Step[dict[str, Any]]):
-    """
-    Collects access entities, databases and tables from previous steps into an uploadable manifest.
-    """
+    """Collects access entities, databases and tables from previous steps into an uploadable manifest."""
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> dict[str, Any]:
         databases, tables = context.get_result(RetrieveDatabasesAndTablesStep)
@@ -379,8 +367,7 @@ class PrepareClickHouseManifestStep(Step[dict[str, Any]]):
 
 @dataclasses.dataclass
 class RemoveFrozenTablesStep(Step[None]):
-    """
-    Removes traces of previous backups that might have failed.
+    """Removes traces of previous backups that might have failed.
     When the system unfreeze flag is enabled, clears frozen parts from all disks in a single go.
     """
 
@@ -434,8 +421,7 @@ class FreezeUnfreezeTablesStepBase(Step[None]):
 
 @dataclasses.dataclass
 class FreezeTablesStep(FreezeUnfreezeTablesStepBase):
-    """
-    Creates a frozen copy of the tables that won't change while we are uploading parts of it.
+    """Creates a frozen copy of the tables that won't change while we are uploading parts of it.
 
     Each table is frozen separately, one after the other. This means the complete backup of all
     tables will not represent a single, globally consistent, point in time.
@@ -458,8 +444,7 @@ class FreezeTablesStep(FreezeUnfreezeTablesStepBase):
 
 @dataclasses.dataclass
 class UnfreezeTablesStep(FreezeUnfreezeTablesStepBase):
-    """
-    Removes the frozen parts after we're done uploading them.
+    """Removes the frozen parts after we're done uploading them.
 
     Frozen leftovers don't immediately harm ClickHouse or cost disk space since they are
     hardlinks to the parts used by the real table. However, as ClickHouse starts mutating
@@ -474,8 +459,7 @@ class UnfreezeTablesStep(FreezeUnfreezeTablesStepBase):
 
 @dataclasses.dataclass
 class MoveFrozenPartsStep(Step[None]):
-    """
-    Renames files in the snapshot manifest to match what we will need during recover.
+    """Renames files in the snapshot manifest to match what we will need during recover.
 
     The freeze step creates hardlinks of the table data in the `shadow/` folder, then the
     snapshot steps upload these file to backup storage and remember them by their
@@ -512,9 +496,7 @@ class MoveFrozenPartsStep(Step[None]):
 
 @dataclasses.dataclass
 class ClickHouseManifestStep(Step[ClickHouseManifest]):
-    """
-    Extracts the ClickHouse plugin manifest from the main backup manifest.
-    """
+    """Extracts the ClickHouse plugin manifest from the main backup manifest."""
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> ClickHouseManifest:
         backup_manifest = context.get_result(BackupManifestStep)
@@ -556,8 +538,7 @@ def get_restore_table_query(table: Table) -> bytes:
 
 @dataclasses.dataclass
 class RestoreReplicatedDatabasesStep(Step[None]):
-    """
-    Re-creates replicated databases on each client and re-create all tables in each database.
+    """Re-creates replicated databases on each client and re-create all tables in each database.
 
     After this step, all tables will be empty.
     """
@@ -685,8 +666,7 @@ DatabasesReplicas = Mapping[bytes, Sequence[DatabaseReplica]]
 
 @dataclasses.dataclass
 class ListDatabaseReplicasStep(Step[DatabasesReplicas]):
-    """
-    For each replicated database, returns the list of replicas.
+    """For each replicated database, returns the list of replicas.
 
     Each replica has a `shard_name` and a `replica_name`.
     """
@@ -714,8 +694,7 @@ class SyncDatabaseReplicasStep(Step[None]):
 
 @dataclasses.dataclass
 class RestoreAccessEntitiesStep(Step[None]):
-    """
-    Restores access entities (user, roles, quotas, row_policies, settings profiles) and their grants
+    """Restores access entities (user, roles, quotas, row_policies, settings profiles) and their grants
     to ZooKeeper. This requires using the replicated storage engine for users.
 
     The list of access entities to restore is read from the plugin manifest, which itself was
@@ -853,9 +832,7 @@ class RestoreKeeperMapTableDataStep(Step[None]):
 
 @dataclasses.dataclass
 class RestoreReplicaStep(Step[None]):
-    """
-    Restore data on all tables by using `SYSTEM RESTORE REPLICA... `.
-    """
+    """Restore data on all tables by using `SYSTEM RESTORE REPLICA... `."""
 
     zookeeper_client: ZooKeeperClient
     clients: Sequence[ClickHouseClient]
@@ -875,7 +852,7 @@ class RestoreReplicaStep(Step[None]):
         # this is a requirement to be allowed to run restore replica.
         async with self.zookeeper_client.connect() as connection:
             for table in replicated_tables:
-                await connection.delete(f"/clickhouse/tables/{str(table.uuid)}", recursive=True)
+                await connection.delete(f"/clickhouse/tables/{table.uuid!s}", recursive=True)
 
         def _restart_replicas(client: ClickHouseClient) -> Iterator[Awaitable[None]]:
             yield from (
@@ -908,8 +885,7 @@ class RestoreReplicaStep(Step[None]):
 
 @dataclasses.dataclass
 class RestoreObjectStorageFilesStep(SyncStep[None]):
-    """
-    If the source and target disks are not the same, restore object storage files by copying them
+    """If the source and target disks are not the same, restore object storage files by copying them
     from the source to the target disk.
     """
 
@@ -944,8 +920,7 @@ class RestoreObjectStorageFilesStep(SyncStep[None]):
 
 @dataclasses.dataclass
 class AttachMergeTreePartsStep(Step[None]):
-    """
-    Restore data to all tables by using `ALTER TABLE ... ATTACH`.
+    """Restore data to all tables by using `ALTER TABLE ... ATTACH`.
 
     Which part are restored to which servers depends on whether the tables uses
     a Replicated table engine or not, see `DistributeReplicatedPartsStep` for more
@@ -983,8 +958,7 @@ class AttachMergeTreePartsStep(Step[None]):
 
 @dataclasses.dataclass
 class SyncTableReplicasStep(Step[None]):
-    """
-    Before declaring the restoration as finished, make sure all parts of replicated tables
+    """Before declaring the restoration as finished, make sure all parts of replicated tables
     are all exchanged between all nodes.
     """
 
@@ -1013,8 +987,7 @@ class SyncTableReplicasStep(Step[None]):
 
 @dataclasses.dataclass
 class DeleteDanglingObjectStorageFilesStep(SyncStep[None]):
-    """
-    Delete object storage files that were created before the most recent backup
+    """Delete object storage files that were created before the most recent backup
     and that are not part of any backup.
     """
 
@@ -1028,7 +1001,7 @@ class DeleteDanglingObjectStorageFilesStep(SyncStep[None]):
             # If we don't have at least one backup, we don't know which files are more recent
             # than the latest backup, so we don't do anything.
             return
-        newest_backup_start_time = max((backup_manifest.start for backup_manifest in backup_manifests))
+        newest_backup_start_time = max(backup_manifest.start for backup_manifest in backup_manifests)
 
         kept_paths: dict[str, set[str]] = {}
         for manifest_min in backup_manifests:
@@ -1036,7 +1009,7 @@ class DeleteDanglingObjectStorageFilesStep(SyncStep[None]):
             clickhouse_manifest = ClickHouseManifest.from_plugin_data(manifest_data.plugin_data)
             for object_storage_files in clickhouse_manifest.object_storage_files:
                 disk_kept_paths = kept_paths.setdefault(object_storage_files.disk_name, set())
-                disk_kept_paths.update((file.path for file in object_storage_files.files))
+                disk_kept_paths.update(file.path for file in object_storage_files.files)
 
         for disk_name, disk_kept_paths in sorted(kept_paths.items()):
             disk_object_storage = self.disks.create_object_storage(disk_name=disk_name)

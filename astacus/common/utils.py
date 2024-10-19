@@ -1,6 +1,4 @@
-"""
-
-utils
+"""utils.
 
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
@@ -14,11 +12,11 @@ from __future__ import annotations
 from abc import ABC
 from collections import deque
 from collections.abc import AsyncIterable, AsyncIterator, Callable, Hashable, Iterable, Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from multiprocessing.dummy import Pool  # fastapi + fork = bad idea
 from pathlib import Path
 from pydantic import BaseModel
-from typing import Any, ContextManager, Final, Generic, IO, Literal, overload, TextIO, TypeAlias, TypeVar
+from typing import Any, Final, Generic, IO, Literal, overload, TextIO, TypeAlias, TypeVar
 
 import asyncio
 import contextlib
@@ -71,7 +69,7 @@ class AstacusModel(BaseModel):
 
 
 def get_or_create_state(*, state: object, key: str, factory: Callable[[], Any]) -> Any:
-    """Get or create sub-state entry (using factory callback)"""
+    """Get or create sub-state entry (using factory callback)."""
     value = getattr(state, key, None)
     if value is None:
         value = factory()
@@ -225,7 +223,7 @@ def exponential_backoff(
     duration: float | None = None,
     async_sleeper: AsyncSleeper | None = None,
 ) -> AnyIterable[int]:
-    """Exponential backoff iterator which works with both 'for' and 'async for'
+    """Exponential backoff iterator which works with both 'for' and 'async for'.
 
     First attempt is never delayed. The delays are only for retries.
     'initial' is the first retry's delay. After that, each retry is
@@ -296,7 +294,7 @@ def exponential_backoff(
 
 class SizeLimitedFile:
     def __init__(self, *, path, file_size):
-        self._f = open(path, "rb")  # pylint: disable=consider-using-with
+        self._f = open(path, "rb")  # noqa: SIM115
         self._file_size = file_size
         self.tell = self._f.tell
 
@@ -346,7 +344,7 @@ def parallel_map_to(*, fun, iterable, result_callback, n=None) -> bool:
 
 
 def now():
-    return datetime.datetime.now(datetime.timezone.utc)
+    return datetime.datetime.now(datetime.UTC)
 
 
 def monotonic_time():
@@ -358,18 +356,18 @@ UpdateBinary: TypeAlias = Literal["w+b"]
 
 
 @overload
-def open_path_with_atomic_rename(path: os.PathLike, *, mode: UpdateBinary) -> ContextManager[IO[bytes]]: ...
+def open_path_with_atomic_rename(path: os.PathLike, *, mode: UpdateBinary) -> AbstractContextManager[IO[bytes]]: ...
 
 
 @overload
-def open_path_with_atomic_rename(path: os.PathLike, *, mode: Write) -> ContextManager[TextIO]: ...
+def open_path_with_atomic_rename(path: os.PathLike, *, mode: Write) -> AbstractContextManager[TextIO]: ...
 
 
 @overload
-def open_path_with_atomic_rename(path: os.PathLike) -> ContextManager[IO[bytes]]: ...
+def open_path_with_atomic_rename(path: os.PathLike) -> AbstractContextManager[IO[bytes]]: ...
 
 
-def open_path_with_atomic_rename(path: os.PathLike, *, mode: str = "w+b") -> ContextManager[TextIO | IO[bytes]]:
+def open_path_with_atomic_rename(path: os.PathLike, *, mode: str = "w+b") -> AbstractContextManager[TextIO | IO[bytes]]:
     return _open_path_with_atomic_rename(path, mode=mode)
 
 

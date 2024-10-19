@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2022 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2022 Aiven Ltd
+See LICENSE for details.
 """
 
 from astacus.common import ipc, utils
@@ -60,7 +59,7 @@ async def test_step_start_cassandra(mocker: MockerFixture, override_tokens: bool
     )
 
     backup_manifest = ipc.BackupManifest(
-        start=datetime.datetime.now(),
+        start=datetime.datetime.now(tz=datetime.UTC),
         attempt=1,
         snapshot_results=[ipc.SnapshotResult()],
         upload_results=[],
@@ -157,7 +156,7 @@ class AsyncIterableWrapper:
         return self.data[self.index]
 
 
-@pytest.mark.parametrize("steps,success", [([True], True), ([False, True], True), ([False], False)])
+@pytest.mark.parametrize(("steps", "success"), [([True], True), ([False, True], True), ([False], False)])
 async def test_step_wait_cassandra_up(mocker: MockerFixture, steps: list[bool], success: bool) -> None:
     get_schema_steps = steps[:]
 
@@ -181,7 +180,7 @@ async def test_step_wait_cassandra_up(mocker: MockerFixture, steps: list[bool], 
 
 
 @pytest.mark.parametrize(
-    "replaced_node_step, expected_nodes", [(restore_steps.StopReplacedNodesStep, [_coordinator_node(2)]), (None, None)]
+    ("replaced_node_step", "expected_nodes"), [(restore_steps.StopReplacedNodesStep, [_coordinator_node(2)]), (None, None)]
 )
 async def test_stopped_nodes_for_wait_cassandra_up_step(
     replaced_node_step: type[restore_steps.StopReplacedNodesStep] | None,
@@ -212,7 +211,7 @@ def test_rewrite_datacenters() -> None:
         .with_cql_create_self(pre_rewrite_cql)
         .with_network_topology_strategy_dcs({"new_dc": "3"}),
     ]
-    restore_steps._rewrite_datacenters(keyspaces)  # pylint: disable=protected-access
+    restore_steps._rewrite_datacenters(keyspaces)
     unchanged_keyspace, rewritten_keyspace = keyspaces[0], keyspaces[1]
     assert unchanged_keyspace.cql_create_self == pre_rewrite_cql
     assert "'new_dc': '3'" in rewritten_keyspace.cql_create_self

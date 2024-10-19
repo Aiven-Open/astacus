@@ -1,7 +1,5 @@
-"""
-
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 
 astacus.common.progress tests
 
@@ -13,7 +11,7 @@ import pytest
 
 
 @pytest.mark.parametrize(
-    "old_value,new_value,total,exp",
+    ("old_value", "new_value", "total", "exp"),
     [
         (0, 1, None, True),
         (8, 9, None, True),

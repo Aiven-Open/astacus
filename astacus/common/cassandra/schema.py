@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2021 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2021 Aiven Ltd
+See LICENSE for details.
 
 Schema-related parts are based on basebackup_schema.py of Cashew
 
@@ -106,10 +105,9 @@ class CassandraFunction(CassandraNamed):
 
     @classmethod
     def get_create_statement(cls, metadata: cm.Function) -> str:
-        """
-        Based on Function.as_cql_query, but doesn't strip `frozen` from arguments as they need to be specified on restoration
+        """Based on Function.as_cql_query, but doesn't strip `frozen` from arguments as they need to be specified on restoration
         With default cassandra-driver the function fails to create with an error message like "Non-frozen UDTs are not
-        allowed inside collections: ..."
+        allowed inside collections: ...".
         """
         sep = " "
         keyspace = cm.protect_name(metadata.keyspace)
@@ -306,7 +304,7 @@ class CassandraSchema(AstacusModel):
 
     @classmethod
     def from_cassandra_session(cls, cas: CassandraSession) -> "CassandraSchema":
-        """Retrieve the schema using CassandraSession"""
+        """Retrieve the schema using CassandraSession."""
         # Cassandra driver updates the schema in the background. Right after connect it's possible the schema hasn't been
         # retrieved yet, and it appears to be empty. This call should block until the schema has been retrieved, and raise
         # an exception if the nodes aren't in sync
@@ -346,7 +344,6 @@ class CassandraSchema(AstacusModel):
         - restore_post_data is done after the restore_pre_data, and
           actual snapshot restoration + moving of files has been done
         """
-
         for keyspace in self.keyspaces:
             # These may be version dependant, and in general should be recreated
             # during restore (and-or other configuration applying)

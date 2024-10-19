@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 
 Common base classes for the plugins
 
@@ -16,10 +15,10 @@ from astacus.common.utils import AstacusModel
 from astacus.coordinator.cluster import Cluster, Result
 from astacus.coordinator.config import CoordinatorNode
 from astacus.coordinator.manifest import download_backup_manifest, download_backup_min_manifest
-from collections import Counter
+from collections import Counter, Counter as TCounter
 from collections.abc import Sequence, Set
 from starlette.concurrency import run_in_threadpool
-from typing import Any, Counter as TCounter, Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 import dataclasses
 import datetime
@@ -103,8 +102,7 @@ class StepsContext:
 
 @dataclasses.dataclass
 class SnapshotStep(Step[Sequence[ipc.SnapshotResult]]):
-    """
-    Request a snapshot of all files matching the `snapshot_root_globs`, on each nodes.
+    """Request a snapshot of all files matching the `snapshot_root_globs`, on each nodes.
 
     The snapshot for each file contains its path, size, modification time and hash,
     see `SnapshotFile` for details.
@@ -126,9 +124,7 @@ class SnapshotStep(Step[Sequence[ipc.SnapshotResult]]):
 
 @dataclasses.dataclass
 class ListHexdigestsStep(Step[Set[str]]):
-    """
-    Fetch the list of all files already present in object storage, identified by their hexdigest.
-    """
+    """Fetch the list of all files already present in object storage, identified by their hexdigest."""
 
     hexdigest_storage: AsyncHexDigestStorage
 
@@ -138,8 +134,7 @@ class ListHexdigestsStep(Step[Set[str]]):
 
 @dataclasses.dataclass
 class UploadBlocksStep(Step[Sequence[ipc.SnapshotUploadResult]]):
-    """
-    Upload to object storage all files that are not yet in that storage.
+    """Upload to object storage all files that are not yet in that storage.
 
     The list of files to upload comes from the snapshot taken on each node during
     the `SnapshotStep`, the list of files already uploaded come from the `ListHexdigestsStep`.
@@ -174,8 +169,7 @@ class UploadBlocksStep(Step[Sequence[ipc.SnapshotUploadResult]]):
 
 @dataclasses.dataclass
 class SnapshotClearStep(Step[Sequence[ipc.NodeResult]]):
-    """
-    Request to clear the source hierarchy of the snapshotter on all nodes.
+    """Request to clear the source hierarchy of the snapshotter on all nodes.
 
     Depending on the request, this can clear either the main snapshotter or the delta snapshotter.
     """
@@ -194,8 +188,7 @@ class SnapshotClearStep(Step[Sequence[ipc.NodeResult]]):
 
 @dataclasses.dataclass
 class SnapshotReleaseStep(Step[Sequence[ipc.NodeResult]]):
-    """
-    Request to release the files we don't need any more in the destination hierarchy.
+    """Request to release the files we don't need any more in the destination hierarchy.
 
     Allows to free some disk space before the next backup happens.
     """
@@ -224,8 +217,7 @@ class SnapshotReleaseStep(Step[Sequence[ipc.NodeResult]]):
 
 @dataclasses.dataclass
 class UploadManifestStep(Step[None]):
-    """
-    Store the backup manifest in the object storage.
+    """Store the backup manifest in the object storage.
 
     The backup manifest contains the snapshot from the `SnapshotStep` as well as the
     statistics collected by the `UploadBlocksStep` and the plugin manifest.
@@ -265,8 +257,7 @@ class UploadManifestStep(Step[None]):
 
 @dataclasses.dataclass
 class BackupNameStep(Step[str]):
-    """
-    Select the name of the backup to restore.
+    """Select the name of the backup to restore.
 
     If the backup name was not specified in the restore request, this will select the
     most recent backup available in object storage, and fail if there are no backup.
@@ -285,9 +276,7 @@ class BackupNameStep(Step[str]):
 
 @dataclasses.dataclass
 class BackupManifestStep(Step[ipc.BackupManifest]):
-    """
-    Download the backup manifest from object storage.
-    """
+    """Download the backup manifest from object storage."""
 
     json_storage: AsyncJsonStorage
 
@@ -299,9 +288,7 @@ class BackupManifestStep(Step[ipc.BackupManifest]):
 
 @dataclasses.dataclass
 class MapNodesStep(Step[Sequence[int | None]]):
-    """
-    Create an index mapping nodes from cluster configuration to nodes in the backup manifest.
-    """
+    """Create an index mapping nodes from cluster configuration to nodes in the backup manifest."""
 
     partial_restore_nodes: Sequence[ipc.PartialRestoreRequestNode] | None = None
 
@@ -324,9 +311,7 @@ class MapNodesStep(Step[Sequence[int | None]]):
 
 @dataclasses.dataclass
 class RestoreStep(Step[Sequence[ipc.NodeResult]]):
-    """
-    Request each node to download and restore all files listed in the backup manifest.
-    """
+    """Request each node to download and restore all files listed in the backup manifest."""
 
     storage_name: str
     partial_restore_nodes: Sequence[ipc.PartialRestoreRequestNode] | None = None
@@ -379,9 +364,7 @@ class RestoreStep(Step[Sequence[ipc.NodeResult]]):
 
 @dataclasses.dataclass
 class ListBackupsStep(Step[set[str]]):
-    """
-    List all available backups and return their name.
-    """
+    """List all available backups and return their name."""
 
     json_storage: AsyncJsonStorage
 
@@ -391,9 +374,7 @@ class ListBackupsStep(Step[set[str]]):
 
 @dataclasses.dataclass
 class ListDeltaBackupsStep(Step[set[str]]):
-    """
-    List all available delta backups and return their name.
-    """
+    """List all available delta backups and return their name."""
 
     json_storage: AsyncJsonStorage
 
@@ -403,8 +384,7 @@ class ListDeltaBackupsStep(Step[set[str]]):
 
 @dataclasses.dataclass
 class DeltaManifestsStep(Step[Sequence[ipc.BackupManifest]]):
-    """
-    Download and parse all delta manifests necessary for restore.
+    """Download and parse all delta manifests necessary for restore.
 
     Includes only the deltas created after the base backup selected for restore.
     Returns manifests sorted by start time.
@@ -430,9 +410,7 @@ class DeltaManifestsStep(Step[Sequence[ipc.BackupManifest]]):
 
 @dataclasses.dataclass
 class RestoreDeltasStep(Step[None]):
-    """
-    Restore the delta backups: download and apply to the node.
-    """
+    """Restore the delta backups: download and apply to the node."""
 
     json_storage: AsyncJsonStorage
     storage_name: str
@@ -589,8 +567,7 @@ def _prune_manifests(manifests: Sequence[ipc.ManifestMin], retention: Retention)
 
 @dataclasses.dataclass
 class ComputeKeptBackupsStep(Step[Sequence[ipc.ManifestMin]]):
-    """
-    Return a list of backup manifests we want to keep, after excluding the explicitly deleted
+    """Return a list of backup manifests we want to keep, after excluding the explicitly deleted
     backups and applying the retention rules.
     """
 
@@ -632,9 +609,7 @@ class ComputeKeptBackupsStep(Step[Sequence[ipc.ManifestMin]]):
 
 @dataclasses.dataclass
 class DeleteBackupManifestsStep(Step[set[str]]):
-    """
-    Delete all backup manifests that are not kept.
-    """
+    """Delete all backup manifests that are not kept."""
 
     json_storage: AsyncJsonStorage
 
@@ -659,9 +634,7 @@ class DeleteBackupAndDeltaManifestsStep(DeleteBackupManifestsStep):
 
 @dataclasses.dataclass
 class DeleteDanglingHexdigestsStep(Step[None]):
-    """
-    Delete all hexdigests that are not referenced by backup manifests.
-    """
+    """Delete all hexdigests that are not referenced by backup manifests."""
 
     hexdigest_storage: AsyncHexDigestStorage
     json_storage: AsyncJsonStorage

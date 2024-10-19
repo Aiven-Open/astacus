@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 
 Test astacus.common.utils
 
@@ -106,7 +105,7 @@ async def test_exponential_backoff(mocker: MockerFixture) -> None:
 
 
 @pytest.mark.parametrize(
-    "v,s",
+    ("v", "s"),
     [
         (timedelta(days=1, seconds=1), "1d 1s"),
         (timedelta(hours=3, minutes=2, seconds=1), "3h 2m 1s"),
@@ -118,7 +117,7 @@ def test_timedelta_as_short_str(v: timedelta, s: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "v,s",
+    ("v", "s"),
     [
         (1_234_567_901_234_678, "1234.6 TB"),
         (1_234_567_901_234, "1.2 TB"),
