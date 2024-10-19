@@ -1,5 +1,5 @@
 """Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+See LICENSE for details.
 
 m3db backup/restore plugin
 

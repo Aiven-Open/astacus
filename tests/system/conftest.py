@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 """
 
 from _pytest.config import Config
@@ -57,7 +56,7 @@ async def background_process(program: str | Path, *args: str | Path, **kwargs) -
     finally:
         try:
             await asyncio.wait_for(proc.wait(), 0.1)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             try:
                 proc.terminate()
             except:
@@ -68,7 +67,7 @@ async def background_process(program: str | Path, *args: str | Path, **kwargs) -
                 try:
                     await asyncio.wait_for(proc.wait(), 3)
                     break
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     try:
                         proc.kill()
                     except:

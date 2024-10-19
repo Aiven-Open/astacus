@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 
 It is responsible for setting up the FastAPI app, with the sub-routers
 mapped ( coordinator + node) and configured (by loading configuration

@@ -1,14 +1,12 @@
-"""
-
-Copyright (c) 2023 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2023 Aiven Ltd
+See LICENSE for details.
 
 """
 
 from abc import ABC, abstractmethod
 from astacus.common.ipc import SnapshotFile, SnapshotHash
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 import threading
 

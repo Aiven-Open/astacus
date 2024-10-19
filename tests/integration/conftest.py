@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2022 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2022 Aiven Ltd
+See LICENSE for details.
 """
 
 from astacus.common.utils import build_netloc
@@ -87,7 +86,7 @@ async def run_process_and_wait_for_pattern(
         try:
             try:
                 await asyncio.wait_for(pattern_found.wait(), timeout=timeout)
-            except asyncio.TimeoutError as e:
+            except TimeoutError as e:
                 raise PatternNotFoundError(
                     f"Pattern {pattern!r} not found after {timeout:.3f}s in output of {str_args}"
                 ) from e
@@ -129,7 +128,7 @@ def port_is_listening(hostname: str, port: int, timeout: float = 0.5) -> bool:
         connection = socket.create_connection((hostname, port), timeout)
         connection.close()
         return True
-    except socket.error:
+    except OSError:
         return False
 
 

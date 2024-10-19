@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2022 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2022 Aiven Ltd
+See LICENSE for details.
 """
 
 from .client import ClickHouseClient, escape_sql_identifier, unescape_sql_string
@@ -111,8 +110,7 @@ async def get_shard_and_replica(clickhouse_client: ClickHouseClient, database_na
 def get_databases_replicas(
     replicated_databases: Sequence[ReplicatedDatabase], servers_macros: Sequence[Macros]
 ) -> Mapping[bytes, Sequence[DatabaseReplica]]:
-    """
-    Get the list of replicas for each database.
+    """Get the list of replicas for each database.
 
     This applies macro substitution, using the macro values of each server, to the
     `shard` and `replica` values of each `ReplicatedDatabase`.

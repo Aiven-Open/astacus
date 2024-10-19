@@ -1,7 +1,5 @@
-"""
-
-Copyright (c) 2021 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2021 Aiven Ltd
+See LICENSE for details.
 """
 
 from astacus.common import ipc, utils
@@ -220,7 +218,7 @@ async def test_compute_kept_backups(
         explicit_delete=[],
     )
     context.set_result(ListBackupsStep, set(await async_json_storage.list_jsons()))
-    half_a_day_after_last_backup = datetime.datetime(2020, 1, 7, 5, 0, tzinfo=datetime.timezone.utc)
+    half_a_day_after_last_backup = datetime.datetime(2020, 1, 7, 5, 0, tzinfo=datetime.UTC)
     with mock.patch.object(utils, "now", lambda: half_a_day_after_last_backup):
         result = await step.run_step(cluster=single_node_cluster, context=context)
     assert {b.filename for b in result} == kept_backups
@@ -379,7 +377,7 @@ async def test_upload_manifest_step_generates_correct_backup_name(
     single_node_cluster: Cluster,
     context: StepsContext,
 ) -> None:
-    context.attempt_start = datetime.datetime(2020, 1, 7, 5, 0, tzinfo=datetime.timezone.utc)
+    context.attempt_start = datetime.datetime(2020, 1, 7, 5, 0, tzinfo=datetime.UTC)
     context.set_result(SnapshotStep, [DefaultedSnapshotResult()])
     context.set_result(UploadBlocksStep, [ipc.SnapshotUploadResult()])
     async_json_storage = AsyncJsonStorage(storage=MemoryJsonStorage(items={}))

@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2021 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2021 Aiven Ltd
+See LICENSE for details.
 """
 
 from astacus.coordinator.plugins.clickhouse.manifest import (
@@ -156,7 +155,7 @@ def test_clickhouse_table_attributes(engine: str, is_replicated: bool, requires_
 
 def test_table_escaped_identifier() -> None:
     table = Table(
-        database="débé".encode(), name="na`me".encode(), uuid=uuid.UUID(int=0), engine="DontCare", create_query=b""
+        database="débé".encode(), name=b"na`me", uuid=uuid.UUID(int=0), engine="DontCare", create_query=b""
     )
     assert table.escaped_sql_identifier == "`d\\xc3\\xa9b\\xc3\\xa9`.`na\\`me`"
 

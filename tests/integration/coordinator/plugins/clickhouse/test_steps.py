@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2021 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2021 Aiven Ltd
+See LICENSE for details.
 """
 
 from .conftest import ClickHouseCommand, create_clickhouse_cluster, get_clickhouse_client, MinioBucket
@@ -86,7 +85,7 @@ async def test_retrieve_tables(ports: Ports, clickhouse_command: ClickHouseComma
                 ),
             ]
             zookeeper_path = (
-                f"/clickhouse/tables/{str(table_uuid)}/{{my_shard}}"
+                f"/clickhouse/tables/{table_uuid!s}/{{my_shard}}"
                 if clickhouse_cluster.expands_uuid_in_zookeeper_path
                 else "/clickhouse/tables/{uuid}/{my_shard}"
             )
@@ -97,7 +96,7 @@ async def test_retrieve_tables(ports: Ports, clickhouse_command: ClickHouseComma
                     engine="ReplicatedMergeTree",
                     uuid=table_uuid,
                     create_query=(
-                        f"CREATE TABLE `has_tablés`.`tablé_1` UUID '{str(table_uuid)}' (`thekey` UInt32) "
+                        f"CREATE TABLE `has_tablés`.`tablé_1` UUID '{table_uuid!s}' (`thekey` UInt32) "
                         f"ENGINE = "
                         f"ReplicatedMergeTree('{zookeeper_path}', '{{my_replica}}') "
                         f"ORDER BY thekey SETTINGS index_granularity = 8192"

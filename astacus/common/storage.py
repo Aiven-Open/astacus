@@ -1,16 +1,14 @@
-"""
-
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 
 """
 
 from .exceptions import NotFoundException
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from rohmu.typing import FileLike
-from typing import BinaryIO, Callable, ContextManager, ParamSpec, TypeAlias, TypeVar
+from typing import BinaryIO, ContextManager, ParamSpec, TypeAlias, TypeVar
 
 import contextlib
 import io
@@ -104,7 +102,7 @@ class Storage(HexDigestStorage, JsonStorage, ABC):
 
 
 def file_error_wrapper(fun: Callable[P, T]) -> Callable[P, T]:
-    """Wrap rohmu exceptions in astacus ones; to be seen what is complete set"""
+    """Wrap rohmu exceptions in astacus ones; to be seen what is complete set."""
 
     def _f(*a: P.args, **kw: P.kwargs) -> T:
         try:
@@ -116,7 +114,7 @@ def file_error_wrapper(fun: Callable[P, T]) -> Callable[P, T]:
 
 
 class FileStorage(Storage):
-    """Implementation of the storage API, which just handles files - primarily useful for testing"""
+    """Implementation of the storage API, which just handles files - primarily useful for testing."""
 
     def __init__(self, path: str | Path, *, hexdigest_suffix: str = ".dat", json_suffix: str = ".json") -> None:
         self.path = Path(path)

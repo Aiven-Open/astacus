@@ -1,11 +1,10 @@
-"""
-Copyright (c) 2021 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2021 Aiven Ltd
+See LICENSE for details.
 """
 
 from astacus.coordinator.plugins.clickhouse.manifest import AccessEntity, Table
-from collections.abc import Hashable, Sequence
-from typing import Callable, TypeVar
+from collections.abc import Callable, Hashable, Sequence
+from typing import TypeVar
 
 # noinspection PyCompatibility
 import graphlib
@@ -22,9 +21,7 @@ def sort_topologically(
     get_dependencies: Callable[[Node], Sequence[NodeKey]] = lambda x: [],
     get_dependants: Callable[[Node], Sequence[NodeKey]] = lambda x: [],
 ) -> list[Node]:
-    """
-    Sort elements topologically based on their dependencies.
-    """
+    """Sort elements topologically based on their dependencies."""
     sorter = graphlib.TopologicalSorter()  # type: ignore
     for element in nodes:
         element_key = get_key(element)
@@ -38,8 +35,7 @@ def sort_topologically(
 
 
 def tables_sorted_by_dependencies(tables: Sequence[Table]) -> Sequence[Table]:
-    """
-    Takes a list of `(database_name: str, table: Table)` and returns a new list,
+    """Takes a list of `(database_name: str, table: Table)` and returns a new list,
     sorted in a valid order to create each table sequentially.
 
     This order is required because tables can depend on each other, for example
@@ -54,8 +50,7 @@ def tables_sorted_by_dependencies(tables: Sequence[Table]) -> Sequence[Table]:
 
 
 def access_entities_sorted_by_dependencies(access_entities: Sequence[AccessEntity]) -> Sequence[AccessEntity]:
-    """
-    Takes a list of `AccessEntity` and returns a new list, sorted in a valid order to
+    """Takes a list of `AccessEntity` and returns a new list, sorted in a valid order to
     create each entity sequentially.
 
     This order is required because entities can depend on each other. Most of them could

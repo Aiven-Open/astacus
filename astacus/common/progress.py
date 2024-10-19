@@ -1,7 +1,5 @@
-"""
-
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 
 """
 
@@ -20,7 +18,7 @@ _log_1_1 = math.log(1.1)
 def increase_worth_reporting(value: int, new_value: int | None = None, *, total: int | None = None):
     """Make reporting sparser and sparser as values grow larger
     - report every 1.1**N or so
-    - if we know total, report every percent
+    - if we know total, report every percent.
     """
     if new_value is None:
         new_value = value
@@ -42,7 +40,7 @@ T = TypeVar("T")
 
 
 class Progress(msgspec.Struct, kw_only=True):
-    """JSON-encodable progress meter of sorts"""
+    """JSON-encodable progress meter of sorts."""
 
     handled: int = 0
     failed: int = 0
@@ -68,7 +66,7 @@ class Progress(msgspec.Struct, kw_only=True):
         return None
 
     def start(self, n) -> None:
-        "Optional 'first' step, just for logic handling state (e.g. no progress object reuse desired)"
+        """Optional 'first' step, just for logic handling state (e.g. no progress object reuse desired)."""
         assert not self.total
         logger.info("start")
         self.add_total(n)

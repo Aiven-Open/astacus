@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 """
 
 from .plugins.base import CoordinatorPlugin, OperationContext, Step, StepFailedError, StepsContext

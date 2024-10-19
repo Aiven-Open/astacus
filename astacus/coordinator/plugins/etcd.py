@@ -1,7 +1,5 @@
-"""
-
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 
 ETCD backup/restore base; while in theory someone might want to backup
 etcd in isolation, this isn't really the tool for it.

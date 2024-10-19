@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2021 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2021 Aiven Ltd
+See LICENSE for details.
 """
 
 from _pytest.fixtures import FixtureRequest
@@ -405,7 +404,7 @@ def create_clickhouse_configs(
     return [
         f"""
                 <clickhouse>
-                    <path>{str(data_dir)}</path>
+                    <path>{data_dir!s}</path>
                     <logger>
                         <level>debug</level>
                         <console>true</console>
@@ -447,7 +446,7 @@ def create_clickhouse_configs(
                     {setting("enable_system_unfreeze", "true")}
                     <user_directories>
                         <users_xml>
-                            <path>{str(data_dir / "users.xml")}</path>
+                            <path>{data_dir / "users.xml"!s}</path>
                         </users_xml>
                         <replicated>
                             <zookeeper_path>/clickhouse/access/</zookeeper_path>

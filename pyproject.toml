@@ -95,7 +95,6 @@ dev = [
     # Needed by pre-commit to lint and test the project
     "pre-commit>=3.7.0",
     "anyio==3.5.0",
-    "pylint==3.0.4",
     "pytest-cov==3.0.0",
     "pytest-mock==3.10.0",
     "pytest-order==1.0.0",
@@ -103,6 +102,7 @@ dev = [
     "pytest-watch==4.2.0",
     "pytest==7.2.2",
     "mypy==1.11.2",
+    "ruff>=0.7.0",
     # Types for things that don't seem to have them
     "types-botocore>=1.0.2",
     "types-PyYAML>=6.0.12.2",
@@ -188,7 +188,7 @@ disallow_incomplete_defs = true
 disallow_untyped_defs = true
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 line-length = 125
 force-exclude = true
 

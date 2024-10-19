@@ -1,6 +1,4 @@
-"""
-
-utils
+"""utils.
 
 Copyright (c) 2020 Aiven Ltd
 See LICENSE for details
@@ -71,7 +69,7 @@ class AstacusModel(BaseModel):
 
 
 def get_or_create_state(*, state: object, key: str, factory: Callable[[], Any]) -> Any:
-    """Get or create sub-state entry (using factory callback)"""
+    """Get or create sub-state entry (using factory callback)."""
     value = getattr(state, key, None)
     if value is None:
         value = factory()
@@ -225,7 +223,7 @@ def exponential_backoff(
     duration: float | None = None,
     async_sleeper: AsyncSleeper | None = None,
 ) -> AnyIterable[int]:
-    """Exponential backoff iterator which works with both 'for' and 'async for'
+    """Exponential backoff iterator which works with both 'for' and 'async for'.
 
     First attempt is never delayed. The delays are only for retries.
     'initial' is the first retry's delay. After that, each retry is
@@ -346,7 +344,7 @@ def parallel_map_to(*, fun, iterable, result_callback, n=None) -> bool:
 
 
 def now():
-    return datetime.datetime.now(datetime.timezone.utc)
+    return datetime.datetime.now(datetime.UTC)
 
 
 def monotonic_time():

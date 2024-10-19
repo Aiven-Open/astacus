@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2021 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2021 Aiven Ltd
+See LICENSE for details.
 """
 
 from astacus.common.ipc import SnapshotFile, SnapshotResult, SnapshotState
@@ -22,7 +21,7 @@ def create_part_files(*, table_uuid: UUID, part_name: str, digest_seed: str) -> 
     uuid_head = str(table_uuid)[:3]
     return [
         SnapshotFile(
-            relative_path=f"store/{uuid_head}/{str(table_uuid)}/detached/{part_name}/{filename}",
+            relative_path=f"store/{uuid_head}/{table_uuid!s}/detached/{part_name}/{filename}",
             file_size=file_size,
             mtime_ns=0,
             hexdigest=hashlib.sha256(f"{digest_seed}-{part_name}-{filename}".encode()).hexdigest(),
@@ -41,7 +40,7 @@ def create_part_from_part_files(snapshot_files: Sequence[SnapshotFile]) -> Part:
     )
 
 
-T1_UUID, T2_UUID, T3_UUID = [UUID(int=i) for i in range(1, 4)]
+T1_UUID, T2_UUID, T3_UUID = (UUID(int=i) for i in range(1, 4))
 TABLE_1_PART_1 = create_part_files(table_uuid=T1_UUID, part_name="all_0_0_0", digest_seed="same")
 TABLE_1_PART_2 = create_part_files(table_uuid=T1_UUID, part_name="all_1_1_0", digest_seed="same")
 TABLE_1_PART_3 = create_part_files(table_uuid=T1_UUID, part_name="all_2_2_0", digest_seed="same")

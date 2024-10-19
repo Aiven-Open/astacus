@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2021 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2021 Aiven Ltd
+See LICENSE for details.
 """
 
 from astacus.common.utils import AstacusModel
@@ -15,8 +14,7 @@ import uuid
 
 
 class AccessEntity(AstacusModel):
-    """
-    An access entity can be a user, a role, a quota, etc.
+    """An access entity can be a user, a role, a quota, etc.
     See `RetrieveAccessEntitiesStep` for more info.
     """
 

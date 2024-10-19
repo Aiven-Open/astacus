@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 """
 
 from .clear import ClearOp
@@ -30,7 +29,7 @@ READONLY_SUBOPS = {
 
 
 class OpName(StrEnum):
-    """(Long-running) operations defined in this API (for node)"""
+    """(Long-running) operations defined in this API (for node)."""
 
     cassandra = "cassandra"
     clear = "clear"

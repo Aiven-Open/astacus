@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 
 Utility class for background operations.
 
@@ -88,9 +87,8 @@ class OpState:
 
 
 class OpMixin:
-    """
-    Convenience mixin which provides for both asynchronous as well as
-    synchronous op starting functionality, and active job querying
+    """Convenience mixin which provides for both asynchronous as well as
+    synchronous op starting functionality, and active job querying.
     """
 
     state: OpState

@@ -1,7 +1,5 @@
-"""
-
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 
 Rohmu-specific actual object storage implementation
 
@@ -103,7 +101,7 @@ class RohmuMetadata(RohmuModel):
 
 
 def rohmu_error_wrapper(fun):
-    """Wrap rohmu exceptions in astacus ones; to be seen what is complete set"""
+    """Wrap rohmu exceptions in astacus ones; to be seen what is complete set."""
 
     def _f(*a, **kw):
         try:
