@@ -25,27 +25,6 @@ repos:
         files: \.py$
         exclude: ^vendor/
 
-  - repo: https://github.com/pycqa/flake8
-    rev: 7.1.1
-    hooks:
-      - id: flake8
-        files: \.py$
-        args:
-          - --config=.flake8
-
-  # https://pre-commit.com/#repository-local-hooks
-  - repo: local
-    hooks:
-      - id: pylint
-        name: pylint
-        entry: pylint
-        language: system
-        types: [python]
-        files: \.py$
-        exclude: ^vendor/
-        args:
-          - --rcfile=.pylintrc
-
   - repo: local
     hooks:
       - id: mypy
