@@ -121,7 +121,7 @@ class OpMixin:
             except asyncio.CancelledError:
                 with contextlib.suppress(ExpiredOperationException):
                     op.set_status_fail()
-            except Exception as ex:  # pylint: disable=broad-except
+            except Exception as ex:
                 logger.warning("Unexpected exception during async %s %s %r", op, fun, ex)
                 with contextlib.suppress(ExpiredOperationException):
                     op.set_status_fail()
@@ -134,7 +134,7 @@ class OpMixin:
                 op.set_status(Op.Status.done, from_status=Op.Status.running)
             except ExpiredOperationException:
                 pass
-            except Exception as ex:  # pylint: disable=broad-except
+            except Exception as ex:
                 logger.warning("Unexpected exception during sync %s %s %r", op, fun, ex)
                 with contextlib.suppress(ExpiredOperationException):
                     op.set_status_fail()

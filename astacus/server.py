@@ -53,9 +53,9 @@ def init_app():
     gconfig = config.set_global_config_from_path(api, config_path)
     sentry_dsn = os.environ.get("SENTRY_DSN", gconfig.sentry_dsn)
     if sentry_dsn:
-        sentry_sdk.init(dsn=sentry_dsn)  # pylint: disable=abstract-class-instantiated
+        sentry_sdk.init(dsn=sentry_dsn)
         api.add_middleware(SentryAsgiMiddleware)
-    global app  # pylint: disable=global-statement
+    global app
     app = api
     return api
 
@@ -68,7 +68,7 @@ def _systemd_notify_ready():
     if not os.environ.get("NOTIFY_SOCKET"):
         return
     try:
-        from systemd import daemon  # pylint: disable=no-name-in-module,disable=import-outside-toplevel
+        from systemd import daemon
 
         daemon.notify("READY=1")
     except ImportError:

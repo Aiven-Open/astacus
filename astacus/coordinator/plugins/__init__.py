@@ -3,8 +3,6 @@ from astacus.common.ipc import Plugin
 
 
 def get_plugin(plugin: Plugin) -> type[CoordinatorPlugin]:
-    # pylint: disable=import-outside-toplevel
-
     if plugin == Plugin.cassandra:
         from .cassandra.plugin import CassandraPlugin
 

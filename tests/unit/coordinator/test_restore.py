@@ -71,7 +71,6 @@ class RestoreTest:
     ],
 )
 def test_restore(rt: RestoreTest, app: FastAPI, client: TestClient, tmp_path: Path) -> None:
-    # pylint: disable=too-many-statements
     # Create fake backup (not pretty but sufficient?)
     storage_factory = StorageFactory(
         storage_config=app.state.coordinator_config.object_storage,

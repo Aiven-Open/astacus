@@ -51,7 +51,7 @@ async def test_opmixin_start_op(
         else:
             mixin.start_op(op=op_obj, op_name="dummy", fun=_sync)
         await mixin.background_tasks()
-    except Exception as ex:  # pylint: disable=broad-except
+    except Exception as ex:
         assert expect_ex
         assert isinstance(ex, expect_ex)
     assert op_obj.info.op_status == expect_status

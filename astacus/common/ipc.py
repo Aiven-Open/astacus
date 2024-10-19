@@ -17,7 +17,6 @@ import msgspec
 import socket
 
 # pydantic validators are class methods in disguise
-# pylint: disable=no-self-argument
 
 
 # These are the database plugins we support; list is intentionally

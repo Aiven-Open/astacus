@@ -9,8 +9,6 @@ from pytest_mock import MockerFixture
 
 import pytest
 
-# pylint: disable=protected-access
-
 
 def test_schema(mocker: MockerFixture) -> None:
     cut = schema.CassandraUserType(name="cut", cql_create_self="CREATE-USER-TYPE", field_types=["type1", "type2"])

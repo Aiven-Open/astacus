@@ -79,7 +79,7 @@ def pytest_fixture_setup(fixturedef: FixtureDef) -> None:
 def pytest_pycollect_makeitem(collector: PyCollector, name: str, obj: Any) -> list[Function] | None:
     """Auto-add a "loop" fixture to all async test functions."""
     if collector.funcnamefilter(name) and asyncio.iscoroutinefunction(obj):
-        functions = list(collector._genfunctions(name, obj))  # pylint: disable=protected-access
+        functions = list(collector._genfunctions(name, obj))
         for function in functions:
             if "loop" not in function.fixturenames:
                 function.fixturenames.append("loop")
@@ -91,7 +91,7 @@ def pytest_pyfunc_call(pyfuncitem: Function) -> bool | None:
     """Run coroutines in an event loop instead of a normal function call."""
     if asyncio.iscoroutinefunction(pyfuncitem.function):
         with _runtime_warning_context():
-            fixture_info = pyfuncitem._fixtureinfo  # pylint: disable=protected-access
+            fixture_info = pyfuncitem._fixtureinfo
             test_args = {arg: pyfuncitem.funcargs[arg] for arg in fixture_info.argnames}
             loop = cast(asyncio.AbstractEventLoop, pyfuncitem.funcargs["loop"])
             loop.run_until_complete(pyfuncitem.obj(**test_args))
@@ -161,7 +161,7 @@ def pytest_collection_modifyitems(session: pytest.Session, config: Config, items
 
 def get_scope_identifiers(item: pytest.Function) -> Iterator[Sequence[str]]:
     """Enumerate all scopes of all the async fixtures required for a test function."""
-    fixture_info = item._fixtureinfo  # pylint: disable=protected-access
+    fixture_info = item._fixtureinfo
     for fixture_name in fixture_info.initialnames:
         if fixture_name == "request":
             continue
@@ -185,7 +185,7 @@ def get_scope_identifiers(item: pytest.Function) -> Iterator[Sequence[str]]:
 
 def get_loop(request: SubRequest) -> Iterator[asyncio.AbstractEventLoop]:
     """Create a new async loop or reuse one from the outermost async scope."""
-    tested_function_request = request._pyfuncitem._request  # pylint: disable=protected-access
+    tested_function_request = request._pyfuncitem._request
     async_scopes = tested_function_request.node.async_scope.connected_scopes
     for scope in FIXTURE_SCOPES:
         if scope == request.scope:

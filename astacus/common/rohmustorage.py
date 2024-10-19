@@ -108,7 +108,7 @@ def rohmu_error_wrapper(fun):
             return fun(*a, **kw)
         except errors.FileNotFoundFromStorageError as ex:
             raise exceptions.NotFoundException from ex
-        except Exception as ex:  # pylint: disable=broad-except
+        except Exception as ex:
             raise exceptions.RohmuException from ex
 
     return _f

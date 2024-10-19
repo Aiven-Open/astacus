@@ -85,7 +85,7 @@ from tests.unit.coordinator.plugins.clickhouse.object_storage import MemoryObjec
 from tests.unit.storage import MemoryJsonStorage
 from typing import Any
 from unittest import mock
-from unittest.mock import _Call as MockCall, patch  # pylint: disable=protected-access
+from unittest.mock import _Call as MockCall, patch
 
 import asyncio
 import base64

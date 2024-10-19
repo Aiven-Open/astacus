@@ -49,7 +49,6 @@ DEFAULT_PLUGIN_CONFIG = {
 
 @asynccontextmanager
 async def background_process(program: str | Path, *args: str | Path, **kwargs) -> AsyncIterator[asyncio.subprocess.Process]:
-    # pylint: disable=bare-except
     proc = await asyncio.create_subprocess_exec(program, *args, **kwargs)
     try:
         yield proc

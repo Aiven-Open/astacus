@@ -211,7 +211,7 @@ def test_rewrite_datacenters() -> None:
         .with_cql_create_self(pre_rewrite_cql)
         .with_network_topology_strategy_dcs({"new_dc": "3"}),
     ]
-    restore_steps._rewrite_datacenters(keyspaces)  # pylint: disable=protected-access
+    restore_steps._rewrite_datacenters(keyspaces)
     unchanged_keyspace, rewritten_keyspace = keyspaces[0], keyspaces[1]
     assert unchanged_keyspace.cql_create_self == pre_rewrite_cql
     assert "'new_dc': '3'" in rewritten_keyspace.cql_create_self

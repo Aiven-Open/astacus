@@ -95,7 +95,6 @@ class JsonStorage(ABC):
 
 
 class Storage(HexDigestStorage, JsonStorage, ABC):
-    # pylint: disable=abstract-method
     # This is abstract class which has whatever APIs necessary. Due to that,
     # it is expected not to implement the abstract methods.
     @abstractmethod
