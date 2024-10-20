@@ -21,7 +21,6 @@ BuildRequires:  snappy-devel
 BuildRequires:  which
 
 # These are used when actually running the package
-Requires:       python3-fastapi
 Requires:       python3-httpx
 Requires:       python3-protobuf
 Requires:       python3-pyyaml

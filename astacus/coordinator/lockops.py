@@ -11,11 +11,10 @@ about API design testing)
 
 from .cluster import LockResult
 from .coordinator import Coordinator, CoordinatorOp
-from fastapi import Depends
 
 
 class LockOps(CoordinatorOp):
-    def __init__(self, *, c: Coordinator = Depends(), locker: str, ttl: int = 60):
+    def __init__(self, *, c: Coordinator, locker: str, ttl: int = 60):
         super().__init__(c=c)
         self.locker = locker
         self.ttl = ttl

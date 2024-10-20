@@ -1,7 +1,7 @@
 [MESSAGES CONTROL]
 disable=
     duplicate-code,                          # the checker in 2.9.6 fails with parallelism
-    invalid-name,                            # fastapi conventions break this
+    invalid-name,                            # fastapi / starlette conventions break this
     missing-docstring,
     no-member,                               # broken with pydantic + inheritance
     too-few-public-methods,                  # some pydantic models have 0 and it is fine

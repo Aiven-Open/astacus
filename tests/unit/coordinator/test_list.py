@@ -23,9 +23,9 @@ from astacus.coordinator import api
 from astacus.coordinator.api import get_cache_entries_from_list_response
 from astacus.coordinator.list import compute_deduplicated_snapshot_file_stats, list_backups
 from astacus.coordinator.storage_factory import StorageFactory
-from fastapi.testclient import TestClient
 from pathlib import Path
 from pytest_mock import MockerFixture
+from starlette.testclient import TestClient
 from tests.utils import create_rohmu_config
 from unittest import mock
 

@@ -8,7 +8,6 @@ Database cleanup operation
 
 from astacus.common import ipc
 from astacus.coordinator.coordinator import Coordinator, SteppedCoordinatorOp
-from fastapi import Depends
 
 import logging
 
@@ -17,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 class CleanupOp(SteppedCoordinatorOp):
     @staticmethod
-    async def create(*, c: Coordinator = Depends(), req: ipc.CleanupRequest = ipc.CleanupRequest()) -> "CleanupOp":
+    async def create(*, c: Coordinator, req: ipc.CleanupRequest = ipc.CleanupRequest()) -> "CleanupOp":
         return CleanupOp(c=c, req=req)
 
     def __init__(self, *, c: Coordinator, req: ipc.CleanupRequest) -> None:
