@@ -180,6 +180,35 @@ class RetrieveUserDefinedFunctionsStep(Step[Sequence[UserDefinedFunction]]):
 
 
 @dataclasses.dataclass
+class KeeperMapTablesReadOnlyStep(Step[None]):
+    clients: Sequence[ClickHouseClient]
+    allow_writes: bool
+
+    @staticmethod
+    def get_revoke_statement(table: Table, escaped_user_name: str) -> bytes:
+        return f"REVOKE INSERT, UPDATE, DELETE ON {table.escaped_sql_identifier} FROM {escaped_user_name}".encode()
+
+    @staticmethod
+    def get_grant_statement(table: Table, escaped_user_name: str) -> bytes:
+        return f"GRANT INSERT, UPDATE, DELETE ON {table.escaped_sql_identifier} TO {escaped_user_name}".encode()
+
+    async def run_step(self, cluster: Cluster, context: StepsContext):
+        _, tables = context.get_result(RetrieveDatabasesAndTablesStep)
+        replicated_users_response = await self.clients[0].execute(
+            b"SELECT base64Encode(name) FROM system.users WHERE storage = 'replicated' ORDER BY name"
+        )
+        replicated_users_names = [b64decode(cast(str, user[0])) for user in replicated_users_response]
+        keeper_map_table_names = [table for table in tables if table.engine == "KeeperMap"]
+        privilege_altering_fun = self.get_grant_statement if self.allow_writes else self.get_revoke_statement
+        statements = [
+            privilege_altering_fun(table, escape_sql_identifier(user))
+            for table in keeper_map_table_names
+            for user in replicated_users_names
+        ]
+        await asyncio.gather(*(self.clients[0].execute(statement) for statement in statements))
+
+
+@dataclasses.dataclass
 class RetrieveKeeperMapTableDataStep(Step[Sequence[KeeperMapTable]]):
     zookeeper_client: ZooKeeperClient
     keeper_map_path_prefix: str | None

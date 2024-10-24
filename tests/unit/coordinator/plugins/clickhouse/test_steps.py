@@ -15,7 +15,7 @@ from astacus.coordinator.plugins.base import (
     StepFailedError,
     StepsContext,
 )
-from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, StubClickHouseClient
+from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, Row, StubClickHouseClient
 from astacus.coordinator.plugins.clickhouse.config import (
     ClickHouseConfiguration,
     ClickHouseNode,
@@ -52,6 +52,7 @@ from astacus.coordinator.plugins.clickhouse.steps import (
     FreezeUnfreezeTablesStepBase,
     get_restore_table_query,
     GetVersionsStep,
+    KeeperMapTablesReadOnlyStep,
     ListDatabaseReplicasStep,
     MoveFrozenPartsStep,
     PrepareClickHouseManifestStep,
@@ -1273,6 +1274,60 @@ async def test_restore_keeper_map_table_data_step() -> None:
             b"SELECT count(*) FROM system.zookeeper WHERE path = '/clickhouse/keeper_map_table/name2/data' AND name = 'key3'"
         ),
     ]
+
+
+@pytest.mark.parametrize(
+    ("allow_writes", "expected_statements"),
+    [
+        (
+            False,
+            [
+                b"SELECT base64Encode(name) FROM system.users WHERE storage = 'replicated' ORDER BY name",
+                b"REVOKE INSERT, ALTER UPDATE, ALTER DELETE ON `db-two`.`table-keeper` FROM `alice`",
+                b"SELECT count() FROM grants WHERE user_name='alice' AND database='db-two' AND table='table-keeper' AND access_type IN ('INSERT', 'ALTER UPDATE', 'ALTER DELETE')",
+            ],
+        ),
+        (
+            True,
+            [
+                b"SELECT base64Encode(name) FROM system.users WHERE storage = 'replicated' ORDER BY name",
+                b"GRANT INSERT, ALTER UPDATE, ALTER DELETE ON `db-two`.`table-keeper` TO `alice`",
+                b"SELECT count() FROM grants WHERE user_name='alice' AND database='db-two' AND table='table-keeper' AND access_type IN ('INSERT', 'ALTER UPDATE', 'ALTER DELETE')",
+            ],
+        ),
+    ],
+    ids=["read-only", "read-write"],
+)
+async def test_keeper_map_table_select_only_setting_modified(allow_writes: bool, expected_statements: list[bytes]) -> None:
+    clickhouse_client = mock_clickhouse_client()
+
+    def execute_side_effect(statement: bytes) -> list[Row]:
+        if statement == b"SELECT base64Encode(name) FROM system.users WHERE storage = 'replicated' ORDER BY name":
+            return [[base64.b64encode(b"alice").decode()]]
+        elif (
+            statement
+            == b"SELECT count() FROM grants WHERE user_name='alice' AND database='db-two' AND table='table-keeper' AND access_type IN ('INSERT', 'ALTER UPDATE', 'ALTER DELETE')"
+        ):
+            num_expected_grants = 3 if allow_writes else 0
+            return [[num_expected_grants]]
+        return []
+
+    clickhouse_client.execute.side_effect = execute_side_effect
+    context = StepsContext()
+    sample_tables = SAMPLE_TABLES + [
+        Table(
+            database=b"db-two",
+            name=b"table-keeper",
+            uuid=uuid.UUID("00000000-0000-0000-0000-200000000008"),
+            engine="KeeperMap",
+            create_query=b"CREATE TABLE db-two.table-keeper ...",
+        ),
+    ]
+    context.set_result(RetrieveDatabasesAndTablesStep, (SAMPLE_DATABASES, sample_tables))
+    step = KeeperMapTablesReadOnlyStep(clients=[clickhouse_client], allow_writes=allow_writes)
+    await step.run_step(Cluster(nodes=[]), context)
+    mock_calls = clickhouse_client.mock_calls
+    assert mock_calls == [mock.call.execute(statement) for statement in expected_statements]
 
 
 async def test_attaches_all_mergetree_parts_in_manifest() -> None:
