@@ -1,7 +1,5 @@
-"""
-
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 
 M3 placement handling code
 
@@ -55,7 +53,7 @@ class M3PlacementNodeReplacement(AstacusModel):
 def rewrite_single_m3_placement_node(
     placement, *, src_pnode: M3PlacementNode, dst_pnode: M3PlacementNode, dst_isolation_group=""
 ):
-    """rewrite single m3 placement entry in-place in protobuf
+    """Rewrite single m3 placement entry in-place in protobuf.
 
     Relevant places ( see m3db
     src/cluster/generated/proto/placementpb/placement.proto which is
@@ -85,7 +83,7 @@ def rewrite_single_m3_placement_node(
 
 
 def rewrite_m3_placement_bytes(value: bytes, replacements: Sequence[M3PlacementNodeReplacement]):
-    """rewrite whole binary m3 placement, with the set of node replacements"""
+    """Rewrite whole binary m3 placement, with the set of node replacements."""
     placement = m3_placement_pb2.Placement()
     placement.ParseFromString(value)
     for replacement in replacements:

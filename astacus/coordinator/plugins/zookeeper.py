@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2021 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2021 Aiven Ltd
+See LICENSE for details.
 """
 
 from astacus.common.exceptions import TransientException
@@ -29,21 +28,16 @@ Watcher = Callable[[WatchedEvent], None]
 
 class ZooKeeperTransaction:
     def create(self, path: str, value: bytes) -> None:
-        """
-        Add a create operation to the transaction.
-        """
+        """Add a create operation to the transaction."""
         raise NotImplementedError
 
     async def commit(self) -> None:
-        """
-        Commit the transaction.
-        """
+        """Commit the transaction."""
         raise NotImplementedError
 
 
 class ZooKeeperConnection:
-    """
-    A connection to a ZooKeeper cluster.
+    """A connection to a ZooKeeper cluster.
 
     This is a context manager, the connection is opened when entering the context manager and closed when leaving it.
 
@@ -57,16 +51,14 @@ class ZooKeeperConnection:
         raise NotImplementedError
 
     async def get(self, path: str, watch: Watcher | None = None) -> bytes:
-        """
-        Returns the value of the node with the specified `path`.
+        """Returns the value of the node with the specified `path`.
 
         Raises `NoNodeError` if the node does not exist.
         """
         raise NotImplementedError
 
     async def get_children(self, path: str, watch: Watcher | None = None) -> Sequence[str]:
-        """
-        Returns the sorted list of all children of the given `path`.
+        """Returns the sorted list of all children of the given `path`.
 
         Raises `NoNodeError` if the node does not exist.
         """
@@ -78,16 +70,14 @@ class ZooKeeperConnection:
         get_data_fault: Callable[[], None] = lambda: None,
         get_children_fault: Callable[[], None] = lambda: None,
     ) -> dict[str, bytes]:
-        """
-        Returns a dictionary of all children of the given `path` with their data.
+        """Returns a dictionary of all children of the given `path` with their data.
 
         Raises `NoNodeError` if the node does not exist.
         """
         raise NotImplementedError
 
     async def try_create(self, path: str, value: bytes) -> bool:
-        """
-        Creates the node with the specified `path` and `value`.
+        """Creates the node with the specified `path` and `value`.
 
         Auto-creates all parent nodes if they don't exist.
 
@@ -102,8 +92,7 @@ class ZooKeeperConnection:
             return False
 
     async def create(self, path: str, value: bytes) -> None:
-        """
-        Creates the node with the specified `path` and `value`.
+        """Creates the node with the specified `path` and `value`.
 
         Auto-creates all parent nodes if they don't exist.
 
@@ -112,8 +101,7 @@ class ZooKeeperConnection:
         raise NotImplementedError
 
     async def set(self, path: str, value: bytes) -> None:
-        """
-        Set the `value` node with the specified `path`.
+        """Set the `value` node with the specified `path`.
 
         The node must already exist.
 
@@ -122,8 +110,7 @@ class ZooKeeperConnection:
         raise NotImplementedError
 
     async def delete(self, path: str, *, recursive: bool = False) -> None:
-        """
-        Delete the node with the specified `path` and optionally its children.
+        """Delete the node with the specified `path` and optionally its children.
 
         Raises `NotEmptyError` if the node has children, unless `recursive` is True.
 
@@ -132,15 +119,11 @@ class ZooKeeperConnection:
         raise NotImplementedError
 
     async def exists(self, path: str) -> bool:
-        """
-        Check if specified node exists.
-        """
+        """Check if specified node exists."""
         raise NotImplementedError
 
     def transaction(self) -> ZooKeeperTransaction:
-        """
-        Begin a transaction.
-        """
+        """Begin a transaction."""
         raise NotImplementedError
 
 
@@ -154,8 +137,7 @@ class ZooKeeperUser:
 
 
 class ZooKeeperClient:
-    """
-    A configured client to a ZooKeeper cluster.
+    """A configured client to a ZooKeeper cluster.
 
     This can be safely shared between multiple threads or multiple asyncio coroutines.
     """
@@ -320,7 +302,7 @@ class FakeZooKeeperClient(ZooKeeperClient):
     def __init__(self) -> None:
         self._storage: dict[tuple[str, ...], bytes] = {("",): b""}
         self._lock = asyncio.Lock()
-        self.connections: list["FakeZooKeeperConnection"] = []
+        self.connections: list[FakeZooKeeperConnection] = []
 
     def connect(self) -> ZooKeeperConnection:
         return FakeZooKeeperConnection(self)

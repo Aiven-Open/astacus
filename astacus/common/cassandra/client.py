@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2021 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2021 Aiven Ltd
+See LICENSE for details.
 
 This client code is originally from Cashew
 

@@ -1,7 +1,5 @@
-"""
-
-Copyright (c) 2023 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2023 Aiven Ltd
+See LICENSE for details.
 
 Classes for working with snapshot groups.
 

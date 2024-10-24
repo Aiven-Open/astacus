@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 
 Test that the list endpoint behaves as advertised
 """
@@ -114,8 +113,8 @@ def fixture_backup_manifest() -> BackupManifest:
     The hexdigest is faked as the table UUID's last digit and a summary of the part name.
     """
     return BackupManifest(
-        start=datetime.datetime(2020, 1, 2, 3, 4, 5, 678, tzinfo=datetime.timezone.utc),
-        end=datetime.datetime(2020, 1, 2, 5, 6, 7, 891, tzinfo=datetime.timezone.utc),
+        start=datetime.datetime(2020, 1, 2, 3, 4, 5, 678, tzinfo=datetime.UTC),
+        end=datetime.datetime(2020, 1, 2, 5, 6, 7, 891, tzinfo=datetime.UTC),
         attempt=1,
         snapshot_results=[
             # First node
@@ -243,8 +242,8 @@ def test_api_list_deduplication(backup_manifest: BackupManifest, tmp_path: Path)
                 backups=[
                     ListSingleBackup(
                         name="1",
-                        start=datetime.datetime(2020, 1, 2, 3, 4, 5, 678, tzinfo=datetime.timezone.utc),
-                        end=datetime.datetime(2020, 1, 2, 5, 6, 7, 891, tzinfo=datetime.timezone.utc),
+                        start=datetime.datetime(2020, 1, 2, 3, 4, 5, 678, tzinfo=datetime.UTC),
+                        end=datetime.datetime(2020, 1, 2, 5, 6, 7, 891, tzinfo=datetime.UTC),
                         plugin=Plugin.cassandra,
                         attempt=1,
                         nodes=2,
@@ -321,8 +320,8 @@ def test_get_cache_entries_from_list_response() -> None:
 def create_backup(name: str) -> ListSingleBackup:
     return ListSingleBackup(
         name=name,
-        start=datetime.datetime(2020, 1, 2, 3, 4, 5, 678, tzinfo=datetime.timezone.utc),
-        end=datetime.datetime(2020, 1, 2, 5, 6, 7, 891, tzinfo=datetime.timezone.utc),
+        start=datetime.datetime(2020, 1, 2, 3, 4, 5, 678, tzinfo=datetime.UTC),
+        end=datetime.datetime(2020, 1, 2, 5, 6, 7, 891, tzinfo=datetime.UTC),
         plugin=Plugin("clickhouse"),
         attempt=1,
         nodes=2,

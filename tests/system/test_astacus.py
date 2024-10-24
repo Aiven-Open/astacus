@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 
 Basic backup-restore cycle and its variations
 

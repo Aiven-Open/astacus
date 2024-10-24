@@ -1,7 +1,5 @@
-"""
-
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 
 """
 
@@ -10,7 +8,7 @@ from starlette.concurrency import run_in_threadpool
 
 
 class AsyncHexDigestStorage:
-    """Subset of the HexDigestStorage API proxied async -> sync via starlette threadpool
+    """Subset of the HexDigestStorage API proxied async -> sync via starlette threadpool.
 
     Note that the access is not intentionally locked; therefore even
     synchronous API can be used in parallel (at least if it is safe to
@@ -29,7 +27,7 @@ class AsyncHexDigestStorage:
 
 
 class AsyncJsonStorage:
-    """Subset of the JsonStorage API proxied async -> sync via starlette threadpool
+    """Subset of the JsonStorage API proxied async -> sync via starlette threadpool.
 
     Note that the access is not intentionally locked; therefore even
     synchronous API can be used in parallel (at least if it is safe to

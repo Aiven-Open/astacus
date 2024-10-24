@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2021 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2021 Aiven Ltd
+See LICENSE for details.
 """
 
 from astacus.common.utils import AstacusModel
@@ -15,8 +14,7 @@ import uuid
 
 
 class AccessEntity(AstacusModel):
-    """
-    An access entity can be a user, a role, a quota, etc.
+    """An access entity can be a user, a role, a quota, etc.
     See `RetrieveAccessEntitiesStep` for more info.
     """
 
@@ -182,7 +180,7 @@ class ClickHouseManifest(AstacusModel):
 def encode_manifest_data(data: Any) -> Any:
     if isinstance(data, dict):
         return {key: encode_manifest_data(value) for key, value in data.items()}
-    if isinstance(data, (list, tuple)):
+    if isinstance(data, list | tuple):
         return [encode_manifest_data(item) for item in data]
     if isinstance(data, bytes):
         return b64encode(data).decode()

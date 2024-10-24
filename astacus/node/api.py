@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 """
 
 from .clear import ClearOp
@@ -30,7 +29,7 @@ READONLY_SUBOPS = {
 
 
 class OpName(StrEnum):
-    """(Long-running) operations defined in this API (for node)"""
+    """(Long-running) operations defined in this API (for node)."""
 
     cassandra = "cassandra"
     clear = "clear"
@@ -311,8 +310,7 @@ def cassandra_start_cassandra(
         replace_address_first_boot=replace_address_first_boot,
         skip_bootstrap_streaming=skip_bootstrap_streaming,
     )
-    # pylint: disable=import-outside-toplevel
-    # pylint: disable=raise-missing-from
+
     try:
         from .cassandra import CassandraStartOp
     except ImportError:
@@ -337,8 +335,7 @@ def cassandra_restore_sstables(
         match_tables_by=match_tables_by,
         expect_empty_target=expect_empty_target,
     )
-    # pylint: disable=import-outside-toplevel
-    # pylint: disable=raise-missing-from
+
     try:
         from .cassandra import CassandraRestoreSSTablesOp
     except ImportError:
@@ -350,8 +347,7 @@ def cassandra_restore_sstables(
 @router.post("/cassandra/{subop}")
 def cassandra(subop: ipc.CassandraSubOp, result_url: Annotated[str, Body(embed=True)] = "", n: Node = Depends()):
     req = ipc.NodeRequest(result_url=result_url)
-    # pylint: disable=import-outside-toplevel
-    # pylint: disable=raise-missing-from
+
     try:
         from .cassandra import CassandraGetSchemaHashOp, SimpleCassandraSubOp
     except ImportError:

@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2022 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2022 Aiven Ltd
+See LICENSE for details.
 """
 
 from astacus.common.exceptions import TransientException
@@ -19,9 +18,7 @@ logger = logging.getLogger(__name__)
 
 @dataclasses.dataclass
 class RetrieveDataStep(Step[Mapping[str, Any]]):
-    """
-    Backups Flink tables from ZooKeeper.
-    """
+    """Backups Flink tables from ZooKeeper."""
 
     zookeeper_client: ZooKeeperClient
     zookeeper_paths: Sequence[str]
@@ -63,9 +60,7 @@ class RetrieveDataStep(Step[Mapping[str, Any]]):
 
 @dataclasses.dataclass
 class PrepareFlinkManifestStep(Step[dict[str, Any]]):
-    """
-    Collects data from previous steps into an uploadable manifest.
-    """
+    """Collects data from previous steps into an uploadable manifest."""
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> dict[str, Any]:
         return FlinkManifest(data=context.get_result(RetrieveDataStep)).dict()
@@ -73,9 +68,7 @@ class PrepareFlinkManifestStep(Step[dict[str, Any]]):
 
 @dataclasses.dataclass
 class FlinkManifestStep(Step[FlinkManifest]):
-    """
-    Extracts the Flink plugin manifest from the main backup manifest.
-    """
+    """Extracts the Flink plugin manifest from the main backup manifest."""
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> FlinkManifest:
         backup_manifest = context.get_result(BackupManifestStep)
@@ -84,9 +77,7 @@ class FlinkManifestStep(Step[FlinkManifest]):
 
 @dataclasses.dataclass
 class RestoreDataStep(Step[None]):
-    """
-    Restores Flint tables to ZooKeeper.
-    """
+    """Restores Flint tables to ZooKeeper."""
 
     zookeeper_client: ZooKeeperClient
     zookeeper_paths: Sequence[str]
@@ -103,7 +94,7 @@ class RestoreDataStep(Step[None]):
     ) -> None:
         current_node = data.get(current_node_path)
         if isinstance(current_node, dict):
-            await connection.create(zk_path, bytes())
+            await connection.create(zk_path, b"")
             for key in current_node.keys():
                 await self._restore_data(connection, f"{zk_path}/{key}", current_node, key)
         elif current_node:

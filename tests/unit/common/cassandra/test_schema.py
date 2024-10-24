@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2022 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2022 Aiven Ltd
+See LICENSE for details.
 """
 
 from astacus.common.cassandra import schema
@@ -9,8 +8,6 @@ from collections.abc import Mapping
 from pytest_mock import MockerFixture
 
 import pytest
-
-# pylint: disable=protected-access
 
 
 def test_schema(mocker: MockerFixture) -> None:
@@ -69,7 +66,7 @@ def test_schema(mocker: MockerFixture) -> None:
 
 
 @pytest.mark.parametrize(
-    "strategy_class,strategy_options,expected_dcs",
+    ("strategy_class", "strategy_options", "expected_dcs"),
     [
         ("SimpleStrategy", {"replication_factor": "2"}, {}),
         ("NetworkTopologyStrategy", {"dc1": 2, "dc2": "3"}, {"dc1": "2", "dc2": "3"}),
@@ -125,7 +122,7 @@ def test_schema_keyspace_iterate_user_types_in_restore_order() -> None:
 
 
 @pytest.mark.parametrize(
-    "definition,identifiers",
+    ("definition", "identifiers"),
     [
         ("foo", ["foo"]),
         ("map<frozen<foo>>", ["foo"]),

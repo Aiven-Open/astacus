@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2021 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2021 Aiven Ltd
+See LICENSE for details.
 
 Algorithms to help with redistributing parts across servers for tables using the
 Replicated family of table engines.
@@ -40,8 +39,7 @@ class Part:
 
 
 def get_part_servers(part_files: Iterable[PartFile]) -> Set[int]:
-    """
-    Return the list of server indices where the part made of all these files is present.
+    """Return the list of server indices where the part made of all these files is present.
 
     Raises a ValueError if not all servers contain all files.
     """
@@ -64,9 +62,7 @@ def list_parts_to_attach(
     disks: Disks,
     tables_by_uuid: Mapping[uuid.UUID, Table],
 ) -> Sequence[tuple[str, bytes]]:
-    """
-    Returns a list of table identifiers and part names to attach from the snapshot.
-    """
+    """Returns a list of table identifiers and part names to attach from the snapshot."""
     parts_to_attach: set[tuple[str, bytes]] = set()
     assert snapshot_result.state is not None
     for snapshot_file in snapshot_result.state.files:

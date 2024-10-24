@@ -1,5 +1,5 @@
 """Copyright (c) 2022 Aiven Ltd
-See LICENSE for details
+See LICENSE for details.
 
 cassandra backup/restore plugin steps
 

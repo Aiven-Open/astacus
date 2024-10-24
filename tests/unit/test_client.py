@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2023 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2023 Aiven Ltd
+See LICENSE for details.
 """
 
 from astacus.client import _reload_config
@@ -47,7 +46,7 @@ def test_reload_config_sleep_and_http_timeout_honors_total_wait_completion() -> 
 
         with mock.patch.object(time, "sleep", new=sleep):
             # mypy wants a return for this function but pylint doesn't
-            # pylint: disable=useless-return
+
             def http_request(*args, timeout: float = 10, **kwargs) -> Mapping[str, Any] | None:
                 time_since_start = time.monotonic() - start_time
                 assert time_since_start + timeout <= wait_completion_secs, "request could end after completion"

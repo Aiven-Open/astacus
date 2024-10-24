@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2023 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2023 Aiven Ltd
+See LICENSE for details.
 """
 
 from .config import DiskConfiguration, DiskType
@@ -89,8 +88,7 @@ class Disks:
     )
 
     def get_snapshot_groups(self, freeze_name: str) -> Sequence[SnapshotGroup]:
-        """
-        Returns the glob groups inside ClickHouse data dirs where frozen table parts are stored.
+        """Returns the glob groups inside ClickHouse data dirs where frozen table parts are stored.
 
         For local disk, the maximum embedded file size is the default one,
         For remote disks the embedded file size is unlimited: we want to embed all metadata files.
@@ -119,8 +117,7 @@ class Disks:
         return None
 
     def parse_part_file_path(self, file_path: str) -> ParsedPath:
-        """
-        Parse component of a file path relative to one of the ClickHouse disks.
+        """Parse component of a file path relative to one of the ClickHouse disks.
 
         The path can be in the normal store or in the frozen shadow store:
             - [disk_path]/store/123/12345678-1234-1234-1234-12345678abcd/all_1_1_0/[file.ext]

@@ -1,7 +1,5 @@
-"""
-
-Copyright (c) 2021 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2021 Aiven Ltd
+See LICENSE for details.
 """
 
 from astacus.common import ipc, utils
@@ -134,7 +132,7 @@ def manifest_with_hashes(hashes: dict[str, bytes], index: int) -> ipc.BackupMani
 
 
 @pytest.mark.parametrize(
-    "node_features,expected_request",
+    ("node_features", "expected_request"),
     [
         (
             [],
@@ -197,7 +195,7 @@ BACKUPS_FOR_RETENTION_TEST = {
 
 
 @pytest.mark.parametrize(
-    "retention,kept_backups",
+    ("retention", "kept_backups"),
     [
         (ipc.Retention(minimum_backups=1, maximum_backups=6, keep_days=6), {"b1", "b2", "b3", "b4", "b5"}),
         (ipc.Retention(minimum_backups=1, maximum_backups=3, keep_days=6), {"b3", "b4", "b5"}),
@@ -220,8 +218,8 @@ async def test_compute_kept_backups(
         explicit_delete=[],
     )
     context.set_result(ListBackupsStep, set(await async_json_storage.list_jsons()))
-    half_a_day_after_last_backup = datetime.datetime(2020, 1, 7, 5, 0, tzinfo=datetime.timezone.utc)
-    with mock.patch.object(utils, "now", lambda: half_a_day_after_last_backup):
+    half_a_day_after_last_backup = datetime.datetime(2020, 1, 7, 5, 0, tzinfo=datetime.UTC)
+    with mock.patch.object(utils, "now", return_value=half_a_day_after_last_backup):
         result = await step.run_step(cluster=single_node_cluster, context=context)
     assert {b.filename for b in result} == kept_backups
 
@@ -241,7 +239,7 @@ BACKUPS_FOR_DELTA_RETENTION_TEST = {
 
 
 @pytest.mark.parametrize(
-    "explicit_delete,expected_kept_backups",
+    ("explicit_delete", "expected_kept_backups"),
     [
         ([], {"b1", "b2", "delta-231", "delta-232", "b3", "b4", "delta-451", "b5", "delta-561"}),
         (["b1"], {"b2", "delta-231", "delta-232", "b3", "b4", "delta-451", "b5", "delta-561"}),
@@ -335,10 +333,9 @@ async def test_delete_backup_and_delta_manifests(
 
 
 @pytest.mark.parametrize(
-    "kept_backups,stored_hashes,expected_hashes",
+    ("kept_backups", "stored_hashes", "expected_hashes"),
     [
         ([], {}, {}),
-        ([], {"a": b"a"}, {}),
         ([], {"a": b"a"}, {}),
         (
             [manifest_with_hashes({"a": b"a"}, 0), manifest_with_hashes({"b": b"b"}, 1)],
@@ -379,7 +376,7 @@ async def test_upload_manifest_step_generates_correct_backup_name(
     single_node_cluster: Cluster,
     context: StepsContext,
 ) -> None:
-    context.attempt_start = datetime.datetime(2020, 1, 7, 5, 0, tzinfo=datetime.timezone.utc)
+    context.attempt_start = datetime.datetime(2020, 1, 7, 5, 0, tzinfo=datetime.UTC)
     context.set_result(SnapshotStep, [DefaultedSnapshotResult()])
     context.set_result(UploadBlocksStep, [ipc.SnapshotUploadResult()])
     async_json_storage = AsyncJsonStorage(storage=MemoryJsonStorage(items={}))
@@ -390,7 +387,7 @@ async def test_upload_manifest_step_generates_correct_backup_name(
 
 
 @pytest.mark.parametrize(
-    "node_features,expected_request",
+    ("node_features", "expected_request"),
     [
         ([], None),
         (

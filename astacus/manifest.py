@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2024 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2024 Aiven Ltd
+See LICENSE for details.
 
 Manifest dump utility. Allows to examine the contents of the object storage
 without a running Astacus process.
@@ -102,7 +101,7 @@ def _dump_manifest_raw(mapped_file):
 
 
 def _create_rohmu_storage(config_path: str, storage: str) -> RohmuStorage:
-    with open(config_path, "r") as config_fp:
+    with open(config_path) as config_fp:
         config_json = json.load(config_fp)
     if "object_storage" not in config_json:
         raise ValueError(f"object_storage key missing in {config_path}")

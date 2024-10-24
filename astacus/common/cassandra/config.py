@@ -1,5 +1,5 @@
 """Copyright (c) 2021 Aiven Ltd
-See LICENSE for details
+See LICENSE for details.
 
 Client configuration data model
 

@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2024 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2024 Aiven Ltd
+See LICENSE for details.
 """
 
 from astacus.common.access_log import AccessLogLevelFilter

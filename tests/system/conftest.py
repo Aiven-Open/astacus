@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 """
 
 from _pytest.config import Config
@@ -50,14 +49,13 @@ DEFAULT_PLUGIN_CONFIG = {
 
 @asynccontextmanager
 async def background_process(program: str | Path, *args: str | Path, **kwargs) -> AsyncIterator[asyncio.subprocess.Process]:
-    # pylint: disable=bare-except
     proc = await asyncio.create_subprocess_exec(program, *args, **kwargs)
     try:
         yield proc
     finally:
         try:
             await asyncio.wait_for(proc.wait(), 0.1)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             try:
                 proc.terminate()
             except:
@@ -68,7 +66,7 @@ async def background_process(program: str | Path, *args: str | Path, **kwargs) -
                 try:
                     await asyncio.wait_for(proc.wait(), 3)
                     break
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     try:
                         proc.kill()
                     except:
@@ -131,7 +129,7 @@ async def wait_url_up(url: str | URL) -> None:
             except httpx.NetworkError as ex:
                 logger.debug("URL %s gave exception %r", url, ex)
         else:
-            assert False, f"url {url} still not reachable"
+            pytest.fail(f"url {url} still not reachable")
 
 
 @pytest.fixture(name="rootdir")

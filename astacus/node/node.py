@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 
 """
 
@@ -51,7 +50,8 @@ class NodeOp(op.Op, Generic[Request, Result]):
         return self._still_locked_callback()
 
     def send_result(self) -> None:
-        assert self.req and self.result, "subclass responsibility to set up req/result before send_result"
+        if not (self.req and self.result):
+            raise AttributeError("subclass responsibility to set up req/result before send_result")
         if not self.req.result_url:
             logger.debug("send_result omitted - no result_url")
             return

@@ -1,7 +1,5 @@
-"""
-
-Copyright (c) 2023 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2023 Aiven Ltd
+See LICENSE for details.
 
 """
 
@@ -10,21 +8,15 @@ from astacus.common.ipc import SnapshotFile, SnapshotHash
 from astacus.common.progress import Progress
 from astacus.node.snapshot import Snapshot
 from astacus.node.snapshotter import Snapshotter
+from collections.abc import Iterable
 from contextlib import closing
 from functools import cached_property
 from pathlib import Path
-from typing import Iterable
+from typing import override
 
 import logging
 import os
 import sqlite3
-import sys
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
-
 
 logger = logging.getLogger(__name__)
 

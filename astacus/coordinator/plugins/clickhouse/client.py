@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2021 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2021 Aiven Ltd
+See LICENSE for details.
 """
 
 from astacus.common.utils import build_netloc, httpx_request
@@ -47,8 +46,7 @@ class ClickHouseClientQueryError(Exception):
 
 
 class HttpClickHouseClient(ClickHouseClient):
-    """
-    ClickHouse client using the HTTP(S) protocol, the port provided
+    """ClickHouse client using the HTTP(S) protocol, the port provided
     should match the `http_port` or `https_port` server option.
 
     The client forces all connections to the `system` database, this
@@ -172,9 +170,7 @@ def escape_sql_identifier(identifier: bytes) -> str:
 
 
 def escape_sql_string(string: bytes) -> str:
-    """
-    Escapes single quotes and backslashes with a backslash and wraps everything between single quotes.
-    """
+    """Escapes single quotes and backslashes with a backslash and wraps everything between single quotes."""
     return _escape_bytes(string, STRING_ESCAPE_MAP, b"'")
 
 

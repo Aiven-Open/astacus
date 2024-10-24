@@ -1,7 +1,5 @@
-"""
-
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 
 Test that the plugin m3 specific flow (backup + restore) works
 

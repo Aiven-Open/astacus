@@ -1,9 +1,6 @@
+"""Copyright (c) 2022 Aiven Ltd
+See LICENSE for details.
 """
-Copyright (c) 2022 Aiven Ltd
-See LICENSE for details
-"""
-
-# pylint: disable=protected-access
 
 from astacus.common.cassandra.schema import CassandraSchema
 from astacus.coordinator.plugins.cassandra import backup_steps

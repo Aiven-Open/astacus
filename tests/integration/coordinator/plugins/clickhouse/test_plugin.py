@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2021 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2021 Aiven Ltd
+See LICENSE for details.
 """
 
 from _pytest.fixtures import SubRequest
@@ -169,7 +168,7 @@ async def fixture_restored_cluster(
         yield clients
 
 
-@pytest.fixture(scope="function", name="function_restored_cluster")
+@pytest.fixture(name="function_restored_cluster")
 async def fixture_function_restored_cluster(
     ports: Ports,
     clickhouse_command: ClickHouseCommand,
@@ -583,7 +582,7 @@ async def test_cleanup_does_not_break_object_storage_disk_files(
 
 
 @pytest.mark.parametrize(
-    "table_name,table_engine",
+    ("table_name", "table_engine"),
     [
         ("default.postgresql", TableEngine.PostgreSQL),
         ("default.mysql", TableEngine.MySQL),

@@ -1,7 +1,5 @@
-"""
-
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 
 Clearing of snapshot storage (separate from empty 'download' step for clarity)
 

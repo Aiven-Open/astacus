@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2020 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2020 Aiven Ltd
+See LICENSE for details.
 """
 
 from .cleanup import CleanupOp
@@ -32,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 class OpName(StrEnum):
-    """(Long-running) operations defined in this API (for coordinator)"""
+    """(Long-running) operations defined in this API (for coordinator)."""
 
     backup = "backup"
     lock = "lock"
@@ -53,7 +52,7 @@ async def root():
 
 @router.post("/config/reload")
 async def config_reload(*, request: Request, c: Coordinator = Depends()):
-    """Reload astacus configuration"""
+    """Reload astacus configuration."""
     config_path = os.environ.get("ASTACUS_CONFIG")
     assert config_path is not None
     config.set_global_config_from_path(request.app, config_path)
@@ -180,7 +179,7 @@ async def cleanup(
 def op_status(*, op_name: OpName, op_id: int, c: Coordinator = Depends()):
     op, op_info = c.get_op_and_op_info(op_id=op_id, op_name=op_name)
     result = {"state": op_info.op_status}
-    if isinstance(op, (BackupOp, DeltaBackupOp, RestoreOp)):
+    if isinstance(op, BackupOp | DeltaBackupOp | RestoreOp):
         result["progress"] = msgspec.to_builtins(op.progress)
     return result
 

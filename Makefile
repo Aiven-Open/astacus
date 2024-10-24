@@ -19,6 +19,7 @@ default: $(GENERATED)
 venv: default
 	python3 -m venv venv && source venv/bin/activate && pip install -U pip && pip install . ".[dev]"
 
+.PHONY: clean
 clean:
 	rm -rf rpm/ $(GENERATED) venv/ .mypy_cache/ astacus.egg-info/
 
@@ -40,13 +41,6 @@ test-dep-ubuntu:
 	tar vxf apache-zookeeper-$(ZOOKEEPER_VERSION)-bin.tar.gz --wildcards apache-zookeeper-$(ZOOKEEPER_VERSION)-bin/lib/*.jar
 	sudo cp -r apache-zookeeper-$(ZOOKEEPER_VERSION)-bin/lib /usr/share/zookeeper
 
-.PHONY: pylint
-pylint: $(GENERATED)
-	pre-commit run pylint --all-files
-
-.PHONY: flake8
-flake8: $(GENERATED)
-	pre-commit run flake8 --all-files
 
 .PHONY: copyright
 copyright:
@@ -68,20 +62,13 @@ unittest: $(GENERATED)
 .PHONY: test
 test: lint copyright unittest
 
-.PHONY: isort
-isort:
-	pre-commit run isort --all-files
-
 .PHONY: ruff
-ruff:
+ruff: $(GENERATED)
 	pre-commit run ruff-format --all-files
 
 .PHONY: mypy
-mypy:
+mypy: $(GENERATED)
 	pre-commit run mypy --all-files
-
-.PHONY: reformat
-reformat: isort ruff
 
 .PHONY: pre-commit
 pre-commit: $(GENERATED)

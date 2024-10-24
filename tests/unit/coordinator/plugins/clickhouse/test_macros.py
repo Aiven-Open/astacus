@@ -1,6 +1,5 @@
-"""
-Copyright (c) 2022 Aiven Ltd
-See LICENSE for details
+"""Copyright (c) 2022 Aiven Ltd
+See LICENSE for details.
 """
 
 from astacus.coordinator.plugins.clickhouse.client import StubClickHouseClient
