@@ -7,7 +7,11 @@ from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import StepsContext
 from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, ClickHouseClientQueryError, HttpClickHouseClient
 from astacus.coordinator.plugins.clickhouse.manifest import ReplicatedDatabase, Table
-from astacus.coordinator.plugins.clickhouse.steps import KeeperMapTablesReadOnlyStep, RetrieveDatabasesAndTablesStep
+from astacus.coordinator.plugins.clickhouse.steps import (
+    KeeperMapTablesReadOnlyStep,
+    KeeperMapTablesReadWriteStep,
+    RetrieveDatabasesAndTablesStep,
+)
 from base64 import b64decode
 from collections.abc import AsyncIterator, Sequence
 from tests.integration.conftest import create_zookeeper, Ports
@@ -184,52 +188,51 @@ async def fixture_keeper_table_context(
         yield KeeperMapInfo(context, admin_client, [foobar_client, alice_client])
 
 
+async def get_row_count(client: ClickHouseClient) -> int:
+    keeper_table_row_count = cast(
+        Sequence[tuple[int]], await client.execute(b"SELECT count() FROM `keeperdata`.`keepertable`")
+    )
+    return int(keeper_table_row_count[0][0])
+
+
 async def check_read_only(user_client: ClickHouseClient) -> None:
-    with pytest.raises(ClickHouseClientQueryError, match=".*ACCESS_DENIED.*"):
+    with pytest.raises(ClickHouseClientQueryError, match=".*TABLE_IS_READ_ONLY.*"):
         await user_client.execute(
             b"INSERT INTO `keeperdata`.`keepertable` SETTINGS wait_for_async_insert=1  SELECT *, materialize(2) FROM numbers(3)"
         )
-    with pytest.raises(ClickHouseClientQueryError, match=".*ACCESS_DENIED.*"):
+    with pytest.raises(ClickHouseClientQueryError, match=".*TABLE_IS_READ_ONLY.*"):
         await user_client.execute(b"ALTER TABLE `keeperdata`.`keepertable` UPDATE thevalue = 3 WHERE thekey < 20")
-    with pytest.raises(ClickHouseClientQueryError, match=".*ACCESS_DENIED.*"):
+    with pytest.raises(ClickHouseClientQueryError, match=".*TABLE_IS_READ_ONLY.*"):
         await user_client.execute(b"DELETE FROM `keeperdata`.`keepertable` WHERE thekey < 20")
-    read_only_row_count = cast(
-        Sequence[tuple[int]], await user_client.execute(b"SELECT count() FROM `keeperdata`.`keepertable`")
-    )
-    assert int(read_only_row_count[0][0]) == 3
+    read_only_row_count = await get_row_count(user_client)
+    assert read_only_row_count == 3
 
 
 async def check_read_write(user_client: ClickHouseClient) -> None:
     await user_client.execute(b"INSERT INTO `keeperdata`.`keepertable` SELECT *, materialize(10) FROM numbers(3)")
-    read_write_row_count = cast(
-        Sequence[tuple[int]], await user_client.execute(b"SELECT count() FROM `keeperdata`.`keepertable`")
-    )
-    assert int(read_write_row_count[0][0]) == 3
+    read_write_row_count = await get_row_count(user_client)
+    assert read_write_row_count == 3
     await user_client.execute(b"ALTER TABLE `keeperdata`.`keepertable` UPDATE thevalue = 3 WHERE thekey < 20")
     current_values = await user_client.execute(b"SELECT thevalue FROM `keeperdata`.`keepertable` ORDER BY thekey")
     assert all(int(cast(str, val[0])) == 3 for val in current_values)
     await user_client.execute(b"DELETE FROM `keeperdata`.`keepertable` WHERE thekey < 20")
-    post_delete_row_count = cast(
-        Sequence[tuple[int]], await user_client.execute(b"SELECT count() FROM `keeperdata`.`keepertable`")
-    )
-    assert int(post_delete_row_count[0][0]) == 0
+    post_delete_row_count = await get_row_count(user_client)
+    assert post_delete_row_count == 0
 
 
 async def test_keeper_map_table_read_only_step(keeper_table_context: KeeperMapInfo) -> None:
     steps_context, admin_client, user_clients = keeper_table_context
-    read_only_step = KeeperMapTablesReadOnlyStep(clients=[admin_client], allow_writes=False)
+    read_only_step = KeeperMapTablesReadOnlyStep([admin_client])
     # After the read-only step, users should only be able to select from the table
     await read_only_step.run_step(Cluster(nodes=[]), steps_context)
     for user_client in user_clients:
         await check_read_only(user_client)
     # After the read-write step, users should be able to write, update and delete from the table
-    read_write_step = KeeperMapTablesReadOnlyStep(clients=[admin_client], allow_writes=True)
+    read_write_step = KeeperMapTablesReadWriteStep([admin_client])
     await read_write_step.run_step(Cluster(nodes=[]), steps_context)
     # Clean up table so that each user starts from a clean slate
     await admin_client.execute(b"TRUNCATE TABLE `keeperdata`.`keepertable`")
-    post_delete_row_count = cast(
-        Sequence[tuple[int]], await admin_client.execute(b"SELECT count() FROM `keeperdata`.`keepertable`")
-    )
-    assert int(post_delete_row_count[0][0]) == 0
+    post_delete_row_count = await get_row_count(admin_client)
+    assert post_delete_row_count == 0
     for user_client in user_clients:
         await check_read_write(user_client)

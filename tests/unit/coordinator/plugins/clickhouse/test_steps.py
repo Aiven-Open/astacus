@@ -15,7 +15,7 @@ from astacus.coordinator.plugins.base import (
     StepFailedError,
     StepsContext,
 )
-from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, Row, StubClickHouseClient
+from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, StubClickHouseClient
 from astacus.coordinator.plugins.clickhouse.config import (
     ClickHouseConfiguration,
     ClickHouseNode,
@@ -52,7 +52,9 @@ from astacus.coordinator.plugins.clickhouse.steps import (
     FreezeUnfreezeTablesStepBase,
     get_restore_table_query,
     GetVersionsStep,
+    KeeperMapTablesReadabilityStepBase,
     KeeperMapTablesReadOnlyStep,
+    KeeperMapTablesReadWriteStep,
     ListDatabaseReplicasStep,
     MoveFrozenPartsStep,
     PrepareClickHouseManifestStep,
@@ -1292,35 +1294,23 @@ async def test_restore_keeper_map_table_data_step() -> None:
 
 
 @pytest.mark.parametrize(
-    ("allow_writes", "expected_statements"),
+    ("step_class", "expected_statements"),
     [
         (
-            False,
-            [
-                b"SELECT base64Encode(name) FROM system.users WHERE storage = 'replicated' ORDER BY name",
-                b"REVOKE INSERT, ALTER UPDATE, ALTER DELETE ON `db-two`.`table-keeper` FROM `alice`",
-            ],
+            KeeperMapTablesReadOnlyStep,
+            [b"ALTER TABLE `db-two`.`table-keeper` MODIFY SETTING read_only=true"],
         ),
         (
-            True,
-            [
-                b"SELECT base64Encode(name) FROM system.users WHERE storage = 'replicated' ORDER BY name",
-                b"GRANT INSERT, ALTER UPDATE, ALTER DELETE ON `db-two`.`table-keeper` TO `alice`",
-            ],
+            KeeperMapTablesReadWriteStep,
+            [b"ALTER TABLE `db-two`.`table-keeper` MODIFY SETTING read_only=false"],
         ),
     ],
     ids=["read-only", "read-write"],
 )
-async def test_keeper_map_table_select_only_setting_modified(allow_writes: bool, expected_statements: list[bytes]) -> None:
+async def test_keeper_map_table_read_only_setting(
+    step_class: type[KeeperMapTablesReadabilityStepBase], expected_statements: list[bytes]
+) -> None:
     clickhouse_client = mock_clickhouse_client()
-
-    def execute_side_effect(statement: bytes) -> list[Row]:
-        if statement == b"SELECT base64Encode(name) FROM system.users WHERE storage = 'replicated' ORDER BY name":
-            return [[base64.b64encode(b"alice").decode()]]
-        return []
-
-    clickhouse_client.execute.side_effect = execute_side_effect
-    context = StepsContext()
     sample_tables = SAMPLE_TABLES + [
         Table(
             database=b"db-two",
@@ -1330,8 +1320,9 @@ async def test_keeper_map_table_select_only_setting_modified(allow_writes: bool,
             create_query=b"CREATE TABLE db-two.table-keeper ...",
         ),
     ]
+    context = StepsContext()
     context.set_result(RetrieveDatabasesAndTablesStep, (SAMPLE_DATABASES, sample_tables))
-    step = KeeperMapTablesReadOnlyStep(clients=[clickhouse_client], allow_writes=allow_writes)
+    step = step_class(clients=[clickhouse_client])
     await step.run_step(Cluster(nodes=[]), context)
     mock_calls = clickhouse_client.mock_calls
     assert mock_calls == [mock.call.execute(statement) for statement in expected_statements]
