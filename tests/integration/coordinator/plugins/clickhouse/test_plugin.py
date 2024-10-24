@@ -89,7 +89,6 @@ async def restorable_cluster_manager(
                     clients = [get_clickhouse_client(service) for service in clickhouse_cluster.services]
                     await setup_cluster_content(
                         clients,
-                        clickhouse_cluster.use_named_collections,
                         get_clickhouse_version(clickhouse_command),
                     )
                     await setup_cluster_users(clients)
@@ -187,18 +186,12 @@ async def sync_replicated_table(clients: Sequence[ClickHouseClient], table_name:
         await client.execute(f"SYSTEM SYNC REPLICA default.{escape_sql_identifier(table_name.encode())} STRICT".encode())
 
 
-async def setup_cluster_content(
-    clients: Sequence[HttpClickHouseClient], use_named_collections: bool, clickhouse_version: tuple[int, ...]
-) -> None:
+async def setup_cluster_content(clients: Sequence[HttpClickHouseClient], clickhouse_version: tuple[int, ...]) -> None:
     for client in clients:
         await client.execute(b"DROP DATABASE default SYNC")
         await client.execute(
             b"CREATE DATABASE default ENGINE = Replicated('/clickhouse/databases/thebase', '{my_shard}', '{my_replica}') "
-            + (
-                b"SETTINGS collection_name='default_cluster'"
-                if use_named_collections
-                else b"SETTINGS cluster_username='default', cluster_password='secret'"
-            )
+            b"SETTINGS collection_name='default_cluster'"
         )
     # table creation is auto-replicated so we only do it once :
     await clients[0].execute(
@@ -558,9 +551,7 @@ async def test_cleanup_does_not_break_object_storage_disk_files(
                     storage_path, zookeeper, clickhouse_cluster, ports, minio_bucket
                 ) as astacus_cluster:
                     clients = [get_clickhouse_client(service) for service in clickhouse_cluster.services]
-                    await setup_cluster_content(
-                        clients, clickhouse_cluster.use_named_collections, get_clickhouse_version(clickhouse_command)
-                    )
+                    await setup_cluster_content(clients, get_clickhouse_version(clickhouse_command))
                     await setup_cluster_users(clients)
                     run_astacus_command(astacus_cluster, "backup")
                     run_astacus_command(astacus_cluster, "backup")

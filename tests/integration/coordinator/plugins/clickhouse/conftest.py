@@ -30,7 +30,6 @@ from tests.utils import (
     CONSTANT_TEST_RSA_PRIVATE_KEY,
     CONSTANT_TEST_RSA_PUBLIC_KEY,
     format_astacus_command,
-    get_clickhouse_version,
 )
 
 import argparse
@@ -54,8 +53,6 @@ pytestmark = [pytest.mark.clickhouse, pytest.mark.x86_64]
 
 @dataclasses.dataclass
 class ClickHouseServiceCluster(ServiceCluster):
-    use_named_collections: bool
-    expands_uuid_in_zookeeper_path: bool
     object_storage_prefix: str
 
 
@@ -264,9 +261,6 @@ async def create_clickhouse_cluster(
     object_storage_prefix: str = "prefix/",
 ) -> AsyncIterator[ClickHouseServiceCluster]:
     cluster_size = len(cluster_shards)
-    clickhouse_version = get_clickhouse_version(command)
-    use_named_collections = clickhouse_version >= (22, 4)
-    expands_uuid_in_zookeeper_path = clickhouse_version < (22, 4)
     tcp_ports = [ports.allocate() for _ in range(cluster_size)]
     http_ports = [ports.allocate() for _ in range(cluster_size)]
     interserver_http_ports = [ports.allocate() for _ in range(cluster_size)]
@@ -280,7 +274,6 @@ async def create_clickhouse_cluster(
             tcp_ports,
             http_ports,
             interserver_http_ports,
-            use_named_collections,
             minio_bucket=minio_bucket,
             object_storage_prefix=object_storage_prefix,
         )
@@ -300,8 +293,6 @@ async def create_clickhouse_cluster(
                     Service(process=process, port=http_port, username="default", password="secret", data_dir=data_dir)
                     for process, http_port, data_dir in zip(processes, http_ports, data_dirs)
                 ],
-                use_named_collections=use_named_collections,
-                expands_uuid_in_zookeeper_path=expands_uuid_in_zookeeper_path,
                 object_storage_prefix=object_storage_prefix,
             )
 
@@ -339,7 +330,6 @@ def create_clickhouse_configs(
     tcp_ports: Sequence[int],
     http_ports: Sequence[int],
     interserver_http_ports: Sequence[int],
-    use_named_collections: bool,
     minio_bucket: MinioBucket | None = None,
     object_storage_prefix: str = "/",
 ):
@@ -356,17 +346,6 @@ def create_clickhouse_configs(
         </replica>
         """
         for tcp_port in tcp_ports
-    )
-    named_collections = (
-        """
-        <named_collections>
-            <default_cluster>
-                <cluster_secret>secret</cluster_secret>
-            </default_cluster>
-        </named_collections>
-        """
-        if use_named_collections
-        else ""
     )
     storage_configuration = (
         f"""
@@ -460,7 +439,11 @@ def create_clickhouse_configs(
                             </shard>
                         </defaultcluster>
                     </remote_servers>
-                    {named_collections}
+                    <named_collections>
+                        <default_cluster>
+                            <cluster_secret>secret</cluster_secret>
+                        </default_cluster>
+                    </named_collections>
                     <default_replica_path>/clickhouse/tables/{{uuid}}/{{my_shard}}</default_replica_path>
                     <default_replica_name>{{my_replica}}</default_replica_name>
                     <macros>
@@ -578,11 +561,6 @@ def create_astacus_configs(
                     replicated_databases_settings=(
                         ReplicatedDatabaseSettings(
                             collection_name="default_cluster",
-                        )
-                        if clickhouse_cluster.use_named_collections
-                        else ReplicatedDatabaseSettings(
-                            cluster_username=clickhouse_cluster.services[0].username,
-                            cluster_password=clickhouse_cluster.services[0].password,
                         )
                     ),
                     replicated_user_defined_zookeeper_path="/clickhouse/user_defined_functions/",
