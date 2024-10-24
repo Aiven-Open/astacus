@@ -19,6 +19,7 @@ default: $(GENERATED)
 venv: default
 	python3 -m venv venv && source venv/bin/activate && pip install -U pip && pip install . ".[dev]"
 
+.PHONY: clean
 clean:
 	rm -rf rpm/ $(GENERATED) venv/ .mypy_cache/ astacus.egg-info/
 
@@ -61,10 +62,6 @@ unittest: $(GENERATED)
 .PHONY: test
 test: lint copyright unittest
 
-.PHONY: isort
-isort: $(GENERATED)
-	pre-commit run isort --all-files
-
 .PHONY: ruff
 ruff: $(GENERATED)
 	pre-commit run ruff-format --all-files
@@ -72,9 +69,6 @@ ruff: $(GENERATED)
 .PHONY: mypy
 mypy: $(GENERATED)
 	pre-commit run mypy --all-files
-
-.PHONY: reformat
-reformat: isort ruff
 
 .PHONY: pre-commit
 pre-commit: $(GENERATED)

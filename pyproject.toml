@@ -127,14 +127,6 @@ astacus = "astacus.main:main"
 [tool.hatch.version]
 source = "vcs"
 
-[tool.isort]
-no_sections = true
-force_alphabetical_sort = true
-combine_as_imports = true
-profile = "black"
-skip_gitignore = true
-line_length = 125
-
 [tool.hatch.build.hooks.vcs]
 version-file = "astacus/version.py"
 
