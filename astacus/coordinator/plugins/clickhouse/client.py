@@ -78,7 +78,7 @@ class HttpClickHouseClient(ClickHouseClient):
         if self.password is not None:
             headers.append(("X-ClickHouse-Key", self.password))
         netloc = build_netloc(self.host, self.port)
-        params = {"wait_end_of_query": "1"}
+        params = {"wait_end_of_query": "1", "http_write_exception_in_output_format": "0"}
         if session_id is not None:
             params["session_id"] = session_id
         response = await httpx_request(
