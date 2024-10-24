@@ -625,4 +625,4 @@ async def test_restores_keeper_map_tables(restored_cluster: Sequence[ClickHouseC
         assert result == []
         with pytest.raises(ClickHouseClientQueryError) as e:
             await client.execute(b"SELECT * FROM default.keeper_map_dropped")
-        assert "Table default.keeper_map_dropped does not exist." in e.value.args[0]
+        assert "UNKNOWN_TABLE" in e.value.args[0]

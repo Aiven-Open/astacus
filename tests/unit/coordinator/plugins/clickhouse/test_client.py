@@ -25,7 +25,9 @@ async def test_successful_execute_returns_rows() -> None:
             "rows": 2,
             "rows_before_limit_at_least": 2,
         }
-        respx.post("http://example.org:9000?wait_end_of_query=1").respond(json=content)
+        respx.post("http://example.org:9000?wait_end_of_query=1&http_write_exception_in_output_format=0").respond(
+            json=content
+        )
         response = await client.execute(b"SHOW DATABASES")
     assert response == [["system"], ["defaultdb"]]
 
@@ -33,7 +35,9 @@ async def test_successful_execute_returns_rows() -> None:
 async def test_failing_execute_raises_an_exception() -> None:
     client = HttpClickHouseClient(host="example.org", port=9000)
     with respx.mock:
-        respx.post("http://example.org:9000?wait_end_of_query=1").respond(status_code=400)
+        respx.post("http://example.org:9000?wait_end_of_query=1&http_write_exception_in_output_format=0").respond(
+            status_code=400
+        )
         with pytest.raises(ClickHouseClientQueryError):
             await client.execute(b"SHOW DATABASES")
 
@@ -41,7 +45,7 @@ async def test_failing_execute_raises_an_exception() -> None:
 async def test_sends_authentication_headers() -> None:
     client = HttpClickHouseClient(host="example.org", port=9000, username="user", password="password")
     with respx.mock:
-        respx.post("http://example.org:9000?wait_end_of_query=1").respond(content="")
+        respx.post("http://example.org:9000?wait_end_of_query=1&http_write_exception_in_output_format=0").respond(content="")
         await client.execute(b"SELECT 1 LIMIT 0")
         request = respx.calls[0][0]
         assert request.headers["x-clickhouse-user"] == "user"
@@ -51,7 +55,9 @@ async def test_sends_authentication_headers() -> None:
 async def test_sends_session_id_as_parameter() -> None:
     client = HttpClickHouseClient(host="example.org", port=9000)
     with respx.mock:
-        respx.post("http://example.org:9000?wait_end_of_query=1&session_id=something").respond(content="")
+        respx.post(
+            "http://example.org:9000?wait_end_of_query=1&http_write_exception_in_output_format=0&session_id=something"
+        ).respond(content="")
         await client.execute(b"SELECT 1 LIMIT 0", session_id="something")
 
 
