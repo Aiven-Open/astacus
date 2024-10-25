@@ -26,11 +26,7 @@ from pathlib import Path
 from tests.conftest import CLICKHOUSE_PATH_OPTION, CLICKHOUSE_RESTORE_PATH_OPTION
 from tests.integration.conftest import get_command_path, Ports, run_process_and_wait_for_pattern, Service, ServiceCluster
 from tests.system.conftest import background_process, wait_url_up
-from tests.utils import (
-    CONSTANT_TEST_RSA_PRIVATE_KEY,
-    CONSTANT_TEST_RSA_PUBLIC_KEY,
-    format_astacus_command,
-)
+from tests.utils import CONSTANT_TEST_RSA_PRIVATE_KEY, CONSTANT_TEST_RSA_PUBLIC_KEY, format_astacus_command
 
 import argparse
 import asyncio
@@ -404,6 +400,12 @@ def create_clickhouse_configs(
                         {setting("number_of_free_entries_in_pool_to_execute_mutation", 2)}
                         {setting("number_of_free_entries_in_pool_to_execute_optimize_entire_partition", 2)}
                     </merge_tree>
+                    <replicated_merge_tree>
+                        <allow_remote_fs_zero_copy_replication>true</allow_remote_fs_zero_copy_replication>
+                        <disable_freeze_partition_for_zero_copy_replication>false</disable_freeze_partition_for_zero_copy_replication>
+                        <disable_detach_partition_for_zero_copy_replication>false</disable_detach_partition_for_zero_copy_replication>
+                        <disable_fetch_partition_for_zero_copy_replication>false</disable_fetch_partition_for_zero_copy_replication>
+                    </replicated_merge_tree>
                     {setting("background_pool_size", 4)}
                     {setting("background_move_pool_size", 2)}
                     {setting("background_fetches_pool_size", 2)}
