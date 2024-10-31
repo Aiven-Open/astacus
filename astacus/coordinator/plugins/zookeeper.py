@@ -11,6 +11,7 @@ from kazoo.protocol.states import KazooState
 from kazoo.recipe.watchers import ChildrenWatch, DataWatch
 from kazoo.retry import KazooRetry
 from queue import Empty, Queue
+from typing import TypeAlias
 
 import asyncio
 import contextlib
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 Watcher = Callable[[WatchedEvent], None]
+FaultInjection: TypeAlias = Callable[[], None]
 
 
 class ZooKeeperTransaction:
@@ -67,8 +69,9 @@ class ZooKeeperConnection:
     async def get_children_with_data(
         self,
         path: str,
-        get_data_fault: Callable[[], None] = lambda: None,
-        get_children_fault: Callable[[], None] = lambda: None,
+        *,
+        get_data_fault: FaultInjection = lambda: None,
+        get_children_fault: FaultInjection = lambda: None,
     ) -> dict[str, bytes]:
         """Returns a dictionary of all children of the given `path` with their data.
 

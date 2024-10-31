@@ -43,6 +43,7 @@ from astacus.coordinator.plugins.base import (
 from astacus.coordinator.plugins.zookeeper import ChangeWatch, NoNodeError, TransactionError, ZooKeeperClient
 from base64 import b64decode
 from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
+from kazoo.exceptions import ZookeeperError
 from typing import Any, cast, TypeVar
 
 import asyncio
@@ -224,7 +225,7 @@ class KeeperMapTablesReadOnlyStep(Step[None]):
             timeout_seconds=60,
         )
 
-    async def run_step(self, cluster: Cluster, context: StepsContext):
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         _, tables = context.get_result(RetrieveDatabasesAndTablesStep)
         replicated_users_response = await self.clients[0].execute(
             b"SELECT base64Encode(name) FROM system.users WHERE storage = 'replicated' ORDER BY name"
@@ -242,6 +243,7 @@ class KeeperMapTablesReadOnlyStep(Step[None]):
 class RetrieveKeeperMapTableDataStep(Step[Sequence[KeeperMapTable]]):
     zookeeper_client: ZooKeeperClient
     keeper_map_path_prefix: str | None
+    clients: Sequence[ClickHouseClient]
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> Sequence[KeeperMapTable]:
         if self.keeper_map_path_prefix is None:
@@ -254,6 +256,8 @@ class RetrieveKeeperMapTableDataStep(Step[Sequence[KeeperMapTable]]):
             except NoNodeError:
                 # The path doesn't exist, no keeper map tables to retrieve
                 return []
+            except ZookeeperError as e:
+                raise StepFailedError("Failed to retrieve KeeperMap tables") from e
 
             tables = []
             for child in children:
@@ -262,8 +266,10 @@ class RetrieveKeeperMapTableDataStep(Step[Sequence[KeeperMapTable]]):
                 try:
                     data = await connection.get_children_with_data(data_path)
                 except NoNodeError:
-                    logger.info("ZNode %s is missing, table was dropped.  Skipping", data_path)
+                    logger.info("ZNode %s is missing, table was dropped. Skipping", data_path)
                     continue
+                except ZookeeperError as e:
+                    raise StepFailedError("Failed to retrieve table data") from e
 
                 tables.append(
                     KeeperMapTable(
@@ -274,6 +280,12 @@ class RetrieveKeeperMapTableDataStep(Step[Sequence[KeeperMapTable]]):
                 if change_watch.has_changed:
                     raise TransientException("Concurrent table addition / deletion during KeeperMap backup")
         return tables
+
+    async def handle_step_failure(self, cluster: Cluster, context: StepsContext) -> None:
+        try:
+            await KeeperMapTablesReadOnlyStep(clients=self.clients, allow_writes=True).run_step(cluster, context)
+        except ClickHouseClientQueryError:
+            logger.warning("Unable to restore write ACLs for KeeperMap tables")
 
 
 @dataclasses.dataclass
@@ -499,6 +511,12 @@ class FreezeTablesStep(FreezeUnfreezeTablesStepBase):
     @property
     def operation(self) -> str:
         return "FREEZE"
+
+    async def handle_step_failure(self, cluster: Cluster, context: StepsContext) -> None:
+        try:
+            await KeeperMapTablesReadOnlyStep(clients=self.clients, allow_writes=True).run_step(cluster, context)
+        except ClickHouseClientQueryError:
+            logger.warning("Unable to restore write ACLs for KeeperMap tables")
 
 
 @dataclasses.dataclass

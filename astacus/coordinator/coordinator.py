@@ -271,8 +271,9 @@ class SteppedCoordinatorOp(LockedCoordinatorOp):
                 with self._progress_handler(cluster, step):
                     try:
                         r = await step.run_step(cluster, context)
-                    except (StepFailedError, WaitResultError) as e:
-                        logger.info("Step %s failed: %s", step, str(e))
+                    except (StepFailedError, WaitResultError) as exc:
+                        logger.info("Step %s failed: %s", step, str(exc))
+                        await step.handle_step_failure(cluster, context)
                         return False
             context.set_result(step.__class__, r)
         return True

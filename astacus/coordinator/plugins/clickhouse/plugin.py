@@ -134,6 +134,7 @@ class ClickHousePlugin(CoordinatorPlugin):
             RetrieveKeeperMapTableDataStep(
                 zookeeper_client=zookeeper_client,
                 keeper_map_path_prefix=self.keeper_map_path_prefix,
+                clients=clickhouse_clients,
             ),
             # Then freeze all tables
             FreezeTablesStep(

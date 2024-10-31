@@ -283,10 +283,25 @@ async def create_zookeeper_keeper_map_table_data(zookeeper_client: ZooKeeperClie
 
 async def test_retrieve_keeper_map_table_data() -> None:
     zookeeper_client = FakeZooKeeperClient()
+    clickhouse_client = mock_clickhouse_client()
     await create_zookeeper_keeper_map_table_data(zookeeper_client)
     step = RetrieveKeeperMapTableDataStep(
         zookeeper_client=zookeeper_client,
         keeper_map_path_prefix="/clickhouse/keeper_map/",
+        clients=[clickhouse_client],
+    )
+    keeper_map_data = await step.run_step(Cluster(nodes=[]), StepsContext())
+    assert keeper_map_data == SAMPLE_KEEPER_MAP_TABLES
+
+
+async def test_retrieve_keeper_map_table_data_raises_step_error_on_zookeeper_error() -> None:
+    zookeeper_client = FakeZooKeeperClient()
+    clickhouse_client = mock_clickhouse_client()
+    await create_zookeeper_keeper_map_table_data(zookeeper_client)
+    step = RetrieveKeeperMapTableDataStep(
+        zookeeper_client=zookeeper_client,
+        keeper_map_path_prefix="/clickhouse/keeper_map/",
+        clients=[clickhouse_client],
     )
     keeper_map_data = await step.run_step(Cluster(nodes=[]), StepsContext())
     assert keeper_map_data == SAMPLE_KEEPER_MAP_TABLES
