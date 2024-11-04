@@ -111,7 +111,9 @@ class Cluster:
 
         # Now 'reqs' + 'urls' contains all we need to actually perform
         # requests we want to.
-        aws = [utils.httpx_request(url, caller=caller, data=msgspec.json.encode(req), **kw) for req, url in zip(reqs, urls)]
+        aws = [
+            utils.httpx_request(url, caller=caller, content=msgspec.json.encode(req), **kw) for req, url in zip(reqs, urls)
+        ]
         results = await asyncio.gather(*aws, return_exceptions=True)
 
         logger.info("request_from_nodes %r to %r => %r", reqs, urls, results)
