@@ -19,6 +19,7 @@ from .steps import (
     DeleteDanglingObjectStorageFilesStep,
     FreezeTablesStep,
     GetVersionsStep,
+    KeeperMapTablesReadOnlyStep,
     ListDatabaseReplicasStep,
     MoveFrozenPartsStep,
     PrepareClickHouseManifestStep,
@@ -129,14 +130,17 @@ class ClickHousePlugin(CoordinatorPlugin):
             ),
             RetrieveDatabasesAndTablesStep(clients=clickhouse_clients),
             RetrieveMacrosStep(clients=clickhouse_clients),
+            KeeperMapTablesReadOnlyStep(clients=clickhouse_clients, allow_writes=False),
             RetrieveKeeperMapTableDataStep(
                 zookeeper_client=zookeeper_client,
                 keeper_map_path_prefix=self.keeper_map_path_prefix,
+                clients=clickhouse_clients,
             ),
             # Then freeze all tables
             FreezeTablesStep(
                 clients=clickhouse_clients, freeze_name=self.freeze_name, freeze_unfreeze_timeout=self.freeze_timeout
             ),
+            KeeperMapTablesReadOnlyStep(clients=clickhouse_clients, allow_writes=True),
             # Then snapshot and backup all frozen table parts
             SnapshotStep(
                 snapshot_groups=disks.get_snapshot_groups(self.freeze_name),

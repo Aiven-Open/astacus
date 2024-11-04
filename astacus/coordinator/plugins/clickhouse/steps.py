@@ -43,6 +43,7 @@ from astacus.coordinator.plugins.base import (
 from astacus.coordinator.plugins.zookeeper import ChangeWatch, NoNodeError, TransactionError, ZooKeeperClient
 from base64 import b64decode
 from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
+from kazoo.exceptions import ZookeeperError
 from typing import Any, cast, TypeVar
 
 import asyncio
@@ -180,9 +181,69 @@ class RetrieveUserDefinedFunctionsStep(Step[Sequence[UserDefinedFunction]]):
 
 
 @dataclasses.dataclass
+class KeeperMapTablesReadOnlyStep(Step[None]):
+    clients: Sequence[ClickHouseClient]
+    allow_writes: bool
+
+    async def revoke_write_on_table(self, table: Table, user_name: bytes) -> None:
+        escaped_user_name = escape_sql_identifier(user_name)
+        revoke_statement = (
+            f"REVOKE INSERT, ALTER UPDATE, ALTER DELETE ON {table.escaped_sql_identifier} FROM {escaped_user_name}"
+        )
+        await asyncio.gather(*(client.execute(revoke_statement.encode()) for client in self.clients))
+        await self.wait_for_access_type_grant(user_name=user_name, table=table, expected_count=0)
+
+    async def grant_write_on_table(self, table: Table, user_name: bytes) -> None:
+        escaped_user_name = escape_sql_identifier(user_name)
+        grant_statement = (
+            f"GRANT INSERT, ALTER UPDATE, ALTER DELETE ON {table.escaped_sql_identifier} TO {escaped_user_name}"
+        )
+        await asyncio.gather(*(client.execute(grant_statement.encode()) for client in self.clients))
+        await self.wait_for_access_type_grant(user_name=user_name, table=table, expected_count=3)
+
+    async def wait_for_access_type_grant(self, *, table: Table, user_name: bytes, expected_count: int) -> None:
+        escaped_user_name = escape_sql_string(user_name)
+        escaped_database = escape_sql_string(table.database)
+        escaped_table = escape_sql_string(table.name)
+
+        async def check_function_count(client: ClickHouseClient) -> bool:
+            statement = (
+                f"SELECT count() FROM grants "
+                f"WHERE user_name={escaped_user_name} "
+                f"AND database={escaped_database} "
+                f"AND table={escaped_table} "
+                f"AND access_type IN ('INSERT', 'ALTER UPDATE', 'ALTER DELETE')"
+            )
+            num_grants_response = await client.execute(statement.encode())
+            num_grants = int(cast(str, num_grants_response[0][0]))
+            return num_grants == expected_count
+
+        await wait_for_condition_on_every_node(
+            clients=self.clients,
+            condition=check_function_count,
+            description="access grants changes to be enforced",
+            timeout_seconds=60,
+        )
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
+        _, tables = context.get_result(RetrieveDatabasesAndTablesStep)
+        replicated_users_response = await self.clients[0].execute(
+            b"SELECT base64Encode(name) FROM system.users WHERE storage = 'replicated' ORDER BY name"
+        )
+        replicated_users_names = [b64decode(cast(str, user[0])) for user in replicated_users_response]
+        keeper_map_table_names = [table for table in tables if table.engine == "KeeperMap"]
+        privilege_altering_fun = self.grant_write_on_table if self.allow_writes else self.revoke_write_on_table
+        privilege_update_tasks = [
+            privilege_altering_fun(table, user) for table in keeper_map_table_names for user in replicated_users_names
+        ]
+        await asyncio.gather(*privilege_update_tasks)
+
+
+@dataclasses.dataclass
 class RetrieveKeeperMapTableDataStep(Step[Sequence[KeeperMapTable]]):
     zookeeper_client: ZooKeeperClient
     keeper_map_path_prefix: str | None
+    clients: Sequence[ClickHouseClient]
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> Sequence[KeeperMapTable]:
         if self.keeper_map_path_prefix is None:
@@ -195,6 +256,8 @@ class RetrieveKeeperMapTableDataStep(Step[Sequence[KeeperMapTable]]):
             except NoNodeError:
                 # The path doesn't exist, no keeper map tables to retrieve
                 return []
+            except ZookeeperError as e:
+                raise StepFailedError("Failed to retrieve KeeperMap tables") from e
 
             tables = []
             for child in children:
@@ -203,8 +266,10 @@ class RetrieveKeeperMapTableDataStep(Step[Sequence[KeeperMapTable]]):
                 try:
                     data = await connection.get_children_with_data(data_path)
                 except NoNodeError:
-                    logger.info("ZNode %s is missing, table was dropped.  Skipping", data_path)
+                    logger.info("ZNode %s is missing, table was dropped. Skipping", data_path)
                     continue
+                except ZookeeperError as e:
+                    raise StepFailedError("Failed to retrieve table data") from e
 
                 tables.append(
                     KeeperMapTable(
@@ -215,6 +280,12 @@ class RetrieveKeeperMapTableDataStep(Step[Sequence[KeeperMapTable]]):
                 if change_watch.has_changed:
                     raise TransientException("Concurrent table addition / deletion during KeeperMap backup")
         return tables
+
+    async def handle_step_failure(self, cluster: Cluster, context: StepsContext) -> None:
+        try:
+            await KeeperMapTablesReadOnlyStep(clients=self.clients, allow_writes=True).run_step(cluster, context)
+        except ClickHouseClientQueryError:
+            logger.warning("Unable to restore write ACLs for KeeperMap tables")
 
 
 @dataclasses.dataclass
@@ -440,6 +511,12 @@ class FreezeTablesStep(FreezeUnfreezeTablesStepBase):
     @property
     def operation(self) -> str:
         return "FREEZE"
+
+    async def handle_step_failure(self, cluster: Cluster, context: StepsContext) -> None:
+        try:
+            await KeeperMapTablesReadOnlyStep(clients=self.clients, allow_writes=True).run_step(cluster, context)
+        except ClickHouseClientQueryError:
+            logger.warning("Unable to restore write ACLs for KeeperMap tables")
 
 
 @dataclasses.dataclass

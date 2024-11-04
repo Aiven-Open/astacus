@@ -3,14 +3,16 @@ See LICENSE for details.
 """
 
 from .conftest import ClickHouseCommand, create_clickhouse_cluster, get_clickhouse_client, MinioBucket
+from .test_plugin import setup_cluster_users
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import StepsContext
+from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, ClickHouseClientQueryError, HttpClickHouseClient
 from astacus.coordinator.plugins.clickhouse.manifest import ReplicatedDatabase, Table
-from astacus.coordinator.plugins.clickhouse.steps import RetrieveDatabasesAndTablesStep
+from astacus.coordinator.plugins.clickhouse.steps import KeeperMapTablesReadOnlyStep, RetrieveDatabasesAndTablesStep
 from base64 import b64decode
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from tests.integration.conftest import create_zookeeper, Ports
-from typing import cast
+from typing import cast, NamedTuple
 from uuid import UUID
 
 import pytest
@@ -99,3 +101,77 @@ async def test_retrieve_tables(ports: Ports, clickhouse_command: ClickHouseComma
                     dependencies=[],
                 ),
             ]
+
+
+class KeeperMapInfo(NamedTuple):
+    context: StepsContext
+    clickhouse_client: ClickHouseClient
+    user_client: ClickHouseClient
+
+
+@pytest.fixture(name="keeper_table_context")
+async def fixture_keeper_table_context(
+    ports: Ports, clickhouse_command: ClickHouseCommand, minio_bucket: MinioBucket
+) -> AsyncIterator[KeeperMapInfo]:
+    async with (
+        create_zookeeper(ports) as zookeeper,
+        create_clickhouse_cluster(zookeeper, minio_bucket, ports, ["s1"], clickhouse_command) as clickhouse_cluster,
+    ):
+        clickhouse = clickhouse_cluster.services[0]
+        admin_client = get_clickhouse_client(clickhouse)
+        await setup_cluster_users([admin_client])
+        for statement in [
+            b"CREATE DATABASE `keeperdata` ENGINE = Replicated('/clickhouse/databases/keeperdata', '{my_shard}', '{my_replica}')",
+            b"CREATE TABLE `keeperdata`.`keepertable` (thekey UInt32, thevalue UInt32) ENGINE = KeeperMap('test', 1000) PRIMARY KEY thekey",
+            b"INSERT INTO `keeperdata`.`keepertable` SELECT *, materialize(1) FROM numbers(3)",
+            b"CREATE USER bob IDENTIFIED WITH sha256_password BY 'secret'",
+            b"GRANT INSERT, SELECT, UPDATE, DELETE ON `keeperdata`.`keepertable` TO `bob`",
+        ]:
+            await admin_client.execute(statement)
+        user_client = HttpClickHouseClient(
+            host=clickhouse.host,
+            port=clickhouse.port,
+            username="bob",
+            password="secret",
+            timeout=10,
+        )
+        step = RetrieveDatabasesAndTablesStep(clients=[admin_client])
+        context = StepsContext()
+        databases_tables_result = await step.run_step(Cluster(nodes=[]), context=context)
+        context.set_result(RetrieveDatabasesAndTablesStep, databases_tables_result)
+        yield KeeperMapInfo(context, admin_client, user_client)
+
+
+async def test_keeper_map_table_select_only_setting_modified(keeper_table_context: KeeperMapInfo) -> None:
+    steps_context, admin_client, user_client = keeper_table_context
+    read_only_step = KeeperMapTablesReadOnlyStep(clients=[admin_client], allow_writes=False)
+    # After the read-only step, the user should only be able to select from the table
+    await read_only_step.run_step(Cluster(nodes=[]), steps_context)
+    with pytest.raises(ClickHouseClientQueryError, match=".*ACCESS_DENIED.*"):
+        await user_client.execute(
+            b"INSERT INTO `keeperdata`.`keepertable` SETTINGS wait_for_async_insert=1  SELECT *, materialize(2) FROM numbers(3)"
+        )
+    with pytest.raises(ClickHouseClientQueryError, match=".*ACCESS_DENIED.*"):
+        await user_client.execute(b"ALTER TABLE `keeperdata`.`keepertable` UPDATE thevalue = 3 WHERE thekey < 20")
+    with pytest.raises(ClickHouseClientQueryError, match=".*ACCESS_DENIED.*"):
+        await user_client.execute(b"DELETE FROM `keeperdata`.`keepertable` WHERE thekey < 20")
+    read_only_row_count = cast(
+        Sequence[tuple[int]], await user_client.execute(b"SELECT count() FROM `keeperdata`.`keepertable`")
+    )
+    assert int(read_only_row_count[0][0]) == 3
+    # After the read-write step, the user should be able to write, update and delete from the table
+    read_write_step = KeeperMapTablesReadOnlyStep(clients=[admin_client], allow_writes=True)
+    await read_write_step.run_step(Cluster(nodes=[]), steps_context)
+    await user_client.execute(b"INSERT INTO `keeperdata`.`keepertable` SELECT *, materialize(3) FROM numbers(3, 3)")
+    read_write_row_count = cast(
+        Sequence[tuple[int]], await user_client.execute(b"SELECT count() FROM `keeperdata`.`keepertable`")
+    )
+    assert int(read_write_row_count[0][0]) == 6
+    await user_client.execute(b"ALTER TABLE `keeperdata`.`keepertable` UPDATE thevalue = 3 WHERE thekey < 20")
+    current_values = await user_client.execute(b"SELECT thevalue FROM `keeperdata`.`keepertable` ORDER BY thekey")
+    assert all(int(cast(str, val[0])) == 3 for val in current_values)
+    await user_client.execute(b"DELETE FROM `keeperdata`.`keepertable` WHERE thekey < 20")
+    post_delete_row_count = cast(
+        Sequence[tuple[int]], await user_client.execute(b"SELECT count() FROM `keeperdata`.`keepertable`")
+    )
+    assert int(post_delete_row_count[0][0]) == 0

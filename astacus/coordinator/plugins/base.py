@@ -71,13 +71,23 @@ class Step(Generic[StepResult_co]):
     async def run_step(self, cluster: Cluster, context: StepsContext) -> StepResult_co:
         raise NotImplementedError
 
+    async def handle_step_failure(self, cluster: Cluster, context: StepsContext) -> None:
+        # This method should not raise exceptions
+        return None
+
 
 class SyncStep(Step[StepResult_co]):
     async def run_step(self, cluster: Cluster, context: StepsContext) -> StepResult_co:
         return await run_in_threadpool(self.run_sync_step, cluster, context)
 
+    async def handle_step_failure(self, cluster: Cluster, context: StepsContext) -> None:
+        await run_in_threadpool(self.handle_step_failure_sync, cluster, context)
+
     def run_sync_step(self, cluster: Cluster, context: StepsContext) -> StepResult_co:
         raise NotImplementedError
+
+    def handle_step_failure_sync(self, cluster: Cluster, context: StepsContext) -> None:
+        return None
 
 
 class StepFailedError(exceptions.PermanentException):
