@@ -191,7 +191,6 @@ class KeeperMapTablesReadOnlyStep(Step[None]):
             f"REVOKE INSERT, ALTER UPDATE, ALTER DELETE ON {table.escaped_sql_identifier} FROM {escaped_user_name}"
         )
         await asyncio.gather(*(client.execute(revoke_statement.encode()) for client in self.clients))
-        await self.wait_for_access_type_grant(user_name=user_name, table=table, expected_count=0)
 
     async def grant_write_on_table(self, table: Table, user_name: bytes) -> None:
         escaped_user_name = escape_sql_identifier(user_name)
@@ -199,31 +198,6 @@ class KeeperMapTablesReadOnlyStep(Step[None]):
             f"GRANT INSERT, ALTER UPDATE, ALTER DELETE ON {table.escaped_sql_identifier} TO {escaped_user_name}"
         )
         await asyncio.gather(*(client.execute(grant_statement.encode()) for client in self.clients))
-        await self.wait_for_access_type_grant(user_name=user_name, table=table, expected_count=3)
-
-    async def wait_for_access_type_grant(self, *, table: Table, user_name: bytes, expected_count: int) -> None:
-        escaped_user_name = escape_sql_string(user_name)
-        escaped_database = escape_sql_string(table.database)
-        escaped_table = escape_sql_string(table.name)
-
-        async def check_function_count(client: ClickHouseClient) -> bool:
-            statement = (
-                f"SELECT count() FROM grants "
-                f"WHERE user_name={escaped_user_name} "
-                f"AND database={escaped_database} "
-                f"AND table={escaped_table} "
-                f"AND access_type IN ('INSERT', 'ALTER UPDATE', 'ALTER DELETE')"
-            )
-            num_grants_response = await client.execute(statement.encode())
-            num_grants = int(cast(str, num_grants_response[0][0]))
-            return num_grants == expected_count
-
-        await wait_for_condition_on_every_node(
-            clients=self.clients,
-            condition=check_function_count,
-            description="access grants changes to be enforced",
-            timeout_seconds=60,
-        )
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         _, tables = context.get_result(RetrieveDatabasesAndTablesStep)

@@ -3,7 +3,6 @@ See LICENSE for details.
 """
 
 from .conftest import ClickHouseCommand, create_clickhouse_cluster, get_clickhouse_client, MinioBucket
-from .test_plugin import setup_cluster_users
 from astacus.coordinator.cluster import Cluster
 from astacus.coordinator.plugins.base import StepsContext
 from astacus.coordinator.plugins.clickhouse.client import ClickHouseClient, ClickHouseClientQueryError, HttpClickHouseClient
@@ -106,7 +105,47 @@ async def test_retrieve_tables(ports: Ports, clickhouse_command: ClickHouseComma
 class KeeperMapInfo(NamedTuple):
     context: StepsContext
     clickhouse_client: ClickHouseClient
-    user_client: ClickHouseClient
+    user_clients: Sequence[ClickHouseClient]
+
+
+def get_grant_database_usage_queries(user_name: str, database_names: Sequence[str]) -> list[bytes]:
+    database_privileges = [
+        "ALTER UPDATE",
+        "ALTER DELETE",
+        "ALTER COLUMN",
+        "ALTER MODIFY COMMENT",
+        "ALTER INDEX",
+        "ALTER PROJECTION",
+        "ALTER CONSTRAINT",
+        "ALTER TTL",
+        "ALTER SETTINGS",
+        "ALTER VIEW",
+        "CREATE TABLE",
+        "DROP TABLE",
+        "INSERT",
+        "OPTIMIZE",
+        "SELECT",
+        "SHOW",
+        "SYSTEM SYNC REPLICA",
+        "TRUNCATE",
+    ]
+    database_privileges_str = ", ".join(database_privileges)
+    return [
+        f"GRANT {database_privileges_str} ON {database_name}.* TO {user_name} WITH GRANT OPTION".encode()
+        for database_name in database_names
+    ]
+
+
+async def create_user_with_privileges(admin_client: ClickHouseClient, *, username: str, password: str) -> None:
+    await admin_client.execute(f"CREATE USER {username} IDENTIFIED WITH sha256_password BY '{password}'".encode())
+    await admin_client.execute(f"GRANT ACCESS MANAGEMENT ON *.* TO {username} WITH GRANT OPTION".encode())
+    response_rows = cast(
+        Sequence[tuple[str]],
+        await admin_client.execute(b"SELECT name FROM system.databases WHERE engine == 'Replicated' ORDER BY name"),
+    )
+    database_names = [row[0] for row in response_rows]
+    for query in get_grant_database_usage_queries(username, database_names):
+        await admin_client.execute(query)
 
 
 @pytest.fixture(name="keeper_table_context")
@@ -119,34 +158,33 @@ async def fixture_keeper_table_context(
     ):
         clickhouse = clickhouse_cluster.services[0]
         admin_client = get_clickhouse_client(clickhouse)
-        await setup_cluster_users([admin_client])
-        for statement in [
-            b"CREATE DATABASE `keeperdata` ENGINE = Replicated('/clickhouse/databases/keeperdata', '{my_shard}', '{my_replica}')",
-            b"CREATE TABLE `keeperdata`.`keepertable` (thekey UInt32, thevalue UInt32) ENGINE = KeeperMap('test', 1000) PRIMARY KEY thekey",
-            b"INSERT INTO `keeperdata`.`keepertable` SELECT *, materialize(1) FROM numbers(3)",
-            b"CREATE USER bob IDENTIFIED WITH sha256_password BY 'secret'",
-            b"GRANT INSERT, SELECT, UPDATE, DELETE ON `keeperdata`.`keepertable` TO `bob`",
-        ]:
-            await admin_client.execute(statement)
-        user_client = HttpClickHouseClient(
+        await admin_client.execute(
+            b"CREATE DATABASE `keeperdata` ENGINE = Replicated('/clickhouse/databases/keeperdata', '{my_shard}', '{my_replica}')"
+        )
+        await create_user_with_privileges(admin_client, username="foobar", password="secret")
+        foobar_client = HttpClickHouseClient(
             host=clickhouse.host,
             port=clickhouse.port,
-            username="bob",
+            username="foobar",
             password="secret",
             timeout=10,
         )
+        for statement in [
+            b"CREATE TABLE `keeperdata`.`keepertable` (thekey UInt32, thevalue UInt32) ENGINE = KeeperMap('test', 1000) PRIMARY KEY thekey",
+            b"INSERT INTO `keeperdata`.`keepertable` SELECT *, materialize(1) FROM numbers(3)",
+            b"CREATE USER alice",
+            b"GRANT SELECT, INSERT, UPDATE, DELETE on `keeperdata`.* TO alice",
+        ]:
+            await foobar_client.execute(statement)
+        alice_client = HttpClickHouseClient(host=clickhouse.host, port=clickhouse.port, username="alice", timeout=10)
         step = RetrieveDatabasesAndTablesStep(clients=[admin_client])
         context = StepsContext()
         databases_tables_result = await step.run_step(Cluster(nodes=[]), context=context)
         context.set_result(RetrieveDatabasesAndTablesStep, databases_tables_result)
-        yield KeeperMapInfo(context, admin_client, user_client)
+        yield KeeperMapInfo(context, admin_client, [foobar_client, alice_client])
 
 
-async def test_keeper_map_table_select_only_setting_modified(keeper_table_context: KeeperMapInfo) -> None:
-    steps_context, admin_client, user_client = keeper_table_context
-    read_only_step = KeeperMapTablesReadOnlyStep(clients=[admin_client], allow_writes=False)
-    # After the read-only step, the user should only be able to select from the table
-    await read_only_step.run_step(Cluster(nodes=[]), steps_context)
+async def check_read_only(user_client: ClickHouseClient) -> None:
     with pytest.raises(ClickHouseClientQueryError, match=".*ACCESS_DENIED.*"):
         await user_client.execute(
             b"INSERT INTO `keeperdata`.`keepertable` SETTINGS wait_for_async_insert=1  SELECT *, materialize(2) FROM numbers(3)"
@@ -159,14 +197,14 @@ async def test_keeper_map_table_select_only_setting_modified(keeper_table_contex
         Sequence[tuple[int]], await user_client.execute(b"SELECT count() FROM `keeperdata`.`keepertable`")
     )
     assert int(read_only_row_count[0][0]) == 3
-    # After the read-write step, the user should be able to write, update and delete from the table
-    read_write_step = KeeperMapTablesReadOnlyStep(clients=[admin_client], allow_writes=True)
-    await read_write_step.run_step(Cluster(nodes=[]), steps_context)
-    await user_client.execute(b"INSERT INTO `keeperdata`.`keepertable` SELECT *, materialize(3) FROM numbers(3, 3)")
+
+
+async def check_read_write(user_client: ClickHouseClient) -> None:
+    await user_client.execute(b"INSERT INTO `keeperdata`.`keepertable` SELECT *, materialize(10) FROM numbers(3)")
     read_write_row_count = cast(
         Sequence[tuple[int]], await user_client.execute(b"SELECT count() FROM `keeperdata`.`keepertable`")
     )
-    assert int(read_write_row_count[0][0]) == 6
+    assert int(read_write_row_count[0][0]) == 3
     await user_client.execute(b"ALTER TABLE `keeperdata`.`keepertable` UPDATE thevalue = 3 WHERE thekey < 20")
     current_values = await user_client.execute(b"SELECT thevalue FROM `keeperdata`.`keepertable` ORDER BY thekey")
     assert all(int(cast(str, val[0])) == 3 for val in current_values)
@@ -175,3 +213,23 @@ async def test_keeper_map_table_select_only_setting_modified(keeper_table_contex
         Sequence[tuple[int]], await user_client.execute(b"SELECT count() FROM `keeperdata`.`keepertable`")
     )
     assert int(post_delete_row_count[0][0]) == 0
+
+
+async def test_keeper_map_table_read_only_step(keeper_table_context: KeeperMapInfo) -> None:
+    steps_context, admin_client, user_clients = keeper_table_context
+    read_only_step = KeeperMapTablesReadOnlyStep(clients=[admin_client], allow_writes=False)
+    # After the read-only step, users should only be able to select from the table
+    await read_only_step.run_step(Cluster(nodes=[]), steps_context)
+    for user_client in user_clients:
+        await check_read_only(user_client)
+    # After the read-write step, users should be able to write, update and delete from the table
+    read_write_step = KeeperMapTablesReadOnlyStep(clients=[admin_client], allow_writes=True)
+    await read_write_step.run_step(Cluster(nodes=[]), steps_context)
+    # Clean up table so that each user starts from a clean slate
+    await admin_client.execute(b"TRUNCATE TABLE `keeperdata`.`keepertable`")
+    post_delete_row_count = cast(
+        Sequence[tuple[int]], await admin_client.execute(b"SELECT count() FROM `keeperdata`.`keepertable`")
+    )
+    assert int(post_delete_row_count[0][0]) == 0
+    for user_client in user_clients:
+        await check_read_write(user_client)
