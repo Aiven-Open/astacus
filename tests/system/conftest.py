@@ -120,7 +120,7 @@ def create_astacus_config(
 
 async def wait_url_up(url: str | URL) -> None:
     async with httpx.AsyncClient() as client:
-        async for _ in exponential_backoff(initial=0.1, multiplier=1.3, retries=20):
+        async for _ in exponential_backoff(initial=0.1, multiplier=1.4, retries=20):
             try:
                 r = await client.get(url)
                 if not r.is_error:
