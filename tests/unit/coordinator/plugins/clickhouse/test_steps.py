@@ -1299,7 +1299,6 @@ async def test_restore_keeper_map_table_data_step() -> None:
             [
                 b"SELECT base64Encode(name) FROM system.users WHERE storage = 'replicated' ORDER BY name",
                 b"REVOKE INSERT, ALTER UPDATE, ALTER DELETE ON `db-two`.`table-keeper` FROM `alice`",
-                b"SELECT count() FROM grants WHERE user_name='alice' AND database='db-two' AND table='table-keeper' AND access_type IN ('INSERT', 'ALTER UPDATE', 'ALTER DELETE')",
             ],
         ),
         (
@@ -1307,7 +1306,6 @@ async def test_restore_keeper_map_table_data_step() -> None:
             [
                 b"SELECT base64Encode(name) FROM system.users WHERE storage = 'replicated' ORDER BY name",
                 b"GRANT INSERT, ALTER UPDATE, ALTER DELETE ON `db-two`.`table-keeper` TO `alice`",
-                b"SELECT count() FROM grants WHERE user_name='alice' AND database='db-two' AND table='table-keeper' AND access_type IN ('INSERT', 'ALTER UPDATE', 'ALTER DELETE')",
             ],
         ),
     ],
@@ -1319,12 +1317,6 @@ async def test_keeper_map_table_select_only_setting_modified(allow_writes: bool,
     def execute_side_effect(statement: bytes) -> list[Row]:
         if statement == b"SELECT base64Encode(name) FROM system.users WHERE storage = 'replicated' ORDER BY name":
             return [[base64.b64encode(b"alice").decode()]]
-        elif (
-            statement
-            == b"SELECT count() FROM grants WHERE user_name='alice' AND database='db-two' AND table='table-keeper' AND access_type IN ('INSERT', 'ALTER UPDATE', 'ALTER DELETE')"
-        ):
-            num_expected_grants = 3 if allow_writes else 0
-            return [[num_expected_grants]]
         return []
 
     clickhouse_client.execute.side_effect = execute_side_effect
