@@ -190,14 +190,14 @@ class KeeperMapTablesReadOnlyStep(Step[None]):
         revoke_statement = (
             f"REVOKE INSERT, ALTER UPDATE, ALTER DELETE ON {table.escaped_sql_identifier} FROM {escaped_user_name}"
         )
-        await asyncio.gather(*(client.execute(revoke_statement.encode()) for client in self.clients))
+        await self.clients[0].execute(revoke_statement.encode())
 
     async def grant_write_on_table(self, table: Table, user_name: bytes) -> None:
         escaped_user_name = escape_sql_identifier(user_name)
         grant_statement = (
             f"GRANT INSERT, ALTER UPDATE, ALTER DELETE ON {table.escaped_sql_identifier} TO {escaped_user_name}"
         )
-        await asyncio.gather(*(client.execute(grant_statement.encode()) for client in self.clients))
+        await self.clients[0].execute(grant_statement.encode())
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         _, tables = context.get_result(RetrieveDatabasesAndTablesStep)
