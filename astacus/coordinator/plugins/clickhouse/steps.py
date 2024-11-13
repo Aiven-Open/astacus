@@ -43,6 +43,7 @@ from astacus.coordinator.plugins.base import (
 from astacus.coordinator.plugins.zookeeper import ChangeWatch, NoNodeError, TransactionError, ZooKeeperClient
 from base64 import b64decode
 from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
+from datetime import timedelta
 from kazoo.exceptions import ZookeeperError
 from typing import Any, cast, TypeVar
 
@@ -1070,6 +1071,8 @@ class DeleteDanglingObjectStorageFilesStep(SyncStep[None]):
 
     disks: Disks
     json_storage: JsonStorage
+    # the longest it could be expected to take to upload a part
+    file_upload_grace_period: timedelta = timedelta(hours=6)
 
     def run_sync_step(self, cluster: Cluster, context: StepsContext) -> None:
         backup_manifests = context.get_result(ComputeKeptBackupsStep)
@@ -1078,7 +1081,14 @@ class DeleteDanglingObjectStorageFilesStep(SyncStep[None]):
             # If we don't have at least one backup, we don't know which files are more recent
             # than the latest backup, so we don't do anything.
             return
+
+        # When a part is moved to the remote disk, firstly files are copied,
+        # then the part is committed. This means for a very large part with
+        # multiple files, the last_modified time of some files on remote storage
+        # may be significantly earlier than the time the part actually appears.
+        # We do not want to delete these files!
         newest_backup_start_time = max(backup_manifest.start for backup_manifest in backup_manifests)
+        latest_safe_delete_time = newest_backup_start_time - self.file_upload_grace_period
 
         kept_paths: dict[str, set[str]] = {}
         for manifest_min in backup_manifests:
@@ -1097,10 +1107,7 @@ class DeleteDanglingObjectStorageFilesStep(SyncStep[None]):
                 logger.info("found %d object storage files to keep in disk %r", len(disk_kept_paths), disk_name)
                 disk_object_storage_items = disk_object_storage.list_items()
                 for item in disk_object_storage_items:
-                    # We don't know if objects newer than the latest backup should be kept or not,
-                    # so we leave them for now. We'll delete them if necessary once there is a newer
-                    # backup to tell us if they are still used or not.
-                    if item.last_modified < newest_backup_start_time and item.key not in disk_kept_paths:
+                    if item.last_modified < latest_safe_delete_time and item.key not in disk_kept_paths:
                         logger.debug("dangling object storage file in disk %r : %r", disk_name, item.key)
                         keys_to_remove.append(item.key)
                 disk_available_paths = [item.key for item in disk_object_storage_items]

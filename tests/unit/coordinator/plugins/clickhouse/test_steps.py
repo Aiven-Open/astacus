@@ -1453,6 +1453,9 @@ async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
             ObjectStorageItem(key="jkl/mnopqr", last_modified=datetime.datetime(2020, 1, 2, tzinfo=datetime.UTC)),
             ObjectStorageItem(key="stu/vwxyza", last_modified=datetime.datetime(2020, 1, 3, tzinfo=datetime.UTC)),
             ObjectStorageItem(key="not_used/and_new", last_modified=datetime.datetime(2020, 1, 4, tzinfo=datetime.UTC)),
+            ObjectStorageItem(
+                key="not_used/and_within_grace_period", last_modified=datetime.datetime(2020, 1, 3, 7, tzinfo=datetime.UTC)
+            ),
         ]
     )
     manifests = [
@@ -1514,6 +1517,9 @@ async def test_delete_object_storage_files_step(tmp_path: Path) -> None:
         ObjectStorageItem(key="jkl/mnopqr", last_modified=datetime.datetime(2020, 1, 2, tzinfo=datetime.UTC)),
         ObjectStorageItem(key="stu/vwxyza", last_modified=datetime.datetime(2020, 1, 3, tzinfo=datetime.UTC)),
         ObjectStorageItem(key="not_used/and_new", last_modified=datetime.datetime(2020, 1, 4, tzinfo=datetime.UTC)),
+        ObjectStorageItem(
+            key="not_used/and_within_grace_period", last_modified=datetime.datetime(2020, 1, 3, 7, tzinfo=datetime.UTC)
+        ),
     ]
 
 
