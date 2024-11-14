@@ -6,6 +6,7 @@ without a running Astacus process.
 
 """
 
+from argparse import ArgumentParser
 from astacus.common import ipc
 from astacus.common.rohmustorage import RohmuConfig, RohmuStorage
 from pathlib import Path
@@ -21,7 +22,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def create_manifest_parsers(parser, subparsers):
+def create_manifest_parsers(parser: ArgumentParser, subparsers):
     p_manifest = subparsers.add_parser("manifest", help="Examine Astacus backup manifests")
     p_manifest.add_argument("-c", "--config", type=str, required=True, help="Astacus server configuration file to use")
     p_manifest.add_argument("-s", "--storage", type=str, help="Storage to use")
@@ -62,6 +63,7 @@ def create_download_files_parser(subparsers):
     )
     p_download_files.add_argument("destination", type=str, help="Destination directory to download files to")
     p_download_files.add_argument("--prefix", type=str, help="Prefix to filter files", required=True)
+    p_download_files.add_argument("--node", type=int, help="Node index to download files from", required=True)
     p_download_files.set_defaults(func=_run_download_files)
 
 
@@ -69,20 +71,22 @@ def _run_download_files(args):
     rohmu_storage = _create_rohmu_storage(args.config, args.storage)
     manifest = rohmu_storage.download_json(args.manifest, ipc.BackupManifest)
     destination = Path(args.destination)
-    for snapshot_result in manifest.snapshot_results:
-        assert snapshot_result.state
-        for snapshot_file in snapshot_result.state.files:
-            if not snapshot_file.relative_path.startswith(args.prefix):
-                continue
+    if args.node >= len(manifest.upload_results):
+        raise ValueError(f"Node {args.node} not found in manifest")
+    snapshot_result = manifest.snapshot_results[args.node]
+    assert snapshot_result.state
+    for snapshot_file in snapshot_result.state.files:
+        if not snapshot_file.relative_path.startswith(args.prefix):
+            continue
 
-            path = destination / snapshot_file.relative_path
-            path.parent.mkdir(parents=True, exist_ok=True)
-            logger.info("Downloading %s to %s", snapshot_file.relative_path, path)
-            if snapshot_file.hexdigest:
-                rohmu_storage.download_hexdigest_to_path(snapshot_file.hexdigest, path)
-            else:
-                assert snapshot_file.content_b64 is not None
-                path.write_bytes(base64.b64decode(snapshot_file.content_b64))
+        path = destination / snapshot_file.relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        logger.info("Downloading %s to %s", snapshot_file.relative_path, path)
+        if snapshot_file.hexdigest:
+            rohmu_storage.download_hexdigest_to_path(snapshot_file.hexdigest, path)
+        else:
+            assert snapshot_file.content_b64 is not None
+            path.write_bytes(base64.b64decode(snapshot_file.content_b64))
 
 
 def _run_list(args):
