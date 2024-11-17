@@ -251,6 +251,12 @@ async def setup_cluster_content(clients: Sequence[HttpClickHouseClient], clickho
         )
     if await is_engine_available(clients[0], TableEngine.S3):
         await clients[0].execute(b"CREATE TABLE default.s3 (a Int) ENGINE = S3('http://bucket.s3.amazonaws.com/key.json')")
+
+    if await is_engine_available(clients[0], TableEngine.AzureBlobStorage):
+        await clients[0].execute(
+            b"CREATE TABLE default.azureblobstorage (a Int) ENGINE = AzureBlobStorage('DefaultEndpointsProtocol=', 'test_container', 'test_table', 'CSV')"
+        )
+
     # add a function table
     await clients[0].execute(b"CREATE TABLE default.from_function_table AS numbers(3)")
     # add a table with data in object storage
@@ -578,6 +584,7 @@ async def test_cleanup_does_not_break_object_storage_disk_files(
         ("default.postgresql", TableEngine.PostgreSQL),
         ("default.mysql", TableEngine.MySQL),
         ("default.s3", TableEngine.S3),
+        ("default.azureblobstorage", TableEngine.AzureBlobStorage),
     ],
 )
 async def test_restores_integration_tables(
