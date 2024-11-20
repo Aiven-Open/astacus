@@ -20,6 +20,7 @@ from .steps import (
     FreezeTablesStep,
     GetVersionsStep,
     KeeperMapTablesReadOnlyStep,
+    KeeperMapTablesReadWriteStep,
     ListDatabaseReplicasStep,
     MoveFrozenPartsStep,
     PrepareClickHouseManifestStep,
@@ -130,7 +131,7 @@ class ClickHousePlugin(CoordinatorPlugin):
             ),
             RetrieveDatabasesAndTablesStep(clients=clickhouse_clients),
             RetrieveMacrosStep(clients=clickhouse_clients),
-            KeeperMapTablesReadOnlyStep(clients=clickhouse_clients, allow_writes=False),
+            KeeperMapTablesReadOnlyStep(clients=clickhouse_clients),
             RetrieveKeeperMapTableDataStep(
                 zookeeper_client=zookeeper_client,
                 keeper_map_path_prefix=self.keeper_map_path_prefix,
@@ -140,7 +141,7 @@ class ClickHousePlugin(CoordinatorPlugin):
             FreezeTablesStep(
                 clients=clickhouse_clients, freeze_name=self.freeze_name, freeze_unfreeze_timeout=self.freeze_timeout
             ),
-            KeeperMapTablesReadOnlyStep(clients=clickhouse_clients, allow_writes=True),
+            KeeperMapTablesReadWriteStep(clients=clickhouse_clients),
             # Then snapshot and backup all frozen table parts
             SnapshotStep(
                 snapshot_groups=disks.get_snapshot_groups(self.freeze_name),

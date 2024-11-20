@@ -182,36 +182,33 @@ class RetrieveUserDefinedFunctionsStep(Step[Sequence[UserDefinedFunction]]):
 
 
 @dataclasses.dataclass
-class KeeperMapTablesReadOnlyStep(Step[None]):
+class KeeperMapTablesReadabilityStepBase(Step[None]):
     clients: Sequence[ClickHouseClient]
-    allow_writes: bool
+    _is_read_only: bool = dataclasses.field(init=False)
 
-    async def revoke_write_on_table(self, table: Table, user_name: bytes) -> None:
-        escaped_user_name = escape_sql_identifier(user_name)
-        revoke_statement = (
-            f"REVOKE INSERT, ALTER UPDATE, ALTER DELETE ON {table.escaped_sql_identifier} FROM {escaped_user_name}"
-        )
-        await self.clients[0].execute(revoke_statement.encode())
+    def readability_statement(self, escaped_table_identifier: str) -> str:
+        read_only = str(self._is_read_only).lower()
+        return f"ALTER TABLE {escaped_table_identifier} MODIFY SETTING read_only={read_only}"
 
-    async def grant_write_on_table(self, table: Table, user_name: bytes) -> None:
-        escaped_user_name = escape_sql_identifier(user_name)
-        grant_statement = (
-            f"GRANT INSERT, ALTER UPDATE, ALTER DELETE ON {table.escaped_sql_identifier} TO {escaped_user_name}"
-        )
-        await self.clients[0].execute(grant_statement.encode())
+    async def alter_readability(self, escaped_table_identifier: str) -> None:
+        statement = self.readability_statement(escaped_table_identifier).encode()
+        await self.clients[0].execute(statement)
 
     async def run_step(self, cluster: Cluster, context: StepsContext) -> None:
         _, tables = context.get_result(RetrieveDatabasesAndTablesStep)
-        replicated_users_response = await self.clients[0].execute(
-            b"SELECT base64Encode(name) FROM system.users WHERE storage = 'replicated' ORDER BY name"
-        )
-        replicated_users_names = [b64decode(cast(str, user[0])) for user in replicated_users_response]
         keeper_map_table_names = [table for table in tables if table.engine == "KeeperMap"]
-        privilege_altering_fun = self.grant_write_on_table if self.allow_writes else self.revoke_write_on_table
-        privilege_update_tasks = [
-            privilege_altering_fun(table, user) for table in keeper_map_table_names for user in replicated_users_names
-        ]
+        privilege_update_tasks = [self.alter_readability(table.escaped_sql_identifier) for table in keeper_map_table_names]
         await asyncio.gather(*privilege_update_tasks)
+
+
+@dataclasses.dataclass
+class KeeperMapTablesReadOnlyStep(KeeperMapTablesReadabilityStepBase):
+    _is_read_only = True
+
+
+@dataclasses.dataclass
+class KeeperMapTablesReadWriteStep(KeeperMapTablesReadabilityStepBase):
+    _is_read_only = False
 
 
 @dataclasses.dataclass
@@ -258,7 +255,7 @@ class RetrieveKeeperMapTableDataStep(Step[Sequence[KeeperMapTable]]):
 
     async def handle_step_failure(self, cluster: Cluster, context: StepsContext) -> None:
         try:
-            await KeeperMapTablesReadOnlyStep(clients=self.clients, allow_writes=True).run_step(cluster, context)
+            await KeeperMapTablesReadOnlyStep(self.clients).run_step(cluster, context)
         except ClickHouseClientQueryError:
             logger.warning("Unable to restore write ACLs for KeeperMap tables")
 
@@ -489,7 +486,7 @@ class FreezeTablesStep(FreezeUnfreezeTablesStepBase):
 
     async def handle_step_failure(self, cluster: Cluster, context: StepsContext) -> None:
         try:
-            await KeeperMapTablesReadOnlyStep(clients=self.clients, allow_writes=True).run_step(cluster, context)
+            await KeeperMapTablesReadOnlyStep(clients=self.clients).run_step(cluster, context)
         except ClickHouseClientQueryError:
             logger.warning("Unable to restore write ACLs for KeeperMap tables")
 
