@@ -1413,9 +1413,9 @@ async def test_sync_replicas_for_replicated_mergetree_tables() -> None:
     for client_index, client in enumerate(clients):
         assert client.mock_calls == [
             mock.call.execute(b"SET receive_timeout=180", session_id=mock.ANY),
-            mock.call.execute(b"SYSTEM SYNC REPLICA `db-one`.`table-uno`", session_id=mock.ANY, timeout=180),
+            mock.call.execute(b"SYSTEM SYNC REPLICA `db-one`.`table-uno` LIGHTWEIGHT", session_id=mock.ANY, timeout=180),
             mock.call.execute(b"SET receive_timeout=180", session_id=mock.ANY),
-            mock.call.execute(b"SYSTEM SYNC REPLICA `db-two`.`table-eins`", session_id=mock.ANY, timeout=180),
+            mock.call.execute(b"SYSTEM SYNC REPLICA `db-two`.`table-eins` LIGHTWEIGHT", session_id=mock.ANY, timeout=180),
         ], f"Wrong list of queries for client {client_index} of {len(clients)}"
         check_each_pair_of_calls_has_the_same_session_id(client.mock_calls)
 

@@ -1021,7 +1021,7 @@ class SyncTableReplicasStep(Step[None]):
         def _sync_replicas(client: ClickHouseClient) -> Iterator[Awaitable[None]]:
             yield from (
                 execute_with_timeout(
-                    client, self.sync_timeout, f"SYSTEM SYNC REPLICA {table.escaped_sql_identifier}".encode()
+                    client, self.sync_timeout, f"SYSTEM SYNC REPLICA {table.escaped_sql_identifier} LIGHTWEIGHT".encode()
                 )
                 for table in manifest.tables
                 if table.is_replicated
