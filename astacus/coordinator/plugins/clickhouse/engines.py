@@ -11,4 +11,3 @@ class TableEngine(enum.Enum):
     PostgreSQL = "PostgreSQL"
     S3 = "S3"
     KeeperMap = "KeeperMap"
-    AzureBlobStorage = "AzureBlobStorage"
