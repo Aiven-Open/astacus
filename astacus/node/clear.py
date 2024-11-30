@@ -38,6 +38,9 @@ class ClearOp(NodeOp[ipc.SnapshotClearRequest, ipc.NodeResult]):
             progress.start(len(self.snapshotter.snapshot))
             for relative_path in self.snapshotter.snapshot.get_all_paths():
                 absolute_path = self.config.root / relative_path
-                absolute_path.unlink(missing_ok=True)
+                try:
+                    absolute_path.unlink(missing_ok=True)
+                except PermissionError as e:
+                    logger.error("Failed to clear: %s", absolute_path)
                 progress.add_success()
             progress.done()

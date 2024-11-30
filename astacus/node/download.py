@@ -57,7 +57,7 @@ class Downloader:
 
         relative_path = snapshotfile.relative_path
         download_path = self.dst / relative_path
-        download_path.parent.mkdir(parents=True, exist_ok=True)
+        download_path.parent.mkdir(parents=True, exist_ok=True, mode=0o770)
         with utils.open_path_with_atomic_rename(download_path) as f:
             if snapshotfile.hexdigest:
                 self.thread_local_storage.get_storage().download_hexdigest_to_file(snapshotfile.hexdigest, f)
