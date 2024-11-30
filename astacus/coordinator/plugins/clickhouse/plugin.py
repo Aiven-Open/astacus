@@ -13,6 +13,7 @@ from .config import (
 from .disks import Disks
 from .steps import (
     AttachMergeTreePartsStep,
+    ClearDisksStep,
     ClickHouseManifestStep,
     CollectObjectStorageFilesStep,
     CollectTieredStorageResultsStep,
@@ -188,6 +189,7 @@ class ClickHousePlugin(CoordinatorPlugin):
             ClickHouseManifestStep(),
             RetrieveMacrosStep(clients=clients),
             ListDatabaseReplicasStep(),
+            ClearDisksStep(disks=disks),  # clear any leftovers from previous attempts
             RestoreReplicatedDatabasesStep(
                 clients=clients,
                 replicated_databases_zookeeper_path=self.replicated_databases_zookeeper_path,

@@ -727,6 +727,23 @@ class ListDatabaseReplicasStep(Step[DatabasesReplicas]):
 
 
 @dataclasses.dataclass
+class ClearDisksStep(Step[Sequence[ipc.NodeResult]]):
+    """
+    Request to remove all data on all ClickHouse disks.
+
+    Used to remove remnants of previous failed restore attempts.
+    """
+
+    disks: Disks
+
+    async def run_step(self, cluster: Cluster, context: StepsContext) -> Sequence[ipc.NodeResult]:
+        root_globs = ["/".join((*disk.path_parts, "store/**/*")) for disk in self.disks.disks]
+        node_request = ipc.SnapshotClearRequest(root_globs=root_globs)
+        start_results = await cluster.request_from_nodes("clear", method="post", caller="ClearDisksStep", req=node_request)
+        return await cluster.wait_successful_results(start_results=start_results, result_class=ipc.NodeResult)
+
+
+@dataclasses.dataclass
 class SyncDatabaseReplicasStep(Step[None]):
     zookeeper_client: ZooKeeperClient
     replicated_databases_zookeeper_path: str
