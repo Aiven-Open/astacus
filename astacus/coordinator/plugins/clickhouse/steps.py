@@ -685,6 +685,8 @@ class RestoreReplicatedDatabasesStep(Step[None]):
             b"SET allow_hyperscan=true",
             b"SET allow_simdjson=true",
             b"SET allow_deprecated_syntax_for_merge_tree=true",
+            b"SET allow_experimental_block_number_column=true",
+            b"SET allow_experimental_replacing_merge_with_cleanup=true",
             # If a table was created with flatten_nested=0, we must be careful to not re-create the
             # table with flatten_nested=1, since this would recreate the table with a different schema.
             # If a table was created with flatten_nested=1, the query in system.tables.create_table_query
