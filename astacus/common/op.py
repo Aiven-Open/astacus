@@ -10,6 +10,7 @@ Notable things:
 
 """
 
+from astacus.coordinator.api import OpName
 from . import magic
 from .exceptions import ExpiredOperationException
 from .statsd import StatsClient
@@ -27,6 +28,7 @@ import asyncio
 import contextlib
 import inspect
 import logging
+from threading import Lock
 
 logger = logging.getLogger(__name__)
 
@@ -81,32 +83,35 @@ Op.Info.update_forward_refs()
 
 @dataclass
 class OpState:
+    op: Op
     op_info: Op.Info = field(default_factory=Op.Info)
-    op: Op | None = None
-    next_op_id: int = 1
 
 
-class OpMixin:
+class Operations:
     """Convenience mixin which provides for both asynchronous as well as
     synchronous op starting functionality, and active job querying.
     """
 
-    state: OpState
     stats: StatsClient
     request_url: URL
     background_tasks: BackgroundTasks
 
+
+    def __init__(self) -> None:
+        self.next_op_id = 1
+        self.operations_lock = Lock()
+        self.operations: dict[str, OpState] = {}
+
     def allocate_op_id(self) -> int:
+        # only call under operations_lock
         try:
-            return self.state.next_op_id
+            return self.next_op_id
         finally:
-            self.state.next_op_id += 1
+            self.next_op_id += 1
 
     def start_op(self, *, op: Op, op_name: str, fun: Callable[[], Any]) -> Op.StartResult:
-        info = self.state.op_info
-        info.op_id = op.op_id
-        info.op_name = op_name
-        self.state.op = op
+        with self.operations_lock:
+            self.operations[op_name] = OpState(id=self.allocate_op_id(), op=op)
         op.set_status(Op.Status.starting)
         url = self.request_url
         status_url = urlunsplit((url.scheme, url.netloc, f"{url.path}/{op.op_id}", "", ""))
@@ -147,10 +152,12 @@ class OpMixin:
 
         return Op.StartResult(op_id=op.op_id, status_url=status_url)
 
-    def get_op_and_op_info(self, *, op_id, op_name=None):
-        op_info = self.state.op_info
-        if op_id != op_info.op_id or (op_name and op_name != op_info.op_name):
-            logger.info("request for nonexistent %s.%s != %r", op_name, op_id, op_info)
+    # instead of the state, we store operations in a separate dict
+    def get_op_and_op_info(self, *, op_id: int, op_name: str) -> tuple[Op, Op.Info]:
+        with self.operations_lock:
+            op_state = self.operations.get(op_name)
+        if op_state is None or op_id != op_state.op_info.op_id:
+            logger.info("request for nonexistent %s.%s != %r", op_name, op_id, op_state)
             raise HTTPException(
                 404,
                 {
@@ -159,4 +166,4 @@ class OpMixin:
                     "message": "Unknown operation id",
                 },
             )
-        return self.state.op, op_info
+        return op_state.op, op_state.op_info

@@ -36,6 +36,8 @@ class NodeFeatures(Enum):
     snapshot_groups = "snapshot_groups"
     # Added on 2023-10-16
     release_snapshot_files = "release_snapshot_files"
+    # Added on 2025-01-06
+    concurrent_cleanup = "concurrent_cleanup"
 
 
 class Retention(msgspec.Struct, kw_only=True):

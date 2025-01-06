@@ -58,31 +58,29 @@ def metadata() -> StructResponse:
 
 
 @router.post("/lock")
-def lock(locker: str, ttl: int, state: NodeState = Depends(node_state)):
+def lock(locker: str, ttl: int, state: NodeState = Depends(node_state), lock_name: str | None = None):
     with state.mutate_lock:
-        if state.is_locked:
+        if state.is_locked(lock_name):
             raise HTTPException(status_code=409, detail="Already locked")
-        state.lock(locker=locker, ttl=ttl)
+        state.lock(lock_name=lock_name, locker=locker, ttl=ttl)
     return {"locked": True}
 
 
 @router.post("/relock")
-def relock(locker: str, ttl: int, state: NodeState = Depends(node_state)):
+def relock(locker: str, ttl: int, state: NodeState = Depends(node_state), lock_name: str | None = None):
     with state.mutate_lock:
-        if not state.is_locked:
-            raise HTTPException(status_code=409, detail="Not locked")
-        if state.is_locked != locker:
+        if state.is_locked(lock_name) != locker:
             raise HTTPException(status_code=403, detail="Locked by someone else")
-        state.lock(locker=locker, ttl=ttl)
+        state.lock(lock_name=lock_name, locker=locker, ttl=ttl)
     return {"locked": True}
 
 
 @router.post("/unlock")
-def unlock(locker: str, state: NodeState = Depends(node_state)):
+def unlock(locker: str, state: NodeState = Depends(node_state), lock_name: str | None = None):
     with state.mutate_lock:
-        if not state.is_locked:
+        if not state.is_locked(lock_name):
             raise HTTPException(status_code=409, detail="Already unlocked")
-        if state.is_locked != locker:
+        if state.is_locked(lock_name) != locker:
             raise HTTPException(status_code=403, detail="Locked by someone else")
         state.unlock()
     return {"locked": False}
@@ -100,15 +98,13 @@ def snapshot(
         result_url=result_url,
         groups=groups,
     )
-    if not n.state.is_locked:
-        raise HTTPException(status_code=409, detail="Not locked")
     snapshotter = snapshotter_from_snapshot_req(req, n)
     return SnapshotOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshotter)
 
 
 @router.get("/snapshot/{op_id}")
 def snapshot_result(*, op_id: int, n: Node = Depends()) -> StructResponse:
-    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.snapshot)
+    op, _ = n.operations.get_op_and_op_info(op_id=op_id, op_name=OpName.snapshot)
     return StructResponse(op.result)
 
 
@@ -122,15 +118,13 @@ def delta_snapshot(
         result_url=result_url,
         groups=groups,
     )
-    if not n.state.is_locked:
-        raise HTTPException(status_code=409, detail="Not locked")
     snapshotter = delta_snapshotter_from_snapshot_req(req, n)
     return SnapshotOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshotter)
 
 
 @router.get("/delta/snapshot/{op_id}")
 def delta_snapshot_result(*, op_id: int, n: Node = Depends()) -> StructResponse:
-    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.snapshot)
+    op, _ = n.operations.get_op_and_op_info(op_id=op_id, op_name=OpName.snapshot)
     return StructResponse(op.result)
 
 
@@ -148,15 +142,13 @@ def upload(
         storage=storage,
         validate_file_hashes=validate_file_hashes,
     )
-    if not n.state.is_locked:
-        raise HTTPException(status_code=409, detail="Not locked")
     snapshot_ = n.get_or_create_snapshot()
     return UploadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshot_)
 
 
 @router.get("/upload/{op_id}")
 def upload_result(*, op_id: int, n: Node = Depends()) -> StructResponse:
-    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.upload)
+    op, _ = n.operations.get_op_and_op_info(op_id=op_id, op_name=OpName.upload)
     return StructResponse(op.result)
 
 
@@ -174,15 +166,13 @@ def delta_upload(
         storage=storage,
         validate_file_hashes=validate_file_hashes,
     )
-    if not n.state.is_locked:
-        raise HTTPException(status_code=409, detail="Not locked")
     snapshot_ = n.get_or_create_delta_snapshot()
     return UploadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshot_)
 
 
 @router.get("/delta/upload/{op_id}")
 def delta_upload_result(*, op_id: int, n: Node = Depends()) -> StructResponse:
-    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.upload)
+    op, _ = n.operations.get_op_and_op_info(op_id=op_id, op_name=OpName.upload)
     return StructResponse(op.result)
 
 
@@ -196,8 +186,6 @@ def release(
         result_url=result_url,
         hexdigests=hexdigests,
     )
-    if not n.state.is_locked:
-        raise HTTPException(status_code=409, detail="Not locked")
     # Groups not needed here.
     snapshotter = n.get_snapshotter(groups=[])
     assert snapshotter
@@ -206,7 +194,7 @@ def release(
 
 @router.get("/release/{op_id}")
 def release_result(*, op_id: int, n: Node = Depends()) -> StructResponse:
-    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.release)
+    op, _ = n.operations.get_op_and_op_info(op_id=op_id, op_name=OpName.release)
     return StructResponse(op.result)
 
 
@@ -226,15 +214,13 @@ def download(
         snapshot_index=snapshot_index,
         root_globs=root_globs,
     )
-    if not n.state.is_locked:
-        raise HTTPException(status_code=409, detail="Not locked")
     snapshotter = snapshotter_from_snapshot_req(req, n)
     return DownloadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshotter)
 
 
 @router.get("/download/{op_id}")
 def download_result(*, op_id: int, n: Node = Depends()) -> StructResponse:
-    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.download)
+    op, _ = n.operations.get_op_and_op_info(op_id=op_id, op_name=OpName.download)
     return StructResponse(op.result)
 
 
@@ -254,45 +240,39 @@ def delta_download(
         snapshot_index=snapshot_index,
         root_globs=root_globs,
     )
-    if not n.state.is_locked:
-        raise HTTPException(status_code=409, detail="Not locked")
     snapshotter = delta_snapshotter_from_snapshot_req(req, n)
     return DownloadOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshotter)
 
 
 @router.get("/delta/download/{op_id}")
 def delta_download_result(*, op_id: int, n: Node = Depends()) -> StructResponse:
-    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.download)
+    op, _ = n.operations.get_op_and_op_info(op_id=op_id, op_name=OpName.download)
     return StructResponse(op.result)
 
 
 @router.post("/clear")
 def clear(root_globs: Annotated[Sequence[str], Body()], result_url: Annotated[str, Body()] = "", n: Node = Depends()):
     req = ipc.SnapshotClearRequest(result_url=result_url, root_globs=root_globs)
-    if not n.state.is_locked:
-        raise HTTPException(status_code=409, detail="Not locked")
     snapshotter = snapshotter_from_snapshot_req(req, n)
     return ClearOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshotter, is_snapshot_outdated=True)
 
 
 @router.get("/clear/{op_id}")
 def clear_result(*, op_id: int, n: Node = Depends()) -> StructResponse:
-    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.clear)
+    op, _ = n.operations.get_op_and_op_info(op_id=op_id, op_name=OpName.clear)
     return StructResponse(op.result)
 
 
 @router.post("/delta/clear")
 def delta_clear(root_globs: Annotated[Sequence[str], Body()], result_url: Annotated[str, Body()] = "", n: Node = Depends()):
     req = ipc.SnapshotClearRequest(result_url=result_url, root_globs=root_globs)
-    if not n.state.is_locked:
-        raise HTTPException(status_code=409, detail="Not locked")
     snapshotter = delta_snapshotter_from_snapshot_req(req, n)
     return ClearOp(n=n, op_id=n.allocate_op_id(), stats=n.stats, req=req).start(snapshotter, is_snapshot_outdated=False)
 
 
 @router.get("/delta/clear/{op_id}")
 def delta_clear_result(*, op_id: int, n: Node = Depends()) -> StructResponse:
-    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.clear)
+    op, _ = n.operations.get_op_and_op_info(op_id=op_id, op_name=OpName.clear)
     return StructResponse(op.result)
 
 
@@ -359,8 +339,6 @@ def cassandra(subop: ipc.CassandraSubOp, result_url: Annotated[str, Body(embed=T
 
 
 def check_can_do_cassandra_subop(n: Node, subop: ipc.CassandraSubOp) -> None:
-    if not n.state.is_locked:
-        raise HTTPException(status_code=409, detail="Not locked")
     if not n.config.cassandra:
         raise HTTPException(status_code=409, detail="Cassandra node configuration not found")
     if not is_allowed(subop, n.config.cassandra.access_level):
@@ -372,7 +350,7 @@ def check_can_do_cassandra_subop(n: Node, subop: ipc.CassandraSubOp) -> None:
 
 @router.get("/cassandra/{subop}/{op_id}")
 def cassandra_result(*, subop: ipc.CassandraSubOp, op_id: int, n: Node = Depends()) -> StructResponse:
-    op, _ = n.get_op_and_op_info(op_id=op_id, op_name=OpName.cassandra)
+    op, _ = n.operations.get_op_and_op_info(op_id=op_id, op_name=OpName.cassandra)
     return StructResponse(op.result)
 
 

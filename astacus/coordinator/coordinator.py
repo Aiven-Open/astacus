@@ -7,7 +7,7 @@ from .storage_factory import StorageFactory
 from astacus.common import asyncstorage, exceptions, ipc, op, statsd, utils
 from astacus.common.dependencies import get_request_url
 from astacus.common.magic import ErrorCode
-from astacus.common.op import Op
+from astacus.common.op import Op, Operations
 from astacus.common.progress import Progress
 from astacus.common.statsd import StatsClient, Tags
 from astacus.common.utils import AsyncSleeper
@@ -46,7 +46,7 @@ def coordinator_storage_factory(
     )
 
 
-class Coordinator(op.OpMixin):
+class Coordinator:
     state: CoordinatorState
     """ Convenience dependency which contains sub-dependencies most API endpoints need """
 
@@ -66,6 +66,7 @@ class Coordinator(op.OpMixin):
         self.state = state
         self.stats = stats
         self.storage_factory = storage_factory
+        self.operations = Operations()
 
     def get_operation_context(self, *, requested_storage: str = "") -> OperationContext:
         storage_name = self.get_storage_name(requested_storage=requested_storage)
@@ -113,7 +114,6 @@ class CoordinatorOp(op.Op):
         # asyncio.Event() call in Python 3 requires us to be inside
         # asyncio event loop.
         return AsyncSleeper()
-
 
 class LockedCoordinatorOp(CoordinatorOp):
     op_started: float | None  # set when op_info.status is set to starting

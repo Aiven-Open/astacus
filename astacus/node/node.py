@@ -88,7 +88,7 @@ def node_stats(config: NodeConfig = Depends(node_config)) -> statsd.StatsClient:
     return statsd.StatsClient(config=config.statsd)
 
 
-class Node(op.OpMixin):
+class Node:
     state: NodeState
     """ Convenience dependency which contains sub-dependencies most API endpoints need """
 
@@ -108,6 +108,7 @@ class Node(op.OpMixin):
         self.config = config
         self.state = state
         self.stats = stats
+        self.operations = op.Operations()
 
     def get_or_create_snapshot(self) -> Snapshot:
         return self._get_or_create_snapshot(SNAPSHOTTER_KEY, self.config.root_link)

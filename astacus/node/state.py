@@ -27,24 +27,26 @@ class LockEntry(utils.AstacusModel):
 @dataclass
 class NodeState(OpState):
     mutate_lock = Lock()
-    _lock: LockEntry | None = None
+    _locks: dict[str | None, LockEntry] = {}
 
     @property
-    def is_locked(self):
-        lock = self._lock
+    def has_any_lock(self) -> bool:
+        return bool(self._locks)
+
+    def is_locked(self, lock_name: str | None) -> str | Literal[False]:
+        lock = self._locks.get(lock_name)
         if not lock:
             return False
         if time.monotonic() > lock.locked_until:
             return False
         return lock.locker
 
-    @property
-    def still_locked_callback(self):
-        original_lock = self._lock
+    def still_locked_callback(self, lock_name: str | None) -> Callable[[], bool]:
+        original_lock = self._locks.get(lock_name)
         assert original_lock
 
         def _gen():
-            while self.is_locked == original_lock.locker:
+            while self.is_locked(lock_name) == original_lock.locker:
                 yield True
             while True:
                 yield False
@@ -56,12 +58,16 @@ class NodeState(OpState):
 
         return _fun
 
-    def lock(self, *, locker, ttl):
-        self._lock = LockEntry(locker=locker, locked_until=time.monotonic() + ttl)
+    def lock(self, *, lock_name: str | None, locker: str, ttl: float) -> None:
+        lock_entry = LockEntry(locker=locker, locked_until=time.monotonic() + ttl)
+        with self.mutate_lock:
+            assert self._locks.get(lock_name) is None
+            self._locks[lock_name] = lock_entry
 
-    def unlock(self):
-        assert self._lock
-        self._lock = None
+    def unlock(self, *, lock_name: str | None) -> None:
+        assert self.is_locked(lock_name)
+        with self.mutate_lock:
+            del self._locks[lock_name]
 
 
 def node_state(request: Request) -> NodeState:

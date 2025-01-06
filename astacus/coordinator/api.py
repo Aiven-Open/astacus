@@ -177,7 +177,7 @@ async def cleanup(
 @router.get("/{op_name}/{op_id}")
 @router.get("/delta/{op_name}/{op_id}")
 def op_status(*, op_name: OpName, op_id: int, c: Coordinator = Depends()):
-    op, op_info = c.get_op_and_op_info(op_id=op_id, op_name=op_name)
+    op, op_info = c.operations.get_op_and_op_info(op_id=op_id, op_name=op_name)
     result = {"state": op_info.op_status}
     if isinstance(op, BackupOp | DeltaBackupOp | RestoreOp):
         result["progress"] = msgspec.to_builtins(op.progress)
@@ -187,7 +187,7 @@ def op_status(*, op_name: OpName, op_id: int, c: Coordinator = Depends()):
 @router.put("/{op_name}/{op_id}/sub-result")
 @router.put("/delta/{op_name}/{op_id}/sub-result")
 async def op_sub_result(*, op_name: OpName, op_id: int, c: Coordinator = Depends()):
-    op, _ = c.get_op_and_op_info(op_id=op_id, op_name=op_name)
+    op, _ = c.operations.get_op_and_op_info(op_id=op_id, op_name=op_name)
     # We used to have results available here, but not use those
     # that was wasting a lot of memory by generating the same result twice.
     if not op.subresult_sleeper:
